@@ -6,7 +6,7 @@ create extension if not exists pgtap with schema extensions;
 begin;
 set search_path to public, extensions;
 
-select plan(7);
+select plan(8);
 
 select ok(not has_column_privilege('authenticated', 'public.content_items', 'wants_image', 'update'), 'founders cannot set the mark');
 
@@ -40,6 +40,15 @@ update public.content_items set status = 'in_review' where idea = 'We shipped th
 update public.content_items set status = 'approved' where idea = 'We shipped the editor';
 select is((select count(*)::int from public.work_orders where user_id = 'e2750000-0000-4000-8000-00000000000a' and kind = 'build_post_image'
   and status <> 'cancelled'), 0, 'a paused CMO orders none');
+
+-- A long idea: the image's title is one slide heading, cut at a word.
+update public.profiles set cmo_paused_at = null where id = 'e2750000-0000-4000-8000-00000000000a';
+insert into public.content_items (user_id, department, platform, day, idea, status, wants_image) values
+  ('e2750000-0000-4000-8000-00000000000a', 'post', 'X', current_date,
+   'Show how the editor cuts a ten minute founder interview down by deleting the words', 'in_review', true);
+update public.content_items set status = 'approved' where idea like 'Show how the editor%';
+select is((select brief->>'title' from public.work_orders where kind = 'build_post_image' and brief->>'postId' = (select id::text from public.content_items where idea like 'Show how the editor%')),
+  'Show how the editor cuts a ten minute founder interview down', 'a long idea is cut at a word, within 60 characters');
 
 select * from finish();
 rollback;

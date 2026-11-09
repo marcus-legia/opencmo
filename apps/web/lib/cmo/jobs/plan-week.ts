@@ -21,7 +21,7 @@ export const PlanSchema = z.object({
         platform: z.string().describe("X, Threads or LinkedIn for post; Reddit for sales; Slideshow for a slideshow"),
         idea: z.string().describe("The idea in one line, specific to this product"),
         reason: z.string().describe("One sentence: why this, why now, citing the strategy or last week"),
-        image: z.boolean().describe("Posts only: true when the post is stronger with an image (a launch, a product screen, a before and after); false otherwise"),
+        image: z.boolean().optional().describe("Posts only: true when the post is stronger with an image (a launch, a product screen, a before and after); false otherwise"),
       }),
     )
     .describe("Five to ten items over the next seven days"),
@@ -72,10 +72,8 @@ export function postPlatform(label: string): string {
  * (`write_video_brief`, which writes the storyboard) and raises a script card; nothing builds the video. Clips of the
  * founder's own videos are ordered when an edit is finished (`cut_shorts_order_for`), not by the plan.
  */
-/** The model's plan; `image` may be missing from older or hand-made plans (it means false). */
-type PlanInput = { items: (Omit<Plan["items"][number], "image"> & { image?: boolean })[] };
-
-export function toPlanItems(plan: PlanInput, today = new Date()): PlanItem[] {
+/** `image` may be missing (older answers, MCP plans written before C3): it means false. */
+export function toPlanItems(plan: Plan, today = new Date()): PlanItem[] {
   let slideshows = 0;
   let scripts = 0;
   let images = 0;

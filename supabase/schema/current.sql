@@ -5859,7 +5859,7 @@ $$;
 CREATE FUNCTION public.content_items_post_image() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
-    AS $$
+    AS $_$
 declare
   v_root public.work_orders;
   v_profile text;
@@ -5878,7 +5878,10 @@ begin
     v_root := public.work_order_week_root(new.user_id);
     perform public.work_order_create(new.user_id, v_root.week, v_root.id, 'build_post_image',
       left('Image for “' || new.idea || '”', 200),
-      jsonb_build_object('postId', new.id, 'title', left(new.idea, 120), 'platform', v_profile,
+      -- The image's title is one slide heading (`SLIDE_TEXT_MAX.heading`, 60): cut at a word, not inside one.
+      jsonb_build_object('postId', new.id, 'title', case when char_length(new.idea) <= 60 then new.idea
+          else left(coalesce(nullif(rtrim(regexp_replace(left(new.idea, 61), '\s+\S*$', '')), ''), new.idea), 60) end,
+        'platform', v_profile,
         'done_when', 'The post''s schedule card shows the image.'),
       0, null, '{}', 'event');
   exception when others then
@@ -5887,7 +5890,7 @@ begin
   end;
   return new;
 end;
-$$;
+$_$;
 
 
 --
@@ -7036,9 +7039,18 @@ CREATE FUNCTION public.editor_projects_rules() RETURNS trigger
     AS $$
 declare
   v_user uuid;
+  v_order uuid;
 begin
   if new.document is distinct from old.document then
     perform public.approval_close('editor_project', new.clip_id, 'cancelled');
+    -- The founder's own video changed after they marked it finished: its posting stops; marking it finished again
+    -- starts a new one (C2).
+    for v_order in
+      select id from public.work_orders where kind = 'post_video' and brief->>'clip_id' = new.clip_id::text
+        and status in ('running', 'waiting_founder')
+    loop
+      perform public.work_order_move(v_order, 'cancelled', 'The edit changed after you marked it finished');
+    end loop;
   end if;
   if new.finished_hash is not null and new.finished_hash is distinct from old.finished_hash then
     select j.user_id into v_user from public.clips c join public.jobs j on j.id = c.job_id
@@ -8100,6 +8112,8 @@ declare
   v_user uuid := public.require_user();
   v_row public.editor_projects;
   v_order uuid;
+  v_deliverable uuid;
+  v_again boolean;
 begin
   perform public.owned_clip(p_clip_id, v_user);
   select * into v_row from public.editor_projects where clip_id = p_clip_id for update;
@@ -8134,10 +8148,17 @@ begin
     select id from public.work_orders where user_id = v_user and kind = 'post_video' and status = 'waiting_founder'
       and brief->>'clip_id' = p_clip_id::text and brief->>'finished_hash' = p_document_hash
   loop
+    -- A video posted before and edited since has its deliverable already: it now belongs to this order, and Schedule
+    -- proposes again where nothing waits or went out.
     insert into public.deliverables (user_id, order_id, kind, ref_kind, ref_id, status)
     values (v_user, v_order, 'video', 'clip', p_clip_id, 'decided')
-    on conflict (ref_kind, ref_id) do nothing;
-    perform public.work_order_move(v_order, 'done', 'Approved “' || coalesce(nullif((select hook from public.clips where id = p_clip_id), ''), 'your video') || '”');
+    on conflict (ref_kind, ref_id) do update set order_id = excluded.order_id, status = 'decided'
+    returning id, (xmax <> 0) into v_deliverable, v_again;
+    if v_again then
+      perform public.schedule_propose(v_deliverable);
+    end if;
+    perform public.work_order_move(v_order, 'done', 'Approved “' || coalesce(nullif((select hook from public.clips where id = p_clip_id), ''), 'your video') || '”',
+      null, 'The founder approved the video.');
   end loop;
   return v_row;
 end;
@@ -8798,7 +8819,10 @@ CREATE FUNCTION public.post_video_render_settled(p_order public.work_orders, p_t
     SET search_path TO 'public'
     AS $$
 begin
-  if p_order.status <> 'running' or p_task.settings_hash is distinct from p_order.brief->>'finished_hash' then
+  -- Only the render of the edit as it is still finished: one changed since is not what the founder marked.
+  if p_order.status <> 'running' or p_task.settings_hash is distinct from p_order.brief->>'finished_hash'
+     or not exists (select 1 from public.editor_projects p where p.clip_id = p_task.clip_id
+                    and p.finished_hash = p_task.settings_hash and p.finished_hash = public.editor_document_hash(p.document)) then
     return;
   end if;
   if p_task.status = 'done' then
@@ -8843,7 +8867,9 @@ begin
   end if;
   select * into v_task from public.tasks
   where id = p_task and user_id = v_user and clip_id = p_clip_id and kind = 'render_document'
-    and settings_hash = v_project.finished_hash;
+    and settings_hash = v_project.finished_hash
+  -- Held until this order commits: a render finishing meanwhile settles after, when the task rule can see the order.
+  for update;
   if not found then
     raise exception 'That render is not of this edit.' using errcode = 'P0001';
   end if;
@@ -8897,6 +8923,10 @@ begin
   return v_clip.kind <> 'short'
     and exists (select 1 from public.editor_projects p where p.clip_id = p_clip_id and p.finished_hash is not null
                 and p.finished_hash = public.editor_document_hash(p.document))
+    -- Already rendering, waiting on its card, or approved at this hash: marking it finished again starts nothing.
+    and not exists (select 1 from public.work_orders o join public.editor_projects p on p.clip_id = p_clip_id
+                    where o.user_id = v_user and o.kind = 'post_video' and o.brief->>'clip_id' = p_clip_id::text
+                      and o.brief->>'finished_hash' = p.finished_hash and o.status in ('running', 'waiting_founder', 'done'))
     and not exists (select 1 from public.studio_steps s left join public.work_orders o on o.id = s.order_id
                     where s.clip_id = p_clip_id
                       and (s.kind in ('slideshow', 'post_image')

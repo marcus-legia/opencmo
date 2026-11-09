@@ -9,8 +9,17 @@ import type { StudioScreen } from "@/lib/screens/studio";
 
 export type EditState = StudioScreen["editStates"][number];
 
-export function markFinished(clipId: string, documentHash: string): Promise<{ finishedAt: string; documentHash: string }> {
+export type Finished = { finishedAt: string; documentHash: string; posting: "rendering" | "refused" | "none"; postingNote?: string };
+
+export function markFinished(clipId: string, documentHash: string): Promise<Finished> {
   return api(`/studio/${encodeURIComponent(clipId)}/finished`, jsonBody({ documentHash }));
+}
+
+/** What Mark finished started (C2), in the same words in the editor and in Studio. */
+export function finishedNote(done: Finished): { text: string; error: boolean } {
+  if (done.posting === "rendering") return { text: "Marked finished. It is rendering for posting: its card comes to your Dashboard, then you pick when it posts. 3 shorts are cut from it too.", error: false };
+  if (done.posting === "refused") return { text: `Marked finished, but it could not be rendered for posting: ${done.postingNote ?? "try again later."}`, error: true };
+  return { text: "Marked finished. Shorts can be cut from it.", error: false };
 }
 
 export function cutShorts(clipId: string): Promise<{ orderId: string }> {

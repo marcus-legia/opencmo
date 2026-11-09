@@ -971,7 +971,7 @@ async function writer({ supabase }: LoadContext): Promise<Partial<WriterScreen>>
           // An approved script is the founder's next video to record, not something posted.
           column: waiting ? ("waiting" as const) : approved ? ("scheduled" as const) : o.status === "done" ? ("posted" as const) : ("drafting" as const),
           versions: 1,
-          note: card ? (waiting ? "Your script" : approved ? "Approved: you record it" : "You skipped it") : o.status === "done" ? "Fed the Studio team" : null,
+          note: card ? (waiting ? "Your script" : approved ? "Approved: you record it" : card.status === "skipped" ? "You skipped it" : "Dropped from the plan") : o.status === "done" ? "Fed the Studio team" : null,
           approvalId: waiting ? card!.id : null,
           scriptId: approved ? o.id : null,
         };

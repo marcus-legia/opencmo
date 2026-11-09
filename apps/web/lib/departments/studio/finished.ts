@@ -15,14 +15,23 @@ export const DOCUMENT_HASH = /^[0-9a-f]{64}$/;
 
 export async function markFinished(ctx: StudioContext, clipId: string, hash: string): Promise<MarkedFinished> {
   if (!DOCUMENT_HASH.test(hash)) throw new ApiError(422, "Save the edit, then mark it finished.");
+  let row: { finished_at: string; finished_hash: string } | null;
   try {
-    const row = firstRow(await rpcOrThrow<{ finished_at: string; finished_hash: string } | { finished_at: string; finished_hash: string }[]>(ctx.supabase, "mark_finished", { p_clip_id: clipId, p_document_hash: hash }));
-    if (!row) throw new Error("mark_finished returned no project.");
-    return { kind: "finished", finishedAt: row.finished_at, hash: row.finished_hash, posting: await startPosting(ctx, clipId) };
+    row = firstRow(await rpcOrThrow<{ finished_at: string; finished_hash: string } | { finished_at: string; finished_hash: string }[]>(ctx.supabase, "mark_finished", { p_clip_id: clipId, p_document_hash: hash }));
   } catch (err) {
     if (err instanceof ApiError && err.status === 409) return { kind: "stale", message: err.message };
     throw err;
   }
+  if (!row) throw new Error("mark_finished returned no project.");
+  // The edit is marked finished now, whatever posting says: a posting failure is reported as such, never as "not marked".
+  let posting: Extract<MarkedFinished, { kind: "finished" }>["posting"];
+  try {
+    posting = await startPosting(ctx, clipId);
+  } catch (err) {
+    if (!(err instanceof ApiError && err.status < 500)) console.error("[studio] posting render", clipId, err);
+    posting = { kind: "refused", message: err instanceof ApiError && err.status < 500 ? err.message : "Rendering it for posting did not start. Mark it finished again to retry." };
+  }
+  return { kind: "finished", finishedAt: row.finished_at, hash: row.finished_hash, posting };
 }
 
 /**

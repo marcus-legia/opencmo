@@ -8,6 +8,7 @@
 import { useEffect, useState } from "react";
 
 import { ApiError, api, jsonBody } from "@/components/clipping/api";
+import { finishedNote, markFinished as markFinishedRoute } from "@/components/screens/studio/finish";
 import { ThemeSwitch } from "@/components/theme";
 import type { SaveStatus } from "@/lib/editor/session";
 import { createClient } from "@/lib/supabase/client";
@@ -265,18 +266,9 @@ function MarkFinished({ clipId, documentHash }: { clipId: string; documentHash: 
     setState({ phase: "busy", hash: marked });
     setNote(null);
     try {
-      const done = await api<{ finishedAt: string; documentHash: string; posting: "rendering" | "refused" | "none"; postingNote?: string }>(
-        `/studio/${encodeURIComponent(clipId)}/finished`,
-        jsonBody({ documentHash }),
-      );
+      const done = await markFinishedRoute(clipId, documentHash);
       setState({ phase: "ready", hash: done.documentHash });
-      setNote(
-        done.posting === "rendering"
-          ? { text: "Marked finished. It is rendering; its card comes to your Dashboard, then you pick when it posts. 3 shorts are cut from it too.", error: false }
-          : done.posting === "refused"
-            ? { text: `Marked finished, but it could not be rendered for posting: ${done.postingNote ?? "try again later."}`, error: true }
-            : { text: "Marked finished. Shorts can be cut from it.", error: false },
-      );
+      setNote(finishedNote(done));
     } catch (error) {
       setState({ phase: "ready", hash: marked });
       setNote({ text: error instanceof ApiError ? error.message : "Could not mark it finished. Please try again.", error: true });

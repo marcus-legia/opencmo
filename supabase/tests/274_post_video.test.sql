@@ -7,7 +7,7 @@ create extension if not exists pgtap with schema extensions;
 begin;
 set search_path to public, extensions;
 
-select plan(20);
+select plan(24);
 
 select ok(has_function_privilege('authenticated', 'public.post_video_start(uuid,uuid)', 'execute'), 'founders start it');
 select ok(not has_function_privilege('authenticated', 'public.post_video_render_settled(public.work_orders,public.tasks)', 'execute'),
@@ -88,6 +88,29 @@ select is((select status from public.content_items where clip_id = (select id fr
 select is((select platform from public.schedule_slots s join public.deliverables d on d.id = s.deliverable_id
   where d.order_id = (select id from t where name = 'order') and d.kind = 'video'), 'youtube', 'Schedule proposes a time where it has a caption');
 
+-- Marked finished again at the approved hash: nothing new. Edited and marked again: a new order, a new card, and
+-- approving it moves the video's deliverable to that order (review fix: it used to fail on the existing deliverable).
+set local role authenticated;
+select ok(not public.post_video_wanted((select id from t where name = 'clip')), 'already approved at this hash: nothing to start');
+reset role;
+update public.editor_projects set document = document || '{"cut": 1}' where clip_id = (select id from t where name = 'clip');
+set local role authenticated;
+select public.mark_finished((select id from t where name = 'clip'), pg_temp.hash('clip'));
+reset role;
+insert into t select 'render_b', pg_temp.render('clip', pg_temp.hash('clip'));
+update public.tasks set status = 'done' where id = (select id from t where name = 'render_b');
+set local role authenticated;
+insert into t select 'order_b', public.post_video_start((select id from t where name = 'clip'), (select id from t where name = 'render_b'));
+reset role;
+update public.tasks set status = 'done', output = '{"pass":true,"round":0,"note":"","files":[]}'
+where id = (select task_id from public.look_checks where order_id = (select id from t where name = 'order_b'));
+set local role authenticated;
+select public.approval_decide(a.id, 'approve', jsonb_build_object('content_hash', a.content_hash))
+from public.approvals a where a.ref_kind = 'editor_project' and a.ref_id = (select id from t where name = 'clip') and a.status = 'waiting';
+reset role;
+select is((select o.status || ' ' || (d.order_id = o.id) from public.work_orders o join public.deliverables d on d.ref_kind = 'clip' and d.ref_id = (select id from t where name = 'clip')
+  where o.id = (select id from t where name = 'order_b')), 'done true', 'an edited video is approved again, its deliverable under the new order');
+
 -- A failed render fails its order; sending a card back cancels the order (the founder marks it finished again).
 set local role authenticated;
 select public.mark_finished((select id from t where name = 'clip2'), pg_temp.hash('clip2'));
@@ -112,6 +135,20 @@ from public.approvals a where a.ref_kind = 'editor_project' and a.ref_id = (sele
 reset role;
 select is((select status from public.work_orders where id = (select id from t where name = 'order3')), 'cancelled',
   'a render done already is settled at once, and sending the card back cancels the order');
+
+-- An edit after marking it finished cancels its posting; the render of the old version then raises nothing.
+update public.editor_projects set document = document || '{"cut": 3}' where clip_id = (select id from t where name = 'clip2');
+set local role authenticated;
+select public.mark_finished((select id from t where name = 'clip2'), pg_temp.hash('clip2'));
+reset role;
+insert into t select 'render4', pg_temp.render('clip2', pg_temp.hash('clip2'));
+set local role authenticated;
+insert into t select 'order4', public.post_video_start((select id from t where name = 'clip2'), (select id from t where name = 'render4'));
+reset role;
+update public.editor_projects set document = document || '{"cut": 4}' where clip_id = (select id from t where name = 'clip2');
+select is((select status from public.work_orders where id = (select id from t where name = 'order4')), 'cancelled', 'an edit after marking it finished cancels its posting');
+update public.tasks set status = 'done' where id = (select id from t where name = 'render4');
+select is((select count(*)::int from public.look_checks where order_id = (select id from t where name = 'order4')), 0, 'and the old render starts no check');
 
 select * from finish();
 rollback;
