@@ -135,7 +135,8 @@ export type CutShorts =
   | { kind: "refused"; message: string };
 
 export type MarkedFinished =
-  | { kind: "finished"; finishedAt: string; hash: string }
+  /** `posting`: the founder's own video is rendering for its card (C2); a refusal says why it is not (an export limit). */
+  | { kind: "finished"; finishedAt: string; hash: string; posting: { kind: "rendering" } | { kind: "refused"; message: string } | { kind: "none" } }
   /** The founder saw another version than the one saved: nothing is marked. */
   | { kind: "stale"; message: string };
 

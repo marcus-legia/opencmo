@@ -28,7 +28,10 @@ export const ThreadSchema = z.object({
 export const SalesScreenSchema = z.object({
   /** Product mentions in the last ten replies: at most one in ten may name the product. */
   mentions: z.object({ used: z.number().int().min(0), window: z.number().int().positive() }),
-  /** Set when the scan stopped (budget used); the banner offers to finish with more credits. */
+  /**
+   * Set when the last two scans found nothing worth joining; the banner points at the Sales settings. A scan holds its
+   * credits before it starts and runs in one go, so `creditsToFinish` and `found` are no longer shown (cmo-review-2 S3.6).
+   */
   stuck: z.object({ text: z.string().max(200), creditsToFinish: z.number().int().positive(), found: z.number().int().min(0) }).nullable(),
   threads: z.array(ThreadSchema),
   /** The founder's Sales settings (`sales_settings`): subreddits never scanned; pairs of terms that must both appear. */

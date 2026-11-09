@@ -1,0 +1,22 @@
+{
+  "source": "assumed",
+  "path": "/v1/youtube/search",
+  "params": {
+    "query": "how to get first customers saas"
+  },
+  "body": {
+    "videos": [
+      {
+        "id": "dQw4w9WgXcQ",
+        "title": "How I got my first 100 customers",
+        "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        "channel": {
+          "title": "user_redacted"
+        },
+        "viewCountInt": 120000,
+        "publishedTime": "2026-10-01T00:00:00Z"
+      }
+    ],
+    "shorts": []
+  }
+}

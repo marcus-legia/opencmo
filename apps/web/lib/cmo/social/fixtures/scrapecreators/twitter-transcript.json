@@ -1,0 +1,10 @@
+{
+  "source": "assumed",
+  "path": "/v1/twitter/tweet/transcript",
+  "params": {
+    "url": "https://x.com/user_redacted/status/1850000000000000001"
+  },
+  "body": {
+    "transcript": "We doubled signups with one change."
+  }
+}

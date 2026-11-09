@@ -21,6 +21,11 @@ export const POST = withApi(
     if (!UUID.test(params.clipId ?? "")) throw new ApiError(404, "Edit not found.");
     const marked = await studio({ supabase, userId: user.id, caller: "ui" }).markFinished(params.clipId!, body.documentHash);
     if (marked.kind === "stale") throw new ApiError(409, marked.message);
-    return { finishedAt: marked.finishedAt, documentHash: marked.hash };
+    return {
+      finishedAt: marked.finishedAt,
+      documentHash: marked.hash,
+      posting: marked.posting.kind,
+      ...(marked.posting.kind === "refused" ? { postingNote: marked.posting.message } : {}),
+    };
   },
 );

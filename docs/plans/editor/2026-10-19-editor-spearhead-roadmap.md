@@ -1,5 +1,9 @@
 # Editor as the spearhead: phase roadmap (2026-10-19)
 
+> **Superseded (owner, 2026-11-08).** The AI CMO leads and the editor comes last; `/video` is hidden for now. See
+> `CLAUDE.md` "Strategy" and [`../cmo/2026-11-08-cmo-review-2-plan.md`](../cmo/2026-11-08-cmo-review-2-plan.md) §2.
+> This roadmap stays as a record of the editor's phases; do not rank work by it.
+
 > Owner decision (see `CLAUDE.md`, "Strategy"): there is no paid-marketing budget, so OpenCMO's own
 > marketing videos are made in OpenCMO's editor. The editor is built until it can make every video we
 > need, phase by phase. The editor is also **what we sell first** (owner, 2026-10-19): video from a slash

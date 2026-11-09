@@ -10,7 +10,7 @@
 import { SLIDE_TEXT_MAX } from "@opencmo/editor-core";
 
 import { checkPost, factIssues, hashtagCount, hasLink, type CheckRules } from "../jobs/check-post";
-import type { CaptionDraft, Slide, VideoBrief, WriterProfile, YoutubeDraft } from "./types";
+import { SCRIPT_BEATS, type CaptionDraft, type Slide, type VideoBrief, type WriterProfile, type YoutubeDraft } from "./types";
 
 const chars = (text: string) => [...text].length;
 
@@ -86,7 +86,17 @@ export function checkVideoBrief(brief: VideoBrief, rules: CheckRules): string[] 
   const issues: string[] = [];
   if (brief.hooks.length !== 3) issues.push(`It has ${brief.hooks.length} hooks; a brief has 3.`);
   if (!brief.cta) issues.push("It has no call to action.");
-  issues.push(...factIssues([brief.objective, brief.angle, ...brief.hooks, ...brief.keyPoints, brief.cta].join("\n"), rules));
+  const beats = brief.storyboard;
+  if (beats.length < SCRIPT_BEATS.min || beats.length > SCRIPT_BEATS.max) {
+    issues.push(`The script has ${beats.length} beats; a script has ${SCRIPT_BEATS.min} to ${SCRIPT_BEATS.max}.`);
+  } else {
+    const total = beats.reduce((sum, beat) => sum + beat.seconds, 0);
+    // A beat's seconds are a guide for recording, so a fifth either way is fine; more and the length is wrong.
+    if (Math.abs(total - brief.seconds) > Math.max(5, brief.seconds * 0.2)) issues.push(`The beats run ${total} s; the video is ${brief.seconds} s.`);
+    const slow = beats.findIndex((beat) => beat.say.split(/\s+/).filter(Boolean).length > beat.seconds * 3.5);
+    if (slow >= 0) issues.push(`Beat ${slow + 1} has more words than can be said in ${beats[slow]!.seconds} s.`);
+  }
+  issues.push(...factIssues([brief.objective, brief.angle, ...brief.hooks, ...brief.keyPoints, brief.cta, ...beats.map((beat) => `${beat.say}\n${beat.show}`)].join("\n"), rules));
   return issues;
 }
 

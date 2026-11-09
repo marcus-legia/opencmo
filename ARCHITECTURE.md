@@ -322,10 +322,14 @@ motion from drawn SVG (`kit.drawOn`, `kit.travel`, `Streak`).
 
 ---
 
-## 11. AI CMO: scheduling, memory, goals and providers
+## 11. AI CMO: the brain, its departments, scheduling, memory and providers
 
-Implemented in PR #21. The review with diagrams (in Vietnamese) is the "Kiến trúc AI CMO"
-artifact linked there.
+First built in PR #21; the departments, the spine and the gates in P1–P6 and the CMO review (#169–#180). The design
+pages with code paths are in [`docs/architecture/`](docs/architecture/README.md) (built, `main` at `4f70a59`).
+
+**Order of work (owner, 2026-11-08): the AI CMO first, the editor last.** The product follows one loop: business
+information → Writer → approval → Video → approval → Post. `/video` (the full AI video) is hidden in the web app
+behind one switch (`CREATE_VIDEO_HIDDEN`, `apps/web/lib/agent/hidden.ts`); the code, the MCP tool and the evals stay.
 
 ### Language boundary
 
@@ -349,7 +353,9 @@ dispatches; CMO jobs stay TypeScript and run on Vercel, in parallel:
 
 ```
 Modal cmo_schedule  (00:05 UTC daily) ──GET──▶ /api/cron/cmo           enqueue the loops due today
+Modal cmo_digest    (every hour)      ──GET──▶ /api/cron/cmo-digest    the morning digest in each founder's timezone
 Modal sweep()       (every minute)    ──POST─▶ /api/internal/cmo/run   ×N, one per claimable run (max 10)
+                                                also: due schedule slots, Studio steps, stuck turns and credit jobs
 Modal cleanup       (03:00 UTC daily) ──GET──▶ /api/cron/cleanup
 ```
 
@@ -359,45 +365,96 @@ Modal cleanup       (03:00 UTC daily) ──GET──▶ /api/cron/cleanup
   so an extra call does nothing. `sweep()` counts claimable runs with the same rule as
   `claim_cmo_run` (`opencmo/worker/cmo_dispatch.py`).
 - Both directions authenticate with `CRON_SECRET`; Modal also needs `OPENCMO_WEB_URL`.
+- The routes run on Vercel Hobby (300 s a request): an Assistant step still streaming at 280 s is cut
+  (`STEP_DEADLINE_MS`, #178), and longer CMO work defers itself (`cmo_defer_run`).
 
-### Memory in three tiers
+### The spine: orders, deliverables, approvals, slots
+
+| Table | Holds |
+|---|---|
+| `work_orders` | the week's tree: one root a week, an order per plan item, children per department; `depends_on`, budget, status. It sits **beside** `cmo_runs` (the job queue) and follows its run |
+| `deliverables` | what a department made (`post`, `caption`, `video`, `short`, `slideshow`, `image`, `reply`, `insight`, `metric`); it wraps `content_items`, `opportunities`, `cmo_insights` and `clips` |
+| `approvals` | every card the founder decides, with a snapshot (JCS content hash, price, time, account); one `approval_decide` RPC; 11 kinds |
+| `schedule_slots` | a time per platform for an approved deliverable, in the founder's timezone (`profiles.timezone`); `publish` (Zernio) or `intent` mode |
+| `social_accounts` | the founder's connected accounts: Zernio ids only, never tokens |
+| `credit_orders` | one hold per job the founder confirmed once (§"Charging" below) |
+
+Event rules are SQL triggers on status changes (finished edit → `cut_shorts`; approved → schedule; due → publish;
+posted + 24 h → measure). Studio work runs through one adapter (`apps/web/lib/departments/studio/adapter.ts`) under
+the founder's short-lived JWT; publishing through one adapter (`apps/web/lib/departments/publish/adapter.ts`) on
+Zernio for X, Threads, LinkedIn, TikTok, Instagram and YouTube, with the intent link as the fallback. The worker task
+`look_check` draws frames of a finished export before any card; `publish_media` uploads media to Zernio.
+
+### Memory in four tiers
 
 | Tier | Where | Read by |
 |---|---|---|
+| 0. Corrections | `cmo_corrections`: rules from the founder's repeated edits, approved on a card | every writing job, first |
 | 1. Profile | the four `marketing_documents` | every job and the chat |
 | 2. Events | `cmo_memories` with `kind`, `topic`, `importance`, `expires_at` | each job reads its own topic + `general`, most important first, unexpired |
 | 3. Lessons | `cmo_lessons`, one per topic per week | every job and the chat, before events |
 
 `summarize_memory` (Sunday, free) writes the topic lessons; `review_week` writes the `general`
-lesson. Skip reasons expire after 90 days; notes the founder typed do not.
+lesson. Skip reasons expire after 90 days; notes the founder typed do not. Voice notes learned from
+approvals and edits are read through `voice_notes_for`, newer first.
 
 ### Weekly goal loop
 
 `cmo_goals` holds at most one goal per week, counted in `posts`, `replies` or `views`.
 The CMO proposes (chat tool `set_week_goal`, or `review_week` for next week); it becomes the goal
 only when the founder approves the card in Approvals. `review_week` (Sunday, free) records the
-result, writes the lesson and proposes the next goal; W1 plans around the approved goal. Chat tool
+result, writes the lesson and proposes the next goal; the week plan is planned around the approved goal. Chat tool
 `get_run_result` lets the CMO check on work it handed out.
+
+### Budgets and gates
+
+- The weekly budget is a hard gate for runs the brain starts itself (`cmo_runs_budget_gate`); the brain's own runs
+  holding over 40 % of it within an hour pause the brain.
+- Kill switch: `OPENCMO_CMO_PAUSED=1` for everyone, Pause CMO per founder (`profiles.cmo_paused_at`).
+- A daily card budget (`card_budget`, about ten new cards a founder's day); later cards are held for the next day.
 
 ### Video in the CMO
 
-Video stays a topic in the weekly plan: a video item on the calendar links to the editor's Upload
-tab, and the founder records and uploads the video themselves. The CMO never edits video; video
-packs and video briefs were removed with the clipping tool (2026-10-20).
+The CMO reaches video through Studio orders, never by driving the editor: a finished edit of the founder's own video
+becomes 3 shorts (`cut_shorts`), a slideshow item becomes `write_slides` → `build_slideshow` (MP4 and a PNG set), and a
+`build_video` order makes an AI video from Writer's brief (the week plan no longer orders one since S2.5; MCP and
+Studio keep the order kind). The founder makes the videos (owner, 2026-11-09): the CMO writes the script and the
+storyboard and never builds a video on its own. Video is only ever the
+founder's own upload or made in the editor: no link import, no clipping of outside video.
+
+### Charging: charge before running, then run in one go
+
+A paid job shows one card with one price, the founder confirms once, and it runs to the end (owner, 2026-11-05).
+`credit_order_open` holds the job's whole estimate; each piece draws its price from it (`credit_order_draw`); the
+close gives back the rest; `credit_orders_reap` closes a job left open for a day. A Studio order holds a small
+allowance before its team calls a model (`studio_order_hold`); an Assistant turn is billed for every credit it used
+(overage), and a turn that opened an explainer job pays at most `agent_3d_hold_credits()` for its tokens.
 
 ### Providers: one per function
 
 | Function | Provider | Called from |
 |---|---|---|
-| Agent LLM | Claude only (owner, 2026-11-05): Sonnet for the Assistant, CMO chat and drafting agents, Haiku for small tasks; one agent can be moved with `CMO_AGENT_<ID>_MODEL` | Vercel |
-| Moderation | Claude Haiku (prompts on the web, frames on the worker) plus fal NSFW | Vercel, Modal |
-| Image, video, voice, sound generation | fal for every model, including Veo, Nano Banana, Gemini TTS and ElevenLabs (voice with word timestamps, sound effects, music); the direct ElevenLabs adapter stays only as a fallback | Modal |
+| Agent LLM | Claude only (owner, 2026-11-05): Sonnet for the Assistant, CMO chat and drafting agents, Haiku for small tasks; one agent can be moved with `CMO_AGENT_<ID>_MODEL` | Vercel, Modal |
+| Moderation | Creem's Moderation API for every image and video prompt (web before credits, worker again); the output (image or 3 video frames) reviewed by Claude Haiku vision and fal NSFW against Creem's rules (`packages/contracts/creem-policy.json`). No LLM checks a prompt | Vercel, Modal |
+| Image, video, voice, sound generation | fal for every model, including Veo, Nano Banana and ElevenLabs (voice with word timestamps, sound effects, music); the direct ElevenLabs adapter stays only as a fallback | Modal |
 | Transcripts | ElevenLabs Scribe | Modal |
-| Social reading · payments · errors | ScrapeCreators · Creem · Sentry | Vercel |
+| Posting and post analytics | Zernio | Vercel, Modal |
+| Email · web push | Resend · VAPID (no provider) | Vercel |
+| Social reading · payments · errors | ScrapeCreators (and Hacker News search) · Creem · Sentry | Vercel |
+
+What each paid call costs us is recorded in `provider_usage` (micro-USD, priced when written) with a daily cap per
+founder (`provider_spend_cap`); the owner's Costs page (`/app/settings/costs`) shows seven days of spend and the
+switches of `apps/web/lib/ops/switches.ts`, plus a live key check per provider (Anthropic, fal, ElevenLabs, Creem,
+ScrapeCreators; `apps/web/lib/ops/providers.ts`, cached five minutes) so a refused key shows red instead of failing
+silently.
 
 ### Deploy order
 
-1. Apply migrations (`supabase db push`): 20261109–20261111 add memory tiers, goals and briefs.
-2. Add `OPENCMO_WEB_URL` and `CRON_SECRET` to the Modal secret `opencmo`, then `modal deploy`.
-3. Merge: Vercel deploys and drops the old crons.
+1. Apply migrations (`supabase db push`).
+2. Modal secrets (`packages/engine/modal_app.py`, `mcp_app.py`): `opencmo` (`OPENCMO_WEB_URL`, `CRON_SECRET`,
+   `ANTHROPIC_API_KEY`, `CREEM_API_KEY`, `OPENCMO_ENV=production`), `fal-secret` (`FAL_KEY`), `opencmo-voice`
+   (`ELEVENLABS_API_KEY`), `opencmo-motion`, and `opencmo-mcp` for the MCP app; then `modal deploy`. Check with
+   `packages/engine/check_deploy_env.py`.
+3. Vercel: the same `ANTHROPIC_API_KEY`, `CRON_SECRET`, Creem, Zernio (with `OPENCMO_PUBLISH_LIVE=1`), Resend (with
+   `OPENCMO_EMAIL_LIVE=1`) and VAPID keys; merge to deploy.
 4. Run `npm run cmo:eval -- --provider anthropic --yes` to grade the jobs on Claude.

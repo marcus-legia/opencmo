@@ -14,6 +14,8 @@ import { formatDate, getAllPosts, getPost, getRelatedPosts } from "@/lib/blog";
 import { OG_DEFAULTS, SITE_NAME, SITE_URL, absoluteUrl } from "@/lib/site";
 
 export const dynamicParams = false;
+// The closing call to action prints the plan's price from the catalogue: rebuilt every 10 minutes, not frozen at build.
+export const revalidate = 600;
 
 export function generateStaticParams() {
   return getAllPosts().map((post) => ({ slug: post.slug }));

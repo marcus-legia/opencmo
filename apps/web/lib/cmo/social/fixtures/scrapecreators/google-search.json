@@ -1,0 +1,16 @@
+{
+  "source": "assumed",
+  "path": "/v1/google/search",
+  "params": {
+    "query": "invoicing software for freelancers reddit"
+  },
+  "body": {
+    "results": [
+      {
+        "url": "https://www.reddit.com/r/freelance/comments/abc123/",
+        "title": "Best invoicing tool?",
+        "description": "Thread about invoicing tools."
+      }
+    ]
+  }
+}

@@ -27,8 +27,6 @@ const BUDGET_MS = 240_000;
 const EARLY: ReadonlySet<BrainStage> = new Set(["pre_launch", "launched_no_users"]);
 /** What an early business does not have yet: asking for it makes the plan undoable. */
 
-const mentionsVideo = (p: BrainEvalProfile) => /video|clip|record|reel|short|tiktok/i.test(`${JSON.stringify(p.docs.content_strategy ?? {})} ${p.brief ?? ""} ${p.goal}`);
-
 /** Code-tier problems with one plan; empty when it passes. */
 export function planIssues(profile: BrainEvalProfile, plan: readonly PlanItem[]): string[] {
   const issues: string[] = [];
@@ -36,7 +34,8 @@ export function planIssues(profile: BrainEvalProfile, plan: readonly PlanItem[])
   const salesPerDay = new Map<string, number>();
   for (const item of plan) if (item.department === "sales") salesPerDay.set(item.day, (salesPerDay.get(item.day) ?? 0) + 1);
   if ([...salesPerDay.values()].some((n) => n > 1)) issues.push("more than one Reddit item on a day");
-  if (!mentionsVideo(profile) && plan.some((i) => i.department === "video" && i.platform !== "Slideshow")) issues.push("a video nobody asked for");
+  // No AI video in a week plan (cmo-review-2 §2.2), even when the founder's strategy talks about video.
+  if (plan.some((i) => i.department === "video" && i.platform !== "Slideshow")) issues.push("an AI video in the plan");
   plan.forEach((item, index) => {
     if (!item.reason.trim()) issues.push(`item ${index + 1}: no reason`);
     for (const issue of ideaIssues(item.idea, item.reason, profile.docs)) issues.push(`item ${index + 1}: ${issue}`);

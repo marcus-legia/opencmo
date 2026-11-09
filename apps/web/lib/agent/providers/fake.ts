@@ -127,7 +127,7 @@ function roughcutRun(history: StoredMessage[]): boolean {
 }
 const untrusted = <T>(raw: string | undefined): T | undefined => (raw ? (JSON.parse(raw) as { untrusted_data?: T }).untrusted_data : undefined);
 
-function script(history: StoredMessage[]): unknown[] {
+function script(history: StoredMessage[], offered: ReadonlySet<string> = new Set()): unknown[] {
   const user = [...history].reverse().find((message) => message.role === "user");
   const blocks = (user?.content ?? []) as Block[];
   const results = blocks.filter((block) => block.type === "tool_result");
@@ -436,6 +436,10 @@ function script(history: StoredMessage[]): unknown[] {
   // prompt tells a real model to route it.
   const blankEdit = original.includes("no_script");
   if (/<command name="\/video">/.test(ask) || (blankEdit && /\b(make|create)\b[^.]*\bvideo\b/.test(ask))) {
+    // As the prompt tells a real model while `/video` is hidden: no whole AI video, and what it can do instead.
+    if (!offered.has("create_video")) {
+      return [text("A whole AI video from one prompt is not made here. I can make a narrated animated explainer with /explain, an animated intro, or build it from AI images and shots one by one.")];
+    }
     // The length and frame the user asked for, as a real model passes them; 15 s and the edit's frame otherwise.
     const asked = /(\d{1,3})\s*-?\s*(?:seconds?|secs?|s)\b/i.exec(words)?.[1];
     const aspect = /\bsquare\b|\b1:1\b/i.test(words) ? "1:1" : /\blandscape\b|\bhorizontal\b|\b16:9\b/i.test(words) ? "16:9" : undefined;
@@ -765,7 +769,7 @@ export const fakeProvider: Provider = {
     const cmo = tools.some((tool) => tool.name === "create_task");
     const content = [
       { type: "thinking", thinking: "Deciding which tool fits.", signature: "fake" },
-      ...(cmo ? cmoScript(history) : script(history)),
+      ...(cmo ? cmoScript(history) : script(history, new Set(tools.map((tool) => tool.name)))),
     ];
     onDelta({ type: "thinking", text: "Deciding which tool fits." });
     for (const block of content as Array<{ type: string; text?: string; id?: string; name?: string }>) {

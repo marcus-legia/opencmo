@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import { api, jsonBody } from "@/components/clipping/api";
 import { Button, ButtonLink, MonoLabel } from "@/components/ui";
+import { salesScanCard } from "@/lib/cmo/jobs/price-card";
 import type { SalesScreen as Data } from "@/lib/screens/sales";
 
 import { ago } from "../format";
@@ -37,11 +38,90 @@ export function SalesScreen() {
       {state.status === "error" && <ErrorNote>{state.message}</ErrorNote>}
       {state.status === "ready" && (
         <>
+          <ScanNow />
           <SalesBody data={state.data} live={!!state.live.threads} />
           <SalesSettings initial={state.data.settings} live={!!state.live.settings} />
         </>
       )}
     </Screen>
+  );
+}
+
+/**
+ * Scan now (cmo-review-2 S3.6): the same price card as a scan asked in the CMO chat. Nothing is held until the founder
+ * approves it; then `enqueue_cmo_run` holds the credits and the scan runs in one go.
+ */
+function ScanNow() {
+  const card = salesScanCard();
+  const [step, setStep] = useState<"idle" | "confirm" | "busy" | "started">("idle");
+  const [error, setError] = useState<string | null>(null);
+  // Mode B: the founder's own Claude runs the scan from its inbox and OpenCMO holds no credits (`/cmo/runs`).
+  const [claude, setClaude] = useState(false);
+
+  async function open() {
+    setError(null);
+    // The card's price depends on the mode: without it the card could promise a charge that never happens.
+    try {
+      const mode = (await api("/cmo/mode")) as { brain?: string };
+      setClaude(mode.brain === "claude");
+    } catch {
+      setError("Could not check where your scan would run. Try again in a moment.");
+      return;
+    }
+    setStep("confirm");
+  }
+
+  async function start() {
+    setStep("busy");
+    setError(null);
+    try {
+      await api("/cmo/runs", jsonBody({ kind: "sales_scan" }));
+      setStep("started");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not start the scan. Please try again.");
+      setStep("confirm");
+    }
+  }
+
+  if (step === "started") {
+    return (
+      <p role="status" className="scr-muted">
+        {claude
+          ? "Sent to your Claude inbox. Open Claude to run the scan; its threads and draft replies land here."
+          : "Scanning. New threads and their draft replies land here and in Approvals, usually within a few minutes."}
+      </p>
+    );
+  }
+  if (step === "idle") {
+    return (
+      <div className="scr-head-actions">
+        <Button variant="primary" onClick={() => void open()}>
+          Scan now
+        </Button>
+        {error && <ErrorNote>{error}</ErrorNote>}
+      </div>
+    );
+  }
+  return (
+    <div className="v2-panel v2-panel-body" role="group" aria-labelledby="scan-now-title">
+      <p id="scan-now-title">
+        <b>{claude ? "Scan now · in your Claude, no OpenCMO credits" : `Scan now · ${card.credits} credits`}</b>
+      </p>
+      <ul>
+        {card.changes.map((line) => (
+          <li key={line}>{line}</li>
+        ))}
+      </ul>
+      {error && <ErrorNote>{error}</ErrorNote>}
+      <span className="scr-head-actions">
+        <Button variant="primary" disabled={step === "busy"} onClick={() => void start()}>
+          {step === "busy" ? "Starting…" : claude ? "Send to my Claude" : `Approve and spend ${card.credits} credits`}
+        </Button>
+        <Button variant="secondary" disabled={step === "busy"} onClick={() => setStep("idle")}>
+          Cancel
+        </Button>
+      </span>
+    </div>
   );
 }
 
@@ -97,26 +177,20 @@ function SalesBody({ data, live }: { data: Data; live: boolean }) {
         <div role="alert" className="scr-banner is-stuck">
           <p>
             <b>{stuck.text.split(". ")[0]}.</b> {stuck.text.split(". ").slice(1).join(". ")}
-            {/* Only a scan stopped by its budget left threads behind; one that found nothing worth joining did not. */}
-            {stuck.found > 0 ? ` ${stuck.found} threads found before it stopped are below.` : ""}
           </p>
           <span className="scr-head-actions">
-            {stuck.found > 0 ? (
-              <Button variant="primary" disabled title="Raising the week's budget arrives with the brain's budget controls">
-                Add {stuck.creditsToFinish} credits and finish
-              </Button>
-            ) : (
-              <Button
-                variant="primary"
-                onClick={() => {
-                  const panel = document.getElementById("sales-settings-title");
-                  panel?.scrollIntoView({ behavior: "smooth", block: "start" });
-                  panel?.focus({ preventScroll: true });
-                }}
-              >
-                Change where Sales looks
-              </Button>
-            )}
+            {/* A scan holds its credits before it starts and runs in one go, so there is no stopped scan to finish:
+                the way out of two empty scans is a different place to look. */}
+            <Button
+              variant="primary"
+              onClick={() => {
+                const panel = document.getElementById("sales-settings-title");
+                panel?.scrollIntoView({ behavior: "smooth", block: "start" });
+                panel?.focus({ preventScroll: true });
+              }}
+            >
+              Change where Sales looks
+            </Button>
             <Button variant="secondary" onClick={() => setStuck(null)}>
               Wait for Monday
             </Button>

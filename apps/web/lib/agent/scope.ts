@@ -25,7 +25,7 @@ import { ScBudget } from "@/lib/cmo/social/scrapecreators";
 import type { LlmUsage } from "@/lib/cmo/jobs/llm";
 
 import { RESEARCH_CALLS_PER_TURN, RESEARCH_TOOLS, runResearchTool } from "./cmo-research";
-import { CMO_TOOL_SPECS, cmoContext, cmoState, isCmoWrite, runCmoTool, type CmoTurn } from "./cmo-tools";
+import { CMO_TOOL_SPECS, cmoContext, cmoState, isCmoWrite, pricedTaskCard, runCmoTool, type CmoTurn } from "./cmo-tools";
 import { DECISION_WRITES, prepareDecision, readCredits, runDecision, type DecisionCard, type Prepared } from "./cmo-decisions";
 import { CMO_SYSTEM_PROMPT, SYSTEM_PROMPT, projectStateBlock } from "./prompt";
 import type { ToolCall } from "./providers/types";
@@ -68,6 +68,7 @@ import { runWaitForMedia, WAIT_TOOL_SPEC } from "./wait-tool";
 import { BRAND_TOOL_SPEC, CAPTION_TOOL_SPECS, CAPTION_TOOLS, captionsCard, prepareCaptions, runBrandTool, runCaptions, type PreparedCaptions } from "./captions-tool";
 import { backgroundToolSpec, prepareBackground } from "./background-tool";
 import { editToolSpec, prepareEdit } from "./edit-tool";
+import { CREATE_VIDEO_HIDDEN } from "./hidden";
 import { createVideoToolSpec, GENERATION_ACTIVE_LIMIT, prepareCreateVideo, runCreateVideo, videoPieces, type JobSource } from "./create-video";
 import { saveKeyframes } from "./keyframe-library";
 import { prepareRedoKeyframe, redoKeyframeToolSpec, runRedoKeyframe, type ListKeyframe, type PreparedRedo } from "./long-take";
@@ -153,10 +154,14 @@ function checkpointing(supabase: SupabaseClient, turn: Turn, already: boolean) {
 }
 
 /** The clip scope's tools. New tools go at the END: tool order is the start of the prompt cache. */
-export function clipToolSpecs(options: { blank?: boolean } = {}): ToolSpec[] {
+/**
+ * `assistant`: the web app's Assistant, where `/video` is hidden (`hidden.ts`). MCP lists the tools without it and keeps
+ * create_video; Studio calls `scope.plan` by name and does not read this list.
+ */
+export function clipToolSpecs(options: { blank?: boolean; assistant?: boolean } = {}): ToolSpec[] {
   const priced = [generateToolSpec(), voiceoverToolSpec()].filter((spec) => spec !== null);
   const background = backgroundToolSpec();
-  const video = createVideoToolSpec();
+  const video = options.assistant && CREATE_VIDEO_HIDDEN ? null : createVideoToolSpec();
   const editTool = editToolSpec();
   const longTake = [redoKeyframeToolSpec()].filter((spec) => spec !== null);
   const base = options.blank ? TOOL_SPECS.filter((spec) => !OWN_VIDEO_TOOLS.has(spec.name)) : TOOL_SPECS;
@@ -252,7 +257,7 @@ export async function clipScopeWith(supabase: SupabaseClient, context: ClipConte
   const explainerScope = () => ({ clipId, source: jobSource() });
   return {
     kind: "clip",
-    tools: clipToolSpecs({ blank }),
+    tools: clipToolSpecs({ blank, assistant: true }),
     system: SYSTEM_PROMPT,
     async context() {
       const snapshot = await workspace.read();
@@ -550,14 +555,6 @@ export async function clipScopeWith(supabase: SupabaseClient, context: ClipConte
         const outcome = await runCaptions(supabase, clipId, input as PreparedCaptions, (op) => applyOpTool(op, env));
         return { outcome, extra: {}, wrote: outcome.ok && outcome.version !== undefined };
       }
-      if (call.name === "animate_video") {
-        // A card from before /video ran in one go (2026-11-06): its second step no longer exists.
-        return {
-          outcome: { ok: false, content: JSON.stringify({ error: "This video step no longer exists: /video now makes the whole video after one approval. Ask for the video again." }), summary: "Out of date" },
-          extra: {},
-          wrote: false,
-        };
-      }
       const source = jobSource();
       // Before the priced-tool guard: the explainer's one card is not a generation card.
       if (call.name === "plan_explainer") {
@@ -571,7 +568,16 @@ export async function clipScopeWith(supabase: SupabaseClient, context: ClipConte
         const outcome = await runPlanExplainer({ supabase, clipId, source }, input as PreparedExplainerPlan, randomUUID());
         return { outcome, extra: {}, wrote: false };
       }
-      if (!PRICED_TOOLS.has(call.name)) throw new Error(`Clip scope has no approval tool ${call.name}.`);
+      // A card for a step that no longer exists (the two-card /video's `animate_video`, gone 2026-11-06) closes as out of
+      // date, on Approve or Cancel, so the conversation can go on. Any other unknown tool is a bug, not an old card.
+      if (call.name === "animate_video") {
+        return {
+          outcome: { ok: false, content: JSON.stringify({ error: "This step no longer exists. Nothing was charged; ask for it again." }), summary: "Out of date" },
+          extra: {},
+          wrote: false,
+        };
+      }
+      if (!PRICED_TOOLS.has(call.name)) throw new Error(`No approval handler for ${call.name}.`);
       const prepared = input as PreparedGeneration;
       if (!approved) {
         return {
@@ -611,18 +617,12 @@ export async function clipScopeWith(supabase: SupabaseClient, context: ClipConte
   };
 }
 
-/** Kết quả `check` nối sau `<project_state>`: chỉ khi có issue, để tin nhắn gọn. */
+/** The `check` result appended after `<project_state>`, in full only when there are issues, to keep the message short. */
 function checkBlock(report: Awaited<ReturnType<typeof runCheck>>): string {
   if (!report.issues.length) return "<check>ok</check>";
   return `<check>${JSON.stringify({ ok: report.ok, issues: report.issues.slice(0, 20) })}</check>`;
 }
 
-/**
- * Phạm vi CMO chat: không clip, không project, không checkpoint. Tool chỉ đọc (tài liệu, lịch,
- * mạng xã hội qua ScrapeCreators) hoặc giao việc (`create_task`); không có thẻ duyệt vì không tool
- * nào tốn tiền ngoài credit của việc được giao, và không tool nào đăng gì. Ngân sách lời gọi
- * research tính theo YÊU CẦU (scope dựng lại mỗi lượt).
- */
 /** The `cmo_read_hit` bucket a CMO chat tool counts against: social reads, website reads, the credit balance. */
 export function chatReadBucket(name: string): "chat_social" | "chat_site" | "research_credits" | null {
   if (name === "read_site") return "chat_site";
@@ -630,7 +630,11 @@ export function chatReadBucket(name: string): "chat_social" | "chat_site" | "res
   return RESEARCH_TOOLS.has(name) ? "chat_social" : null;
 }
 
-/** `sessionId`: the conversation a turn runs in, for the runs that finished since its previous message. */
+/**
+ * The CMO chat. A decision, and a task priced above a draft (a Sales scan, competitor research), stops at an approval
+ * card: nothing runs or is held before the founder approves it (cmo-review-2 S3.5).
+ * `sessionId`: the conversation a turn runs in, for the runs that finished since its previous message.
+ */
 export function cmoScope(supabase: SupabaseClient, sessionId?: string): Scope {
   const budget = new ScBudget(RESEARCH_CALLS_PER_TURN);
   const turn: CmoTurn = { siteReads: 0, startedAt: Date.now() };
@@ -641,6 +645,11 @@ export function cmoScope(supabase: SupabaseClient, sessionId?: string): Scope {
     context: async () => `${await cmoContext(supabase)}${sessionId ? await runsFinishedBlock(supabase, sessionId) : ""}`,
     state: () => cmoState(supabase),
     async plan(call) {
+      // A Sales scan or competitor research shows its price first; nothing is held until the founder approves it.
+      if (call.name === "create_task") {
+        const priced = pricedTaskCard(call.input);
+        return priced ? { kind: "approval", input: priced.input, card: priced.card } : { kind: "run" };
+      }
       // A decision (plan 2026-11-02-cmo-chat-decisions) is a confirmation card: nothing writes until the founder
       // confirms it. The prepared input, with the card's hash read now, stays on the server with the pending call.
       if (!DECISION_WRITES.has(call.name)) return { kind: "run" };
@@ -669,7 +678,7 @@ export function cmoScope(supabase: SupabaseClient, sessionId?: string): Scope {
         : runCmoTool(supabase, call.name, call.input, turn);
     },
     async decide(call, input, approved) {
-      if (!DECISION_WRITES.has(call.name)) throw new Error(`CMO scope has no approval tool ${call.name}.`);
+      if (call.name !== "create_task" && !DECISION_WRITES.has(call.name)) throw new Error(`CMO scope has no approval tool ${call.name}.`);
       if (!approved) {
         return {
           outcome: { ok: false, content: JSON.stringify({ declined: true, message: "The founder cancelled. Nothing changed." }), summary: "Cancelled" },
@@ -677,7 +686,8 @@ export function cmoScope(supabase: SupabaseClient, sessionId?: string): Scope {
           wrote: false,
         };
       }
-      const outcome = await runDecision(supabase, input as Prepared);
+      // The task as it was priced on the card: the model cannot change it after the founder saw it.
+      const outcome = call.name === "create_task" ? await runCmoTool(supabase, "create_task", input, turn) : await runDecision(supabase, input as Prepared);
       return { outcome, extra: {}, wrote: outcome.ok };
     },
     isWrite: isCmoWrite,

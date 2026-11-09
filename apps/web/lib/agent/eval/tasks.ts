@@ -30,6 +30,7 @@ import icons from "../../../../../packages/clip-icons/data/icons.json";
 
 import type { PreparedGeneration } from "../generate-tool";
 import { ROUGHCUT_TRANSCRIPT, SECOND_TALK, SECOND_TRANSCRIPT, TRANSCRIPT, addSecondTalk } from "./fixture";
+import { CREATE_VIDEO_HIDDEN } from "../hidden";
 import { PAID_TOOLS, before, forbidden, inOrder, maxSteps, toolUsed, trajectory, writes } from "./trajectory";
 
 /** The shared clip with an introduction as its first line, for the name-tag task. */
@@ -174,7 +175,7 @@ const codeIcons = (code: string): string[] => [...code.matchAll(/<Icon\b[^>]*?\b
 
 const masters = (document: ClipDocument) => all(document).filter((item) => item.tag === "video" && item.entity.src === MASTER_SRC);
 
-export const TASKS: EvalTask[] = [
+const ALL_TASKS: EvalTask[] = [
   {
     id: "roughcut",
     prompt: "/roughcut my talk. Just do it, no need to ask.",
@@ -973,3 +974,29 @@ function quoteHit(document: ClipDocument, quote: string | undefined) {
 }
 
 const quoteFound = (document: ClipDocument, quote: string | undefined): boolean => Boolean(quoteHit(document, quote));
+
+/** The tasks that ask for a whole AI video (`/video` or "make me a video" on a blank edit). */
+const WHOLE_VIDEO_TASKS = new Set(["videocreate", "video-slash", "video-plain", "video-outro", "video-square", "video-own-clip"]);
+
+/**
+ * While `/video` is hidden in the web app (`hidden.ts`, cmo-review-2 §2.2) the Assistant has no create_video: a request
+ * for a whole video makes none, and the reply says what it can do instead. The original graders stay for when it is
+ * shown again.
+ */
+function whileVideoHidden(task: EvalTask): EvalTask {
+  return {
+    ...task,
+    grade(outcome) {
+      const notes: string[] = [];
+      const none = check(
+        notes,
+        !(outcome.calls ?? []).some((call) => call.name === "create_video") && !(outcome.generations ?? []).some((item) => item.longTake),
+        "a whole AI video was made while /video is hidden",
+      );
+      const told = check(notes, /explainer|\/explain|intro|one by one|piece by piece/i.test(outcome.reply ?? ""), `the user is not offered what works instead: ${(outcome.reply ?? "").slice(0, 200)}`);
+      return { pass: none && told, notes };
+    },
+  };
+}
+
+export const TASKS: EvalTask[] = ALL_TASKS.map((task) => (CREATE_VIDEO_HIDDEN && WHOLE_VIDEO_TASKS.has(task.id) ? whileVideoHidden(task) : task));

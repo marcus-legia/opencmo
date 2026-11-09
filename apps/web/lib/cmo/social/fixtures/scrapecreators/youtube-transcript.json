@@ -1,0 +1,20 @@
+{
+  "source": "assumed",
+  "path": "/v1/youtube/video/transcript",
+  "params": {
+    "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+  },
+  "body": {
+    "transcript": [
+      {
+        "text": "Today I'll show you",
+        "startMs": "0"
+      },
+      {
+        "text": "how we got customers.",
+        "startMs": "1500"
+      }
+    ],
+    "transcript_only_text": "Today I'll show you how we got customers."
+  }
+}

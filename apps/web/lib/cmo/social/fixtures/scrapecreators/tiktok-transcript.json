@@ -1,0 +1,11 @@
+{
+  "source": "assumed",
+  "path": "/v1/tiktok/video/transcript",
+  "params": {
+    "url": "https://www.tiktok.com/@user_redacted/video/7400000000000000001"
+  },
+  "body": {
+    "id": "7400000000000000001",
+    "transcript": "Three mistakes small shops make with marketing."
+  }
+}

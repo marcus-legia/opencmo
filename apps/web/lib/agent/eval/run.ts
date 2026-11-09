@@ -37,6 +37,7 @@ import { gitInfo, printComparison, writeReport } from "@/lib/eval/report";
 
 import { clipContextBlock } from "../clip-context";
 import { AGENT_3D_HOLD_CREDITS, KEEP_IMAGES } from "../limits";
+import { CREATE_VIDEO_HIDDEN } from "../hidden";
 import { SYSTEM_PROMPT, projectStateBlock } from "../prompt";
 import { ANTHROPIC_MODEL, anthropicProvider } from "../providers/anthropic";
 import { fakeProvider } from "../providers/fake";
@@ -162,7 +163,7 @@ async function runTask(task: EvalTask, provider: Provider, options: Args) {
   process.env.OPENCMO_AI_FAKE ??= "1";
   // Same profile as the app: an edit with no video that has a transcript has no cut-by-words tools.
   const blank = !speechSources((await workspace.read()).document).length;
-  const toolSpecs = [...TOOL_SPECS.filter((spec) => !(blank && OWN_VIDEO_TOOLS.has(spec.name))), ...[generateToolSpec(), voiceoverToolSpec()].filter((spec) => spec !== null), PLAN_VIDEO_TOOL, ...[backgroundToolSpec(), createVideoToolSpec(), editToolSpec()].filter((spec) => spec !== null), WAIT_TOOL_SPEC, ...explainerToolSpecs()];
+  const toolSpecs = [...TOOL_SPECS.filter((spec) => !(blank && OWN_VIDEO_TOOLS.has(spec.name))), ...[generateToolSpec(), voiceoverToolSpec()].filter((spec) => spec !== null), PLAN_VIDEO_TOOL, ...[backgroundToolSpec(), CREATE_VIDEO_HIDDEN ? null : createVideoToolSpec(), editToolSpec()].filter((spec) => spec !== null), WAIT_TOOL_SPEC, ...explainerToolSpecs()];
   const history: StoredMessage[] = [{ role: "user", content: provider.userTurn(task.prompt, `${slashDirective(task.prompt, toolSpecs.map((spec) => spec.name))}${about}${await state()}`) }];
   const generations: PreparedGeneration[] = [];
 

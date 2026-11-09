@@ -59,7 +59,9 @@ export async function runLookSendBacks(admin: SupabaseClient, contextFor: (userI
       const sendBack = lookSendBack(CARD_OF[row.ref_kind], row.ref_id, result.data);
       const failed = [...new Set(result.data.files.flatMap((f) => f.answers.filter((a) => a.pass === false).map((a) => a.id)))];
       try {
-        redo = await redoAfterLook(contextFor(row.user_id, row.order_id), sendBack, failed);
+        // The founder's own video (C2, `post_video`) is never changed for them: its card goes up with the note.
+        const own = row.order_id ? (await admin.from("work_orders").select("kind").eq("id", row.order_id).maybeSingle<{ kind: string }>()).data?.kind === "post_video" : false;
+        if (!own) redo = await redoAfterLook(contextFor(row.user_id, row.order_id), sendBack, failed);
       } catch (error) {
         console.error("[look-redo]", row.check_id, error);
       }

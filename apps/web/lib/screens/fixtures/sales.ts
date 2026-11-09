@@ -3,7 +3,7 @@ import { at } from "./shared";
 
 export const salesFixture: SalesScreen = {
   mentions: { used: 0, window: 10 },
-  stuck: { text: "Scan stopped. This week's Sales budget is used (5 of 5 credits).", creditsToFinish: 5, found: 4 },
+  stuck: { text: "Your last two scans found no conversation worth joining. Try a different brief, or fewer excluded subreddits.", creditsToFinish: 5, found: 0 },
   threads: [
     {
       id: "t-1",

@@ -20,6 +20,7 @@ import {
 import { EXPLAINER_EXAMPLE, EXPLAINER_EXAMPLE_BEATS } from "@opencmo/clip-motion/guide-example";
 import { FONTS } from "@opencmo/editor-core";
 
+import { CREATE_VIDEO_HIDDEN } from "./hidden";
 import { EXPLAINER_MOTION } from "./motion-guide";
 
 /** Prop editor ghi cho chính nó — agent không cần biết. */
@@ -407,7 +408,7 @@ A new AI voice on the clip. It costs credits (the user approves the price) and a
 
 Nothing is spoken, so there are no quotes to anchor to: every piece of media is placed by time.
 
-When the user describes a whole video ("a 20-second video about…", /video), call create_video (read_guide "video"): keyframes first, then the shots between them, each with its own card. The steps below are for building it piece by piece, when the user asks for single shots or wants to pick stills first.
+${CREATE_VIDEO_HIDDEN ? "A whole AI video from one prompt is not made here: when the user asks for one, say so in one sentence and offer to build it piece by piece with the steps below, or a narrated explainer (plan_explainer)." : 'When the user describes a whole video ("a 20-second video about…", /video), call create_video (read_guide "video"): keyframes first, then the shots between them, each with its own card. The steps below are for building it piece by piece, when the user asks for single shots or wants to pick stills first.'}
 
 1. Plan the video first with update_plan, one beat per line in seconds: "[0-3s] hook: a laptop glowing in a dark hotel room", "[3-7s] the dashboard fills with bookings". Keep each shot 2-5 seconds.
 2. work_area in <clip_context> is how long the video plays. When the plan is longer, set_workarea {start: 0, end: <plan length>} BEFORE adding media, or the shots past the end will not play.
