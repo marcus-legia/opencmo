@@ -4260,8 +4260,8 @@ begin
   if v_profile is null or public.platform_profile(v_profile)->>'kind' is distinct from 'post' then
     v_profile := 'x';
   end if;
-  -- A thread is approved as written and scheduled from its card.
-  if jsonb_typeof(v_item.body->'thread') = 'array' and jsonb_array_length(v_item.body->'thread') >= 5 then
+  -- A thread is approved as written and scheduled from its card; the same rule as the card (`thread_valid`).
+  if public.thread_valid(v_item.body) then
     raise exception 'A thread is approved and scheduled from its card.' using errcode = 'P0001';
   end if;
   if exists (select 1 from public.social_accounts where user_id = v_user and platform = v_profile and status = 'connected') then
@@ -12810,11 +12810,12 @@ begin
   end if;
   perform public.lock_credit_owner(v_user);
   v_held := public.credit_held('work_order', p_order_id);
-  if v_held >= public.studio_plan_hold() then
-    return v_held;
+  if v_held < public.studio_plan_hold() then
+    perform public.credit_hold(v_user, 'work_order', p_order_id, public.studio_plan_hold() - v_held, 'CMO video team hold');
   end if;
-  perform public.credit_hold(v_user, 'work_order', p_order_id, public.studio_plan_hold() - v_held, 'CMO video team hold');
-  return public.studio_plan_hold();
+  update public.work_orders set budget_credits = public.studio_plan_hold(), updated_at = now()
+  where id = p_order_id and budget_credits < public.studio_plan_hold();
+  return greatest(v_held, public.studio_plan_hold());
 end;
 $$;
 
