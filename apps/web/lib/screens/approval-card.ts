@@ -262,6 +262,8 @@ const ScriptBody = z.object({
   beats: z.array(StoryBeatSchema).min(1),
   /** Price of the next stage (keyframes), shown before anything is spent. */
   nextPriceCredits: z.number().int().min(0).nullable(),
+  /** A script the founder records (owner, 2026-11-09): free, and approving it opens the editor. `stepId` is its order. */
+  forFounder: z.boolean().default(false),
 });
 
 const PriceBody = z.object({

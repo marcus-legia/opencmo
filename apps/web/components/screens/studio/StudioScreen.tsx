@@ -15,7 +15,7 @@ import { useTabParam } from "../useTabParam";
 import { useScreen } from "../useScreen";
 import { StudioCard, type CardActions } from "./StudioCard";
 import { StudioDrawer } from "./StudioDrawer";
-import { cutShorts, markFinished, type EditState } from "./finish";
+import { cutShorts, finishedNote, markFinished, type EditState } from "./finish";
 import { SORTS, projectCard, screenCard, sortCards, type Card, type Sort } from "./model";
 import { useProjects } from "./useProjects";
 
@@ -69,7 +69,7 @@ export function StudioScreen() {
   );
 
   const finish = useCallback(
-    async (clipId: string, run: () => Promise<unknown>, done: string) => {
+    async <T,>(clipId: string, run: () => Promise<T>, done: string | ((result: T) => string)) => {
       if (finishing) return;
       if (sampleItems && !editStates.has(clipId)) {
         toast(`${done} (sample, nothing was sent).`);
@@ -78,8 +78,8 @@ export function StudioScreen() {
       setFinishing(clipId);
       setError(null);
       try {
-        await run();
-        toast(done);
+        const result = await run();
+        toast(typeof done === "string" ? done : done(result));
         reloadScreen();
       } catch (err) {
         // A stale hash or an edit that is not finished: the server's sentence says what to do.
@@ -143,7 +143,7 @@ export function StudioScreen() {
       void projects.remove(card.project);
       if (itemId === card.id) openItem(null);
     },
-    markFinished: (clipId, documentHash) => void finish(clipId, () => markFinished(clipId, documentHash), "Marked finished. Shorts can be cut from it"),
+    markFinished: (clipId, documentHash) => void finish(clipId, () => markFinished(clipId, documentHash), (done) => finishedNote(done).text),
     cutShorts: (clipId) => void finish(clipId, () => cutShorts(clipId), "Cutting 3 shorts. The batch card comes to your Dashboard"),
   };
 

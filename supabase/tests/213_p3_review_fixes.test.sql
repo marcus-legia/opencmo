@@ -1,5 +1,5 @@
 -- P3 review fixes (20261229100000, 20261229110000): a post's runs match by item whether or not they carry the order;
--- a replan keeps a video waiting on its brief and refunds a dropped brief's run; Writer never delivers or rewrites a
+-- a replan keeps a video's script and refunds a dropped brief's run; Writer never delivers or rewrites a
 -- caption the founder has not seen; a Threads or LinkedIn post is marked posted with its own link and platform; a
 -- new cut of a finished video gets new captions; a skip reason is remembered once.
 create extension if not exists pgtap with schema extensions;
@@ -35,40 +35,43 @@ select isnt((public.enqueue_cmo_run_for('e2130000-0000-4000-8000-00000000000a', 
   'Writer''s orders still key by order');
 update public.cmo_runs set status = 'done', finished_at = now() where user_id = 'e2130000-0000-4000-8000-00000000000a' and kind in ('post_draft', 'write_caption');
 
--- F2: a replan that keeps the video keeps its order and its brief; nothing is paid twice.
+-- F2: a replan that keeps the video keeps its script order and its run; nothing is paid twice. A week's video is a script
+-- the founder records (2026-11-09): no video order is made.
 insert into public.cmo_runs (id, user_id, kind, status) values
   ('e2131000-0000-4000-8000-000000000001', 'e2130000-0000-4000-8000-00000000000a', 'plan_week', 'running'),
   ('e2131000-0000-4000-8000-000000000002', 'e2130000-0000-4000-8000-00000000000a', 'plan_week', 'running'),
   ('e2131000-0000-4000-8000-000000000003', 'e2130000-0000-4000-8000-00000000000a', 'plan_week', 'running');
 select public.cmo_plan_week('e2130000-0000-4000-8000-00000000000a', 'e2131000-0000-4000-8000-000000000001',
   jsonb_build_array(jsonb_build_object('day', current_date, 'department', 'video', 'platform', 'TikTok', 'idea', 'Cut a demo', 'reason', 'r')));
-insert into t select 'video', id from public.work_orders where kind = 'build_video' and user_id = 'e2130000-0000-4000-8000-00000000000a';
 insert into t select 'brief', id from public.work_orders where kind = 'write_video_brief' and user_id = 'e2130000-0000-4000-8000-00000000000a';
 insert into t select 'brief_run', id from public.cmo_runs where kind = 'write_video_brief' and input->>'order_id' = pg_temp.id('brief')::text;
 create temp table b (credits integer) on commit drop;
 insert into b select pg_temp.balance();
-select is((select status from public.work_orders where id = pg_temp.id('video')), 'queued', 'the video waits on its brief');
+select is((select status from public.work_orders where id = pg_temp.id('brief')), 'queued', 'the script waits to be written');
 
 select public.cmo_plan_week('e2130000-0000-4000-8000-00000000000a', 'e2131000-0000-4000-8000-000000000002',
   jsonb_build_array(jsonb_build_object('day', current_date, 'department', 'video', 'platform', 'TikTok', 'idea', 'Cut a demo, by words', 'reason', 'r')));
-select is((select status from public.work_orders where id = pg_temp.id('video')), 'queued', 'a replan that keeps the video does not cancel it');
-select is((select item_id from public.work_orders where id = pg_temp.id('video')),
+select is((select status from public.work_orders where id = pg_temp.id('brief')), 'queued', 'a replan that keeps the video does not cancel its script');
+select is((select item_id from public.work_orders where id = pg_temp.id('brief')),
   (select id from public.content_items where run_id = 'e2131000-0000-4000-8000-000000000002' and department = 'video'),
   'it takes over the new item');
 select is((select count(*)::int from public.work_orders where kind in ('build_video', 'write_video_brief') and user_id = 'e2130000-0000-4000-8000-00000000000a'),
-  2, 'no second brief or video');
-select is((select status from public.work_orders where id = pg_temp.id('brief')), 'queued', 'its brief still waits to run');
+  1, 'no second script and no video');
+select is((select status from public.cmo_runs where id = pg_temp.id('brief_run')), 'queued', 'its run still waits');
 select is(pg_temp.balance(), (select credits from b), 'and nothing more was held');
 
--- A replan that drops the video cancels it, its brief and the brief's run, and gives the credit back.
+-- A replan that drops the video cancels its script and the script's run, and gives the credit back.
 select public.cmo_plan_week('e2130000-0000-4000-8000-00000000000a', 'e2131000-0000-4000-8000-000000000003',
   jsonb_build_array(jsonb_build_object('day', current_date, 'department', 'post', 'platform', 'X', 'idea', 'A post', 'reason', 'r')));
-select is((select status from public.work_orders where id = pg_temp.id('video')), 'cancelled', 'a dropped video is cancelled');
-select is((select status from public.work_orders where id = pg_temp.id('brief')), 'cancelled', 'so is the brief only it waited on');
+select is((select status from public.work_orders where id = pg_temp.id('brief')), 'cancelled', 'a dropped script is cancelled');
+select is((select count(*)::int from public.work_orders where kind = 'build_video' and user_id = 'e2130000-0000-4000-8000-00000000000a'), 0,
+  'and no video was ever ordered');
 select is((select status from public.cmo_runs where id = pg_temp.id('brief_run')), 'failed', 'its queued run never runs');
 select is(pg_temp.balance(), (select credits from b) + 1, 'and its credit comes back');
 select is((select count(*)::int from public.work_orders where kind = 'post_draft' and status = 'queued' and user_id = 'e2130000-0000-4000-8000-00000000000a'),
   1, 'the new plan''s post is ordered');
+insert into t select 'video', id from public.work_order_create('e2130000-0000-4000-8000-00000000000a', date_trunc('week', current_date)::date,
+  (select id from public.work_orders where parent_id is null and user_id = 'e2130000-0000-4000-8000-00000000000a'), 'cut_shorts', 'The founder''s video', '{}', 0);
 
 -- F3, F4: captions are delivered only by approving the card; Writer never rewrites one the founder approved.
 insert into public.jobs (id, user_id, source_url, duration_seconds, status) values

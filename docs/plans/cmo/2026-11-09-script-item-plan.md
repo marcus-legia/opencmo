@@ -78,7 +78,7 @@ owner measures pay → website → first draft on a preview, now that the keys a
 Ranked by the CMO loop. Each item starts with a short research note (what the code does, `file:line`; what changes;
 how it is checked), as `CLAUDE.md` asks.
 
-### C1 The script item (first)
+### C1 The script item (first) — done `7377f50c`
 
 The week plan orders **a script and a storyboard** for a video the founder makes. The CMO never builds it.
 
@@ -100,7 +100,49 @@ The week plan orders **a script and a storyboard** for a video the founder makes
 - Check: a CMO eval case where the strategy calls for a demo video and the plan holds one Script item, with a
   storyboard. An e2e covers plan → script card → approve → Open in editor, with markers present.
 
-### C2 The founder's finished video goes out
+**As built (2026-11-09, `7377f50c`):**
+- One video item a week. Its platform is Shorts, Reels or TikTok (`plan-week.ts` `toPlanItems`).
+- SQL orders `write_video_brief` only, carrying the item (`20270112010000_script_item.sql`). A replan keeps the
+  script, or cancels it with its run and refunds the credit.
+- `VideoBriefSchema.storyboard` holds 3 to 8 beats, each with say, show, shot and seconds. The beats are checked for
+  count, total length (±20%), pace (3.5 words a second) and invented facts.
+- `work_orders_brief_rules` keeps the storyboard on the order and raises a `script` card with
+  `ref_kind = 'work_order'`. The card is free and shows "To camera / Screen / You film".
+- Approve or edit a beat (the edit saves the words and closes the card as `edited`). "Approve and open in editor"
+  then calls `cmo_script_open`: one blank edit per script, kept on the order. Next, `/api/v1/cmo/scripts/[id]/open`
+  sets one marker per beat, skipping markers already placed. The Writer screen offers "Open in editor →" for
+  approved scripts.
+- Tests:
+  - pgTAP 273 and the 7 updated files;
+  - the writer, jobs, studio-orders, screens, load and script-markers checks;
+  - e2e `ui-v2-script`: card → approve → editor with 3 markers → the Writer screen opens the same edit.
+- Code review fixes (2026-11-09):
+  - the replan's relink names its candidate;
+  - the calendar item follows the card (`in_review`, then `approved` or `skipped`), so a replan keeps a written
+    script;
+  - a script whose item was dropped raises or keeps no card;
+  - the markers go in one write with a version check;
+  - the Writer board puts an approved script in "Scheduled" and reads the live card first;
+  - one beat check (`approval_script_beat`);
+  - one `openScript` helper.
+- **Not done:** a CMO eval case for a week with a script.
+
+### C2 The founder's finished video goes out — done `8e4167e4`
+
+**Research note (2026-11-09):** today "Mark finished" on the founder's own edit (`mark_finished`) only closes the card.
+`editor_projects_rules` orders `cut_shorts`. Nothing renders the long video, nothing raises its `finished_video` card
+(that card, and the captions it orders through `approvals_caption_rules`, exist only for a `build_video` order's
+render via `look_check_raise`), and no `video` deliverable is made (`mark_finished` makes one only for a `build_video`
+order). `schedule_propose` makes slots for `post`, `short` and `slideshow` only. So C2 needs the tail of the old
+video pipeline for the founder's own edit:
+1. Finished → render the finished hash (`render_document`) → look check → `finished_video` card. The card orders the
+   captions, as it does today.
+2. Approving it makes a `video` deliverable under a work order. Today none exists for an own edit: create one, or put
+   it under the `cut_shorts` order.
+3. `schedule_propose` and `schedule_follow_content` take `video` like `short`, with YouTube, LinkedIn and X.
+4. Check that `publish_post` posts the render of the approved hash.
+
+That is a migration plus the Studio runner: its own session, not a patch.
 
 The sketch's lane: video + caption → schedule.
 
@@ -112,7 +154,15 @@ The sketch's lane: video + caption → schedule.
 - pgTAP: marking an edit finished creates the caption order and, after the caption card, a schedule slot for the long
   video. Look at a frame of the export that would be posted (`CLAUDE.md` "Verify by looking").
 
-### C3 Post images for posts that need one
+### C3 Post images for posts that need one — done `917d3968`
+
+**Research note (2026-11-09):** the Post image squad (`lib/departments/studio/slideshow/post-image.ts`, order
+`build_post_image`) and its schedule hook (`schedule_image_changed`) are built. Writer drafts posts only for X,
+Threads and LinkedIn (`lib/cmo/platforms.ts`, kind `post`); Instagram and TikTok are captions on a video. So "post
+needs an image" means an X, Threads or LinkedIn post the planner marks. It needs:
+- a plan field;
+- an order created when the post is approved;
+- an e2e.
 
 - `plan-week.ts` or the post draft marks a post that needs an image (Instagram, TikTok photo posts; an X post the
   strategy says works better with one).
@@ -120,7 +170,7 @@ The sketch's lane: video + caption → schedule.
   the existing `build_post_image` order, the Studio hold and Creem moderation. The image joins the post's schedule card.
 - Images only when the post's platform needs one: a text post on X stays text.
 
-### C4 Fewer cards a week (research first, then decide)
+### C4 Fewer cards a week (research first, then decide) — research done: [`docs/research/agents/2026-11-09-weekly-approvals.md`](../../research/agents/2026-11-09-weekly-approvals.md); recommendation: the post card carries its time (about 5–8 fewer cards a week). Waits on the owner.
 
 The sketch has two approvals: the words, then what was made. A week is about 15–20 cards today (`workflow.md` §3).
 C4 is a research note with a recommendation, not code:

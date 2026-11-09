@@ -3,7 +3,7 @@
  *
  *     cd apps/web && NODE_OPTIONS=--conditions=react-server npx tsx lib/cmo/jobs/studio-orders.check.ts
  *
- * A week plan orders no AI video, even when the brief asks for one; a video order's brief becomes the adapter's brief.
+ * A week plan holds one script the founder records, never an AI video; a video order's brief becomes the adapter's brief.
  */
 import assert from "node:assert/strict";
 
@@ -13,7 +13,7 @@ import { briefOf } from "./studio-orders";
 const video = (idea: string) => ({ day_offset: 1, department: "video" as const, platform: "Shorts", idea, reason: "why" });
 const post = { day_offset: 0, department: "post" as const, platform: "X", idea: "A post", reason: "why" };
 
-assert.equal(toPlanItems({ items: [post, video("a"), video("b")] }).filter((i) => i.department === "video").length, 0, "no AI video in a week plan (cmo-review-2 §2.2)");
+assert.equal(toPlanItems({ items: [post, video("a"), video("b")] }).filter((i) => i.department === "video").length, 1, "one script a week; SQL orders its brief, never a video (owner, 2026-11-09)");
 
 const order = (brief: Record<string, unknown>) => ({ id: "o", user_id: "u", kind: "build_video", brief });
 const b = briefOf(order({ objective: "How the CMO plans a week", angle: "Launch week", seconds: 45, aspect: "16:9" }));

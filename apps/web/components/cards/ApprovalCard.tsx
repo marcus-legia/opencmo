@@ -30,6 +30,7 @@ import {
   SlideshowBody,
 } from "./bodies";
 import { useConnectedPlatforms } from "./connected";
+import { openScript } from "./open-script";
 import { blockedReason, editCaption, type Decision } from "./decide";
 import { renderAgain, saveSlideText, slidesHref } from "./slides";
 import { NUMERAL, cardHead, headNote } from "./labels";
@@ -182,6 +183,20 @@ export function ApprovalCard({
     }
   }
 
+  /** A script the founder records: approved (or edited), then its blank edit opens with a marker on each beat. */
+  async function approveAndOpen() {
+    if (card.body.kind !== "script") return;
+    const words = draft.trim();
+    const decision: Decision = editing && words && words !== beats[beat]?.words ? { action: "edit", beat, text: words } : { action: "approve" };
+    const orderId = card.body.stepId;
+    if (!(await run(decision)) || sample) return;
+    try {
+      await openScript(orderId);
+    } catch (error) {
+      toast(error instanceof ApiError ? `Script approved. ${error.message}` : "Script approved, but the editor did not open. Try again from the Writer screen.");
+    }
+  }
+
   async function rerender() {
     if (busy) return;
     setBusy(true);
@@ -283,6 +298,7 @@ export function ApprovalCard({
       case "goal":
         return [primary(), { label: "Edit plan", variant: "secondary", href: "/app/brain" }, ...declineAction];
       case "script":
+        if (card.body.forFounder) return [{ label: editing ? "Approve edit and open" : "Approve and open in editor", variant: "primary", run: () => void approveAndOpen() }, editAction("Edit a beat"), ...declineAction];
         return [primary(editing ? "Approve edit" : PRIMARY_ACTION.script), editAction("Edit a beat"), ...declineAction];
       case "price":
         // No keyframe redo from a card: the contact sheet went with the two-card /video (2026-11-06); `redo_keyframe` does it

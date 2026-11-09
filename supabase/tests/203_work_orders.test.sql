@@ -45,17 +45,19 @@ select is(public.cmo_plan_week('e2030000-0000-4000-8000-00000000000a', pg_temp.i
 insert into t select 'p1', id from public.content_items where idea = 'Cut by words';
 insert into t select 'p2', id from public.content_items where idea = 'Ask for B-roll';
 insert into t select 's1', id from public.content_items where idea = 'People editing demos';
+insert into t select 'v1', id from public.content_items where idea = 'A short';
 insert into t select 'root', id from public.work_orders where user_id = 'e2030000-0000-4000-8000-00000000000a' and parent_id is null;
 
 select is((select status from public.work_orders where id = pg_temp.id('root')), 'running', 'the week root runs');
 select is((select budget_credits from public.work_orders where id = pg_temp.id('root')), 80, 'the root holds the weekly budget');
 select is((select run_id from public.work_orders where id = pg_temp.id('root')), pg_temp.id('plan'), 'the root is the plan run''s order');
-select is((select count(*)::int from public.work_orders where parent_id = pg_temp.id('root')), 6,
-  'one order per post, Reddit and video item, the video''s brief (P3 A2), plus the Sunday review');
+select is((select count(*)::int from public.work_orders where parent_id = pg_temp.id('root')), 5,
+  'one order per post, Reddit and video item (the video''s is its script, 2026-11-09), plus the Sunday review');
 select is((pg_temp.order_of('p1')).department, 'writer', 'posts go to Writer');
 select is((pg_temp.order_of('s1')).budget_credits, 5, 'a Reddit scan gets its price as budget');
 select is(((pg_temp.order_of('p1')).due_at at time zone 'UTC')::date, current_date, 'an order is due on its calendar day');
-select is((select department from public.work_orders where kind = 'build_video'), 'studio', 'a video item is a Studio order (P2 A2)');
+select is((select kind || ' / ' || department from public.work_orders where item_id = pg_temp.id('v1')), 'write_video_brief / writer',
+  'a video item is a script Writer writes; nothing builds the video (owner, 2026-11-09)');
 select ok(exists (select 1 from public.work_order_events where order_id = pg_temp.id('root') and text = 'Planned the week'), 'the log says so');
 
 -- A post draft run: queued → running → done with a draft waiting on its card.
@@ -84,7 +86,7 @@ select is((select status from public.deliverables where ref_id = pg_temp.id('p1'
 -- The founder approves the card: the order is done.
 set local role authenticated;
 set local request.jwt.claims = '{"sub":"e2030000-0000-4000-8000-00000000000a"}';
-select is((select count(*)::int from public.work_orders), 7, 'the founder reads their tree (with the video order, P2 A2, and its brief, P3 A2)');
+select is((select count(*)::int from public.work_orders), 6, 'the founder reads their tree (with the video''s script order)');
 select public.approval_decide(a.id, 'approve', jsonb_build_object('content_hash', a.content_hash))
 from public.approvals a where a.ref_id = pg_temp.id('p1') and a.status = 'waiting';
 select is((pg_temp.order_of('p1')).status, 'done', 'approving the card finishes the order');

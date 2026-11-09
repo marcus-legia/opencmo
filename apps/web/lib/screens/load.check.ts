@@ -66,12 +66,15 @@ const tables: Record<string, Row[]> = {
   work_orders: [
     { id: "b-1", kind: "write_video_brief", status: "done", brief: { objective: "Show a demo cut by words", platform: "TikTok" }, due_at: `${today}T23:59:00Z`, created_at: now },
     { id: "b-2", kind: "write_video_brief", status: "failed", brief: { objective: "Failed brief" }, due_at: null, created_at: now },
+    { id: "b-3", kind: "write_video_brief", status: "done", brief: { objective: "Record the demo", platform: "Shorts", storyboard: [{ say: "a", show: "b", shot: "screen", seconds: 10 }] }, due_at: `${today}T23:59:00Z`, created_at: now },
   ],
   approvals: [
     { id: "card-post", ref_kind: "content_item", ref_id: "p-x", status: "waiting" },
     { id: "card-video", ref_kind: "editor_project", ref_id: "clip-video", status: "waiting" },
     { id: "card-batch", ref_kind: "short_batch", ref_id: "batch-1", status: "waiting" },
     { id: "card-time", ref_kind: "schedule_slot", ref_id: "sl-wait", status: "waiting" },
+    { id: "card-script", kind: "script", ref_kind: "work_order", ref_id: "b-3", status: "approved", created_at: now },
+    { id: "card-script-old", kind: "script", ref_kind: "work_order", ref_id: "b-3", status: "cancelled", created_at: now },
   ],
   shorts: [{ short_clip_id: "clip-short", batch_id: "batch-1", created_at: now }],
   cmo_corrections: [
@@ -114,7 +117,9 @@ async function main(): Promise<void> {
   const writer = compose("writer", (await LOADERS.writer!(ctx)) as never, { production: true, sample: false });
   assert.ok(writer.live.drafts && writer.live.voice, "Writer's drafts and voice are live");
   const drafts = new Map(writer.data.drafts.map((d) => [d.id, d]));
-  assert.deepEqual([...drafts.keys()].sort(), ["b-1", "c-tt", "c-yt", "p-li", "p-th", "p-x"], "posts, captions and briefs of the last two weeks");
+  assert.deepEqual([...drafts.keys()].sort(), ["b-1", "b-3", "c-tt", "c-yt", "p-li", "p-th", "p-x"], "posts, captions and briefs of the last two weeks");
+  assert.deepEqual([drafts.get("b-3")!.scriptId, drafts.get("b-3")!.note, drafts.get("b-3")!.column, drafts.get("b-1")!.scriptId ?? null], ["b-3", "Approved: you record it", "scheduled", null],
+    "an approved script opens in the editor; a brief without a storyboard does not");
   assert.deepEqual(
     ["p-x", "p-li", "p-th"].map((id) => [drafts.get(id)!.platform, drafts.get(id)!.column]),
     [["x", "waiting"], ["linkedin", "scheduled"], ["threads", "drafting"]],

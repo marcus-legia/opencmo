@@ -319,6 +319,7 @@ export const SCRIPT_CARD: ApprovalCard = {
       { words: "Ask for B-roll.", picture: "Slash command, shot drops in.", motion: null },
     ],
     nextPriceCredits: 6,
+    forFounder: false,
   },
 };
 
