@@ -1,0 +1,69 @@
+# Today frame: work in place, readable type, one bar, smaller bundle (2026-11-10)
+
+Branch `claude/today-inline-edit`, cut from #188 (which carries #189's Today frame). One PR.
+
+## 1. What the owner asked (2026-11-10)
+
+- **Fewer jumps between pages, first of all.** Reading a business document and pressing Edit sent the founder to
+  Library. Editing should happen where the founder already is, on the feed. The routes the AI CMO links to change with
+  it.
+- **Type is too small** in the app (local dev): hard to read.
+- **The three columns** (Context, feed, CMO chat) cannot be resized.
+- **The header and navigation** differ between Feed, Calendar and Analytics: make them one.
+- **Measure the bundle and cut it.**
+
+## 2. Decisions
+
+- A document is read **and edited** in the Context drawer (`?doc=<kind>`, `?doc=<kind>&edit=1` opens the form). Save
+  writes a new version through the same route Library uses (`PUT /api/v1/cmo/documents/[kind]`). The Brand Kit's own
+  editor opens in the drawer, loaded only then.
+- Every link that sent the founder to Library for the business documents or the Brand Kit opens the drawer instead.
+  Library stays for Voice and Skills, which have no place on the feed yet.
+- Type: +1 px for every size under 17 px, nothing under 12 px. The rule lives in `scripts/port-today-css.py`
+  (`bump_type`), so `styles/today.css` stays generated from the artboards.
+- Columns: the old shell's `Sash` (drag, arrows, Home/End, Enter resets). Widths are CSS variables set before the first
+  frame and kept in `localStorage` (`opencmo.today.columns`); under 900 px the columns stack and the sashes go.
+- One bar for Feed, Calendar and Analytics: business and accounts left, the three views as links in the middle, credits,
+  Logs and Chat right (no Chat button on the feed, where the chat is a column).
+
+## 3. Todo
+
+### 3.1 In place, not another page
+- [x] Context drawer: Edit opens the document's form in the drawer; Save, Cancel, Escape leaves the form first.
+- [x] Brand Kit editor inside the drawer (dynamic import).
+- [x] `?doc=<kind>&edit=1` opens the form; "+" writes the first missing document; "Add a competitor" opens its form.
+- [x] Today's "Ready to read: your marketing strategy" → `/app?doc=strategy` (was Library).
+- [x] Research "Add a competitor" and its banner, Settings' Brand Kit link → the drawer.
+- [ ] Brain (`/app/brain`) and Library (`/app/library`) still render in the old v2 look inside the frame (screenshots of
+  2026-11-10). Bring their headers and type to the artboards' tokens, or move what the founder needs from them (what
+  the CMO learned, Voice) into drawers on the feed. Ask the owner which.
+- [ ] Look for other links from the CMO chat and cards that leave the feed for something a drawer could show.
+
+### 3.2 Readable type
+- [x] `bump_type` in `port-today-css.py`; `today.css` regenerated.
+- [x] Same scale on the components' inline sizes and `today-app.css`.
+- [ ] Screenshots of Feed, Calendar, Analytics, Sales, Writer, Settings at 1440 and 390, light and dark, in the PR.
+
+### 3.3 Resizable columns
+- [x] `components/today/columns.ts` (+ `columns-boot.ts`), sashes in `Feed` and `ShellV2`.
+- [ ] e2e: drag and keyboard resize, the width survives a reload (rewrite of the old `ui-v2-shell` columns test).
+
+### 3.4 One header for Feed, Calendar, Analytics
+- [x] `TopBar`: `home` and `views` draw one bar; the views are links (`aria-current="page"`).
+- [x] The feed's own Feed / Calendar / Analytics row removed.
+- [ ] e2e `ui-v2-shell`: views by link in the banner (today it still clicks the old tab inside the feed).
+
+### 3.5 Bundle
+- [x] Sentry: `bundleSizeOptimizations` (no tracing, no debug logger). First Load JS shared by all 171 → 141 kB,
+  `/app` 434 → 406 kB, `/login` → 219 kB.
+- [ ] The two ~80 kB gz chunks on `/app` (`3727-*`, `3040-*`): find what they hold and split what the first paint
+  does not need (`next/dynamic`).
+- [ ] `marked` (18 kB gz) and zod (28 kB gz) in the feed's client bundle: load them only where used.
+- [ ] `ShellV2` imports the classic `WebShell` statically for `/video` only: make it dynamic.
+- [ ] Record the before / after table in this file and the PR.
+
+### 3.6 Checks
+- [x] `tsc --noEmit`, `next build`.
+- [ ] `check:contracts`.
+- [ ] v2 e2e for the touched screens (shell, dashboard, today, setup); CI does not run e2e.
+- [ ] Look at it: screenshots in the PR.
