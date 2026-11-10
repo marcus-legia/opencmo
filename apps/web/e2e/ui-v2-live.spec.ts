@@ -29,17 +29,19 @@ test("a finished draft comes back to the chat and opens Writer; a rating is kept
   const line = chat.getByTestId("run-line");
   await expect(line).toContainText("Draft ready to review", { timeout: 120_000 });
   await expect(page).toHaveURL(/\/app\/writer/);
+  // The chat moved the founder to Writer mid-conversation: there it is a drawer, and it stays open.
+  await expect(chat.getByLabel("Ask your CMO")).toBeVisible();
   await page.screenshot({ path: join(OUT, "run-line-1440.png") });
 
   const up = chat.getByRole("button", { name: "Good answer" }).last();
   await up.click();
   await expect(up).toHaveAttribute("aria-pressed", "true");
   await page.reload();
+  await page.getByRole("banner").getByRole("button", { name: "Chat" }).click();
   await expect(chat.getByTestId("run-line")).toContainText("Draft ready to review");
   await expect(chat.getByRole("button", { name: "Good answer" }).last()).toHaveAttribute("aria-pressed", "true");
 
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.getByRole("button", { name: "Chat" }).click();
   await expect(chat.getByTestId("run-line")).toBeVisible();
   await page.screenshot({ path: join(OUT, "run-line-390.png") });
 });

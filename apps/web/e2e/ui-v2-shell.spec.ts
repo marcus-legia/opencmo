@@ -2,84 +2,55 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
-import { signIn, state } from "./helpers";
+import { sidewaysOverflow, signIn, state } from "./helpers";
 import { ensureOnboarded } from "./ui-v2-seed";
 
 /**
- * The three-column shell (docs/plans/cmo/2026-10-30-three-column-shell-plan.md): resizable columns that keep
- * `rail < chat ≤ panel`, open tabs, and one CMO chat that lives across screens. Runs with `npm run test:e2e:v2`.
+ * The Today frame (docs/design/today-canvas, PR #189): no rail and no tab strip. Each screen wears its artboard's top
+ * bar; the CMO chat is the feed's right column and a drawer elsewhere, one chat that lives across screens; Logs open
+ * over any screen; the editor's Assistant takes the right column. Runs with `npm run test:e2e:v2`.
  */
 test.skip(process.env.NEXT_PUBLIC_OPENCMO_UI !== "v2", "v2 UI only: run with npm run test:e2e:v2");
 test.beforeAll(ensureOnboarded);
 
 const OUT = join(__dirname, "..", "..", "..", "docs", "plans", "cmo", "2026-10-30-three-column-shell-shots");
 
-async function widths(page: Page) {
-  return page.evaluate(() => {
-    const width = (selector: string) => document.querySelector(selector)?.getBoundingClientRect().width ?? 0;
-    return { rail: width("#v2-rail"), chat: width("#v2-chat"), panel: width(".v2-main") };
-  });
-}
-
-test("columns resize by keyboard, survive a reload, and keep rail < chat ≤ panel", async ({ page }) => {
+test("the top bars move between views and agent pages; the chat is a column on the feed and a drawer elsewhere", async ({ page }) => {
   await signIn(page, state().users.a);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/app?sample=1");
+  const chat = page.locator("#v2-chat");
   await expect(page.getByTestId("v2-dashboard")).toBeVisible();
+  await expect(chat.getByLabel("Ask your CMO")).toBeVisible();
 
-  const chatSash = page.getByRole("separator", { name: "Resize the chat" });
-  await expect(chatSash).toHaveAttribute("aria-valuenow", "400");
-  await chatSash.focus();
-  await page.keyboard.press("ArrowRight");
-  await page.keyboard.press("ArrowRight");
-  await expect(chatSash).toHaveAttribute("aria-valuenow", "432");
-  expect(Math.round((await widths(page)).chat)).toBe(432);
+  // Feed → Calendar → Analytics through the views switch (Calendar.dc.html, Analytics.dc.html).
+  await page.getByTestId("v2-dashboard").getByRole("tablist", { name: "View" }).getByRole("tab", { name: "Calendar" }).click();
+  await expect(page).toHaveURL(/\/app\/schedule/);
+  await expect(chat.getByLabel("Ask your CMO")).toBeHidden();
+  await page.getByRole("banner").getByRole("tab", { name: "Analytics" }).click();
+  await expect(page).toHaveURL(/\/app\/analytics/);
 
-  await page.reload();
-  await expect(page.getByTestId("v2-dashboard")).toBeVisible();
-  expect(Math.round((await widths(page)).chat)).toBe(432);
+  // The chat opens as a drawer and Escape closes it.
+  await page.getByRole("banner").getByRole("button", { name: "Chat" }).click();
+  await expect(chat.getByLabel("Ask your CMO")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(chat.getByLabel("Ask your CMO")).toBeHidden();
 
-  for (const width of [1100, 1280, 1920]) {
-    await page.setViewportSize({ width, height: 900 });
-    const { rail, chat, panel } = await widths(page);
-    expect(rail, `rail < chat at ${width}`).toBeLessThan(chat);
-    expect(chat, `chat ≤ panel at ${width}`).toBeLessThanOrEqual(panel);
-  }
-
-  // Enter puts the chat back to its default.
-  await page.setViewportSize({ width: 1440, height: 900 });
-  await chatSash.focus();
-  await page.keyboard.press("Enter");
-  await expect(chatSash).toHaveAttribute("aria-valuenow", "400");
-});
-
-test("tabs open with each screen, the current one closes to its neighbour, Dashboard stays", async ({ page }) => {
-  await signIn(page, state().users.a);
-  await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto("/app?sample=1");
-  const rail = page.getByRole("navigation", { name: "Main" });
-  const tabs = page.getByRole("navigation", { name: "Open tabs" });
-
-  await rail.getByRole("link", { name: /^Writer/ }).click();
-  await expect(page).toHaveURL(/\/app\/writer/);
-  await rail.getByRole("link", { name: /^Sales/ }).click();
-  await expect(page).toHaveURL(/\/app\/sales/);
-  await expect(tabs.getByRole("link")).toHaveText(["Dashboard", "Writer", "Sales"]);
-  await expect(tabs.getByRole("button", { name: "Close Dashboard" })).toHaveCount(0);
-
-  await tabs.getByRole("button", { name: "Close Sales" }).click();
-  await expect(page).toHaveURL(/\/app\/writer/);
-  await tabs.getByRole("button", { name: "Close Writer" }).click();
+  // An agent page's crumbs lead back to the agents.
+  await page.goto("/app/sales?sample=1");
+  await expect(page.getByTestId("v2-sales")).toBeVisible();
+  await page.getByRole("banner").getByRole("link", { name: "Agents" }).click();
   await expect(page).toHaveURL(/\/app(\?|$)/);
-  await expect(tabs.getByRole("link")).toHaveText(["Dashboard"]);
+  await expect(page.getByTestId("v2-dashboard")).toBeVisible();
 
-  // Clicking the open screen in the rail hides the panel; clicking it again brings it back.
-  await rail.getByRole("link", { name: /^Dashboard/ }).click();
-  await expect(page.locator(".v2-main")).toBeHidden();
-  await rail.getByRole("link", { name: /^Dashboard/ }).click();
-  await expect(page.locator(".v2-main")).toBeVisible();
+  // Logs open over the screen and close again.
+  await page.getByRole("banner").getByRole("button", { name: "Logs" }).click();
+  const logs = page.getByRole("dialog", { name: "Logs" });
+  await expect(logs).toBeVisible();
+  await logs.getByRole("button", { name: "Close" }).first().click();
+  await expect(logs).toHaveCount(0);
 });
 
 test("the chat keeps its draft across screens, and ?ask=1 puts the cursor in it", async ({ page }) => {
@@ -89,8 +60,9 @@ test("the chat keeps its draft across screens, and ?ask=1 puts the cursor in it"
   const chat = page.locator("#v2-chat");
   const input = chat.getByLabel("Ask your CMO");
   await input.fill("Plan a launch week");
-  await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: /^Research/ }).click();
-  await expect(page).toHaveURL(/\/app\/research/);
+  await page.getByRole("region", { name: "Your team" }).getByRole("link", { name: /^Writer/ }).click();
+  await expect(page).toHaveURL(/\/app\/writer/);
+  await page.getByRole("banner").getByRole("button", { name: "Chat" }).click();
   await expect(input).toHaveValue("Plan a launch week");
 
   await page.goto("/app?ask=1&sample=1");
@@ -113,14 +85,15 @@ test("look: the frame at 1440, 1280, 1024 and 390, with no serious axe violation
       // Visible only: during a navigation the outgoing page can briefly share the DOM with the new one.
       await expect(page.getByTestId(ready).filter({ visible: true })).toBeVisible();
       await expect(page.locator('main [aria-busy="true"]')).toHaveCount(0);
-      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+      const overflow = await sidewaysOverflow(page);
+      expect(overflow.width, `${name} @ ${width}, sideways scroll from: ${overflow.culprits.join("; ")}`).toBeLessThanOrEqual(width);
       await page.screenshot({ path: join(OUT, `${name}-${width}.png`) });
     }
   }
   await page.setViewportSize({ width: 1024, height: 768 });
   await page.goto("/app/writer?sample=1");
-  await page.getByRole("button", { name: "Chat" }).click();
-  await expect(page.locator("#v2-chat")).toBeVisible();
+  await page.getByRole("banner").getByRole("button", { name: "Chat" }).click();
+  await expect(page.locator("#v2-chat").getByLabel("Ask your CMO")).toBeVisible();
   await page.screenshot({ path: join(OUT, "writer-1024-chat.png") });
 
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -131,7 +104,7 @@ test("look: the frame at 1440, 1280, 1024 and 390, with no serious axe violation
   expect(serious.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`)).toEqual([]);
 });
 
-test("the editor opens in the frame: its Assistant in column 2, the rail as the icon strip", async ({ page }) => {
+test("the editor wears its artboard: Feed back, the Assistant in the right column, the CMO chat on the way back", async ({ page }) => {
   mkdirSync(OUT, { recursive: true });
   await signIn(page, state().users.a);
   await page.emulateMedia({ reducedMotion: "reduce" });
@@ -143,35 +116,24 @@ test("the editor opens in the frame: its Assistant in column 2, the rail as the 
 
   const editor = page.getByTestId("editor-v2");
   await expect(editor).toBeVisible();
-  // Inside column 3, under the tab strip, not over the whole window.
-  const box = (await editor.boundingBox())!;
-  expect(box.x).toBeGreaterThan(300);
-  await expect(page.getByRole("navigation", { name: "Open tabs" }).getByRole("link", { name: "Editor" })).toBeVisible();
+  // Editor.dc.html: the editor's own top bar, no frame bar above it.
+  await expect(page.getByRole("banner").filter({ has: page.getByTestId("editor-home") })).toBeVisible();
 
-  // One chat on screen: the clip's Assistant in column 2, none inside the editor.
+  // One chat on screen: the clip's Assistant in the right column, none inside the editor.
   const column = page.getByRole("complementary", { name: "Assistant" });
   await expect(column.locator(".ed2-asst")).toBeVisible();
   await expect(editor.locator(".ed2-agent")).toBeHidden();
-  expect(Math.round((await widths(page)).rail)).toBe(56);
   await page.screenshot({ path: join(OUT, "editor-1440.png") });
-
-  // ⌘B is the editor's split, not the shell's rail toggle.
-  await editor.click({ position: { x: 10, y: 10 } }).catch(() => undefined);
-  await page.keyboard.press("ControlOrMeta+b");
-  expect(Math.round((await widths(page)).rail)).toBe(56);
 
   for (const [width, height] of [[1280, 800], [1024, 768]] as const) {
     await page.setViewportSize({ width, height });
     await expect(editor).toBeVisible();
     await page.screenshot({ path: join(OUT, `editor-${width}.png`) });
   }
-  await page.getByRole("button", { name: "Chat" }).click();
-  await expect(column.locator(".ed2-asst")).toBeVisible();
-  await page.screenshot({ path: join(OUT, "editor-1024-chat.png") });
 
-  // Back on a CMO screen, the CMO chat is in column 2 again.
-  await page.keyboard.press("Escape");
+  // "Feed" saves and goes back; the CMO chat is the feed's column again.
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.getByRole("navigation", { name: "Open tabs" }).getByRole("link", { name: "Dashboard" }).click();
+  await page.getByTestId("editor-home").click();
+  await expect(page).toHaveURL(/\/app(\?|$)/);
   await expect(page.locator("#v2-chat").getByLabel("Ask your CMO")).toBeVisible();
 });

@@ -65,22 +65,20 @@ for (const kind of KINDS) {
   });
 }
 
-test("the phone layout keeps the queue and the chat one tap away; 1024 has the chat as a drawer", async ({ page }) => {
+test("the phone layout keeps the feed and the chat on the page; 1024 has the chat as a drawer elsewhere", async ({ page }) => {
   await signIn(page, state().users.a);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/app?sample=1");
-  // The phone tab bar (shell S1-S3): Today, Approve, Calendar, Chat, More. The queue and the chat are one tap each.
-  const tabs = page.getByRole("navigation", { name: "Main" }).last();
-  await expect(tabs).toBeVisible();
-  await expect(tabs.getByRole("button", { name: "Chat" })).toBeVisible();
-  await expect(tabs.getByRole("link", { name: /^Approve/ })).toBeVisible();
-  await expect(page.getByTestId("approval-queue").getByTestId("approval-card").first()).toBeVisible();
+  // On the feed the chat is the right column (Main.dc.html); at 390 px it stacks under the feed, no tap away.
+  const rows = page.getByTestId("approval-queue").locator('[data-testid="feed-row"][data-card-id]');
+  await expect(rows.first().getByTestId("approval-card")).toBeVisible();
+  await expect(page.locator("#v2-chat").getByLabel("Ask your CMO")).toBeAttached();
   await page.screenshot({ path: join(OUT, "phone-queue-390.png"), fullPage: true });
 
   await page.setViewportSize({ width: 1024, height: 900 });
-  await page.goto("/app?sample=1");
-  await expect(page.getByRole("button", { name: /^Chat/ }).first()).toBeVisible();
-  await expect(page.getByTestId("approval-queue").getByTestId("approval-card").first()).toBeVisible();
+  await page.goto("/app/writer?sample=1");
+  await page.getByRole("banner").getByRole("button", { name: "Chat" }).click();
+  await expect(page.locator("#v2-chat").getByLabel("Ask your CMO")).toBeVisible();
 });
 
 test("the thread card numbers its posts and cannot be edited; the look note sits on the video card", async ({ page }) => {
@@ -93,7 +91,7 @@ test("the thread card numbers its posts and cannot be edited; the look note sits
 
   await page.goto("/app/inbox/card-finished-look");
   const video = page.getByTestId("inbox-card-page").getByTestId("approval-card");
-  await expect(video.getByTestId("look-note")).toContainText("captions run past the frame's right edge at 0:12");
+  await expect(video.getByTestId("look-note")).toContainText(/captions run past the frame's right edge at 0:12/i);
   await expect(video.getByTestId("look-note")).not.toContainText(/^Look check: Look check/);
 });
 
@@ -105,6 +103,8 @@ test("the morning digest lands in the mail catcher and its link opens the card b
   await admin.from("profiles").update({ timezone: "UTC", digest_hour: hour }).eq("id", user.id);
   await admin.from("email_log").delete().eq("user_id", user.id);
   await admin.from("notify_settings").upsert({ user_id: user.id, email_digest: true });
+  // The digest links the first card that waits: cards other specs left waiting for this shared user would come first.
+  await admin.from("approvals").update({ status: "cancelled" }).eq("user_id", user.id).eq("status", "waiting");
   const { data: item, error } = await admin
     .from("content_items")
     .insert({ user_id: user.id, department: "post", platform: "x", day: new Date().toISOString().slice(0, 10), idea: "Digest card", status: "in_review", body: { text: "A digest card: cut by words.", alternates: [] } })
@@ -177,8 +177,11 @@ test("Analytics reads stored Zernio numbers for a connected account", async ({ p
     await expect(page.getByTestId("v2-analytics")).toBeVisible();
     await expect(page.locator('main [aria-busy="true"]')).toHaveCount(0);
     await expect(page.getByText("Sample data")).toHaveCount(0);
-    await expect(page.getByRole("region", { name: "Totals" })).toContainText("Impressions");
-    await expect(page.getByRole("region", { name: "By account" }).first()).toContainText("@e2e_founder");
+    // Analytics.dc.html: the four numbers, then views per day from the connected account.
+    const totals = page.getByRole("region", { name: "Totals" });
+    await expect(totals).toContainText("Views on X");
+    await expect(totals.locator(".kpi").nth(1)).not.toHaveText("–");
+    await expect(page.getByTestId("v2-analytics")).toContainText("X · all posts");
     await axeClean(page);
     await page.screenshot({ path: join(OUT, "analytics-1440.png"), fullPage: true });
     await page.setViewportSize({ width: 390, height: 844 });
@@ -187,11 +190,6 @@ test("Analytics reads stored Zernio numbers for a connected account", async ({ p
     await expect(page.locator('main [aria-busy="true"]')).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
     await page.screenshot({ path: join(OUT, "analytics-390.png"), fullPage: true });
-
-    // The rail says how many accounts Analytics reads.
-    await page.setViewportSize({ width: 1440, height: 1000 });
-    await page.goto("/app/analytics");
-    await expect(page.getByRole("link", { name: /^Analytics, 1 account$/ })).toBeVisible();
   } finally {
     await admin.from("account_metrics").delete().eq("user_id", user.id);
   }

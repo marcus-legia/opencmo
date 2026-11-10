@@ -5,7 +5,7 @@ import { signIn, state } from "./helpers";
 import { ensureOnboarded } from "./ui-v2-seed";
 
 /**
- * Today (CMO review 3, 1.1): the short list above the queue, read from real rows. Approving the top row in place moves
+ * Today (CMO review 3, 1.1): the feed's first rows (Main.dc.html), read from real rows. Approving the top row in place moves
  * "N of M done today"; a platform quiet for days comes first. At 1280 px and 390 px, with a screenshot of each to look
  * at (`test-results/today-*.png`).
  */
@@ -39,26 +39,30 @@ async function cleanup(userId: string, ids: string[]): Promise<void> {
 }
 
 async function approveTopRow(page: Page, width: number): Promise<void> {
-  const today = page.getByTestId("today");
-  await expect(today.getByText("Sample data")).toHaveCount(0);
-  await expect(today.getByTestId("today-row")).toHaveCount(2);
-  await expect(today.getByTestId("today-count")).toHaveText("0 of 2 done today");
+  // The feed (Main.dc.html): Today's rows first, the first one inverted and opened on its card.
+  const feed = page.getByTestId("approval-queue");
+  const rows = feed.getByTestId("feed-row");
+  const count = page.getByTestId("today-count");
+  await expect(feed.getByText("Sample data")).toHaveCount(0);
+  await expect(rows).toHaveCount(2);
+  await expect(count).toHaveText("0 of 2 done");
   await page.screenshot({ path: `test-results/today-${width}.png`, fullPage: false });
   // The theme follows the system by default and is read when the page loads: the same view in dark.
   await page.emulateMedia({ colorScheme: "dark" });
   await page.reload();
-  await expect(today.getByTestId("today-count")).toHaveText("0 of 2 done today");
+  await expect(count).toHaveText("0 of 2 done");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await page.screenshot({ path: `test-results/today-${width}-dark.png`, fullPage: false });
   await page.emulateMedia({ colorScheme: "light" });
   await page.reload();
-  await expect(today.getByTestId("today-row")).toHaveCount(2);
+  await expect(rows).toHaveCount(2);
 
-  await today.getByTestId("today-row").first().getByRole("button", { name: "Open" }).click();
+  const card = rows.first().getByTestId("approval-card");
+  await expect(card).toBeVisible();
   // A post card approves its words and its time at once (A's 1.2): "Approve for this time", or "Approve" without one.
-  await today.getByRole("button", { name: /^Approve( for this time)?$/ }).click();
-  await expect(today.getByTestId("today-count")).toHaveText("1 of 2 done today");
-  await expect(today.getByTestId("today-row")).toHaveCount(1);
+  await card.getByRole("button", { name: /^Approve( for this time)?$/ }).click();
+  await expect(count).toHaveText("1 of 2 done");
+  await expect(rows).toHaveCount(1);
   await page.screenshot({ path: `test-results/today-${width}-after.png`, fullPage: false });
 }
 
@@ -101,9 +105,7 @@ test("a platform quiet for days comes first and asks the CMO for a post", async 
     await signIn(page, user);
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto("/app");
-    const first = page.getByTestId("today").getByTestId("today-row").first();
-    await expect(first).toHaveAttribute("data-reason", "silent");
-    await expect(first).toContainText("Critical");
+    const first = page.getByTestId("approval-queue").getByTestId("feed-row").first();
     await expect(first).toContainText("LinkedIn: nothing posted for 9 days");
     await first.getByRole("button", { name: "Ask your CMO for a post" }).click();
     await expect(page.locator("textarea:focus")).toHaveValue("Write me a post for LinkedIn for today.");

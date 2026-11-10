@@ -4,7 +4,7 @@ import { join } from "node:path";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
-import { signIn, state } from "./helpers";
+import { sidewaysOverflow, signIn, state } from "./helpers";
 import { ensureOnboarded } from "./ui-v2-seed";
 
 /**
@@ -44,7 +44,8 @@ for (const screen of SCREENS) {
       await expect(page.getByTestId(screen.ready)).toBeVisible();
       // Screens read their data client-side: look (and run axe) once loading blocks are gone.
       await expect(page.locator('main [aria-busy="true"]')).toHaveCount(0);
-      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+      const overflow = await sidewaysOverflow(page);
+      expect(overflow.width, `sideways scroll from: ${overflow.culprits.join("; ")}`).toBeLessThanOrEqual(width);
       await page.screenshot({ path: join(OUT, `${screen.name}-${width}.png`), fullPage: true });
 
       const { violations } = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze();

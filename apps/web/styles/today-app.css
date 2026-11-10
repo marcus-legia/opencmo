@@ -25,6 +25,15 @@ html[data-ui="v2"][data-theme="dark"] body { background: #121110; }
 .td-menuwrap > summary::-webkit-details-marker { display: none; }
 .td-menu { position: absolute; left: 0; top: calc(100% + 6px); z-index: 50; min-width: 200px; padding: 6px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); box-shadow: 0 12px 32px rgba(0, 0, 0, .18); display: flex; flex-direction: column; gap: 2px; }
 .td-menuwrap.is-right .td-menu { left: auto; right: 0; }
+/* Chrome lays out a closed <details>' content (content-visibility: hidden keeps its box): an off-screen menu then
+   widens the page at phone width. Closed means gone. */
+.td-menuwrap:not([open]) > .td-menu { display: none; }
+/* At phone width the artboards' toolbars wrap (the canvas's own rule) instead of pushing the page sideways. */
+@media (max-width: 640px) {
+  .td-frame .top { flex-wrap: wrap; height: auto; min-height: 48px; padding-block: 8px; row-gap: 6px; }
+  .td-frame .top > * { min-width: 0; }
+  .td-menu { max-width: calc(100vw - 24px); }
+}
 .td-menu-note { padding: 6px 8px; font-size: 11.5px; color: var(--subtle); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .td-menu a, .td-menu button { display: flex; align-items: center; height: 32px; padding: 0 8px; border: 0; border-radius: 6px; background: transparent; color: var(--text); font: inherit; font-size: 13px; text-align: left; text-decoration: none; cursor: pointer; width: 100%; }
 .td-menu a:hover, .td-menu button:hover { background: var(--hover); color: var(--text); }
@@ -152,6 +161,8 @@ html[data-ui="v2"] .k :is(.td-menu, .cmo-messages) :is(ul, ol), html[data-ui="v2
 .td-v2host .v2-panel-sub, .td-v2host .scr-head-sub { color: var(--muted); font-size: 13px; }
 .td-v2host .v2-panel.scr-dark { background: var(--panel); color: var(--text); border-color: var(--line); }
 .td-v2host .scr-dark :is(h2, p, span, b) { color: inherit; }
+/* The panel is light here: its links keep the dark panel's near-white ink otherwise. */
+.td-v2host .scr-dark .scr-off-links a { color: var(--accent); }
 .td-v2host :is(h1, h2, h3) { color: var(--text); }
 .td-v2host .v2-title, .td-v2host .scr-title { font: 600 22px Geist, ui-sans-serif, system-ui, sans-serif; letter-spacing: -.4px; }
 .td-v2host .v2-tabs { gap: 18px; border-bottom: 1px solid var(--line); }
@@ -246,3 +257,20 @@ html[data-ui="v2"] .k :is(.td-menu, .cmo-messages) :is(ul, ol), html[data-ui="v2
 
 .pg-editor .ed2-center { background: var(--stage); }
 .pg-editor .ed2-framebar, .pg-editor .ed2-tl-wrap { background: var(--panel); border-color: var(--line); }
+
+/* Contrast (WCAG AA, 4.5:1 for small text). In light mode the artboards' green and amber read 3.8:1 on their own
+   washes, and every status tag, badge and "4.2×" sits on one. These shades keep the hue and pass on the washes, the
+   raised grey and the hover grey; dark mode already passes. */
+html:not([data-theme="dark"]) .k { --ok: #16744c; --warn: #8f5a0e; }
+
+/* The old v2 queue drew its first card inverted (charcoal). In the Today frame only the feed's first row is inverted
+   (Main.dc.html); a queue in a legacy screen (Inbox) keeps every card on the panel, or its text, set in --text, sits
+   dark on charcoal. */
+.td-cardhost.v2 .v2-queue .v2-card:first-of-type { background: var(--panel); border-color: var(--line); color: var(--text); }
+.td-cardhost.v2 .v2-queue .v2-card:first-of-type :is(.v2-card-head, .v2-card-meta, .v2-card-numeral, .v2-muted, .v2-button.is-quiet) { color: var(--muted); }
+.td-cardhost.v2 .v2-queue .v2-card:first-of-type :is(.v2-card-toggle, .v2-card-link, .v2-button.is-secondary) { color: var(--text); }
+.td-cardhost.v2 .v2-queue .v2-card:first-of-type .v2-card-toggle:hover { background: var(--hover); }
+.td-cardhost.v2 .v2-queue .v2-card:first-of-type[data-open] .v2-card-body { background: transparent; border-top-color: var(--line); }
+.td-cardhost.v2 .v2-queue .v2-card:first-of-type :is(.v2-card-draft, .v2-card-quote, .v2-card-facts > div, .v2-card-caption, .v2-card-slides li, .v2-input) { background: var(--bg); border-color: var(--line); color: var(--text); }
+.td-cardhost.v2 .v2-queue .v2-card:first-of-type .v2-button.is-primary { background: var(--accent); color: var(--accent-ink); }
+.td-cardhost.v2 .v2-queue .v2-card:first-of-type .v2-button.is-secondary { border-color: var(--line-2); }

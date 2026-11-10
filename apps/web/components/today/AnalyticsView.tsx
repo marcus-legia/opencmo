@@ -71,7 +71,7 @@ export function AnalyticsView() {
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: "12px", marginBottom: "12px" }} className="td-kpis">
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: "12px", marginBottom: "12px" }} className="td-kpis" role="region" aria-label="Totals">
         <div className="card">
           <div className="meta">{goal?.goal ? `Goal: ${goal.goal}` : "Goal this week"}</div>
           <div className="kpi">

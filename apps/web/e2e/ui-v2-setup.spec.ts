@@ -69,7 +69,7 @@ for (const width of [1280, 390]) {
     const { data: plan } = await admin().from("marketing_documents_latest").select("body").eq("user_id", user.id).eq("kind", "content_strategy").single();
     expect(String((plan!.body as { cadence?: string }).cadence)).toMatch(/^The founder posts on X, LinkedIn\./);
     // Today opens with the strategy to read.
-    await expect(page.getByTestId("today").getByTestId("today-row").filter({ hasText: "Ready to read: your marketing strategy" })).toBeVisible();
+    await expect(page.getByTestId("approval-queue").getByTestId("feed-row").filter({ hasText: "Ready to read: your marketing strategy" })).toBeVisible();
   });
 }
 

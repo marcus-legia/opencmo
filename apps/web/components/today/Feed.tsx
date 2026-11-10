@@ -79,6 +79,7 @@ function Row({
   onToggle,
   actions,
   children,
+  cardId,
 }: {
   inv?: boolean;
   icon: ReactNode;
@@ -89,6 +90,8 @@ function Row({
   onToggle?: () => void;
   actions?: ReactNode;
   children?: ReactNode;
+  /** The approval card behind the row, for tests and the row's own lookups. */
+  cardId?: string;
 }) {
   const line = (
     <>
@@ -101,7 +104,7 @@ function Row({
     </>
   );
   return (
-    <div className={inv ? "item inv" : "item"}>
+    <div className={inv ? "item inv" : "item"} data-testid="feed-row" data-card-id={cardId}>
       {onToggle && !actions ? (
         <button type="button" className="row" onClick={onToggle} aria-expanded={open}>
           {line}
@@ -123,6 +126,7 @@ function CardRow({ card, inv, open, onToggle, onLater, onDecide, sample }: { car
   const meta = whenLabel(card);
   return (
     <Row
+      cardId={card.id}
       inv={inv}
       icon={card.kind === "post" && card.account ? (PLATFORM_ICON[card.account.platform] ?? KIND_ICON.post) : KIND_ICON[card.kind]}
       kind={label}
@@ -426,7 +430,7 @@ export function Feed({ email }: { email?: string | null }) {
           <div className="flow" role="group" aria-label="This week's workflow" style={{ marginBottom: "22px" }}>
             {steps.map((s, i) => (
               <span key={s.id} style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                <button type="button" aria-pressed={step === s.id} onClick={() => setStep(s.id)}>
+                <button type="button" aria-pressed={step === s.id} onClick={() => setStep(s.id)} data-testid={`flow-${s.id}`}>
                   <b>{counts[s.id]}</b>
                   {s.label}
                 </button>

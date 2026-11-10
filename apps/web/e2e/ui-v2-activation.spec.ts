@@ -1,7 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { expect, test, type Page } from "@playwright/test";
 
-import { showAssistant, signIn, state } from "./helpers";
+import { openFeedCard, showAssistant, signIn, state } from "./helpers";
 
 /**
  * cmo-review-2 S2 and CMO review 3, 3.1 (the free first run, the first week within minutes, the rail, `/video` hidden, "I posted it"), on the local
@@ -62,8 +62,7 @@ test("the free first run: website → documents, plan and drafts with no payment
 
   // Approve on the post card answers with the plan sheet; the draft stays waiting.
   await page.reload();
-  const card = page.getByTestId("approval-queue").getByRole("article", { name: /^Writer · Post · X:/ }).first();
-  await card.getByRole("button", { name: /Writer · Post · X/ }).click();
+  const card = await openFeedCard(page, /X post ·/);
   await card.getByRole("button", { name: /^Approve( for this time)?$/ }).click();
   await expect(page.getByTestId("plan-sheet")).toBeVisible();
   await expect(page.getByTestId("plan-sheet")).toContainText("Your first plan and drafts were free");
@@ -102,11 +101,11 @@ test("the first week: website → plan card and a first draft, then I posted it 
   await page.getByRole("button", { name: "Read my website" }).click();
   await expect(page).toHaveURL(/\/app$/, { timeout: 60_000 });
 
-  // The rail follows the CMO loop: Dashboard, then Writer, Studio, Schedule; the editor last.
-  const rail = page.getByRole("navigation", { name: "Main" }).first();
-  await expect(rail.getByRole("link", { name: /^Writer/ })).toBeVisible();
-  const labels = (await rail.locator("a").allInnerTexts()).map((text) => text.split("\n")[0]!.trim()).filter(Boolean);
-  const order = ["Dashboard", "Writer", "Studio", "Schedule", "Editor"].map((name) => labels.findIndex((label) => label.startsWith(name)));
+  // The agents follow the CMO loop: Planner, then Writer, Studio, Publisher (Main.dc.html's agent list).
+  const team = page.getByRole("region", { name: "Your team" });
+  await expect(team.getByRole("link", { name: /^Writer/ })).toBeVisible();
+  const labels = (await team.locator("a").allInnerTexts()).map((text) => text.split("\n")[0]!.trim()).filter(Boolean);
+  const order = ["Planner", "Writer", "Studio", "Publisher"].map((name) => labels.findIndex((label) => label.startsWith(name)));
   expect(order.every((index, i) => index >= 0 && (i === 0 || index > order[i - 1]!)), labels.join(" | ")).toBe(true);
 
   // The plan and today's draft arrive without waiting for Monday.
@@ -129,8 +128,7 @@ test("the first week: website → plan card and a first draft, then I posted it 
 
   // The X draft, with no X account: Open X and I posted it on the card itself.
   await page.reload();
-  const card = page.getByRole("article", { name: /^Writer · Post · X:/ }).first();
-  await card.getByRole("button", { name: /Writer · Post · X/ }).click();
+  const card = await openFeedCard(page, /X post ·/);
   await expect(card.getByRole("button", { name: "Open X" })).toBeVisible();
   const cardId = await card.getAttribute("data-card-id");
   const posted = page.waitForResponse((response) => response.url().endsWith(`/approvals/${cardId}/posted`));

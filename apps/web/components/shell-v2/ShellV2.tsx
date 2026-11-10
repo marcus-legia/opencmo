@@ -162,14 +162,17 @@ function TodayFrame({ credits, plan, email, userId, pending, chatLive, children,
   const [workVersion, setWorkVersion] = useState(0);
   const [clipAssistantSlot, setClipAssistantSlot] = useState<HTMLElement | null>(null);
 
-  // A new screen closes the chat drawer and the logs.
+  // A new screen closes the chat drawer and the logs, unless the chat itself moved there (it opens Writer when a draft
+  // is ready, or the screen a request is about): the founder is mid-conversation, and on that screen the chat is a
+  // drawer, so it stays open instead of vanishing with the answer.
   const shown = useRef(segment);
   useEffect(() => {
     if (shown.current === segment) return;
     shown.current = segment;
-    setChatOpen(false);
+    const fromChat = !!chatColumn.current && chatColumn.current.contains(document.activeElement);
+    setChatOpen(fromChat && screen.chat === "drawer");
     setLogsOpen(false);
-  }, [segment]);
+  }, [segment, screen.chat]);
 
   // `?logs=1` (Billing's "Open Logs") opens the drawer over the screen it lands on, then drops the flag.
   useEffect(() => {

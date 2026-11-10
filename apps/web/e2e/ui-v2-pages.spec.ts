@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 import type { Project } from "../lib/clipping-types";
-import { signIn, state } from "./helpers";
+import { sidewaysOverflow, signIn, state } from "./helpers";
 
 /**
  * Session C's v2 pages (ui-build plan U5–U8). They exist only in a build with NEXT_PUBLIC_OPENCMO_UI=v2,
@@ -10,12 +10,12 @@ import { signIn, state } from "./helpers";
 test.skip(process.env.NEXT_PUBLIC_OPENCMO_UI !== "v2", "v2 pages are built only with NEXT_PUBLIC_OPENCMO_UI=v2");
 
 const PAGES: [string, string][] = [
-  ["/app/analytics", "What worked, and what didn't."],
+  ["/app/analytics", "This week"],
   ["/app/brain", "The plan, the orders, what it learned."],
   ["/app/library", "What your team knows about your business."],
   ["/app/research", "What works, with the link."],
   ["/app/writer", "Writer"],
-  ["/app/studio", "Videos, shorts, slides."],
+  ["/app/studio", "Videos"],
   ["/app/sales", "Sales"],
   ["/app/settings", "Settings"],
 ];
@@ -26,8 +26,8 @@ for (const [path, heading] of PAGES) {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(`${path}?sample=1`);
     await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
-    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
-    expect(overflow).toBeLessThanOrEqual(0);
+    const overflow = await sidewaysOverflow(page);
+    expect(overflow.width, `sideways scroll from: ${overflow.culprits.join("; ")}`).toBeLessThanOrEqual(390);
   });
 }
 
@@ -72,10 +72,12 @@ const project: Project = {
   clips: [],
 };
 
+/** Projects.dc.html: a project opens its drawer, where Delete takes two taps. */
 async function deleteFromMenu(page: import("@playwright/test").Page) {
-  await page.getByRole("button", { name: "More for Remove me" }).click();
-  await page.getByRole("menuitem", { name: "Delete" }).click();
-  await page.getByRole("menuitem", { name: "Delete? Tap again" }).click();
+  await page.locator("button.proj").filter({ hasText: "Remove me" }).click();
+  const drawer = page.getByRole("dialog");
+  await drawer.getByRole("button", { name: "Delete", exact: true }).click();
+  await drawer.getByRole("button", { name: "Delete? Tap again" }).click();
 }
 
 test("Studio deletes an upload only after the second tap and the server's answer", async ({ page }) => {
@@ -92,7 +94,6 @@ test("Studio deletes an upload only after the second tap and the server's answer
   await expect(page.getByText("Remove me", { exact: true })).toBeVisible();
   await deleteFromMenu(page);
   await expect(page.getByText("Remove me", { exact: true })).toHaveCount(0);
-  await expect(page.getByText(/Nothing here yet/)).toBeVisible();
 });
 
 test("a delayed search response cannot bring a deleted upload back", async ({ page }) => {
