@@ -5,6 +5,7 @@
  */
 import type { ReactNode } from "react";
 
+import { Icon, type IconName } from "@/components/icons";
 import { MonoLabel, SampleTag } from "@/components/ui";
 
 import "./screens.css";
@@ -38,13 +39,22 @@ export function PageHeader({
   sample?: boolean;
   actions?: ReactNode;
 }) {
+  const icon = HEAD_ICON[eyebrow.toLowerCase()];
   return (
-    <header className="scr-head">
-      <div className="scr-head-text">
-        <span className="scr-eyebrow">
-          {numeral ? <span className="v2-numeral">{`${numeral} · ${eyebrow}`.toUpperCase()}</span> : <MonoLabel muted>{eyebrow}</MonoLabel>}
-          {sample && <SampleTag />}
+    <header className="scr-head td-head">
+      {icon ? (
+        <span className="td-head-tile" aria-hidden="true">
+          <Icon name={icon} size={20} />
         </span>
+      ) : null}
+      <div className="scr-head-text">
+        {/* The eyebrow only when it adds something: a page titled with the agent's name does not repeat it. */}
+        {title !== eyebrow || sample ? (
+          <span className="scr-eyebrow">
+            {title === eyebrow ? null : numeral ? <span className="v2-numeral">{`${numeral} · ${eyebrow}`}</span> : <MonoLabel muted>{eyebrow}</MonoLabel>}
+            {sample && <SampleTag />}
+          </span>
+        ) : null}
         <h1 className="v2-title scr-title">{title}</h1>
         {sub && <p className="scr-head-sub">{sub}</p>}
       </div>
@@ -52,6 +62,19 @@ export function PageHeader({
     </header>
   );
 }
+
+/** The agent's tile on its page (canvas AgentSales.dc.html): the same Lucide icon as the rail. */
+const HEAD_ICON: Record<string, IconName> = {
+  writer: "pencil",
+  studio: "film",
+  schedule: "calendar",
+  sales: "message-circle",
+  library: "file-text",
+  research: "search",
+  analytics: "chart-column",
+  brain: "sparkles",
+  settings: "settings",
+};
 
 /** B's `Panel` now carries `sub`, `foot` and `white` itself; pages keep importing it from here. */
 export { Panel } from "@/components/ui";

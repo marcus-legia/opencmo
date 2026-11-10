@@ -1,22 +1,24 @@
 "use client";
 
 /**
- * The v2 home (S2): week strip, team graph with the live log, results, what goes out today, and the approval queue.
- * Desktop follows Main.dc.html; at phone width the graph becomes a list and the queue moves up (DashboardPhone.dc.html).
+ * The v2 home, the feed (Today redesign, canvas Main.dc.html): the headline, the week's loop in one line, then the
+ * approval queue first, one row per thing to do, opened in place. Beside it: the goal, the team and the live log.
  * Data: `DashboardScreen` from `/api/v1/screens/dashboard`; a block whose `live` flag is false shows "Sample data".
  */
 
+import Link from "next/link";
 import { useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 
+import { Icon } from "@/components/icons";
 import { useShellState } from "@/components/shell-v2/ShellState";
-import { Button, Kpi, KpiStrip, Panel } from "@/components/ui";
+import { Button, Panel } from "@/components/ui";
 
 import { ApprovalQueue } from "./ApprovalQueue";
 import { DashboardHeader } from "./Header";
 import { LiveLog } from "./LiveLog";
 import { ResultsPanel, TodayPanel } from "./Tables";
-import { TeamGraph, TeamList } from "./TeamGraph";
+import { TeamGrid } from "./TeamGraph";
 import { useDashboard } from "./useDashboard";
 
 export function Dashboard() {
@@ -65,59 +67,64 @@ export function Dashboard() {
   const { week } = data;
   const credits = week.credits.budget > 0 ? `${week.credits.used} / ${week.credits.budget}` : `${week.credits.used}`;
 
+  const outCount = data.outToday.filter((row) => row.status !== "failed").length;
+  const goalPct = week.deliverables.total > 0 ? Math.round((week.deliverables.done / week.deliverables.total) * 100) : 0;
+
   return (
-    <div className="v2-dash" data-testid="v2-dashboard">
+    <div className="v2-dash td-feed" data-testid="v2-dashboard">
       <DashboardHeader count={count} goal={week.deliverables} pausedAt={data.cmo.pausedAt} pauseLive={live.cmo} onPaused={setPausedAt} onAsk={focusChat} />
 
-      <div className="v2-dash-week">
-        <KpiStrip label="This week, live">
-          <Kpi label="Week goal" value={week.goal ?? "No goal yet"} text progress={week.deliverables.total > 0 ? (week.deliverables.done / week.deliverables.total) * 100 : 0} />
-          <Kpi label="Deliverables done" value={`${week.deliverables.done} / ${week.deliverables.total}`} />
-          <Kpi label="Working now" value={`${week.workingNow} of ${data.team.nodes.length}`} />
-          <Kpi label="Words drafted today" value={week.wordsDraftedToday.toLocaleString("en-US")} />
-          <Kpi label="Credits this week" value={credits} />
-        </KpiStrip>
-      </div>
+      {/* The week's loop in one line (canvas "flow"): what waits, what goes out, what is done. Numbers only from the screen. */}
+      <nav className="td-flow" aria-label="This week">
+        <a href="#approval-queue" className="td-flow-step">
+          <b className="v2-num">{count}</b> waiting on you
+        </a>
+        <Icon name="chevron-right" size={14} className="td-flow-arrow" />
+        <Link href="/app/schedule" className="td-flow-step">
+          <b className="v2-num">{outCount}</b> going out today
+        </Link>
+        <Icon name="chevron-right" size={14} className="td-flow-arrow" />
+        <Link href="/app/writer" className="td-flow-step">
+          <b className="v2-num">
+            {week.deliverables.done}/{week.deliverables.total}
+          </b>{" "}
+          done this week
+        </Link>
+        <span className="td-spacer" />
+        <span className="v2-mono is-muted">Credits this week {credits}</span>
+      </nav>
 
       <div className="v2-dash-cols">
         <div className="v2-dash-main">
-          <Panel id="team-title" title="Your team, working" mark live sample={!live.team || !live.log} className="v2-dash-team" actions={<Legend />}>
-            <TeamGraph team={data.team} waiting={waiting} />
-            <LiveLog events={data.log} />
-          </Panel>
-          <div className="v2-dash-teamlist">
-            <TeamList team={data.team} waiting={waiting} />
-          </div>
-          <div className="v2-dash-results">
-            <ResultsPanel results={data.results} live={live.results} />
+          <div id="approval-queue">
+            <ApprovalQueue cards={data.queue} live={live.queue} digest={data.digest} onDecide={decideCard} />
           </div>
           <div className="v2-dash-today">
             <TodayPanel rows={data.outToday} live={live.outToday} waiting={(id) => data.queue.some((card) => card.id === id)} />
           </div>
+          <div className="v2-dash-results">
+            <ResultsPanel results={data.results} live={live.results} />
+          </div>
         </div>
-        <div className="v2-dash-side">
-          <ApprovalQueue cards={data.queue} live={live.queue} digest={data.digest} onDecide={decideCard} />
+        <div className="v2-dash-side td-side">
+          <Panel id="week-title" title="Goal this week" className="v2-dash-week">
+            <div className="v2-panel-body">
+              <div className="td-goal">{week.goal ?? "No goal yet. Ask your CMO to set one."}</div>
+              <div className="v2-progress" aria-hidden="true">
+                <span style={{ width: `${goalPct}%` }} />
+              </div>
+              <div className="v2-mono is-muted td-goal-note">
+                {week.deliverables.done} of {week.deliverables.total} done · {week.workingNow} of {data.team.nodes.length} working now ·{" "}
+                {week.wordsDraftedToday.toLocaleString("en-US")} words today
+              </div>
+            </div>
+          </Panel>
+          <Panel id="team-title" title="Your team" mark live sample={!live.team || !live.log} className="v2-dash-team">
+            <TeamGrid team={data.team} waiting={waiting} />
+            <LiveLog events={data.log} />
+          </Panel>
         </div>
       </div>
-    </div>
-  );
-}
-
-function Legend() {
-  return (
-    <div className="v2-legend" aria-label="Legend">
-      <span>
-        <span className="v2-legend-key is-working" aria-hidden="true" />
-        Working
-      </span>
-      <span>
-        <span className="v2-legend-key is-idle" aria-hidden="true" />
-        Idle
-      </span>
-      <span>
-        <span className="v2-legend-key is-stuck" aria-hidden="true" />
-        Stuck
-      </span>
     </div>
   );
 }

@@ -5,8 +5,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { ApiError, api } from "@/components/clipping/api";
 import { NewMenu } from "@/components/editor/slides/NewMenu";
+import { Icon } from "@/components/icons";
 import { useShellState } from "@/components/shell-v2/ShellState";
 import { Button, ButtonLink, EmptyState, SampleTag, Tabs } from "@/components/ui";
+import type { ApprovedScript } from "@/app/api/v1/cmo/scripts/route";
 import type { Project } from "@/lib/clipping-types";
 import { STUDIO_KINDS, type StudioScreen as Data, type TeamStep } from "@/lib/screens/studio";
 
@@ -163,6 +165,7 @@ export function StudioScreen() {
           </>
         }
       />
+      <ScriptsToFilm />
       <Tabs<Tab> label="Kind" idBase="studio-kind" panel={false} items={TABS.map((t) => ({ id: t.id, label: `${t.label} · ${count(t.id)}` }))} value={tab} onChange={setTab} />
       <div className="scr-studio-tools">
         <label className="scr-search">
@@ -270,5 +273,50 @@ export function TeamSteps({ steps, compact = false }: { steps: TeamStep[]; compa
         </li>
       ))}
     </ol>
+  );
+}
+
+/**
+ * Scripts the founder approved in Writer and still has to film (canvas Projects.dc.html): the founder makes the videos,
+ * so the editor's home starts with what to record. Nothing shows when there is none.
+ */
+function ScriptsToFilm() {
+  const [scripts, setScripts] = useState<ApprovedScript[]>([]);
+  useEffect(() => {
+    let alive = true;
+    // A small list of its own: Studio does not load Writer's whole screen for it. No list rather than an error here.
+    void api<{ scripts: ApprovedScript[] }>("/cmo/scripts")
+      .then((r) => alive && setScripts(r.scripts))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+  if (scripts.length === 0) return null;
+  return (
+    <section className="td-group" aria-labelledby="scripts-to-film">
+      <h2 id="scripts-to-film" className="td-group-head">
+        Scripts to film <span className="v2-num">{scripts.length}</span>
+      </h2>
+      <ul className="td-rows">
+        {scripts.map((d) => (
+          <li key={d.id} className="td-row-item">
+            <div className="td-row">
+              <span className="td-row-tile" aria-hidden="true">
+                <Icon name="video" size={14} />
+              </span>
+              <span className="td-row-title">{d.title}</span>
+              <a className="v2-button is-quiet is-compact" href={`/app/script/${encodeURIComponent(d.id)}/prompter`}>
+                <Icon name="smartphone" size={14} />
+                Read on your phone
+              </a>
+              <ButtonLink href="/app/editor?panel=upload" variant="primary" compact>
+                Upload the take
+              </ButtonLink>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

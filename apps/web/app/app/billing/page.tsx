@@ -1,9 +1,11 @@
 import { BillingButton } from "@/components/billing/BillingButton";
+import { BillingV2 } from "@/components/billing/BillingV2";
 import { AccountUsageLoader } from "@/components/clipping/web/AccountUsage";
 import { LocalTime } from "@/components/LocalTime";
 
 import { packsOnSale, plansOnSale } from "@/lib/billing-catalog";
 import { isPaidPlan } from "@/lib/pricing";
+import { UI_V2 } from "@/lib/screens/flag";
 import { createServerClient } from "@/lib/supabase/server";
 import type { LedgerEntry } from "@/lib/types";
 
@@ -38,6 +40,23 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   const current = plans.find((plan) => plan.id === planId);
   const paid = isPaidPlan(planId);
   const planCredit = plans.find((plan) => plan.id === "starter" && plan.slug && plan.credits > 0);
+
+  if (UI_V2) {
+    return (
+      <BillingV2
+        planId={planId}
+        paid={paid}
+        plans={plans}
+        packs={packs}
+        planCredit={planCredit}
+        ledger={ledger ?? []}
+        hasPortal={Boolean(profile?.creem_customer_id)}
+        justPaid={justPaid === "1"}
+        start={start === "1"}
+        site={site}
+      />
+    );
+  }
 
   return (
     <section className="billing-view">

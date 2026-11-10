@@ -13,7 +13,7 @@ import { BUDGET_MAX, BUDGET_MIN, type SettingsScreen as Data } from "@/lib/scree
 import { PauseButton } from "../brain/PauseButton";
 import { cx, ErrorNote, PageHeader, Panel, Screen, SkeletonBlocks } from "../parts";
 import { isSample, useScreen } from "../useScreen";
-import { AccountsPanel } from "./AccountsPanel";
+import { ACCOUNTS_PANEL_ID, AccountsPanel } from "./AccountsPanel";
 import { NotifyPanel } from "./NotifyPanel";
 
 const DIGEST_HOURS = [6, 7, 8, 9, 10, 12, 18];
@@ -40,15 +40,30 @@ export function SettingsScreen({ mcpEndpoint, paid }: { mcpEndpoint: string | nu
 
   return (
     <Screen label="Settings">
-      <PageHeader eyebrow="Settings" title="Accounts, budget, and the off switch." sample={state.status === "ready" && isSample(state.live)} />
-      {state.status === "loading" && <SkeletonBlocks />}
-      {state.status === "error" && <ErrorNote>{state.message}</ErrorNote>}
-      {state.status === "ready" && <SettingsBody data={state.data} live={state.live} />}
-      {/* Today's account, API keys and connected apps: kept whole so nothing the old page did is lost. */}
-      <AccountPanel />
-      <div id="api-keys" className="scr-legacy-cards">
-        <ApiKeys endpoint={mcpEndpoint} paid={paid} />
-        <ConnectedApps paid={paid} />
+      <PageHeader eyebrow="Settings" title="Settings" sub="Accounts, budget, notifications and the off switch." sample={state.status === "ready" && isSample(state.live)} />
+      <div className="td-settings">
+        {/* A menu of the page's own parts plus the settings that have their own page (canvas Settings.dc.html). */}
+        <nav className="td-settings-nav" aria-label="Settings">
+          <a href={`#${ACCOUNTS_PANEL_ID}`}>Accounts</a>
+          <a href="#settings-your-cmo">Your CMO</a>
+          <a href="#settings-notify">Notifications</a>
+          <a href="#off-title">Off switch</a>
+          <a href="#api-keys">API keys</a>
+          <span className="td-settings-sep" aria-hidden="true" />
+          <a href="/app/billing">Billing</a>
+          <a href="/app/library?tab=brand">Brand Kit</a>
+        </nav>
+        <div className="td-settings-body">
+          {state.status === "loading" && <SkeletonBlocks />}
+          {state.status === "error" && <ErrorNote>{state.message}</ErrorNote>}
+          {state.status === "ready" && <SettingsBody data={state.data} live={state.live} />}
+          {/* Today's account, API keys and connected apps: kept whole so nothing the old page did is lost. */}
+          <AccountPanel />
+          <div id="api-keys" className="scr-legacy-cards">
+            <ApiKeys endpoint={mcpEndpoint} paid={paid} />
+            <ConnectedApps paid={paid} />
+          </div>
+        </div>
       </div>
     </Screen>
   );
