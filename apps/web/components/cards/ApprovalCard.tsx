@@ -15,6 +15,7 @@ import { Button, ButtonLink } from "@/components/ui";
 import { intentFor } from "@/lib/departments/publish/intent";
 import { isPublishPlatform } from "@/lib/departments/publish/types";
 import { PRIMARY_ACTION, type ApprovalCard as Card, type Caption, type ScheduleOptions } from "@/lib/screens/approval-card";
+import { PLATFORM_LABEL } from "@/lib/screens/common";
 
 import {
   CorrectionBody,
@@ -77,15 +78,13 @@ function firstText(card: Card): string {
   return "";
 }
 
-const PLATFORM_NAME = { x: "X", threads: "Threads", linkedin: "LinkedIn" } as const;
-
 /**
  * The time a post card approves with its words (cmo-review-3 1.2): "Goes out Tue 11 Nov, 09:00 on X (@handle)", or,
  * with no account, "Opens X to post at …". A time already past says that approving asks for a new one.
  */
 export function postWhen(proposed: NonNullable<Extract<Card["body"], { kind: "post" }>["proposed"]>, now = Date.now()): string {
   const when = formatWhen(proposed.at, proposed.timezone);
-  const where = PLATFORM_NAME[proposed.platform];
+  const where = PLATFORM_LABEL[proposed.platform];
   if (new Date(proposed.at).getTime() <= now) return `Its time (${when}) has passed. Approve it and pick a new time, or change it here.`;
   return proposed.mode === "publish"
     ? `Goes out ${when} on ${where}${proposed.handle ? ` (${proposed.handle})` : ""}, your time.`

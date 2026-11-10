@@ -103,11 +103,12 @@ function build(row: ApprovalRow): Built | null {
       // An X thread (P6 W4): SQL emits it only when it is valid (5 to 8 posts, the first being `text`).
       const thread = strings(s.thread);
       const { head, rest } = firstSentence(text);
+      const timed = proposedOf(s.proposed);
       return {
         title: head || clip(str(s.idea), 200),
         summary: clip(rest || str(s.rationale) || text, 400),
         meta: `${versions.length} ${versions.length === 1 ? "version" : "versions"} · ${profile.label} · ${
-          s.proposed && typeof s.proposed === "object" && (s.proposed as { mode?: unknown }).mode === "publish" ? "goes out from your account at its time" : "you post it on your account"
+          timed.proposed?.mode === "publish" ? "goes out from your account at its time" : "you post it on your account"
         }`,
         body: {
           kind: "post",
@@ -122,7 +123,7 @@ function build(row: ApprovalRow): Built | null {
           ],
           checks: [],
           why: str(s.rationale) || null,
-          ...proposedOf(s.proposed),
+          ...timed,
         },
       };
     }

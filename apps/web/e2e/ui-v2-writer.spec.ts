@@ -261,7 +261,7 @@ test("an approved Threads draft opens nothing: its card's time is approved, a sl
   const card = page.getByTestId("inbox-card-page").getByTestId("approval-card");
   await expect(card).toContainText(`${threadsText.length}/500`);
   await card.getByRole("button", { name: "Approve", exact: true }).click();
-  await expect(page.getByText(/Approved\. On .* a card gives you the post to copy and open\./)).toBeVisible();
+  await expect(page.getByText(/Approved for .*, your time: then a card gives you the post to copy and open\./)).toBeVisible();
   expect(popups).toHaveLength(0);
   await expect.poll(async () => (await db.from("content_items").select("status, final_text").eq("id", threads.itemId).single()).data).toEqual({ status: "approved", final_text: threadsText });
   await expect.poll(async () => (await db.from("cmo_draft_outcomes").select("platform").eq("item_id", threads.itemId).single()).data?.platform).toBe("threads");

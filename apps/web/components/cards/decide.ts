@@ -149,9 +149,10 @@ export function decidedMessage(card: ApprovalCard, decision: Decision, sample: b
       if (card.body.kind === "post" && card.body.proposed && new Date(card.body.proposed.at).getTime() > Date.now()) {
         const p = card.body.proposed;
         const when = formatWhen(p.at, p.timezone);
+        // The server checks the time once more as it schedules it; if it was taken meanwhile, a card asks again.
         return p.mode === "publish"
-          ? `Approved. It goes out on ${PLATFORM_LABEL[p.platform]} on ${when}, your time${suffix}.`
-          : `Approved. On ${when} a card gives you the post to copy and open${suffix}.`;
+          ? `Approved for ${when}, your time, on ${PLATFORM_LABEL[p.platform]}. If that time was taken meanwhile, a card asks for a new one${suffix}.`
+          : `Approved for ${when}, your time: then a card gives you the post to copy and open. If that time was taken meanwhile, a card asks for a new one${suffix}.`;
       }
       if (card.kind === "post") return `Approved. A schedule card asks you for its time${suffix}.`;
       if (card.kind === "script") return `Script approved. The keyframes are being made${suffix}.`;

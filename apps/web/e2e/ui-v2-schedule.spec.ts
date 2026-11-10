@@ -105,7 +105,7 @@ test("a post card shows its time; approving it schedules the post then, with no 
   await expect(view.getByTestId("post-when")).toContainText("Goes out");
   await expect(view.getByTestId("post-when")).toContainText("on X (@founder)");
   await view.getByRole("button", { name: "Approve", exact: true }).click();
-  await expect(page.getByText(/Approved\. It goes out on X on/)).toBeVisible();
+  await expect(page.getByText(/Approved for .*, your time, on X\./)).toBeVisible();
 
   const deliverable = (await db.from("deliverables").select("id").eq("ref_kind", "content_item").eq("ref_id", itemId).single()).data!.id;
   const readSlot = async () => (await db.from("schedule_slots").select("id, status, publish_at, approval_id").eq("deliverable_id", deliverable).maybeSingle()).data as SlotRow | null;

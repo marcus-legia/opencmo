@@ -15,6 +15,7 @@ import { z } from "zod";
 import { ApiError } from "@/lib/api/errors";
 import { firstRow, rpcOrThrow, type SupabaseClient } from "@/lib/api/handler";
 import { APPROVAL_COLUMNS, approvalToCard, type ApprovalRow } from "@/lib/screens/cards";
+import { PLATFORM_LABEL } from "@/lib/screens/common";
 import { BUDGET_MAX, BUDGET_MIN } from "@/lib/screens/settings";
 
 import type { PanelOpen } from "./panel";
@@ -279,7 +280,7 @@ async function prepareCard(supabase: SupabaseClient, raw: unknown): Promise<Prep
     const proposed = card.body.kind === "post" ? card.body.proposed : undefined;
     if (proposed && Date.parse(proposed.at) > Date.now()) {
       const zone = await founderTimezone(supabase);
-      const where = proposed.platform === "x" ? "X" : proposed.platform === "threads" ? "Threads" : "LinkedIn";
+      const where = PLATFORM_LABEL[proposed.platform];
       changes.push(
         proposed.mode === "publish"
           ? `This approves its time too: it goes out on ${where}${proposed.handle ? ` (${proposed.handle})` : ""} on ${localLabel(proposed.at, zone)} (${zone}).`
