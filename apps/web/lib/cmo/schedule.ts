@@ -7,7 +7,6 @@ import { isoDay, type CmoJobKind } from "@/lib/cmo/jobs/types";
 import { dueLoops, type LoopState } from "@/lib/cmo/loops";
 import { profileIdOf } from "@/lib/cmo/platforms";
 import { socialReaderReady } from "@/lib/cmo/social/reddit";
-import { isPaidPlan } from "@/lib/pricing";
 
 /**
  * Reads every user's state and enqueues the loops due today (`lib/cmo/loops.ts`). Only enqueues:
@@ -45,18 +44,19 @@ async function dueLinks(admin: SupabaseClient, items: (string | undefined)[]): P
   return out;
 }
 
-/** The users with a plan on sale or credits left. A read error counts nobody as paid: the loops wait a day. */
+/**
+ * The users with a plan on sale or credits left: SQL `cmo_paid`, the one rule (`cmo_paid_users`). A read error counts
+ * nobody as paid: the loops wait a day.
+ */
 async function paidUsers(admin: SupabaseClient, users: string[]): Promise<Set<string>> {
   const out = new Set<string>();
   for (let i = 0; i < users.length; i += 500) {
-    const { data, error } = await admin.from("profiles").select("id, plan, credit_balance").in("id", users.slice(i, i + 500));
+    const { data, error } = await admin.rpc("cmo_paid_users", { p_users: users.slice(i, i + 500) });
     if (error) {
       console.warn("[cron] cmo: could not read plans", error.message);
-      return out;
+      return new Set();
     }
-    for (const row of (data ?? []) as { id: string; plan: string | null; credit_balance: number | null }[]) {
-      if (isPaidPlan(row.plan) || (row.credit_balance ?? 0) > 0) out.add(row.id);
-    }
+    for (const id of (data ?? []) as string[]) out.add(id);
   }
   return out;
 }

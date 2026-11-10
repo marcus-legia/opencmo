@@ -3480,7 +3480,8 @@ begin
       ) || case when v_profile.post_platforms = array['x'] then ' only.' else '.' end;
       v_cadence := coalesce(v_doc.body->>'cadence', '');
       -- One such sentence, always first: the earlier answer is replaced, the founder's own words are kept.
-      v_next := v_line || nullif(' ' || btrim(regexp_replace(v_cadence, 'The founder posts on [^.]*\.\s*', '', 'g')), ' ');
+      -- concat, not ||: an empty rhythm must leave the sentence alone, never make the whole value null.
+      v_next := btrim(concat(v_line, ' ', btrim(regexp_replace(v_cadence, 'The founder posts on [^.]*\.\s*', '', 'g'))));
       if v_next is distinct from v_cadence then
         insert into public.marketing_documents (user_id, kind, version, body, created_by)
         values (p_user, 'content_strategy', v_doc.version + 1, v_doc.body || jsonb_build_object('cadence', v_next), 'user');
@@ -3983,8 +3984,10 @@ CREATE FUNCTION public.cmo_enqueue(p_user uuid, p_kind text, p_input jsonb) RETU
     AS $$
 declare
   v_row public.cmo_runs;
+  -- A plan on sale, read without `is_paid`'s ownership check: this runs inside other users' transactions too.
+  v_plan boolean := coalesce((select plan in ('starter', 'creator') from public.profiles where id = p_user), false);
   v_price integer := case
-    when p_input->>'brain' = 'claude' and public.is_paid(p_user) then 0
+    when p_input->>'brain' = 'claude' and v_plan then 0
     else public.cmo_job_price(p_kind)
   end;
   v_key text := case when p_kind in ('post_draft', 'write_caption', 'write_video_brief', 'write_slides', 'publish_post')
@@ -3993,7 +3996,7 @@ begin
   -- The founder's own Claude answers inbox items over MCP, which is for paid plans only: a free founder's inbox item
   -- could never be answered, and its price was charged for nothing (review R5). Their run thinks with OpenCMO
   -- instead, and is refused below when they cannot pay for it.
-  if p_input->>'brain' = 'claude' and not public.is_paid(p_user) then
+  if p_input->>'brain' = 'claude' and not v_plan then
     p_input := p_input - 'brain';
     v_price := public.cmo_job_price(p_kind);
   end if;
@@ -4090,7 +4093,9 @@ CREATE FUNCTION public.cmo_first_run_free(p_user uuid, p_kind text) RETURNS bool
     and not exists (
       select 1 from public.cmo_runs r
       where r.user_id = p_user and r.kind = p_kind and r.status in ('queued', 'running', 'done')
-    );
+    )
+    -- A failed run gives the free run back, at most twice: runs made to fail cannot become free work every day.
+    and (select count(*) from public.cmo_runs r where r.user_id = p_user and r.kind = p_kind and r.status = 'failed') < 3;
 $$;
 
 
@@ -4417,6 +4422,18 @@ CREATE FUNCTION public.cmo_paid(p_user uuid) RETURNS boolean
     SET search_path TO ''
     AS $$
   select coalesce((select p.plan in ('starter', 'creator') or p.credit_balance > 0 from public.profiles p where p.id = p_user), false);
+$$;
+
+
+--
+-- Name: cmo_paid_users(uuid[]); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_paid_users(p_users uuid[]) RETURNS SETOF uuid
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select u from unnest(p_users) u where public.cmo_paid(u);
 $$;
 
 
@@ -9379,8 +9396,7 @@ CREATE FUNCTION public.product_events_approve() RETURNS trigger
     SET search_path TO 'public'
     AS $$
 begin
-  if new.kind in ('post', 'reply') and new.status in ('approved', 'edited') and old.status is distinct from new.status
-     and old.status not in ('approved', 'edited') then
+  if new.kind in ('post', 'reply') and new.status in ('approved', 'edited') and old.status not in ('approved', 'edited') then
     perform public.product_event(new.user_id, 'approve', new.snapshot->>'platform', new.id);
   end if;
   return new;
@@ -13336,8 +13352,10 @@ begin
   if exists(select 1 from public.cmo_runs where user_id = v_user and kind = p_kind and status = 'running') then
     raise exception 'Your marketing plan is already being built. Give it a minute.' using errcode = 'P0001';
   end if;
+  -- Runs that failed on our side (a site we could not read, a model error) do not count; the 5-a-day cap below
+  -- still bounds the retries.
   if not public.cmo_paid(v_user)
-     and (select count(*) from public.cmo_runs where user_id = v_user and kind = p_kind) >= public.cmo_free_onboard_runs() then
+     and (select count(*) from public.cmo_runs where user_id = v_user and kind = p_kind and status <> 'failed') >= public.cmo_free_onboard_runs() then
     perform public.cmo_plan_required();
   end if;
   if (select count(*) from public.cmo_runs

@@ -5,7 +5,7 @@ create extension if not exists pgtap with schema extensions;
 begin;
 set search_path to public, extensions;
 
-select plan(16);
+select plan(18);
 
 insert into auth.users (id, email) values
   ('e2870000-0000-4000-8000-00000000000a', 'ff-a@test.local'),
@@ -45,6 +45,16 @@ set local request.jwt.claims = '{"sub":"e2870000-0000-4000-8000-00000000000c","r
 select is((select credits from public.enqueue_cmo_run('plan_week', '{}')), 0, 'after a failed first plan, the next is still free');
 reset role;
 
+-- Three failed first plans: the next one is paid work.
+insert into public.cmo_runs (user_id, kind, status, input, credits) values
+  ('e2870000-0000-4000-8000-00000000000c', 'post_draft', 'failed', '{}', 0),
+  ('e2870000-0000-4000-8000-00000000000c', 'post_draft', 'failed', '{}', 0),
+  ('e2870000-0000-4000-8000-00000000000c', 'post_draft', 'failed', '{}', 0);
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"e2870000-0000-4000-8000-00000000000c","role":"authenticated"}';
+select throws_ok($$ select public.enqueue_cmo_run('post_draft', '{"brief":"x"}') $$, 'P0402', null, 'after three failures the free run is gone');
+reset role;
+
 -- Founder B: paid, charged as before.
 set local role authenticated;
 set local request.jwt.claims = '{"sub":"e2870000-0000-4000-8000-00000000000b","role":"authenticated"}';
@@ -58,6 +68,14 @@ set local request.jwt.claims = '{"sub":"e2870000-0000-4000-8000-00000000000a","r
 select lives_ok($$ select public.start_cmo_run('onboard', '{"site":"exampel.com"}') $$, 'the first onboarding');
 reset role;
 update public.cmo_runs set status = 'failed' where user_id = 'e2870000-0000-4000-8000-00000000000a' and kind = 'onboard';
+-- Two runs that failed on our side do not count.
+insert into public.cmo_runs (user_id, kind, status, input) values
+  ('e2870000-0000-4000-8000-00000000000a', 'onboard', 'failed', '{}');
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"e2870000-0000-4000-8000-00000000000a","role":"authenticated"}';
+select lives_ok($$ select public.start_cmo_run('onboard', '{"site":"example.com"}') $$, 'after failed runs, onboarding still runs');
+reset role;
+update public.cmo_runs set status = 'done' where user_id = 'e2870000-0000-4000-8000-00000000000a' and kind = 'onboard' and status = 'running';
 set local role authenticated;
 set local request.jwt.claims = '{"sub":"e2870000-0000-4000-8000-00000000000a","role":"authenticated"}';
 select lives_ok($$ select public.start_cmo_run('onboard', '{"site":"example.com"}') $$, 'a second, for a typo');

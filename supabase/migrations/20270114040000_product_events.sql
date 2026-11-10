@@ -64,8 +64,7 @@ create or replace function public.product_events_approve() returns trigger
   set search_path to 'public'
 as $$
 begin
-  if new.kind in ('post', 'reply') and new.status in ('approved', 'edited') and old.status is distinct from new.status
-     and old.status not in ('approved', 'edited') then
+  if new.kind in ('post', 'reply') and new.status in ('approved', 'edited') and old.status not in ('approved', 'edited') then
     perform public.product_event(new.user_id, 'approve', new.snapshot->>'platform', new.id);
   end if;
   return new;
@@ -161,3 +160,19 @@ revoke all on function public.product_events_approve() from public, anon, authen
 revoke all on function public.product_events_slot() from public, anon, authenticated;
 revoke all on function public.product_events_posted() from public, anon, authenticated;
 revoke all on function public.product_events_reply() from public, anon, authenticated;
+
+-- Accounts that onboarded or approved before this migration: their first events, so `activation` does not read every
+-- earlier signup as never onboarded. `paid` is the account's state now (the past state is not kept anywhere).
+insert into public.product_events (user_id, kind, paid, ref_id, at)
+select r.user_id, 'onboarded', public.cmo_paid(r.user_id), r.user_id, min(coalesce(r.finished_at, r.created_at))
+from public.cmo_runs r
+where r.kind = 'onboard' and r.status = 'done'
+group by r.user_id
+on conflict (kind, ref_id) do nothing;
+
+insert into public.product_events (user_id, kind, platform, paid, ref_id, at)
+select a.user_id, 'approve', nullif(lower(regexp_replace(coalesce(a.snapshot->>'platform', ''), '[^A-Za-z_]', '', 'g')), ''),
+  public.cmo_paid(a.user_id), a.id, coalesce(a.decided_at, a.created_at)
+from public.approvals a
+where a.kind in ('post', 'reply') and a.status in ('approved', 'edited')
+on conflict (kind, ref_id) do nothing;

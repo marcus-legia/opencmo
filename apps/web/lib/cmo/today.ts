@@ -140,6 +140,19 @@ export function daysBetween(earlier: Date | string, later: Date, timezone: strin
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
+/** The request a silent platform's row puts in the chat. */
+export function silentPrompt(platform: TodayPlatform): string {
+  return `Write me a post for ${PLATFORM_LABEL[platform]} for today.`;
+}
+
+/**
+ * Whether `prompt` is one Today itself writes. A link (`/app?ask=1&prompt=`) only fills the chat with one of these, so
+ * nobody can send a founder a link that types their own instructions into the CMO chat.
+ */
+export function isTodayPrompt(prompt: string): boolean {
+  return TODAY_PLATFORMS.some((platform) => silentPrompt(platform) === prompt);
+}
+
 /** The post card a silent platform's row opens, or the chat request when none waits. */
 function silentRow(platform: TodayPlatform, days: number, post: TodayCard | undefined): TodayRow {
   const name = PLATFORM_LABEL[platform];
@@ -153,7 +166,7 @@ function silentRow(platform: TodayPlatform, days: number, post: TodayCard | unde
     platform,
     action: post
       ? { type: "card", approvalId: post.id, label: "Open the post" }
-      : { type: "chat", prompt: `Write me a post for ${name} for today.`, label: "Ask your CMO for a post" },
+      : { type: "chat", prompt: silentPrompt(platform), label: "Ask your CMO for a post" },
   };
 }
 

@@ -6,8 +6,8 @@
 
 -- True for an account that is not paid (no plan and no credits: the same rule as `cmo_require_paid`, so an account
 -- with credits left pays as before), for `plan_week` and `post_draft`, when it has no earlier run of that kind that
--- is queued, running or done. A failed run does not count, so a first plan that failed is tried again for free; a
--- queued one does, so two requests at once make one free run, not two.
+-- is queued, running or done. A failed run does not count, so a first plan that failed is tried again for free (up to
+-- three failures); a queued one does, so two requests at once make one free run, not two.
 create or replace function public.cmo_first_run_free(p_user uuid, p_kind text) returns boolean
   language sql stable security definer
   set search_path to ''
@@ -18,7 +18,9 @@ as $$
     and not exists (
       select 1 from public.cmo_runs r
       where r.user_id = p_user and r.kind = p_kind and r.status in ('queued', 'running', 'done')
-    );
+    )
+    -- A failed run gives the free run back, at most twice: runs made to fail cannot become free work every day.
+    and (select count(*) from public.cmo_runs r where r.user_id = p_user and r.kind = p_kind and r.status = 'failed') < 3;
 $$;
 
 revoke all on function public.cmo_first_run_free(uuid, text) from public, anon, authenticated;
@@ -33,8 +35,10 @@ create or replace function public.cmo_enqueue(p_user uuid, p_kind text, p_input 
 as $$
 declare
   v_row public.cmo_runs;
+  -- A plan on sale, read without `is_paid`'s ownership check: this runs inside other users' transactions too.
+  v_plan boolean := coalesce((select plan in ('starter', 'creator') from public.profiles where id = p_user), false);
   v_price integer := case
-    when p_input->>'brain' = 'claude' and public.is_paid(p_user) then 0
+    when p_input->>'brain' = 'claude' and v_plan then 0
     else public.cmo_job_price(p_kind)
   end;
   v_key text := case when p_kind in ('post_draft', 'write_caption', 'write_video_brief', 'write_slides', 'publish_post')
@@ -43,7 +47,7 @@ begin
   -- The founder's own Claude answers inbox items over MCP, which is for paid plans only: a free founder's inbox item
   -- could never be answered, and its price was charged for nothing (review R5). Their run thinks with OpenCMO
   -- instead, and is refused below when they cannot pay for it.
-  if p_input->>'brain' = 'claude' and not public.is_paid(p_user) then
+  if p_input->>'brain' = 'claude' and not v_plan then
     p_input := p_input - 'brain';
     v_price := public.cmo_job_price(p_kind);
   end if;
@@ -102,8 +106,8 @@ begin
 end;
 $$;
 
--- start_cmo_run (onboarding): an account without a plan gets 2 onboarding runs ever (one more for a typo in the URL),
--- then the 402. A paid account keeps 5 a day.
+-- start_cmo_run (onboarding): an account without a plan gets 2 onboarding runs ever that did not fail (one more for a
+-- typo in the URL), then the 402. A paid account keeps 5 a day.
 create or replace function public.start_cmo_run(p_kind text, p_input jsonb) returns public.cmo_runs
   language plpgsql security definer
   set search_path to 'public'
@@ -127,8 +131,10 @@ begin
   if exists(select 1 from public.cmo_runs where user_id = v_user and kind = p_kind and status = 'running') then
     raise exception 'Your marketing plan is already being built. Give it a minute.' using errcode = 'P0001';
   end if;
+  -- Runs that failed on our side (a site we could not read, a model error) do not count; the 5-a-day cap below
+  -- still bounds the retries.
   if not public.cmo_paid(v_user)
-     and (select count(*) from public.cmo_runs where user_id = v_user and kind = p_kind) >= public.cmo_free_onboard_runs() then
+     and (select count(*) from public.cmo_runs where user_id = v_user and kind = p_kind and status <> 'failed') >= public.cmo_free_onboard_runs() then
     perform public.cmo_plan_required();
   end if;
   if (select count(*) from public.cmo_runs
@@ -147,3 +153,15 @@ create or replace function public.cmo_free_onboard_runs() returns integer
 as $$ select 2 $$;
 
 revoke all on function public.cmo_free_onboard_runs() from public, anon, authenticated;
+
+
+-- The paid accounts among `p_users`, for the daily loops (`lib/cmo/schedule.ts`): the same `cmo_paid` rule, in one query.
+create or replace function public.cmo_paid_users(p_users uuid[]) returns setof uuid
+  language sql stable security definer
+  set search_path to ''
+as $$
+  select u from unnest(p_users) u where public.cmo_paid(u);
+$$;
+
+revoke all on function public.cmo_paid_users(uuid[]) from public, anon, authenticated;
+grant execute on function public.cmo_paid_users(uuid[]) to service_role;

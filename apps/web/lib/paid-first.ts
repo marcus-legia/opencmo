@@ -1,5 +1,6 @@
 import "server-only";
 
+import { ApiError, apiErrorFromPostgrest } from "@/lib/api/errors";
 import { rpcOrThrow, type SupabaseClient } from "@/lib/api/handler";
 
 /**
@@ -14,3 +15,15 @@ export async function requirePaid(supabase: SupabaseClient, userId: string): Pro
   await rpcOrThrow(supabase, "cmo_require_paid", { p_user: userId });
 }
 
+
+/**
+ * The CMO chat is paid work after the free first run: a turn of a CMO session (starting or continuing) checks the plan
+ * before any model call. Other sessions (the editor's Assistant) keep their own checks. A session that is not the
+ * founder's reads as not found under RLS.
+ */
+export async function requirePaidForCmoSession(supabase: SupabaseClient, userId: string, sessionId: string): Promise<void> {
+  const { data, error } = await supabase.from("agent_sessions").select("scope").eq("id", sessionId).maybeSingle<{ scope: string | null }>();
+  if (error) throw apiErrorFromPostgrest(error);
+  if (!data) throw new ApiError(404, "Conversation not found.");
+  if (data.scope === "cmo") await requirePaid(supabase, userId);
+}

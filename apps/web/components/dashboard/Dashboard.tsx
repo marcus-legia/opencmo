@@ -12,6 +12,7 @@ import { useSearchParams } from "next/navigation";
 
 import { Icon } from "@/components/icons";
 import { useShellState } from "@/components/shell-v2/ShellState";
+import { isTodayPrompt } from "@/lib/cmo/today";
 import { Button, Panel } from "@/components/ui";
 
 import { ApprovalQueue } from "./ApprovalQueue";
@@ -29,8 +30,10 @@ export function Dashboard() {
   // router: a router change would render this dynamic page again on the server.
   const search = useSearchParams();
   const asking = search.get("ask") === "1";
-  // `prompt` (the email's Today rows): the request goes into the chat's box; the founder sends it.
-  const prompt = search.get("prompt")?.slice(0, 300) ?? "";
+  // `prompt` (the email's Today rows): the request goes into the chat's box and the founder sends it. Only a request
+  // Today itself writes is taken, so a link cannot type someone else's instructions into the chat.
+  const asked = search.get("prompt") ?? "";
+  const prompt = isTodayPrompt(asked) ? asked : "";
   useEffect(() => {
     if (!asking) return;
     focusChat();

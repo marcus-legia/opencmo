@@ -58,12 +58,29 @@ export async function runOnboarding(supabase: SupabaseClient, userId: string, si
     if (error instanceof ApiError) throw error;
     throw new ApiError(known && error instanceof SiteError ? 422 : 502, message);
   }
-  // Only a founder who never had a week planned gets one at once; reading the website again rewrites the documents only.
-  const { count: plans } = await supabase.from("cmo_runs").select("id", { count: "exact", head: true }).eq("kind", "plan_week");
-  return { runId: run.id, firstWeek: plans === 0 ? await startFirstWeek(supabase, userId, started) : false };
+  // Only a founder whose first week never got going gets one at once; reading the website again otherwise rewrites the
+  // documents only. A failed first plan or draft does not count, so reading the site again retries it (free once for an
+  // account without a plan: `cmo_first_run_free`).
+  const live = (kind: "plan_week" | "post_draft") =>
+    supabase.from("cmo_runs").select("id", { count: "exact", head: true }).eq("kind", kind).neq("status", "failed");
+  const [{ count: plans }, { count: drafts }] = await Promise.all([live("plan_week"), live("post_draft")]);
+  if (plans === 0) return { runId: run.id, firstWeek: await startFirstWeek(supabase, userId, started) };
+  if (drafts === 0) return { runId: run.id, firstWeek: await startFirstDraft(supabase) };
+  return { runId: run.id, firstWeek: false };
 }
 
-/** The step ids Setup words (`components/screens/setup/steps.ts`): the website, then each document as it is saved. */
+/** The plan is there but its first draft failed: queue the draft again (the plan's own trigger only queues it once). */
+async function startFirstDraft(supabase: SupabaseClient): Promise<boolean> {
+  try {
+    await startCmoRun(supabase, "post_draft", { source: "onboarding" });
+    return true;
+  } catch (error) {
+    console.error("[cmo] could not queue the first draft again", error);
+    return false;
+  }
+}
+
+/** The step ids Setup words (`lib/cmo/onboard-status.ts`): the website, then each document as it is saved. */
 export type OnboardStepId = "site" | (typeof DOCUMENT_KINDS)[number];
 type StepState = "running" | "done" | "failed";
 

@@ -91,7 +91,8 @@ begin
       ) || case when v_profile.post_platforms = array['x'] then ' only.' else '.' end;
       v_cadence := coalesce(v_doc.body->>'cadence', '');
       -- One such sentence, always first: the earlier answer is replaced, the founder's own words are kept.
-      v_next := v_line || nullif(' ' || btrim(regexp_replace(v_cadence, 'The founder posts on [^.]*\.\s*', '', 'g')), ' ');
+      -- concat, not ||: an empty rhythm must leave the sentence alone, never make the whole value null.
+      v_next := btrim(concat(v_line, ' ', btrim(regexp_replace(v_cadence, 'The founder posts on [^.]*\.\s*', '', 'g'))));
       if v_next is distinct from v_cadence then
         insert into public.marketing_documents (user_id, kind, version, body, created_by)
         values (p_user, 'content_strategy', v_doc.version + 1, v_doc.body || jsonb_build_object('cadence', v_next), 'user');

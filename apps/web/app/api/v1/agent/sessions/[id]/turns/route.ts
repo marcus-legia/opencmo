@@ -1,10 +1,9 @@
 import { z } from "zod";
 
-import { apiErrorFromPostgrest } from "@/lib/api/errors";
-import { notFound, withApi } from "@/lib/api/handler";
+import { withApi } from "@/lib/api/handler";
 import { ScreenContextSchema } from "@/lib/agent/panel";
 import { startTurn } from "@/lib/agent/session";
-import { requirePaid } from "@/lib/paid-first";
+import { requirePaidForCmoSession } from "@/lib/paid-first";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -46,10 +45,7 @@ const body = z.object({
 // body holds one frame (base64, up to 600 KB), over the default 256 KB cap.
 export const POST = withApi({ body, rateLimit: { bucket: "agent-turn", limit: 120, windowSeconds: 3600 }, maxBodyBytes: 1024 * 1024 }, async ({ supabase, user, body, params }) => {
   // The CMO chat is paid work once the free first run is done (CMO review 3, 3.1): a clear 402 `plan_required` before
-  // any model call, not "not enough credits" halfway through a turn. The editor's Assistant keeps its own checks.
-  const { data: session, error } = await supabase.from("agent_sessions").select("scope").eq("id", params.id).maybeSingle<{ scope: string | null }>();
-  if (error) throw apiErrorFromPostgrest(error);
-  if (!session) throw notFound("Conversation not found.");
-  if (session.scope === "cmo") await requirePaid(supabase, user.id);
+  // any model call, not "not enough credits" halfway through a turn.
+  await requirePaidForCmoSession(supabase, user.id, params.id);
   return startTurn(supabase, user.id, params.id, body.prompt, body.attachments);
 });
