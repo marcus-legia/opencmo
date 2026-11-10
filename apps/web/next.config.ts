@@ -144,4 +144,7 @@ export default withSentryConfig(config, {
   widenClientFileUpload: true,
   sourcemaps: { disable: !process.env.SENTRY_AUTH_TOKEN },
   telemetry: false,
+  // The client sends errors only (`tracesSampleRate: 0` in instrumentation-client.ts), yet the SDK's tracing code was
+  // the largest chunk on every page, the login form included. Shake it and the SDK's debug logger out of the bundle.
+  bundleSizeOptimizations: { excludeTracing: true, excludeDebugStatements: true },
 });
