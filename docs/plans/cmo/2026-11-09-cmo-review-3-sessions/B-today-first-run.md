@@ -83,3 +83,18 @@ Branch: `claude/okara-spec-opencmo-b7qlx2`. Pull before each item, and push afte
 
 - **From A:** B2 calls `rateDraftsPending(supabase)` from `lib/cmo/voice.ts` for the "Rate your first drafts" row.
   A exports it in A5. Until then, use a stub.
+- **From A (2026-11-10, A5 landed in `2be24040`):**
+  - `rateDraftsPending(supabase)` is in `lib/cmo/voice.ts` (true while a post card waits and the founder never rated a
+    round). The row opens `<RatingSheet open onClose={…} />` from `components/cards/RatingSheet.tsx`; nothing else to
+    pass. The Voice tab also opens it ("Rate your drafts"), so the e2e does not wait on Today.
+  - "N of M done": a post card that carried its time (1.2) writes an `approvals` row of kind `schedule` that is
+    **created already approved** (`created_at = decided_at`, never `waiting`). It is not a card the founder saw; count
+    only rows that were `waiting` (or count the post card alone).
+  - `product_events` `schedule` (a slot made `waiting`): since 1.2 the slot is **inserted** as `waiting` by
+    `schedule_take_proposal`, not updated to it. The trigger needs `after insert or update of status`.
+  - A changed three functions outside both lists, so they are not redefined from an older copy: `cmo_job_daily_limit`
+    (adds `distill_ratings`, 2 a day), the `cmo_runs_kind_check` constraint (adds `distill_ratings`) and
+    `approvals_sync` (rules from ratings raise no card). If B0 or 3.1 redefines `cmo_enqueue`, `distill_ratings` must
+    stay priced 0 (it is part of the first run, free for unpaid accounts).
+  - A3 waits on B0: `cmo_require_paid` and the 402 `plan_required` mapping. Tell A in `A-post-voice.md` → Requests when
+    they are pushed.

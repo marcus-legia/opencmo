@@ -17,6 +17,16 @@ Branch: `claude/okara-spec-opencmo-b7qlx2`. Pull before each item, and push afte
 - `apps/web/lib/cmo/skills/no-ai-slop.check.ts`;
 - `docs/architecture/approval.md` and `schedule-publish.md`, with their `.html` twins.
 
+**Notes from the build (2026-11-10):**
+- 1.2: "no schedule card" still writes an approved `schedule` row for the slot: the firing only posts what
+  `schedule_approval_holds` finds approved (A0). Older tests of the schedule-card path set `proposed` to null.
+- 2.2: `cmo_accept_corrections` takes the round too, `(p_round, p_ids, p_texts)`, so the rules left unticked are set
+  aside in the same transaction and the sheet does not show them again.
+- 2.3: the Voice page reads `/api/v1/cmo/voice` (not the screens loader, which is B's `load.ts`). Its parts live in
+  `LibraryScreen.tsx`.
+- A local Postgres 16 with a pgTAP stand-in ran every test file before each push; CI's Supabase run is the
+  authoritative one.
+
 **Waits on:** nothing for A1–A2. A3 waits on B0 (`cmo_require_paid`, the 402 mapping, `PlanSheet.tsx`). A5's Today
 row is B's (the request below).
 
@@ -44,14 +54,14 @@ row is B's (the request below).
   - the card shows `PlanSheet` on a 402 `plan_required`;
   - the card is put back, and the drafts stay;
   - pgTAP: unpaid approve is refused with the code, and paid is unchanged.
-- [ ] **A4 (2.1) A reason picked on every draft.**
+- [x] **A4 (2.1) A reason picked on every draft.**
   - Add the columns `reason_code` and `labelled_by` to `cmo_draft_outcomes`, with a check of the list.
   - Show the chips on Skip, and the optional "What did you fix?" chips on an edited approve.
   - A founder label sets `edit_mode` and `classified_at`. Make the classifier skip those rows.
   - In `correction_from_edits`, two founder labels are enough, and founder skips count too.
   - Add the field to the route zod schema and to `decide.ts`.
   - pgTAP and `jobs.check.ts` as in plan §4.1.
-- [ ] **A5 (2.2) Rate your first drafts.**
+- [x] **A5 (2.2) Rate your first drafts.**
   - Add the table `cmo_draft_ratings`, with RLS, grants and pgTAP.
   - Add `cmo_rate_drafts` (at most 5 rows a round and 1 round a day) and the job `distill_ratings`:
     - Haiku, price 0;
@@ -62,7 +72,7 @@ row is B's (the request below).
   - The rating sheet lives in `components/cards/` and opens from B's Today row.
   - Export `rateDraftsPending(supabase)` from `lib/cmo/voice.ts`.
   - Tests: an eval fake case, pgTAP and e2e, as in plan §4.2.
-- [ ] **A6 (2.3) The voice as a page with history and Undo.**
+- [x] **A6 (2.3) The voice as a page with history and Undo.**
   - Add the table `cmo_voice_events`, and `cmo_edit_correction` and `cmo_voice_undo`.
   - Write events from every rule change, and from a trigger on `save_marketing_document` for `strategy.voice` and
     `avoid`.
