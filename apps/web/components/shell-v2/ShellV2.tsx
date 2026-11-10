@@ -46,7 +46,7 @@ const CLASSIC: ReadonlySet<string> = new Set(["video"]);
 /** The script prompter on the founder's phone, drawn without any frame. */
 const PROMPTER = "script";
 
-type Screen = { page: string; top: TopVariant | null; chat: "column" | "drawer" | "assistant" };
+type Screen = { page: string; top: TopVariant | null; chat: "column" | "drawer" | "assistant"; legacy?: boolean };
 
 const AGENTS = { label: "Agents", href: "/app" };
 
@@ -78,7 +78,7 @@ function screenFor(segment: string | null): Screen {
       return { page: "editor", top: null, chat: "assistant" };
     default: {
       const label = segment.charAt(0).toUpperCase() + segment.slice(1);
-      return { page: "agentsales", top: { kind: "crumbs", trail: [AGENTS, { label }], chat: true }, chat: "drawer" };
+      return { page: "agentsales", top: { kind: "crumbs", trail: [AGENTS, { label }], chat: true }, chat: "drawer", legacy: true };
     }
   }
 }
@@ -167,6 +167,15 @@ function TodayFrame({ credits, plan, email, userId, pending, chatLive, children,
     setLogsOpen(false);
   }, [segment]);
 
+  // `?logs=1` (Billing's "Open Logs") opens the drawer over the screen it lands on, then drops the flag.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("logs") !== "1") return;
+    setLogsOpen(true);
+    url.searchParams.delete("logs");
+    window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+  }, [segment]);
+
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") setChatOpen(false);
@@ -207,7 +216,7 @@ function TodayFrame({ credits, plan, email, userId, pending, chatLive, children,
               <TopBar variant={screen.top} credits={account.credits} email={email ?? null} logsOpen={logsOpen} onLogs={openLogs} onChat={focusChat} />
             ) : null}
             <div className={screen.chat === "column" ? "cols" : "td-body"}>
-              {children}
+              {screen.legacy ? <div className="v2 td-legacy td-cardhost td-v2host">{children}</div> : children}
               <aside className={chatClass} id="v2-chat" aria-label={screen.chat === "assistant" ? "Assistant" : "Chat with your CMO"} data-clip={screen.chat === "assistant" ? "" : undefined} ref={chatColumn}>
                 {screen.chat === "drawer" ? (
                   <button type="button" className="ib td-chat-close" aria-label="Close the chat" onClick={() => setChatOpen(false)}>

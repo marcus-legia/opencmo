@@ -139,3 +139,63 @@ html[data-ui="v2"] .k .td-chat .cmo-chat-head h2 { font: 500 12.5px Geist, ui-sa
 html[data-ui="v2"] .k ul { list-style: disc; }
 html[data-ui="v2"] .k ol { list-style: decimal; }
 html[data-ui="v2"] .k :is(.td-menu, .cmo-messages) :is(ul, ol), html[data-ui="v2"] .k .cmo-messages { list-style: none; }
+
+/* ---- components of the classic v2 screens, inside a canvas frame ----
+   Settings' parts, and the screens the canvas has no artboard for (Library, Research, Brain, the card page), keep their
+   components; here they take the artboard's tokens (the --v2-* names map onto them, `.td-cardhost` above) and its
+   cards, heads, tabs and type. */
+.td-v2host { --v2-radius: 12px; color: var(--text); font-family: Geist, ui-sans-serif, system-ui, sans-serif; }
+.td-v2host .v2-panel, .td-v2host .v2-card, .td-v2host .v2-empty, .td-v2host .settings-card { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); box-shadow: none; }
+.td-v2host .v2-panel-head { padding: 14px 18px; border-bottom: 1px solid var(--line); }
+.td-v2host .v2-panel-title { margin: 0; font: 600 14px Geist, ui-sans-serif, system-ui, sans-serif; letter-spacing: 0; text-transform: none; color: var(--text); }
+.td-v2host .v2-panel-body { padding: 16px 18px; }
+.td-v2host .v2-panel-sub, .td-v2host .scr-head-sub { color: var(--muted); font-size: 13px; }
+.td-v2host .v2-panel.scr-dark { background: var(--panel); color: var(--text); border-color: var(--line); }
+.td-v2host .scr-dark :is(h2, p, span, b) { color: inherit; }
+.td-v2host :is(h1, h2, h3) { color: var(--text); }
+.td-v2host .v2-title, .td-v2host .scr-title { font: 600 22px Geist, ui-sans-serif, system-ui, sans-serif; letter-spacing: -.4px; }
+.td-v2host .v2-tabs { gap: 18px; border-bottom: 1px solid var(--line); }
+.td-v2host .v2-tab { min-height: 0; padding: 0 0 10px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: var(--muted); font: 500 13px Geist, ui-sans-serif, system-ui, sans-serif; letter-spacing: 0; text-transform: none; }
+.td-v2host .v2-tab[aria-selected="true"] { color: var(--text); border-bottom-color: var(--text); }
+.td-v2host .v2-segmented { gap: 2px; padding: 2px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); }
+.td-v2host .v2-segment { min-height: 26px; padding: 0 10px; border-radius: 6px; font: 500 12.5px Geist, ui-sans-serif, system-ui, sans-serif; letter-spacing: 0; text-transform: none; color: var(--muted); }
+.td-v2host .v2-segment[aria-pressed="true"] { background: var(--raised); color: var(--text); }
+.td-v2host .scr-pill { min-height: 24px; height: 24px; padding: 0 9px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); color: var(--muted); font: 400 12px Geist, ui-sans-serif, system-ui, sans-serif; letter-spacing: 0; text-transform: none; }
+.td-v2host .scr-pill[aria-pressed="true"] { color: var(--text); border-color: var(--line-2); background: var(--raised); }
+.td-v2host .scr-mono, .td-v2host .scr-status { font: 400 11.5px Geist, ui-sans-serif, system-ui, sans-serif; letter-spacing: 0; text-transform: none; color: var(--subtle); }
+.td-v2host .v2-table th { font: 500 11.5px Geist, ui-sans-serif, system-ui, sans-serif; letter-spacing: 0; text-transform: none; color: var(--subtle); }
+.td-v2host .v2-table td { border-top-color: var(--line); }
+.td-v2host .v2-kpi-value { font: 600 22px Geist, ui-sans-serif, system-ui, sans-serif; }
+.td-v2host .scr-radio { border-radius: 10px; border-color: var(--line); background: var(--bg); }
+.td-v2host .scr-radio:has(input:checked) { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.td-v2host a { color: var(--accent); }
+.td-v2host .v2-page { padding: 0; max-width: none; }
+/* Settings' parts stack like the artboard's cards. */
+.td-settings-body { display: flex; flex-direction: column; gap: 16px; }
+
+/* Screens with no artboard of their own sit in the agent page's frame, centred like it. */
+.td-legacy { max-width: 1320px; margin: 0 auto; padding: 22px 24px 40px; }
+.td-newmenu .v2-button { height: 32px; min-height: 0; padding: 0 12px; border-radius: 7px; border: 1px solid var(--line-2); background: transparent; color: var(--text); font: 400 13px Geist, ui-sans-serif, system-ui, sans-serif; letter-spacing: 0; text-transform: none; }
+.v2.td-newmenu .v2-button.v2-button { height: 32px; min-height: 0; padding: 0 12px; border-radius: 7px; border: 1px solid var(--line-2); background: transparent; color: var(--text); font: 400 13px Geist, ui-sans-serif, system-ui, sans-serif; letter-spacing: 0; text-transform: none; }
+.v2.td-newmenu .v2-button.v2-button:hover { background: var(--hover); }
+.pg-projects .proj .badge { white-space: nowrap; flex: none; }
+
+/* ---- the editor (Editor.dc.html): the real editor, in the artboard's tokens and type ----
+   Its design-system tokens point at the artboard's; the theme switch and the credits leave its top bar (the app sets
+   the theme, Billing shows the credits). Lanes and media colours keep their own. */
+.pg-editor .ed2 {
+  --ds-font-sans: Geist, ui-sans-serif, system-ui, sans-serif;
+  --ds-font-display: Geist, ui-sans-serif, system-ui, sans-serif;
+  --ds-font-mono: "Geist Mono", ui-monospace, monospace;
+  --ds-bg: var(--bg); --ds-app: var(--bg); --ds-panel: var(--panel); --ds-raised: var(--raised);
+  --ds-ink-0: var(--bg); --ds-ink-1: var(--bg); --ds-ink-2: var(--raised); --ds-ink-3: var(--raised); --ds-ink-4: var(--panel); --ds-ink-7: var(--raised); --ds-ink-8: var(--line-2);
+  --ds-line: var(--line); --ds-line-1: var(--line); --ds-line-2: var(--line); --ds-line-3: var(--line-2); --ds-line-4: var(--line-2); --ds-line-5: var(--line-2);
+  --ds-text: var(--text); --ds-muted: var(--muted); --ds-fg-1: var(--text); --ds-fg-2: var(--text); --ds-fg-3: var(--text); --ds-fg-4: var(--muted); --ds-fg-5: var(--subtle); --ds-fg-6: var(--subtle);
+  --ds-peach: var(--accent); --ds-accent-ink: var(--accent-ink); --ds-primary-hover: var(--accent-hover);
+  --ds-lapis-900: var(--text); --ds-lapis-700: var(--text); --ds-lapis-500: var(--muted); --ds-lapis-100: var(--raised);
+  --ds-marble-50: var(--raised); --ds-marble-100: var(--raised); --ds-gold-500: var(--line-2); --ds-gold-line: var(--line-2); --ds-gold-text: var(--muted);
+  --ds-focus: var(--accent); --ds-selected: var(--accent);
+  font-family: Geist, ui-sans-serif, system-ui, sans-serif;
+}
+.pg-editor .ed2-top :is(.ed2-theme, .ed2-credits) { display: none; }
+.pg-editor .td-body > :not(aside) { flex: 1 1 auto; min-width: 0; position: relative; }

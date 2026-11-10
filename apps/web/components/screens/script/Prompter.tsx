@@ -4,11 +4,9 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import type { PointerEvent } from "react";
 
-import { Icon } from "@/components/icons";
 import type { ScriptBeat } from "@/lib/cmo/writer/types";
 
 const SHOT_LABEL: Record<ScriptBeat["shot"], string> = { talking_head: "To camera", screen: "Screen", broll: "You film" };
-const SHOT_ICON = { talking_head: "video", screen: "monitor", broll: "film" } as const;
 
 /** Keeps the screen on while the prompter is open, where the browser allows it; a refusal changes nothing else. */
 function useWakeLock() {
@@ -72,59 +70,112 @@ export function Prompter({ title, beats }: { title: string; beats: ScriptBeat[] 
     }
   };
 
+  // Prompter.dc.html, filling the phone's screen instead of the artboard's 390 × 844.
   return (
-    <div className="v2 td-prompter" data-testid="prompter">
-      <header className="td-prompter-head">
-        <div style={{ flex: "1 1 auto", minWidth: 0 }}>
-          <div className="v2-mono is-muted">Script · {total} s · you film</div>
-          <div className="td-prompter-title">{title}</div>
+    <div className="k pg-prompter" data-testid="prompter" style={{ minHeight: "100dvh", height: "100dvh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      <header style={{ display: "flex", alignItems: "center", gap: "4px", padding: "12px 8px 8px 16px" }}>
+        <div style={{ flex: "1 1 auto", minWidth: "0" }}>
+          <div className="meta">Script · {total} s · you film</div>
+          <div style={{ fontSize: "15px", fontWeight: "600", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{title}</div>
         </div>
-        <Link href="/app/studio" className="td-icon" aria-label="Close the prompter">
-          <Icon name="x" size={20} />
+        <Link href="/app/studio" className="ib" aria-label="Close the prompter">
+          <svg className="i" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M18 6 6 18" />
+            <path d="m6 6 12 12" />
+          </svg>
         </Link>
       </header>
+
       <div style={{ padding: "0 16px" }}>
-        <div className="td-prompter-segs" aria-hidden="true">
+        <div className="segs" aria-hidden="true">
           {beats.map((_, i) => (
-            <i key={i} data-on={i <= index ? "" : undefined} />
+            <i key={i} data-on={i <= index ? "true" : "false"}></i>
           ))}
         </div>
-        <div className="td-prompter-count">
-          <span className="v2-num" aria-live="polite">
-            Beat {index + 1} of {beats.length}
+        <div style={{ display: "flex", justifyContent: "space-between", marginTop: "8px" }}>
+          <span className="meta mono" aria-live="polite">
+            BEAT {index + 1} OF {beats.length}
           </span>
-          <span className="v2-num">{beat.seconds} s</span>
+          <span className="meta mono">{beat.seconds} s</span>
         </div>
       </div>
+
       {/* Taps and swipes on the words are a shortcut for the buttons below, which stay the accessible controls. */}
       <div
-        className="td-prompter-stage"
+        style={{ position: "relative", flex: "1 1 auto", display: "flex", flexDirection: "column", padding: "28px 20px 16px", gap: "16px", minHeight: "0", overflow: "auto", touchAction: "pan-y", cursor: "pointer", userSelect: "none" }}
         onPointerDown={onDown}
         onPointerUp={onUp}
         onPointerCancel={() => (swipe.current = null)}
       >
-        <span className="td-prompter-kind">
-          <Icon name={SHOT_ICON[beat.shot]} size={15} />
-          {SHOT_LABEL[beat.shot]}
-        </span>
-        <p className="td-prompter-show">Show: {beat.show}</p>
-        <p className="td-prompter-words">{beat.say}</p>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+          <span className="kind">
+            {beat.shot === "screen" ? (
+              <svg className="i" viewBox="0 0 24 24" aria-hidden="true" style={{ width: "15px", height: "15px" }}>
+                <rect width="20" height="14" x="2" y="3" rx="2" />
+                <line x1="8" x2="16" y1="21" y2="21" />
+                <line x1="12" x2="12" y1="17" y2="21" />
+              </svg>
+            ) : (
+              <svg className="i" viewBox="0 0 24 24" aria-hidden="true" style={{ width: "15px", height: "15px" }}>
+                <path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5" />
+                <rect x="2" y="6" width="14" height="12" rx="2" />
+              </svg>
+            )}
+            {SHOT_LABEL[beat.shot]}
+          </span>
+        </div>
+        <div style={{ fontSize: "15px", color: "var(--muted)" }}>Show: {beat.show}</div>
+        <p className="words">{beat.say}</p>
+        <div style={{ flex: "1 1 auto" }}></div>
+        <div className="meta" style={{ textAlign: "center" }}>
+          Tap the right half for the next beat, the left half to go back
+        </div>
       </div>
-      <footer className="td-prompter-foot">
-        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          <button type="button" className="td-prompter-nav" aria-label="Previous beat" disabled={index === 0} onClick={() => go(-1)}>
-            <Icon name="chevron-left" size={22} />
+
+      <div style={{ padding: "12px 16px calc(16px + env(safe-area-inset-bottom))", display: "flex", flexDirection: "column", gap: "10px", borderTop: "1px solid var(--line)", background: "var(--panel)" }}>
+        <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+          <button type="button" className="nav" aria-label="Previous beat" onClick={() => go(-1)} disabled={index === 0}>
+            <svg className="i" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m15 18-6-6 6-6" />
+            </svg>
           </button>
-          <button type="button" className="td-prompter-play" aria-pressed={auto} onClick={() => setAuto((a) => !a)} disabled={last && !auto}>
-            <Icon name={auto ? "pause" : "play"} size={18} />
-            {auto ? "Scrolling at the beat's pace" : "Auto-scroll"}
+          <button type="button" className="play" aria-pressed={auto} onClick={() => setAuto((a) => !a)} disabled={last && !auto}>
+            {auto ? (
+              <>
+                <svg className="i" viewBox="0 0 24 24" aria-hidden="true">
+                  <rect x="14" y="4" width="4" height="16" rx="1" />
+                  <rect x="6" y="4" width="4" height="16" rx="1" />
+                </svg>
+                Scrolling at the beat&apos;s pace
+              </>
+            ) : (
+              <>
+                <svg className="i" viewBox="0 0 24 24" aria-hidden="true">
+                  <polygon points="6 3 20 12 6 21 6 3" />
+                </svg>
+                Auto-scroll
+              </>
+            )}
           </button>
-          <button type="button" className="td-prompter-nav" aria-label="Next beat" disabled={last} onClick={() => go(1)}>
-            <Icon name="chevron-right" size={22} />
+          <button type="button" className="nav" aria-label="Next beat" onClick={() => go(1)} disabled={last}>
+            <svg className="i" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m9 18 6-6-6-6" />
+            </svg>
           </button>
         </div>
-        <p className="v2-mono is-muted td-prompter-note">Screen stays on. Film with your camera app, then upload the take.</p>
-      </footer>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }} className="meta">
+          <svg className="i" viewBox="0 0 24 24" aria-hidden="true" style={{ width: "13px", height: "13px" }}>
+            <circle cx="12" cy="12" r="4" />
+            <path d="M12 2v2" />
+            <path d="M12 20v2" />
+            <path d="m4.93 4.93 1.41 1.41" />
+            <path d="m17.66 17.66 1.41 1.41" />
+            <path d="M2 12h2" />
+            <path d="M20 12h2" />
+          </svg>
+          Screen stays on. Film with your camera app, then upload.
+        </div>
+      </div>
     </div>
   );
 }

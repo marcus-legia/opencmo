@@ -7,6 +7,7 @@ apps/web/styles/today.css, verbatim except for scope:
   different look (`.chip`, `.row`, `.drawer`...) do not collide; the app puts `k pg-<name>` on the screen's root;
 - `@media (prefers-color-scheme:dark){...}` becomes `html[data-theme="dark"] ...`, so the app's own System / Light /
   Dark choice works (THEME_BOOT resolves System from the same media query);
+- `.k <descendant>` defaults are wrapped in `:where()` so a class always beats them;
 - `body` rules are dropped (the page root `.k` carries the background) and keyframes get a per-page name.
 
 Run from apps/web: python3 scripts/port-today-css.py ../../docs/design/today-canvas > styles/today.css
@@ -44,8 +45,12 @@ def scope_selector(sel, page, dark):
     pre = 'html[data-theme="dark"] ' if dark else ""
     if sel == "body" or sel.startswith("body "):
         return None
-    if sel == ".k" or sel.startswith(".k ") or sel.startswith(".k.") or sel.startswith(".k:") or sel.startswith(".k["):
+    if sel == ".k" or sel.startswith(".k.") or sel.startswith(".k:") or sel.startswith(".k["):
         return pre + root + sel[2:]
+    if sel.startswith(".k "):
+        # `.k button{color:inherit}` and the like are defaults for everything inside; at full weight they beat the
+        # artboard's own classes (`.play`) and the components hosted inside (the editor). `:where` keeps them defaults.
+        return f"{pre}:where({root}){sel[2:]}"
     return f"{pre}.pg-{page} {sel}"
 
 
