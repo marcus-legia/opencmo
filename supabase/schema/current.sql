@@ -3441,6 +3441,57 @@ $$;
 
 
 --
+-- Name: cmo_apply_onboarding_answers(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_apply_onboarding_answers(p_user uuid) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_profile public.profiles;
+  v_doc public.marketing_documents;
+  v_line text;
+  v_cadence text;
+  v_next text;
+begin
+  select * into v_profile from public.profiles where id = p_user;
+  if not found then
+    return;
+  end if;
+
+  if v_profile.x_handle is not null then
+    -- The same lock `save_marketing_document` takes, so a version number is never taken twice.
+    perform pg_advisory_xact_lock(hashtextextended(p_user::text || ':doc:product', 1713));
+    select * into v_doc from public.marketing_documents where user_id = p_user and kind = 'product' order by version desc limit 1;
+    if found and coalesce(btrim(v_doc.body->>'x_handle'), '') = '' then
+      insert into public.marketing_documents (user_id, kind, version, body, created_by)
+      values (p_user, 'product', v_doc.version + 1, v_doc.body || jsonb_build_object('x_handle', '@' || v_profile.x_handle), 'user');
+    end if;
+  end if;
+
+  if v_profile.post_platforms is not null then
+    perform pg_advisory_xact_lock(hashtextextended(p_user::text || ':doc:content_strategy', 1713));
+    select * into v_doc from public.marketing_documents where user_id = p_user and kind = 'content_strategy' order by version desc limit 1;
+    if found then
+      v_line := 'The founder posts on ' || (
+        select string_agg(case p when 'x' then 'X' when 'threads' then 'Threads' else 'LinkedIn' end, ', ' order by array_position(array['x', 'threads', 'linkedin'], p))
+        from unnest(v_profile.post_platforms) p
+      ) || case when v_profile.post_platforms = array['x'] then ' only.' else '.' end;
+      v_cadence := coalesce(v_doc.body->>'cadence', '');
+      -- One such sentence, always first: the earlier answer is replaced, the founder's own words are kept.
+      v_next := v_line || nullif(' ' || btrim(regexp_replace(v_cadence, 'The founder posts on [^.]*\.\s*', '', 'g')), ' ');
+      if v_next is distinct from v_cadence then
+        insert into public.marketing_documents (user_id, kind, version, body, created_by)
+        values (p_user, 'content_strategy', v_doc.version + 1, v_doc.body || jsonb_build_object('cadence', v_next), 'user');
+      end if;
+    end if;
+  end if;
+end;
+$$;
+
+
+--
 -- Name: cmo_as_written(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -4270,6 +4321,91 @@ begin
   return new;
 end;
 $$;
+
+
+--
+-- Name: cmo_onboard_step(uuid, jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_onboard_step(p_run uuid, p_steps jsonb) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $_$
+declare
+  v_user uuid := public.require_user();
+begin
+  if p_steps is null or jsonb_typeof(p_steps) <> 'array' or jsonb_array_length(p_steps) > 12
+     or exists (
+       select 1 from jsonb_array_elements(p_steps) e
+       where jsonb_typeof(e) <> 'object'
+          or coalesce(e->>'id', '') !~ '^[a-z_]{1,40}$'
+          or coalesce(e->>'status', '') not in ('running', 'done', 'failed')
+          or (select count(*) from jsonb_object_keys(e)) <> 2
+     ) then
+    raise exception 'These steps are not valid.' using errcode = '22023';
+  end if;
+  update public.cmo_runs set steps = p_steps
+  where id = p_run and user_id = v_user and kind = 'onboard' and status = 'running';
+  return found;
+end;
+$_$;
+
+
+--
+-- Name: cmo_onboarding_answers(jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_onboarding_answers(p_answers jsonb) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $_$
+declare
+  v_user uuid := public.require_user();
+  v_handle text;
+  v_platforms text[];
+  v_heard text;
+  v_note text;
+begin
+  if p_answers is null or jsonb_typeof(p_answers) <> 'object' or octet_length(p_answers::text) > 1024
+     or exists (select 1 from jsonb_object_keys(p_answers) k where k not in ('x_handle', 'platforms', 'heard_from', 'heard_from_note')) then
+    raise exception 'These answers are not valid.' using errcode = '22023';
+  end if;
+
+  if p_answers ? 'x_handle' then
+    v_handle := regexp_replace(btrim(coalesce(p_answers->>'x_handle', '')), '^@', '');
+    if v_handle !~ '^[A-Za-z0-9_]{1,15}$' then
+      raise exception 'An X handle has 1 to 15 letters, numbers or underscores.' using errcode = '22023';
+    end if;
+  end if;
+  if p_answers ? 'platforms' then
+    if jsonb_typeof(p_answers->'platforms') <> 'array' then
+      raise exception 'These answers are not valid.' using errcode = '22023';
+    end if;
+    select array_agg(distinct v) into v_platforms from jsonb_array_elements_text(p_answers->'platforms') v;
+    if v_platforms is null or not (v_platforms <@ array['x', 'threads', 'linkedin']) then
+      raise exception 'Pick X, Threads or LinkedIn.' using errcode = '22023';
+    end if;
+  end if;
+  if p_answers ? 'heard_from' then
+    v_heard := p_answers->>'heard_from';
+    if v_heard is null or v_heard not in ('search', 'x', 'reddit', 'linkedin', 'youtube', 'ai_assistant', 'friend', 'newsletter', 'other') then
+      raise exception 'These answers are not valid.' using errcode = '22023';
+    end if;
+    v_note := nullif(left(btrim(coalesce(p_answers->>'heard_from_note', '')), 100), '');
+  elsif p_answers ? 'heard_from_note' then
+    raise exception 'These answers are not valid.' using errcode = '22023';
+  end if;
+
+  update public.profiles set
+    x_handle = coalesce(v_handle, x_handle),
+    post_platforms = coalesce(v_platforms, post_platforms),
+    heard_from = coalesce(v_heard, heard_from),
+    heard_from_note = case when v_heard is not null then v_note else heard_from_note end
+  where id = v_user;
+
+  perform public.cmo_apply_onboarding_answers(v_user);
+end;
+$_$;
 
 
 --
@@ -16118,10 +16254,18 @@ CREATE TABLE public.profiles (
     cmo_paused_at timestamp with time zone,
     timezone_source text DEFAULT 'default'::text NOT NULL,
     creem_customer_id text,
+    x_handle text,
+    post_platforms text[],
+    heard_from text,
+    heard_from_note text,
     CONSTRAINT profiles_digest_hour_check CHECK (((digest_hour >= 0) AND (digest_hour <= 23))),
+    CONSTRAINT profiles_heard_from_check CHECK (((heard_from IS NULL) OR (heard_from = ANY (ARRAY['search'::text, 'x'::text, 'reddit'::text, 'linkedin'::text, 'youtube'::text, 'ai_assistant'::text, 'friend'::text, 'newsletter'::text, 'other'::text])))),
+    CONSTRAINT profiles_heard_from_note_check CHECK (((heard_from_note IS NULL) OR (char_length(heard_from_note) <= 100))),
+    CONSTRAINT profiles_post_platforms_check CHECK (((post_platforms IS NULL) OR (((cardinality(post_platforms) >= 1) AND (cardinality(post_platforms) <= 3)) AND (post_platforms <@ ARRAY['x'::text, 'threads'::text, 'linkedin'::text])))),
     CONSTRAINT profiles_timezone_check CHECK (((char_length(timezone) >= 1) AND (char_length(timezone) <= 64))),
     CONSTRAINT profiles_timezone_source_check CHECK ((timezone_source = ANY (ARRAY['default'::text, 'browser'::text, 'founder'::text]))),
-    CONSTRAINT profiles_weekly_credit_budget_check CHECK (((weekly_credit_budget >= 0) AND (weekly_credit_budget <= 10000)))
+    CONSTRAINT profiles_weekly_credit_budget_check CHECK (((weekly_credit_budget >= 0) AND (weekly_credit_budget <= 10000))),
+    CONSTRAINT profiles_x_handle_check CHECK (((x_handle IS NULL) OR (x_handle ~ '^[A-Za-z0-9_]{1,15}$'::text)))
 );
 
 

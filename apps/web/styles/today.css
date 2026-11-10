@@ -652,3 +652,15 @@ html[data-ui="v2"] .v2-main-body:has(.ed2) {
   .td-today-line { flex-direction: column; align-items: stretch; }
   .td-today-line .v2-button { align-self: flex-start; }
 }
+.td-setup-steps { margin: 12px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.td-setup-steps li { display: grid; grid-template-columns: 20px 1fr auto; align-items: center; gap: 10px; font-size: 14px; color: var(--v2-ink2); }
+.td-setup-steps li[data-state="done"], .td-setup-steps li[data-state="running"] { color: var(--v2-ink); }
+.td-setup-dot { width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--v2-line); border-radius: 50%; font-size: 11px; }
+.td-setup-steps li[data-state="done"] .td-setup-dot { background: var(--v2-ok-soft); color: var(--v2-ok); border-color: transparent; }
+.td-setup-steps li[data-state="running"] .td-setup-dot { border-color: var(--v2-brand); box-shadow: inset 0 0 0 3px var(--v2-brand-soft); }
+.td-setup-steps li[data-state="failed"] .td-setup-dot { background: var(--v2-stuck-soft); color: var(--v2-stuck); border-color: transparent; }
+.td-setup-questions { display: flex; flex-direction: column; gap: 12px; }
+.td-setup-fieldset { margin: 0; padding: 0; border: 0; display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.td-setup-fieldset legend { padding: 0 0 6px; font-size: 13px; }
+.td-setup-check { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; }
+.scr-setup-title { margin: 0 0 4px; font-size: 22px; font-weight: 500; letter-spacing: -.02em; }

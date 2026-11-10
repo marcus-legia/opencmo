@@ -31,6 +31,15 @@ for (const [path, heading] of PAGES) {
   });
 }
 
+test("Library says who reads each document (CMO review 3, 3.3)", async ({ page }) => {
+  await signIn(page, state().users.a);
+  await page.goto("/app/library");
+  const cards = page.locator(".scr-doc-card");
+  await expect(cards).toHaveCount(4);
+  for (const card of await cards.all()) await expect(card.getByTestId("doc-used-by")).toHaveText("Used by Planner, Writer, Sales, Research");
+  await expect(page.getByText("Edit it here and every draft after uses it.")).toBeVisible();
+});
+
 test("old project routes redirect to Studio", async ({ page }) => {
   await signIn(page, state().users.a);
   const id = "55555555-5555-4555-8555-555555555555";

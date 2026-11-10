@@ -31,14 +31,26 @@ export async function runOnboarding(supabase: SupabaseClient, userId: string, si
   const run = firstRow(await rpcOrThrow<RunRow | RunRow[]>(supabase, "start_cmo_run", { p_kind: "onboard", p_input: { site } }));
   if (!run) throw new ApiError(500, "Could not start building your plan.");
 
+  const steps = progress(supabase, run.id);
   try {
+    await steps.set("site", "running");
     const snapshot = await readSite(site);
+    await steps.set("site", "done");
+    await steps.set(DOCUMENT_KINDS[0], "running");
     const drafts = await draftDocuments(snapshot);
-    for (const kind of DOCUMENT_KINDS) {
+    for (const [index, kind] of DOCUMENT_KINDS.entries()) {
       await rpcOrThrow(supabase, "save_marketing_document", { p_kind: kind, p_body: drafts[kind], p_run: run.id });
+      await steps.set(kind, "done");
+      const next = DOCUMENT_KINDS[index + 1];
+      if (next) await steps.set(next, "running");
     }
+    // Answers given while the run worked (CMO review 3, 3.2) reach the documents before the first plan reads them.
+    await supabase.rpc("cmo_onboarding_answers", { p_answers: {} }).then(({ error }) => {
+      if (error) console.warn("[cmo] onboarding answers not applied", error.message);
+    });
     await rpcOrThrow(supabase, "finish_cmo_run", { p_id: run.id, p_ok: true });
   } catch (error) {
+    await steps.fail();
     const known = error instanceof SiteError || error instanceof GenerateError;
     const message = known ? error.message : "We could not build your plan. Try again in a minute.";
     if (!known && !(error instanceof ApiError)) console.error("[cmo] onboarding failed", error);
@@ -49,6 +61,36 @@ export async function runOnboarding(supabase: SupabaseClient, userId: string, si
   // Only a founder who never had a week planned gets one at once; reading the website again rewrites the documents only.
   const { count: plans } = await supabase.from("cmo_runs").select("id", { count: "exact", head: true }).eq("kind", "plan_week");
   return { runId: run.id, firstWeek: plans === 0 ? await startFirstWeek(supabase, userId, started) : false };
+}
+
+/** The step ids Setup words (`components/screens/setup/steps.ts`): the website, then each document as it is saved. */
+export type OnboardStepId = "site" | (typeof DOCUMENT_KINDS)[number];
+type StepState = "running" | "done" | "failed";
+
+/**
+ * The run's real steps (CMO review 3, 3.2), written as the founder (`cmo_onboard_step`). Best effort: a step that
+ * cannot be written never stops onboarding, Setup only shows less.
+ */
+function progress(supabase: SupabaseClient, runId: string) {
+  const list: { id: OnboardStepId; status: StepState }[] = [];
+  const write = async () => {
+    const { error } = await supabase.rpc("cmo_onboard_step", { p_run: runId, p_steps: list });
+    if (error) console.warn("[cmo] onboarding step not written", error.message);
+  };
+  return {
+    async set(id: OnboardStepId, status: StepState) {
+      const found = list.find((step) => step.id === id);
+      if (found) found.status = status;
+      else list.push({ id, status });
+      await write();
+    },
+    async fail() {
+      const running = list.find((step) => step.status === "running");
+      if (!running) return;
+      running.status = "failed";
+      await write();
+    },
+  };
 }
 
 /** The onboarding route's time limit (`maxDuration` 300 s), less a margin, from the route's start: `after()` work must end before the platform kills it. */
