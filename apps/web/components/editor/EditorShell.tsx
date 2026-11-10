@@ -68,6 +68,8 @@ import { Splitter } from "./Splitter";
 import { Soundboard } from "./soundboard/Soundboard";
 import { SlidePanel, SlideStrip, readSlides, slideAt } from "./slides/SlidesView";
 import { Timeline } from "./timeline/Timeline";
+import { ScriptPanel } from "./script/ScriptPanel";
+import type { Script } from "@/lib/cmo/script";
 import { studioItemHref } from "@/components/screens/studio/href";
 import { reportClientError } from "@/lib/client-errors";
 
@@ -358,7 +360,21 @@ function Workspace({
   // Op: một lượt sửa = một commit = một bước Undo.
   const [busy, setBusy] = useState(false);
   // Tab của panel Media (Palmier: Media / Index…). Assistant là panel riêng (layout.ts).
-  const [leftTab, setLeftTab] = useState<"media" | "transcript" | "upload">("media");
+  const [leftTab, setLeftTab] = useState<"media" | "transcript" | "upload" | "script">("media");
+  // The script this edit was opened from (cmo-review-3 I1): the Script tab shows only when there is one.
+  const [script, setScript] = useState<Script | null>(null);
+  const [scriptRead, setScriptRead] = useState(0);
+  useEffect(() => {
+    let live = true;
+    api<Script>(`/clips/${encodeURIComponent(clipId)}/script`).then(
+      (found) => live && setScript(found),
+      // 404: the edit did not come from a script. Any other failure only hides the tab.
+      () => live && setScript(null),
+    );
+    return () => {
+      live = false;
+    };
+  }, [clipId, scriptRead]);
   // `?panel=upload` (old links say `?panel=clips`: the rail, `/app/video`): open the Upload tab,
   // then drop the parameter from the URL.
   const search = useSearchParams();
@@ -1447,7 +1463,7 @@ function Workspace({
           />
         ) : null}
         <div className="ed2-left-tabs" role="tablist" hidden={slidesView}>
-          {(["media", "transcript", "upload"] as const).map((tab) => (
+          {(script ? (["media", "transcript", "upload", "script"] as const) : (["media", "transcript", "upload"] as const)).map((tab) => (
             <button
               key={tab}
               type="button"
@@ -1457,7 +1473,7 @@ function Workspace({
               data-testid={`tab-${tab}`}
               onClick={() => setLeftTab(tab)}
             >
-              {tab === "media" ? "Media" : tab === "transcript" ? "Transcript" : "Upload"}
+              {tab === "media" ? "Media" : tab === "transcript" ? "Transcript" : tab === "script" ? "Script" : "Upload"}
             </button>
           ))}
         </div>
@@ -1475,6 +1491,18 @@ function Workspace({
             run={run}
             onSeek={(seconds) => playback.seek(Math.round(seconds * 30))}
             selection={selection}
+          />
+        ) : leftTab === "script" && script ? (
+          <ScriptPanel
+            script={script}
+            onScript={setScript}
+            onReload={() => setScriptRead((n) => n + 1)}
+            doc={state.document}
+            context={opContext}
+            busy={busy}
+            run={run}
+            playhead={frame / 30}
+            onSeek={(seconds) => playback.seek(Math.round(seconds * 30))}
           />
         ) : null}
         <UploadPanel
