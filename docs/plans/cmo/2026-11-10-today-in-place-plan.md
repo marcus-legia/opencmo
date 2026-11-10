@@ -46,12 +46,13 @@ Branch `claude/today-inline-edit`, cut from #188 (which carries #189's Today fra
 
 ### 3.3 Resizable columns
 - [x] `components/today/columns.ts` (+ `columns-boot.ts`), sashes in `Feed` and `ShellV2`.
-- [ ] e2e: drag and keyboard resize, the width survives a reload (rewrite of the old `ui-v2-shell` columns test).
+- [x] e2e: drag and keyboard resize, the width survives a reload, Enter resets (`ui-v2-shell`).
 
 ### 3.4 One header for Feed, Calendar, Analytics
 - [x] `TopBar`: `home` and `views` draw one bar; the views are links (`aria-current="page"`).
 - [x] The feed's own Feed / Calendar / Analytics row removed.
-- [ ] e2e `ui-v2-shell`: views by link in the banner (today it still clicks the old tab inside the feed).
+- [x] e2e `ui-v2-shell`: views by link in the banner, `aria-current` on the open one.
+- [x] Phone: the feed first, then Context, then the chat; the bar drops the Connect pills (Settings connects accounts).
 
 ### 3.5 Bundle
 - [x] Sentry: `bundleSizeOptimizations` (no tracing, no debug logger). First Load JS shared by all 171 → 141 kB,
@@ -77,6 +78,7 @@ Branch `claude/today-inline-edit`, cut from #188 (which carries #189's Today fra
 
 ### 3.6 Checks
 - [x] `tsc --noEmit`, `next build`.
-- [ ] `check:contracts`.
-- [ ] v2 e2e for the touched screens (shell, dashboard, today, setup); CI does not run e2e.
-- [ ] Look at it: screenshots in the PR.
+- [x] `check:contracts`.
+- [x] v2 e2e for the touched screens: shell, context (new), dashboard, today, theme, look: 28/28, then shell, dashboard,
+  look again after the phone CSS: 23/23. CI does not run e2e.
+- [x] Looked at Feed and Calendar at 1440 and the feed at 390 (e2e screenshots).
