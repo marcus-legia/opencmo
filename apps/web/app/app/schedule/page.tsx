@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 
-import { ScheduleScreen } from "@/components/screens/schedule/ScheduleScreen";
+import { CalendarView } from "@/components/today/CalendarView";
 import { requireUiV2 } from "@/lib/screens/flag";
 
-export const metadata: Metadata = { title: "Schedule" };
+export const metadata: Metadata = { title: "Calendar" };
 
 export default function SchedulePage() {
   requireUiV2();
-  return <ScheduleScreen />;
+  return <CalendarView />;
 }

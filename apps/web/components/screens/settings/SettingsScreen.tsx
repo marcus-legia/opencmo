@@ -39,20 +39,10 @@ export function SettingsScreen({ mcpEndpoint, paid }: { mcpEndpoint: string | nu
   const [state] = useScreen("settings");
 
   return (
-    <Screen label="Settings">
-      <PageHeader eyebrow="Settings" title="Settings" sub="Accounts, budget, notifications and the off switch." sample={state.status === "ready" && isSample(state.live)} />
-      <div className="td-settings">
-        {/* A menu of the page's own parts plus the settings that have their own page (canvas Settings.dc.html). */}
-        <nav className="td-settings-nav" aria-label="Settings">
-          <a href={`#${ACCOUNTS_PANEL_ID}`}>Accounts</a>
-          <a href="#settings-your-cmo">Your CMO</a>
-          <a href="#settings-notify">Notifications</a>
-          <a href="#off-title">Off switch</a>
-          <a href="#api-keys">API keys</a>
-          <span className="td-settings-sep" aria-hidden="true" />
-          <a href="/app/billing">Billing</a>
-          <a href="/app/library?tab=brand">Brand Kit</a>
-        </nav>
+    <div className="v2 scr td-cardhost td-v2host" data-testid="v2-settings">
+      <h1 style={{ margin: "0 0 4px", fontSize: "22px", fontWeight: "600", letterSpacing: "-0.4px" }}>
+        Settings {state.status === "ready" && isSample(state.live) ? <span className="meta">· sample data</span> : null}
+      </h1>
         <div className="td-settings-body">
           {state.status === "loading" && <SkeletonBlocks />}
           {state.status === "error" && <ErrorNote>{state.message}</ErrorNote>}
@@ -64,8 +54,7 @@ export function SettingsScreen({ mcpEndpoint, paid }: { mcpEndpoint: string | nu
             <ConnectedApps paid={paid} />
           </div>
         </div>
-      </div>
-    </Screen>
+    </div>
   );
 }
 

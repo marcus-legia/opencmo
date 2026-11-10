@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>OpenCMO Sales agent</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#f7f6f3}
+@media (prefers-color-scheme:dark){body{background:#121110}}
+a{color:var(--accent)}a:hover{color:var(--accent-hover)}
+.k{--bg:#f7f6f3;--panel:#ffffff;--raised:#f1efeb;--hover:#ebe8e3;--line:#e7e3dc;--line-2:#d8d2c8;--text:#191816;--muted:#625b52;--subtle:#736c62;--accent:#3b4cca;--accent-hover:#2f3fb0;--accent-ink:#ffffff;--accent-wash:#e9ebfa;--ok:#1e8a5e;--ok-wash:#e3f3ec;--warn:#a86a12;--warn-wash:#f8eedc;--top:#ffffff;
+font-family:Geist,ui-sans-serif,system-ui,sans-serif;color:var(--text);background:var(--bg);min-height:100vh;font-size:13px;line-height:1.45;-webkit-font-smoothing:antialiased}
+@media (prefers-color-scheme:dark){.k{--bg:#121110;--panel:#181715;--raised:#201e1c;--hover:#262421;--line:#2a2825;--line-2:#36332f;--text:#f2efe9;--muted:#a59e93;--subtle:#8a847b;--accent:#8b97ff;--accent-hover:#a8b1ff;--accent-ink:#0e1024;--accent-wash:#22264a;--ok:#4cc497;--ok-wash:#173328;--warn:#e7a948;--warn-wash:#3a2c14;--top:#0e0d0c}}
+.k *{box-sizing:border-box}.k button{font:inherit;color:inherit;cursor:pointer}
+.k svg.i{width:16px;height:16px;flex-shrink:0;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}.k svg.s{width:14px;height:14px}
+.top{height:48px;display:flex;align-items:center;gap:8px;padding:0 12px;border-bottom:1px solid var(--line);background:var(--top)}
+.ib{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:6px;border:0;background:transparent;color:var(--muted)}
+.ib:hover{background:var(--hover);color:var(--text)}
+.pill{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:6px;border:1px solid var(--line);background:transparent;color:var(--muted);font-size:12.5px}
+.meta{font-size:11.5px;color:var(--subtle)}
+.chip{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:999px;background:var(--raised);color:var(--muted);font-size:11.5px;border:1px solid var(--line)}
+.tile{display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:10px;background:var(--raised);border:1px solid var(--line);color:var(--text)}
+.tabs{display:flex;gap:18px;border-bottom:1px solid var(--line);margin:18px 0 0}
+.tabs button{border:0;background:transparent;padding:0 0 10px;color:var(--muted);font-size:13px;font-weight:500;border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button[aria-selected="true"]{color:var(--text);border-color:var(--text)}
+.th{border:1px solid var(--line);border-radius:10px;background:var(--panel);overflow:hidden}
+.th[data-open="true"]{border-color:var(--line-2)}
+.row{display:flex;align-items:center;gap:12px;width:100%;min-height:52px;padding:8px 12px;border:0;background:transparent;text-align:left}
+.score{display:inline-flex;align-items:center;justify-content:center;width:36px;height:24px;border-radius:6px;font-family:"Geist Mono",ui-monospace,monospace;font-size:12px;font-weight:500}
+.hi{background:var(--ok-wash);color:var(--ok)}.mid{background:var(--warn-wash);color:var(--warn)}.lo{background:var(--raised);color:var(--muted)}
+.quote{margin:0;padding:8px 12px;border-left:2px solid var(--line-2);color:var(--muted);font-size:13px;background:var(--bg);border-radius:0 6px 6px 0}
+.reply{margin:0;padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--bg);font-size:14px;line-height:1.55}
+.primary{height:32px;padding:0 14px;border-radius:7px;border:0;background:var(--accent);color:var(--accent-ink);font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.primary:hover{background:var(--accent-hover)}
+.ghost{height:32px;padding:0 12px;border-radius:7px;border:1px solid var(--line-2);background:transparent;color:var(--text);font-size:13px;display:inline-flex;align-items:center;gap:6px}
+.ghost:hover{background:var(--hover)}
+.skip{height:32px;padding:0 10px;border:0;border-radius:7px;background:transparent;color:var(--muted);font-size:13px}
+.card{border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:14px}
+.run{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
+.run:last-child{border:0}
+.tg{position:relative;width:30px;height:18px;border-radius:999px;background:var(--line-2);border:0;flex-shrink:0}
+.tg[aria-checked="true"]{background:var(--accent)}
+.tg span{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff}
+.tg[aria-checked="true"] span{left:14px}
+.live{position:relative;display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--ok)}
+</style>
+</helmet>
+<div class="k">
+
+<header class="top">
+  <button type="button" class="pill" style="color:var(--text);gap:8px;border:0;padding:0 8px"><span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:5px;background:var(--accent);color:var(--accent-ink);font-weight:700;font-size:11px">C</span><span style="font-weight:600">Cross Push</span><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></button>
+  <span class="meta">/</span>
+  <a href="Main.dc.html" style="display:inline-flex;align-items:center;gap:4px;color:var(--muted);text-decoration:none;font-size:12.5px">Agents</a>
+  <span class="meta">/</span>
+  <span style="font-size:12.5px;font-weight:500">Sales</span>
+  <div style="flex:1 1 auto"></div>
+  <button type="button" class="pill"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>Chat</button>
+  <span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:var(--line-2);font-size:12px;font-weight:600">T</span>
+</header>
+
+<div style="display:flex;flex-wrap:wrap;max-width:1320px;margin:0 auto;padding:22px 24px 40px;gap:24px">
+<main style="flex:999 1 600px;min-width:0">
+  <div style="display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap">
+    <span class="tile"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="width:20px;height:20px"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"></path></svg></span>
+    <div style="flex:1 1 300px;min-width:0">
+      <div style="display:flex;align-items:center;gap:8px"><h1 style="margin:0;font-size:22px;font-weight:600;letter-spacing:-0.4px">Sales</h1><span class="chip"><span class="live"></span>Scanned 2 h ago</span></div>
+      <p style="margin:4px 0 8px;color:var(--muted);font-size:13px;max-width:620px">Finds public conversations where people describe the problem Cross Push solves, scores each one with the exact words, and drafts a help-first reply. You post it yourself; Sales has no post button.</p>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><span class="meta">Reads</span><span class="chip">Product</span><span class="chip">Competitors</span><span class="chip">Brand voice</span></div>
+    </div>
+    <button type="button" class="primary"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg>Scan now · 5 credits</button>
+  </div>
+
+  <div class="tabs" role="tablist" aria-label="Sales">
+    <sc-for list="{{tabs}}" as="t" hint-placeholder-count="3">
+      <button type="button" role="tab" aria-selected="{{t.sel}}" onClick="{{t.pick}}">{{t.label}}</button>
+    </sc-for>
+  </div>
+
+  <div style="display:flex;align-items:center;gap:8px;margin:14px 0 10px;flex-wrap:wrap">
+    <span style="font-weight:600">3 threads worth a reply</span><span class="meta">· 11 checked, 8 below your bar</span>
+    <div style="flex:1 1 auto"></div>
+    <span class="meta">Sort</span><button type="button" class="pill">Score<svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></button>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:8px">
+    <sc-for list="{{threads}}" as="t" hint-placeholder-count="3">
+      <div class="th" data-open="{{t.open}}">
+        <button type="button" class="row" onClick="{{t.pick}}" aria-expanded="{{t.open}}">
+          <span class="{{t.scls}}">{{t.score}}</span>
+          <span style="flex:1 1 auto;min-width:0">
+            <span style="display:block;font-size:13.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{t.title}}</span>
+            <span class="meta">{{t.where}} · {{t.age}} · {{t.comments}} comments</span>
+          </span>
+          <svg class="i s" viewBox="0 0 24 24" aria-hidden="true" style="color:var(--subtle)"><path d="m6 9 6 6 6-6"></path></svg>
+        </button>
+        <sc-if value="{{t.isOpen}}" hint-placeholder-val="{{ false }}">
+          <div style="border-top:1px solid var(--line);padding:14px 14px 14px 60px;display:flex;flex-direction:column;gap:12px">
+            <div><div class="meta" style="margin-bottom:6px">Why it scored {{t.score}}</div><p class="quote">“{{t.quote}}”</p></div>
+            <div class="meta">{{t.rules}}</div>
+            <div><div class="meta" style="margin-bottom:6px">Draft reply</div><p class="reply">{{t.reply}}</p></div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+              <button type="button" class="skip">Dismiss</button>
+              <button type="button" class="ghost">Mark replied</button>
+              <button type="button" class="primary"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg>Copy and open thread</button>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+    </sc-for>
+  </div>
+</main>
+
+<aside style="flex:1 1 300px;max-width:360px;display:flex;flex-direction:column;gap:14px">
+  <section class="card">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px"><h2 style="margin:0;font-size:13px;font-weight:600">This week</h2><span class="meta">since Mon</span></div>
+    <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
+      <div><div style="font-size:20px;font-weight:600">2</div><div class="meta">replied</div></div>
+      <div><div style="font-size:20px;font-weight:600">5</div><div class="meta">upvotes</div></div>
+      <div><div style="font-size:20px;font-weight:600">1</div><div class="meta">sign-up</div></div>
+    </div>
+  </section>
+  <section class="card">
+    <h2 style="margin:0 0 6px;font-size:13px;font-weight:600">Recent runs</h2>
+    <div class="run"><span class="meta" style="width:64px">Today 08:10</span><span style="flex:1">11 threads, 3 kept</span><span class="meta">5 cr</span></div>
+    <div class="run"><span class="meta" style="width:64px">Thu 08:05</span><span style="flex:1">9 threads, 2 kept</span><span class="meta">5 cr</span></div>
+    <div class="run"><span class="meta" style="width:64px">Mon 08:00</span><span style="flex:1">14 threads, 4 kept</span><span class="meta">5 cr</span></div>
+  </section>
+  <section class="card">
+    <h2 style="margin:0 0 8px;font-size:13px;font-weight:600">Where it looks</h2>
+    <sc-for list="{{places}}" as="p" hint-placeholder-count="5">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0"><span>{{p.name}}</span><button type="button" class="tg" role="switch" aria-checked="{{p.on}}" aria-label="{{p.name}}" onClick="{{p.pick}}"><span></span></button></div>
+    </sc-for>
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0 0;margin-top:6px;border-top:1px solid var(--line)"><span>Scans</span><button type="button" class="pill">Mon and Thu<svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></button></div>
+  </section>
+</aside>
+</div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { open: 't1', tab: 'threads', places: { Reddit: true, X: true, 'Hacker News': true, 'Indie Hackers': false, LinkedIn: false } }; }
+  renderVals() {
+    var self = this, s = this.state;
+    var data = [
+      { id: 't1', score: '8.4', scls: 'score hi', title: 'How do you prove an influencer actually posted?', where: 'r/SaaS', age: '5 h', comments: 23, quote: 'We paid three creators last month and one deleted the post after a day. The screenshot is all we have.', rules: 'r/SaaS rules checked: no links in the first reply, self-promotion only when asked.', reply: 'I check the live post on X, not a screenshot. Screenshots get edited and posts come down a day later. If you track it by hand, a sheet with the post URL and a re-check after 48 hours does most of the job.' },
+      { id: 't2', score: '7.1', scls: 'score mid', title: 'Best way to find small X creators for a launch?', where: 'r/startups', age: '1 d', comments: 41, quote: 'Under 10k followers, in dev tools, who will post for a flat fee. Where do people find them?', rules: 'r/startups rules checked: answer the question first, the product at most once.', reply: 'Search X for people who already post about the tools you compete with, then sort by replies, not followers. Small accounts with real replies sell better than big ones with none.' },
+      { id: 't3', score: '6.2', scls: 'score mid', title: 'Ask HN: Has anyone paid for sponsored tweets?', where: 'Hacker News', age: '2 d', comments: 88, quote: 'Spent $400 on two sponsored tweets, no idea if anyone clicked.', rules: 'HN: plain text, no marketing tone.', reply: 'Give each creator their own link with a UTM tag before they post. Without it you only know the post went live, not whether it sold anything.' }
+    ];
+    var threads = data.map(function (t) {
+      var o = s.open === t.id;
+      return Object.assign({}, t, { open: o ? 'true' : 'false', isOpen: o, pick: function () { self.setState({ open: o ? null : t.id }); } });
+    });
+    var tabs = [['threads', 'Threads'], ['runs', 'Runs'], ['settings', 'Settings']].map(function (t) {
+      return { label: t[1], sel: s.tab === t[0] ? 'true' : 'false', pick: function () { self.setState({ tab: t[0] }); } };
+    });
+    var places = Object.keys(s.places).map(function (n) {
+      return { name: n, on: s.places[n] ? 'true' : 'false', pick: function () { var p = Object.assign({}, self.state.places); p[n] = !p[n]; self.setState({ places: p }); } };
+    });
+    return { threads: threads, tabs: tabs, places: places };
+  }
+}
+</script>
+</body>
+</html>

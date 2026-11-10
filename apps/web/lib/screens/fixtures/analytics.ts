@@ -52,6 +52,13 @@ export const analyticsFixture: AnalyticsScreen = {
     { id: "p-3", title: "“Why we built the editor first”", platform: "linkedin", impressions: 710, engagementRate: 6.0, vsMedian: 1.1, read: "Too few posts to judge", url: null },
     { id: "p-4", title: "“Tired of editing demos?”", platform: "x", impressions: 1050, engagementRate: 2.2, vsMedian: 0.5, read: "Question opener, text only", url: null },
   ],
+  bestTimes: [
+    [3, 3, 2, 2, 1, 2, 1],
+    [1, 2, 2, 1, 1, 3, 2],
+    [0, 1, 1, 1, 0, 2, 1],
+    [2, 1, 2, 3, 1, 1, 0],
+    [1, 0, 1, 1, 0, 0, 0],
+  ],
 };
 
 export const analyticsEmpty: AnalyticsScreen = {
@@ -68,4 +75,5 @@ export const analyticsEmpty: AnalyticsScreen = {
   brainReads: [],
   byAccount: [],
   posts: [],
+  bestTimes: null,
 };

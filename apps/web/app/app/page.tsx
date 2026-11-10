@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 
 import { CmoView } from "@/components/cmo/CmoView";
 import { CmoWorkspace } from "@/components/cmo/workspace/CmoWorkspace";
-import { Dashboard } from "@/components/dashboard/Dashboard";
+import { Feed } from "@/components/today/Feed";
 import { UI_V2 } from "@/lib/screens/flag";
 import { loadWorkspace } from "@/lib/cmo/load-workspace";
 import { loadCmoState } from "@/lib/cmo/state";
@@ -43,7 +43,7 @@ export default async function CmoHome({ searchParams }: { searchParams: Promise<
       const query = new URLSearchParams({ ...(site ? { site } : {}), ...(paid ? { paid } : {}) }).toString();
       redirect(query ? `/app/setup?${query}` : "/app/setup");
     }
-    return <Dashboard />;
+    return <Feed email={user?.email ?? null} />;
   }
 
   if (Object.keys(state.documents).length === 0) return <CmoView initial={state} site={site} />;

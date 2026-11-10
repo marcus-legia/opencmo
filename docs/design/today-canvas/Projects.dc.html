@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>OpenCMO video projects</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#f7f6f3}
+@media (prefers-color-scheme:dark){body{background:#121110}}
+a{color:var(--accent)}a:hover{color:var(--accent-hover)}
+.k{--bg:#f7f6f3;--panel:#ffffff;--raised:#f1efeb;--hover:#ebe8e3;--line:#e7e3dc;--line-2:#d8d2c8;--text:#191816;--muted:#625b52;--subtle:#736c62;--accent:#3b4cca;--accent-hover:#2f3fb0;--accent-ink:#ffffff;--accent-wash:#e9ebfa;--ok:#1e8a5e;--ok-wash:#e3f3ec;--warn:#a86a12;--warn-wash:#f8eedc;--top:#ffffff;--thumb:#2a2825;--thumb-2:#3a3733;
+font-family:Geist,ui-sans-serif,system-ui,sans-serif;color:var(--text);background:var(--bg);min-height:100vh;font-size:13px;line-height:1.45;-webkit-font-smoothing:antialiased}
+@media (prefers-color-scheme:dark){.k{--bg:#121110;--panel:#181715;--raised:#201e1c;--hover:#262421;--line:#2a2825;--line-2:#36332f;--text:#f2efe9;--muted:#a59e93;--subtle:#8a847b;--accent:#8b97ff;--accent-hover:#a8b1ff;--accent-ink:#0e1024;--accent-wash:#22264a;--ok:#4cc497;--ok-wash:#173328;--warn:#e7a948;--warn-wash:#3a2c14;--top:#0e0d0c;--thumb:#24221f;--thumb-2:#302d29}}
+.k *{box-sizing:border-box}.k button{font:inherit;color:inherit;cursor:pointer}
+.k svg.i{width:16px;height:16px;flex-shrink:0;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}.k svg.s{width:14px;height:14px}
+.top{height:48px;display:flex;align-items:center;gap:8px;padding:0 12px;border-bottom:1px solid var(--line);background:var(--top)}
+.pill{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:6px;border:1px solid var(--line);background:transparent;color:var(--muted);font-size:12.5px}
+.ib{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:6px;border:0;background:transparent;color:var(--muted)}
+.ib:hover{background:var(--hover);color:var(--text)}
+.meta{font-size:11.5px;color:var(--subtle)}
+.mono{font-family:"Geist Mono",ui-monospace,monospace}
+.primary{height:34px;padding:0 14px;border-radius:7px;border:0;background:var(--accent);color:var(--accent-ink);font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:6px;text-decoration:none}
+.primary:hover{background:var(--accent-hover);color:var(--accent-ink)}
+.ghost{height:34px;padding:0 12px;border-radius:7px;border:1px solid var(--line-2);background:transparent;color:var(--text);font-size:13px;display:inline-flex;align-items:center;gap:6px;text-decoration:none}
+.ghost:hover{background:var(--hover);color:var(--text)}
+.seg{display:inline-flex;gap:2px;padding:2px;border-radius:8px;background:var(--panel);border:1px solid var(--line)}
+.seg button{height:26px;padding:0 10px;border-radius:6px;border:0;background:transparent;color:var(--muted);font-size:12.5px;font-weight:500}
+.seg button[aria-selected="true"]{background:var(--raised);color:var(--text);box-shadow:0 0 0 1px var(--line-2)}
+.sec{display:flex;align-items:center;gap:8px;margin:0 0 10px}
+.sec h2{margin:0;font-size:13px;font-weight:600}
+.script{display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--panel);flex-wrap:wrap}
+.st{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;background:var(--accent-wash);color:var(--accent);flex-shrink:0}
+.beatbar{display:flex;gap:3px}
+.beatbar i{display:block;height:4px;border-radius:2px;background:var(--line-2)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(232px,1fr));gap:14px}
+.proj{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:10px;background:var(--panel);overflow:hidden;text-decoration:none;color:var(--text)}
+.proj:hover{border-color:var(--line-2);color:var(--text)}
+.thumb{position:relative;aspect-ratio:16/10;background:var(--thumb);display:flex;align-items:center;justify-content:center;color:#d8d2c8}
+.thumb.v{aspect-ratio:16/10}
+.thumb .frame{height:82%;aspect-ratio:9/16;border-radius:4px;background:var(--thumb-2)}
+.thumb .wide{width:82%;aspect-ratio:16/9;border-radius:4px;background:var(--thumb-2)}
+.dur{position:absolute;right:8px;bottom:8px;height:20px;padding:0 6px;border-radius:4px;background:rgba(0,0,0,.6);color:#fff;font-family:"Geist Mono",ui-monospace,monospace;font-size:11px;display:inline-flex;align-items:center}
+.badge{display:inline-flex;align-items:center;gap:5px;height:20px;padding:0 7px;border-radius:5px;font-size:11px;font-weight:500}
+.b-edit{background:var(--raised);color:var(--muted);border:1px solid var(--line)}.b-ok{background:var(--ok-wash);color:var(--ok)}.b-run{background:var(--accent-wash);color:var(--accent)}
+.drop{display:flex;align-items:center;gap:14px;padding:16px;border:1px dashed var(--line-2);border-radius:10px;background:var(--panel);flex-wrap:wrap}
+</style>
+</helmet>
+<div class="k">
+
+<header class="top">
+  <button type="button" class="pill" style="color:var(--text);gap:8px;border:0;padding:0 8px"><span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:5px;background:var(--accent);color:var(--accent-ink);font-weight:700;font-size:11px">C</span><span style="font-weight:600">Cross Push</span><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></button>
+  <span class="meta">/</span>
+  <span style="font-size:12.5px;font-weight:500">Editor</span>
+  <div style="flex:1 1 auto"></div>
+  <span class="pill" style="cursor:default">212 credits</span>
+  <a href="Main.dc.html" class="pill" style="text-decoration:none">Back to today</a>
+  <span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:var(--line-2);font-size:12px;font-weight:600">T</span>
+</header>
+
+<div style="max-width:1240px;margin:0 auto;padding:24px 24px 48px">
+  <div style="display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:20px">
+    <div style="flex:1 1 320px">
+      <h1 style="margin:0;font-size:22px;font-weight:600;letter-spacing:-0.4px">Videos</h1>
+      <p style="margin:4px 0 0;color:var(--muted);font-size:13px">Film from the script, upload the take, fine-tune it here. Cut short clips from a finished video and Post schedules them.</p>
+    </div>
+    <button type="button" class="ghost"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"></path><path d="M12 5v14"></path></svg>Blank edit</button>
+    <button type="button" class="primary"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" x2="12" y1="3" y2="15"></line></svg>Upload a video</button>
+  </div>
+
+  <div class="sec"><h2>Scripts to film</h2><span class="meta">approved in Writer</span></div>
+  <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:28px">
+    <div class="script">
+      <span class="st"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5"></path><rect x="2" y="6" width="14" height="12" rx="2"></rect></svg></span>
+      <div style="flex:1 1 280px;min-width:0">
+        <div style="font-weight:500;font-size:13.5px">Post a launch brief in under a minute</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:4px"><div class="beatbar" aria-hidden="true"><i style="width:14px"></i><i style="width:34px"></i><i style="width:32px"></i><i style="width:22px"></i></div><span class="meta">4 beats · 45 s · 2 to camera, 2 screen</span></div>
+      </div>
+      <a href="Prompter.dc.html" class="ghost"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><rect width="14" height="20" x="5" y="2" rx="2"></rect><path d="M12 18h.01"></path></svg>Read on your phone</a>
+      <a href="Editor.dc.html" class="primary">Upload the take</a>
+    </div>
+    <div class="script">
+      <span class="st"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5"></path><rect x="2" y="6" width="14" height="12" rx="2"></rect></svg></span>
+      <div style="flex:1 1 280px;min-width:0">
+        <div style="font-weight:500;font-size:13.5px">Why we check the live post, not the screenshot</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:4px"><div class="beatbar" aria-hidden="true"><i style="width:20px"></i><i style="width:26px"></i><i style="width:20px"></i></div><span class="meta">3 beats · 30 s · all to camera</span></div>
+      </div>
+      <a href="Prompter.dc.html" class="ghost"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><rect width="14" height="20" x="5" y="2" rx="2"></rect><path d="M12 18h.01"></path></svg>Read on your phone</a>
+      <a href="Editor.dc.html" class="primary">Upload the take</a>
+    </div>
+  </div>
+
+  <div class="sec" style="flex-wrap:wrap">
+    <h2>Projects</h2><span class="meta">6</span>
+    <div style="flex:1 1 auto"></div>
+    <div class="seg" role="tablist" aria-label="Filter projects">
+      <sc-for list="{{filters}}" as="f" hint-placeholder-count="3">
+        <button type="button" role="tab" aria-selected="{{f.sel}}" onClick="{{f.pick}}">{{f.label}}</button>
+      </sc-for>
+    </div>
+  </div>
+  <div class="grid">
+    <sc-for list="{{projects}}" as="p" hint-placeholder-count="6">
+      <a href="Editor.dc.html" class="proj">
+        <span class="thumb"><sc-if value="{{p.tall}}" hint-placeholder-val="{{ true }}"><span class="frame"></span></sc-if><sc-if value="{{p.wideOn}}" hint-placeholder-val="{{ false }}"><span class="wide"></span></sc-if><span class="dur">{{p.dur}}</span></span>
+        <span style="padding:10px 12px;display:flex;flex-direction:column;gap:6px">
+          <span style="font-weight:500;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{p.title}}</span>
+          <span style="display:flex;align-items:center;gap:6px"><span class="{{p.bcls}}">{{p.status}}</span><span class="meta">{{p.when}}</span></span>
+        </span>
+      </a>
+    </sc-for>
+  </div>
+
+  <div class="drop" style="margin-top:20px">
+    <svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="width:20px;height:20px;color:var(--muted)"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" x2="12" y1="3" y2="15"></line></svg>
+    <div style="flex:1 1 300px"><div style="font-weight:500">Drop your own video here</div><div class="meta">Any video file, up to 15 minutes. It gets a transcript so you can cut by words.</div></div>
+    <button type="button" class="ghost">Choose a file</button>
+  </div>
+</div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { f: 'all' }; }
+  renderVals() {
+    var self = this, s = this.state;
+    var data = [
+      { title: 'Launch brief walkthrough', dur: '0:47', st: 'edit', status: 'Editing', when: 'today', tall: true },
+      { title: 'No commission, explained', dur: '0:32', st: 'done', status: '3 clips scheduled', when: 'Fri', tall: true },
+      { title: 'Founder Q&A, October', dur: '12:08', st: 'done', status: 'Exported', when: '2 weeks ago', tall: false },
+      { title: 'Creator onboarding demo', dur: '1:54', st: 'run', status: 'Transcribing', when: 'just now', tall: false },
+      { title: 'Delivered mark close-up', dur: '0:18', st: 'done', status: 'Posted', when: 'last week', tall: true },
+      { title: 'Untitled edit', dur: '0:00', st: 'edit', status: 'Editing', when: 'Oct 30', tall: true }
+    ];
+    var cls = { edit: 'badge b-edit', done: 'badge b-ok', run: 'badge b-run' };
+    var list = data.filter(function (p) { return s.f === 'all' || (s.f === 'done' ? p.st === 'done' : p.st !== 'done'); });
+    var projects = list.map(function (p) { return Object.assign({}, p, { bcls: cls[p.st], wideOn: !p.tall }); });
+    var filters = [['all', 'All'], ['edit', 'In progress'], ['done', 'Finished']].map(function (f) {
+      return { label: f[1], sel: s.f === f[0] ? 'true' : 'false', pick: function () { self.setState({ f: f[0] }); } };
+    });
+    return { projects: projects, filters: filters };
+  }
+}
+</script>
+</body>
+</html>

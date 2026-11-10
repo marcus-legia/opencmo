@@ -1384,13 +1384,14 @@ async function measured(supabase: SupabaseClient, range: number, now: Date): Pro
   };
 }
 
-async function analytics({ supabase, params }: LoadContext): Promise<Partial<AnalyticsScreen>> {
+async function analytics({ supabase, userId, params }: LoadContext): Promise<Partial<AnalyticsScreen>> {
   const parsed = RangeSchema.safeParse(Number(params.get("range") ?? 30));
   const range = parsed.success ? parsed.data : 30;
   const now = new Date();
   const m = await measured(supabase, range, now);
   // `brainReads` is live and empty: no model reads these numbers yet, and a sample line would read as a real finding.
-  return buildAnalytics({ range, now, accounts: m.accounts, days: m.days, posts: m.posts, publishedInRange: m.published });
+  const timezone = await profile(supabase, userId).then((p) => p.timezone, () => "UTC");
+  return buildAnalytics({ range, now, accounts: m.accounts, days: m.days, posts: m.posts, publishedInRange: m.published, timezone });
 }
 
 /**

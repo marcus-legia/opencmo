@@ -8,6 +8,7 @@
 
 import type { Account, Platform } from "./common";
 import { PLATFORMS } from "./common";
+import { BEST_HOURS } from "./analytics";
 import type { AnalyticsScreen, Range } from "./analytics";
 import type { DashboardScreen } from "./dashboard";
 
@@ -113,9 +114,9 @@ function percentChange(now: number | null, before: number | null): number | null
   return Math.round(((now - before) / before) * 100);
 }
 
-export type AnalyticsInput = { range: Range; now: Date; accounts: AccountIn[]; days: AccountDayIn[]; posts: PostIn[]; publishedInRange: number };
+export type AnalyticsInput = { range: Range; now: Date; accounts: AccountIn[]; days: AccountDayIn[]; posts: PostIn[]; publishedInRange: number; timezone?: string };
 
-export function buildAnalytics({ range, now, accounts, days, posts, publishedInRange }: AnalyticsInput): AnalyticsScreen {
+export function buildAnalytics({ range, now, accounts, days, posts, publishedInRange, timezone = "UTC" }: AnalyticsInput): AnalyticsScreen {
   const current = rangeDays(now, range);
   const previous = rangeDays(new Date(now.getTime() - range * DAY_MS), range);
   const inDays = (set: string[]) => {
@@ -208,11 +209,43 @@ export function buildAnalytics({ range, now, accounts, days, posts, publishedInR
           vsMedian: vs,
           read: null,
           url: p.url && p.url.startsWith("https://") ? p.url : null,
+          publishedAt: new Date(p.publishedAt).toISOString(),
         }]
       : [],
   );
 
-  return { range, accounts: analyticsAccounts(accounts, days), kpis, daily, brainReads: [], byAccount, posts: postRows };
+  return { range, accounts: analyticsAccounts(accounts, days), kpis, daily, brainReads: [], byAccount, posts: postRows, bestTimes: bestTimes(scored, timezone) };
+}
+
+/**
+ * Views per post against the median, by weekday and the nearest of `BEST_HOURS`, in the founder's zone. A cell is the
+ * average multiple of its posts, cut into four levels; a cell with no post is 0. Null below `MIN_POSTS_TO_JUDGE` posts
+ * with a reading: a few posts would paint chance as a pattern.
+ */
+function bestTimes(scored: { p: PostIn; vs: number | null }[], timezone: string): number[][] | null {
+  const read = scored.filter((s): s is { p: PostIn; vs: number } => s.vs !== null);
+  if (read.length < MIN_POSTS_TO_JUDGE) return null;
+  let fmt: Intl.DateTimeFormat;
+  try {
+    fmt = new Intl.DateTimeFormat("en-GB", { timeZone: timezone, weekday: "short", hour: "numeric", hourCycle: "h23" });
+  } catch {
+    fmt = new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", weekday: "short", hour: "numeric", hourCycle: "h23" });
+  }
+  const WEEK = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const sums = BEST_HOURS.map(() => WEEK.map(() => ({ total: 0, n: 0 })));
+  for (const { p, vs } of read) {
+    const parts = fmt.formatToParts(new Date(p.publishedAt));
+    const day = WEEK.indexOf(parts.find((x) => x.type === "weekday")?.value ?? "");
+    const hour = Number(parts.find((x) => x.type === "hour")?.value ?? NaN);
+    if (day < 0 || Number.isNaN(hour)) continue;
+    let row = 0;
+    BEST_HOURS.forEach((h, i) => {
+      if (Math.abs(h - hour) < Math.abs(BEST_HOURS[row]! - hour)) row = i;
+    });
+    sums[row]![day]!.total += vs;
+    sums[row]![day]!.n += 1;
+  }
+  return sums.map((cells) => cells.map(({ total, n }) => (n === 0 ? 0 : total / n >= 1.5 ? 3 : total / n >= 1 ? 2 : 1)));
 }
 
 /** The Dashboard's results: the last seven days per account. */
