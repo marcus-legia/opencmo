@@ -59,6 +59,9 @@ insert into allowed values
   ('cmo_post_myself(uuid,text,text)'),
   -- CMO review 3, B0: a founder asks about themselves only (another account is not found).
   ('cmo_require_paid(uuid)'),
+  -- CMO review 3, 3.2: steps on the founder's own onboarding run, and the three optional answers.
+  ('cmo_onboard_step(uuid,jsonb)'),
+  ('cmo_onboarding_answers(jsonb)'),
   ('cmo_script_open(uuid)'),
   ('post_video_start(uuid,uuid)'),
   ('post_video_wanted(uuid)'),

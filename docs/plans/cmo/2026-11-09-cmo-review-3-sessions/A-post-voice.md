@@ -93,5 +93,10 @@ row is B's (the request below).
     `isPlanRequired(error)`; show the sheet when `isPlanRequired` is true instead of an error line. `lib/plan-offer.ts`
     holds the same helper for code outside components.
   - Server: `requirePaid(supabase, userId)` in `lib/paid-first.ts` for a route that checks before work.
+  - In SQL that already trusts the user (a trigger, a function called for another account), use the internal
+    `public.cmo_paid(user)` and `perform public.cmo_plan_required()`: `cmo_require_paid` checks that the caller asks
+    about themselves and answers "Not found" otherwise (B5, `20270114020000`).
+  - B's e2e "the free first run" (`e2e/ui-v2-activation.spec.ts`) presses Approve on an unpaid account's post card and
+    expects `plan-sheet`; it goes green once A3 and the card's sheet land.
   - Today's "Rate your first drafts" row links to `/app?rate=1`. Please open the rating sheet from that query on the
     Dashboard, or tell B the URL you want and B changes the link.

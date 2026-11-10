@@ -4859,7 +4859,7 @@ $$;
 --
 
 CREATE FUNCTION public.cmo_require_paid(p_user uuid) RETURNS void
-    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO ''
     AS $$
 begin
@@ -9350,6 +9350,114 @@ begin
  return v_result;
 end;
 $_$;
+
+
+--
+-- Name: product_event(uuid, text, text, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.product_event(p_user uuid, p_kind text, p_platform text, p_ref uuid) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  insert into public.product_events (user_id, kind, platform, paid, ref_id)
+  values (p_user, p_kind, nullif(lower(regexp_replace(coalesce(p_platform, ''), '[^A-Za-z_]', '', 'g')), ''), public.cmo_paid(p_user), p_ref)
+  on conflict (kind, ref_id) do nothing;
+exception when others then
+  raise warning 'product event % not recorded for %: %', p_kind, p_user, sqlerrm;
+end;
+$$;
+
+
+--
+-- Name: product_events_approve(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.product_events_approve() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  if new.kind in ('post', 'reply') and new.status in ('approved', 'edited') and old.status is distinct from new.status
+     and old.status not in ('approved', 'edited') then
+    perform public.product_event(new.user_id, 'approve', new.snapshot->>'platform', new.id);
+  end if;
+  return new;
+end;
+$$;
+
+
+--
+-- Name: product_events_onboarded(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.product_events_onboarded() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  if new.kind = 'onboard' and new.status = 'done' and old.status is distinct from 'done' then
+    perform public.product_event(new.user_id, 'onboarded', null, new.user_id);
+  end if;
+  return new;
+end;
+$$;
+
+
+--
+-- Name: product_events_posted(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.product_events_posted() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  if new.status = 'published' and old.status is distinct from 'published' then
+    perform public.product_event(new.user_id, 'posted', new.platform, new.id);
+  end if;
+  return new;
+end;
+$$;
+
+
+--
+-- Name: product_events_reply(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.product_events_reply() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  if new.status = 'replied' and old.status is distinct from 'replied' then
+    perform public.product_event(new.user_id, 'reply_copied', new.platform, new.id);
+  end if;
+  return new;
+end;
+$$;
+
+
+--
+-- Name: product_events_slot(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.product_events_slot() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  if new.status = 'waiting' and (tg_op = 'INSERT' or old.status is distinct from 'waiting') then
+    perform public.product_event(new.user_id, 'schedule', new.platform, new.id);
+  end if;
+  if new.status = 'published' and (tg_op = 'INSERT' or old.status is distinct from 'published')
+     and not exists (select 1 from public.deliverables d where d.id = new.deliverable_id and d.ref_kind = 'content_item') then
+    perform public.product_event(new.user_id, 'posted', new.platform, new.id);
+  end if;
+  return new;
+end;
+$$;
 
 
 --
@@ -15624,6 +15732,86 @@ CREATE TABLE public.account_metrics (
 
 
 --
+-- Name: product_events; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.product_events (
+    id bigint NOT NULL,
+    user_id uuid NOT NULL,
+    kind text NOT NULL,
+    platform text,
+    paid boolean NOT NULL,
+    ref_id uuid NOT NULL,
+    at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT product_events_kind_check CHECK ((kind = ANY (ARRAY['onboarded'::text, 'approve'::text, 'schedule'::text, 'posted'::text, 'reply_copied'::text]))),
+    CONSTRAINT product_events_platform_check CHECK (((platform IS NULL) OR (platform ~ '^[a-z_]{1,40}$'::text)))
+);
+
+
+--
+-- Name: profiles; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.profiles (
+    id uuid NOT NULL,
+    email text,
+    plan text DEFAULT 'free'::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    credit_balance integer DEFAULT 0 NOT NULL,
+    retention_from timestamp with time zone DEFAULT now() NOT NULL,
+    retention_exempt boolean DEFAULT false NOT NULL,
+    weekly_credit_budget integer DEFAULT 80 NOT NULL,
+    timezone text DEFAULT 'UTC'::text NOT NULL,
+    digest_hour smallint DEFAULT 7,
+    cmo_paused_at timestamp with time zone,
+    timezone_source text DEFAULT 'default'::text NOT NULL,
+    creem_customer_id text,
+    x_handle text,
+    post_platforms text[],
+    heard_from text,
+    heard_from_note text,
+    CONSTRAINT profiles_digest_hour_check CHECK (((digest_hour >= 0) AND (digest_hour <= 23))),
+    CONSTRAINT profiles_heard_from_check CHECK (((heard_from IS NULL) OR (heard_from = ANY (ARRAY['search'::text, 'x'::text, 'reddit'::text, 'linkedin'::text, 'youtube'::text, 'ai_assistant'::text, 'friend'::text, 'newsletter'::text, 'other'::text])))),
+    CONSTRAINT profiles_heard_from_note_check CHECK (((heard_from_note IS NULL) OR (char_length(heard_from_note) <= 100))),
+    CONSTRAINT profiles_post_platforms_check CHECK (((post_platforms IS NULL) OR (((cardinality(post_platforms) >= 1) AND (cardinality(post_platforms) <= 3)) AND (post_platforms <@ ARRAY['x'::text, 'threads'::text, 'linkedin'::text])))),
+    CONSTRAINT profiles_timezone_check CHECK (((char_length(timezone) >= 1) AND (char_length(timezone) <= 64))),
+    CONSTRAINT profiles_timezone_source_check CHECK ((timezone_source = ANY (ARRAY['default'::text, 'browser'::text, 'founder'::text]))),
+    CONSTRAINT profiles_weekly_credit_budget_check CHECK (((weekly_credit_budget >= 0) AND (weekly_credit_budget <= 10000))),
+    CONSTRAINT profiles_x_handle_check CHECK (((x_handle IS NULL) OR (x_handle ~ '^[A-Za-z0-9_]{1,15}$'::text)))
+);
+
+
+--
+-- Name: activation; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW public.activation WITH (security_invoker='true') AS
+ WITH onboarded AS (
+         SELECT product_events.user_id,
+            min(product_events.at) AS at
+           FROM public.product_events
+          WHERE (product_events.kind = 'onboarded'::text)
+          GROUP BY product_events.user_id
+        ), approved AS (
+         SELECT product_events.user_id,
+            min(product_events.at) AS at
+           FROM public.product_events
+          WHERE (product_events.kind = 'approve'::text)
+          GROUP BY product_events.user_id
+        )
+ SELECT ((p.created_at AT TIME ZONE 'UTC'::text))::date AS signup_day,
+    public.cmo_paid(p.id) AS paid,
+    (count(*))::integer AS signups,
+    (count(o.user_id))::integer AS onboarded,
+    (count(a.user_id) FILTER (WHERE (a.at <= (o.at + '24:00:00'::interval))))::integer AS approved_24h,
+    round(((100.0 * (count(a.user_id) FILTER (WHERE (a.at <= (o.at + '24:00:00'::interval))))::numeric) / (NULLIF(count(o.user_id), 0))::numeric), 1) AS approved_24h_pct
+   FROM ((public.profiles p
+     LEFT JOIN onboarded o ON ((o.user_id = p.id)))
+     LEFT JOIN approved a ON ((a.user_id = p.id)))
+  GROUP BY (((p.created_at AT TIME ZONE 'UTC'::text))::date), (public.cmo_paid(p.id));
+
+
+--
 -- Name: agent_messages; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -16237,35 +16425,16 @@ CREATE TABLE public.post_metrics (
 
 
 --
--- Name: profiles; Type: TABLE; Schema: public; Owner: -
+-- Name: product_events_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.profiles (
-    id uuid NOT NULL,
-    email text,
-    plan text DEFAULT 'free'::text NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    credit_balance integer DEFAULT 0 NOT NULL,
-    retention_from timestamp with time zone DEFAULT now() NOT NULL,
-    retention_exempt boolean DEFAULT false NOT NULL,
-    weekly_credit_budget integer DEFAULT 80 NOT NULL,
-    timezone text DEFAULT 'UTC'::text NOT NULL,
-    digest_hour smallint DEFAULT 7,
-    cmo_paused_at timestamp with time zone,
-    timezone_source text DEFAULT 'default'::text NOT NULL,
-    creem_customer_id text,
-    x_handle text,
-    post_platforms text[],
-    heard_from text,
-    heard_from_note text,
-    CONSTRAINT profiles_digest_hour_check CHECK (((digest_hour >= 0) AND (digest_hour <= 23))),
-    CONSTRAINT profiles_heard_from_check CHECK (((heard_from IS NULL) OR (heard_from = ANY (ARRAY['search'::text, 'x'::text, 'reddit'::text, 'linkedin'::text, 'youtube'::text, 'ai_assistant'::text, 'friend'::text, 'newsletter'::text, 'other'::text])))),
-    CONSTRAINT profiles_heard_from_note_check CHECK (((heard_from_note IS NULL) OR (char_length(heard_from_note) <= 100))),
-    CONSTRAINT profiles_post_platforms_check CHECK (((post_platforms IS NULL) OR (((cardinality(post_platforms) >= 1) AND (cardinality(post_platforms) <= 3)) AND (post_platforms <@ ARRAY['x'::text, 'threads'::text, 'linkedin'::text])))),
-    CONSTRAINT profiles_timezone_check CHECK (((char_length(timezone) >= 1) AND (char_length(timezone) <= 64))),
-    CONSTRAINT profiles_timezone_source_check CHECK ((timezone_source = ANY (ARRAY['default'::text, 'browser'::text, 'founder'::text]))),
-    CONSTRAINT profiles_weekly_credit_budget_check CHECK (((weekly_credit_budget >= 0) AND (weekly_credit_budget <= 10000))),
-    CONSTRAINT profiles_x_handle_check CHECK (((x_handle IS NULL) OR (x_handle ~ '^[A-Za-z0-9_]{1,15}$'::text)))
+ALTER TABLE public.product_events ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.product_events_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
 );
 
 
@@ -17207,6 +17376,22 @@ ALTER TABLE ONLY public.post_metrics
 
 
 --
+-- Name: product_events product_events_kind_ref_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.product_events
+    ADD CONSTRAINT product_events_kind_ref_id_key UNIQUE (kind, ref_id);
+
+
+--
+-- Name: product_events product_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.product_events
+    ADD CONSTRAINT product_events_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: profiles profiles_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -18026,6 +18211,13 @@ CREATE INDEX post_metrics_user_idx ON public.post_metrics USING btree (user_id, 
 
 
 --
+-- Name: product_events_user_kind; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX product_events_user_kind ON public.product_events USING btree (user_id, kind, at);
+
+
+--
 -- Name: profiles_creem_customer_unique; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -18443,6 +18635,41 @@ CREATE TRIGGER marketing_documents_write_budget BEFORE INSERT ON public.marketin
 --
 
 CREATE TRIGGER media_assets_record_storage_deletions BEFORE DELETE ON public.media_assets FOR EACH ROW EXECUTE FUNCTION public.record_media_storage_deletions();
+
+
+--
+-- Name: approvals product_events_approve; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER product_events_approve AFTER UPDATE OF status ON public.approvals FOR EACH ROW EXECUTE FUNCTION public.product_events_approve();
+
+
+--
+-- Name: cmo_runs product_events_onboarded; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER product_events_onboarded AFTER UPDATE OF status ON public.cmo_runs FOR EACH ROW EXECUTE FUNCTION public.product_events_onboarded();
+
+
+--
+-- Name: content_items product_events_posted; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER product_events_posted AFTER UPDATE OF status ON public.content_items FOR EACH ROW EXECUTE FUNCTION public.product_events_posted();
+
+
+--
+-- Name: opportunities product_events_reply; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER product_events_reply AFTER UPDATE OF status ON public.opportunities FOR EACH ROW EXECUTE FUNCTION public.product_events_reply();
+
+
+--
+-- Name: schedule_slots product_events_slot; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER product_events_slot AFTER INSERT OR UPDATE OF status ON public.schedule_slots FOR EACH ROW EXECUTE FUNCTION public.product_events_slot();
 
 
 --
@@ -19230,6 +19457,14 @@ ALTER TABLE ONLY public.post_metrics
 
 
 --
+-- Name: product_events product_events_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.product_events
+    ADD CONSTRAINT product_events_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
 -- Name: profiles profiles_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -19931,6 +20166,12 @@ ALTER TABLE public.page_captures ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.post_metrics ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: product_events; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.product_events ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: profiles; Type: ROW SECURITY; Schema: public; Owner: -

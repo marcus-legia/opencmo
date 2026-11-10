@@ -34,7 +34,7 @@ $$;
 revoke all on function public.cmo_plan_required() from public, anon, authenticated;
 
 create or replace function public.cmo_require_paid(p_user uuid) returns void
-  language plpgsql stable security definer
+  language plpgsql security definer
   set search_path to ''
 as $$
 begin

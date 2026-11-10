@@ -29,9 +29,9 @@ Branch: `claude/okara-spec-opencmo-b7qlx2`. Pull before each item, and push afte
   - The `today` contract: the types in `lib/cmo/today.ts` and the block's schema in `lib/screens/dashboard.ts`.
   - pgTAP for the helper.
   - Then write in A's file that B0 has landed.
-- [ ] **B1 Research note** (below): what the code does now for each item, with `file:line`, what changes, and how it
+- [x] **B1 Research note** (below): what the code does now for each item, with `file:line`, what changes, and how it
   is checked.
-- [ ] **B2 (1.1) Today.**
+- [x] **B2 (1.1) Today.**
   - `buildToday` (pure, with unit tests) and the loader in `load.ts`, plus the registry lists and the fixture.
   - The block at the top of the Dashboard, with the queue below it as "Everything waiting".
   - Ranking, the cap of 5, "N of M done", silence at 2 and 7 days, and the connection row only when publishing is
@@ -39,10 +39,10 @@ Branch: `claude/okara-spec-opencmo-b7qlx2`. Pull before each item, and push afte
   - The first-run rows: "Ready to read" now, and "Rate your first drafts" through A's `rateDraftsPending`. Until A5
     lands, a stub that returns false.
   - e2e at 1280 px and 390 px, and screenshots that you look at.
-- [ ] **B3 (1.3) Today in the morning email.** The top 3 rows and "N more waiting" in `digest.ts`, with
+- [x] **B3 (1.3) Today in the morning email.** The top 3 rows and "N more waiting" in `digest.ts`, with
   `digest.check.ts` cases.
 - [ ] **B4 Code review of group 1** (plan §7), written under "Reviews".
-- [ ] **B5 (3.1) The free first run.**
+- [x] **B5 (3.1) The free first run.**
   - `cmo_first_run_free`. The rule reads history, never `input.source`.
   - The price-0 path in `cmo_enqueue`, and the budget gate lets it through.
   - Unpaid onboarding: 2 runs ever.
@@ -55,13 +55,13 @@ Branch: `claude/okara-spec-opencmo-b7qlx2`. Pull before each item, and push afte
   - Find out how each login method verifies the email before building. If one does not, the free run waits for a
     verified email.
   - pgTAP and e2e as in plan §5.1.
-- [ ] **B6 (3.2) Onboarding shows its work.**
+- [x] **B6 (3.2) Onboarding shows its work.**
   - Real steps in `cmo_runs.steps`, and Setup shows them live.
   - The three optional questions, saved through `cmo_onboarding_answers`, with a Skip button.
   - Go to the Dashboard when the run ends.
   - e2e with `OPENCMO_AI_FAKE=1`.
-- [ ] **B7 (3.3) "Used by" on each document** in `BusinessDocs.tsx`.
-- [ ] **B8 (3.4) `product_events` and the `activation` view.**
+- [x] **B7 (3.3) "Used by" on each document** in `BusinessDocs.tsx`.
+- [x] **B8 (3.4) `product_events` and the `activation` view.**
   - Triggers on `approvals`, `schedule_slots` and `opportunities`, as their own functions.
   - The table is service-role only.
   - pgTAP as in plan §5.4.
@@ -73,7 +73,94 @@ Branch: `claude/okara-spec-opencmo-b7qlx2`. Pull before each item, and push afte
 
 ## Research note
 
-(B1 goes here.)
+B1, written against `main` at `e442855` (the plan's base) on 2026-11-10. What the code did, what changed, how it is
+checked.
+
+**Branch.** This session's harness pushes to `claude/pr-186-session-b-0hyo3r`, and draft PR #187 targets
+`claude/okara-spec-opencmo-b7qlx2`, so B's commits land in #186 when #187 is merged. B rebases on that branch before
+B10.
+
+**1.1 Today.**
+- Was: the Dashboard (`components/dashboard/Dashboard.tsx`) opened on the whole queue (`ApprovalQueue`, every waiting
+  card, oldest first); "Going out today" read today's slots (`lib/screens/load.ts:250`, `scheduleSlots`).
+- Now: `lib/cmo/today.ts` (pure `buildToday`) ranks at most 5 rows; `lib/cmo/today-input.ts` reads waiting cards,
+  cards decided since local midnight, failed slots still inside `window_ends_at` with a waiting Retry card, the last
+  post per platform (`my_published_items` / `published_items`, 60 days back), tomorrow's slots without a connected
+  account (only when `publishAdapter()` is configured, `lib/departments/publish/adapter.ts:12`), the strategy
+  document, and the first decided card ever. The Dashboard shows `TodayBlock` above the queue, renamed "Everything
+  waiting". A card row opens the card in place (`ApprovalCard`), a chat row focuses the chat and fills the request
+  (the founder sends it; nothing is sent from Today).
+- "Ready to read" shows while the strategy exists and the founder has never decided a card. "Rate your first drafts"
+  uses a stub until A5's `rateDraftsPending` lands (it links to `/app?rate=1`; A was asked to open the sheet there).
+- Check: `lib/cmo/today.check.ts` (ranking, cap, thresholds, midnight in two zones, setup row), `screens.check`,
+  `e2e/ui-v2-today.spec.ts` (1280 and 390 px, approve the top row → "1 of 2 done today", a 9-day-quiet LinkedIn
+  first, screenshots).
+
+**1.3 Morning email.**
+- Was: `buildDigest` listed every waiting card.
+- Now: `loadDigestInput` also builds Today (same `buildToday`; `today: false` on the Dashboard, which has its own
+  block) and `buildDigest` starts with the top 3 rows and "N more waiting", falling back to the old list on a day
+  with no rows. Links only open things: a card, an `/app` page, or the chat (`/app?ask=1`). `lib/notify/send.ts` is
+  unchanged.
+- Check: `lib/cmo/digest.check.ts` (order, cut, empty day, escaping, no deciding link).
+
+**3.1 The free first run.**
+- Was: `app/app/page.tsx:37-44` sent an account with no plan and no credits to `/app/billing?start=1`; the onboarding
+  route waited up to 15 s for a payment (`paidOrWait`) and answered 402; `cmo_enqueue` charged every plan and draft.
+- Now (SQL, `20270114010000`, `20270114020000`):
+  - `cmo_paid(user)` (internal: plan on sale or credits left, no ownership check, not granted to founders) and
+    `cmo_require_paid(user)` (founder-facing, a founder asks only about themselves) with SQLSTATE `P0402`, mapped to
+    402 `plan_required` in `lib/api/errors.ts`. The two are split because `cmo_enqueue` runs inside other users'
+    transactions in tests and triggers, where an ownership check answered "Not found" (found by `212_p3_writer_orders`).
+  - `cmo_first_run_free(user, kind)`: no plan and no credits, `plan_week` or `post_draft`, no earlier run of the kind
+    that is queued, running or done. **Deviation from the plan's "not paid (`is_paid`)":** an account with credits left
+    pays as before, so "paid" has one definition everywhere and the older tests of accounts topped up with credits
+    keep their meaning. A failed first run is tried again for free (bounded by the daily limits: 5 plans, 10 drafts).
+  - `cmo_enqueue`: the free run is priced 0 under the per-user lock (two requests at once make one free run); any
+    other priced run of an unpaid account answers `P0402` before "Not enough credits". Runs priced 0 are unchanged.
+    The week budget gate (`cmo_runs_budget_gate`) already lets `credits = 0` through.
+  - `start_cmo_run`: unpaid onboarding is 2 runs ever (`cmo_free_onboard_runs()`), then `P0402`; paid keeps 5 a day.
+- Now (web): the onboarding route drops `paidOrWait`; `/app` sends an account without documents to Setup; the CMO chat
+  turn checks `requirePaid` before any model call (`app/api/v1/agent/sessions/[id]/turns/route.ts`, CMO scope only;
+  the editor's Assistant keeps its own checks); the chat and Sales "Scan now" show `PlanSheet` on the 402; the daily
+  loops skip unpaid accounts (`LoopState.paid`, read in `lib/cmo/schedule.ts`); the copy in plan §5.1 now reads "Your
+  first plan and drafts are free. Pick a plan to approve and post them."
+- Email verification: the only sign-in is Google OAuth (`components/LoginForm.tsx`), whose accounts carry a verified
+  Google email; email/password signup is refused by the `before_user_created` hook (`check:auth-signup`,
+  `178_refuse_email_signup`). So no extra wait for a verified email is needed. A new login method must revisit this.
+- Waits on A: the refusal of Approve, schedule and "I posted it" for an unpaid account is A3 (`approval_decide`,
+  `cmo_post_myself`) and the plan sheet on the card is A's (`components/cards/**`). The e2e for it is written
+  (`ui-v2-activation.spec.ts`, "the free first run") and goes green once A3 lands.
+- Check: pgTAP `286_cmo_require_paid`, `287_free_first_run` (free once per kind, second charged, paid charged, `source`
+  changes nothing, failed first run free again, onboarding 2 then 402); `jobs.check` (no loops when unpaid);
+  `handler.check` (P0402 → 402 with the code); e2e "the free first run" and "unpaid onboarding".
+- Older pgTAP files that relied on an unpaid account paying from credits (`111`, `112`) now give that account a plan;
+  `182` lists the new founder-callable functions.
+
+**3.2 Onboarding shows its work.**
+- Was: Setup posted the website and waited on one blank request (`SetupScreen.tsx:54`), then went to the Dashboard.
+- Now: `runOnboarding` writes `[{id, status}]` to its run through `cmo_onboard_step` (owner-checked, ids and states
+  only; Setup words each step). `GET /api/v1/cmo/onboarding` returns the run, the plan and draft runs started after it,
+  the saved answers and the handle the CMO found. Setup polls every 2 s (Realtime was not used: `cmo_runs` is not in
+  the publication, and a poll needs no new grant), lists seven steps, and goes to the Dashboard when the drafts end
+  (`setupFinished`). Three optional questions save through `cmo_onboarding_answers`: onto `profiles` (four new
+  columns with checks) and into the documents the CMO already reads, so no job had to change: the handle into an
+  empty `product.x_handle`, the platforms as the first sentence of `content_strategy.cadence`, which the planner's
+  rule reads for Threads and LinkedIn (`plan-week.ts:35`). Answers given before the documents exist are applied by
+  `runOnboarding` right after it saves them.
+- Check: pgTAP `288_onboarding_steps`; `lib/cmo/onboard-status.check.ts`; `e2e/ui-v2-setup.spec.ts` (1280 and 390 px,
+  steps in order, answers saved and applied, Skip, the Dashboard with "Ready to read").
+
+**3.3 "Used by".** `BusinessDocs.tsx` names who reads each document. Every job that writes for the founder puts the
+four documents in its prompt (`documentsBlock`: plan, drafts, threads, Sales scan and replies, competitor research),
+so each says "Planner, Writer, Sales, Research". Check: `ui-v2-pages.spec.ts`.
+
+**3.4 `product_events` and `activation`.** A table with RLS on and no policy, `select, delete` for the service role
+only, `unique (kind, ref_id)`, written by five trigger functions (`cmo_runs` onboard done, `approvals` post/reply
+approved, `schedule_slots` waiting and published-without-a-post, `content_items` published, `opportunities` replied).
+No product function was edited; a failed event write only warns. The `activation` view (security invoker, service
+role only) gives per signup day and paid: signups, onboarded, approved within 24 h and the share. Check: pgTAP
+`289_product_events`.
 
 ## Reviews
 
