@@ -12,22 +12,15 @@
 
 import { z } from "zod";
 
+import { DRAFT_REASONS } from "../../../components/cards/labels";
 import { NO_AI_SLOP } from "../skills";
 import { escapeForTag } from "../untrusted";
 
 import type { JobContext, JobOutput } from "./runner";
 import type { DraftRating } from "./types";
 
-/** The chips as the founder picked them (`DRAFT_REASONS` on the card). */
-const REASON_TEXT: Record<string, string> = {
-  TOO_SALESY: "too salesy",
-  WRONG_VOICE: "doesn't sound like me",
-  INVENTED_CLAIM: "made something up",
-  TOO_LONG: "too long",
-  HOOK_REWRITTEN: "weak first line",
-  OFF_TOPIC: "off topic",
-  OTHER: "something else",
-};
+/** The chips as the founder picked them, from the card's own list. */
+const REASON_TEXT: Record<string, string> = Object.fromEntries(DRAFT_REASONS.map((r) => [r.code, r.label.toLowerCase()]));
 
 /** The rule a reason teaches when the model is not called (CI): the same words `correction_rule` uses in SQL. */
 const FAKE_RULE: Record<string, string> = {

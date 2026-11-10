@@ -128,8 +128,9 @@ export function ApprovalCard({
   /** Script card: the beat being edited. */
   const [beat, setBeat] = useState(0);
   const [reason, setReason] = useState("");
-  /** Post card: the chip picked on Skip, or as "What did you fix?" on an edited approve (cmo-review-3 2.1). */
+  /** Post card (cmo-review-3 2.1): the chip picked on Skip, and the one picked as "What did you fix?" on an edit. */
   const [reasonCode, setReasonCode] = useState<DraftReason | null>(null);
+  const [fixCode, setFixCode] = useState<DraftReason | null>(null);
   /** Schedule card: the platform's fields as the founder is changing them, and the change-time picker. */
   const [options, setOptions] = useState<ScheduleOptions>(() => (card.body.kind === "schedule" ? card.body.options : {}));
   const [moving, setMoving] = useState(false);
@@ -249,7 +250,7 @@ export function ApprovalCard({
     if (card.kind === "post") {
       const text = editing ? draft.trim() : shown;
       // The chip goes only with words the founder changed; picking another version as written is not an edit.
-      const fixed = editing && text !== shown && reasonCode && FIX_REASONS.includes(reasonCode) ? reasonCode : undefined;
+      const fixed = editing && text !== shown && fixCode && FIX_REASONS.includes(fixCode) ? fixCode : undefined;
       return run({ action: "approve", text: text !== firstText(card) ? text : undefined, ...(fixed ? { reasonCode: fixed } : {}) });
     }
     if (card.kind === "correction" && editing) return run({ action: "edit", text: draft.trim() });
@@ -472,7 +473,7 @@ export function ApprovalCard({
           )}
 
           {card.body.kind === "post" && editing && draft.trim() !== shown && card.status === "waiting" ? (
-            <ReasonChips label="What did you fix? Optional: your CMO learns from it." value={reasonCode} onChange={setReasonCode} only={FIX_REASONS} disabled={busy} />
+            <ReasonChips label="What did you fix? Optional: your CMO learns from it." value={fixCode} onChange={setFixCode} only={FIX_REASONS} disabled={busy} />
           ) : null}
           {proposed ? (
             <p className="v2-card-meta" data-testid="post-when">

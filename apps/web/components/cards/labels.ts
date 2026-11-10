@@ -116,3 +116,5 @@ export const DRAFT_REASONS = [
   { code: "OTHER", label: "Something else" },
 ] as const;
 export type DraftReason = (typeof DRAFT_REASONS)[number]["code"];
+/** The codes alone, for the routes' zod schemas (SQL's check holds the same list; `jobs.check.ts` compares them). */
+export const DRAFT_REASON_CODES = DRAFT_REASONS.map((r) => r.code) as [DraftReason, ...DraftReason[]];

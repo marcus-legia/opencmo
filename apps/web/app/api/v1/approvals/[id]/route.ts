@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { DRAFT_REASON_CODES } from "@/components/cards/labels";
 import { ApiError } from "@/lib/api/errors";
 import { firstRow, rpcOrThrow, withApi } from "@/lib/api/handler";
 import { kickStudioOrders } from "@/lib/cmo/jobs/studio-orders";
@@ -44,7 +45,7 @@ const body = z.object({
   index: z.number().int().min(0).max(100).optional(),
   reason: z.string().trim().max(400).optional(),
   /** Post card, `skip` or an edited `approve`: the chip the founder picked (cmo-review-3 2.1); SQL checks the list too. */
-  reasonCode: z.enum(["TOO_SALESY", "WRONG_VOICE", "INVENTED_CLAIM", "TOO_LONG", "HOOK_REWRITTEN", "OFF_TOPIC", "OTHER"]).optional(),
+  reasonCode: z.enum(DRAFT_REASON_CODES).optional(),
   goal: z.string().trim().max(300).optional(),
   target: z.number().int().min(1).max(1_000_000).optional(),
   /** Schedule card, `change_time`: the new time, with its offset. */

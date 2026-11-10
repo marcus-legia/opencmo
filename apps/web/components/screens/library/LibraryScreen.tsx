@@ -332,14 +332,16 @@ function VoiceHistory({ page, onChanged }: { page: VoicePage; onChanged: () => v
   const { toast } = useShellState();
   const [busy, setBusy] = useState(false);
 
-  async function undo() {
+  async function undo(eventId: string) {
     setBusy(true);
     try {
-      await api("/cmo/voice/undo", jsonBody({}));
+      await api("/cmo/voice/undo", jsonBody({ eventId }));
       toast("Undone. Your drafts follow what was there before.");
       onChanged();
     } catch (err) {
       toast(err instanceof ApiError ? err.message : "Nothing was undone. Please try again.");
+      // A newer change came in: show it, so the next Undo is the one the founder sees.
+      onChanged();
     } finally {
       setBusy(false);
     }
@@ -360,7 +362,7 @@ function VoiceHistory({ page, onChanged }: { page: VoicePage; onChanged: () => v
               </span>
             </span>
             {event.canUndo ? (
-              <Button compact variant="quiet" disabled={busy} onClick={() => void undo()}>
+              <Button compact variant="quiet" disabled={busy} onClick={() => void undo(event.id)}>
                 Undo
               </Button>
             ) : null}

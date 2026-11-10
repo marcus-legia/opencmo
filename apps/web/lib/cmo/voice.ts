@@ -114,7 +114,7 @@ export async function ratingSheet(supabase: SupabaseClient, now = new Date()): P
 // ------------------------------------------------------------------ the Voice page (2.3)
 
 /** Who changed it, as the page names it (`cmo_voice_events.source`). */
-export const VOICE_SOURCE_LABEL = { setup: "Setup", you: "You", edits: "Learned from your edits", ratings: "From your ratings" } as const;
+export const VOICE_SOURCE_LABEL = { setup: "Setup", you: "You", cmo: "Your CMO", edits: "Learned from your edits", ratings: "From your ratings" } as const;
 export type VoiceSource = keyof typeof VOICE_SOURCE_LABEL;
 
 export type VoiceRule = { id: string; rule: string; on: boolean; source: VoiceSource };
@@ -157,20 +157,23 @@ export function eventLine(e: Pick<EventRow, "correction_id" | "field" | "before"
 }
 
 export async function voicePage(supabase: SupabaseClient): Promise<VoicePage> {
-  const [rules, events, strategy] = await Promise.all([
-    supabase.from("cmo_corrections").select("id, rule, status, source, decided_at").in("status", ["active", "rejected"]).order("decided_at", { ascending: false, nullsFirst: false }).limit(60),
+  const [active, turnedOff, events, strategy] = await Promise.all([
+    // Every rule the Writer follows (it reads the newest 30; the page shows them all, up to the table's own use).
+    supabase.from("cmo_corrections").select("id, rule, status, source").eq("status", "active").order("decided_at", { ascending: false, nullsFirst: false }).limit(200),
+    // Rules off now that were on once (turned off here, or undone): a proposal set aside never was.
+    supabase.from("cmo_voice_events").select("correction_id").not("correction_id", "is", null).or("before_status.eq.active,after_status.eq.active").order("seq", { ascending: false }).limit(200),
     supabase.from("cmo_voice_events").select("id, seq, correction_id, field, source, before, after, before_status, after_status, undone_at, created_at").order("seq", { ascending: false }).limit(30),
     supabase.from("marketing_documents").select("body").eq("kind", "strategy").order("version", { ascending: false }).limit(1).maybeSingle<{ body: Record<string, unknown> }>(),
   ]);
-  for (const r of [rules, events, strategy]) if (r.error) throw new Error(`voice page: ${r.error.message}`);
+  for (const r of [active, turnedOff, events, strategy]) if (r.error) throw new Error(`voice page: ${r.error.message}`);
+  const offIds = [...new Set(((turnedOff.data ?? []) as { correction_id: string }[]).map((e) => e.correction_id))];
+  const off = offIds.length ? await supabase.from("cmo_corrections").select("id, rule, status, source").eq("status", "rejected").in("id", offIds) : { data: [], error: null };
+  if (off.error) throw new Error(`voice page: ${off.error.message}`);
   const rows = (events.data ?? []) as EventRow[];
-  // A rule off now is listed only when it was on before (from this page, or undone): a proposal set aside is not.
-  const wasOn = new Set(rows.filter((e) => e.correction_id && (e.before_status === "active" || e.after_status === "active")).map((e) => e.correction_id!));
   const latest = rows.find((e) => !e.undone_at)?.id ?? null;
   const body = strategy.data?.body ?? {};
   return {
-    rules: ((rules.data ?? []) as { id: string; rule: string; status: string; source: string }[])
-      .filter((r) => r.status === "active" || wasOn.has(r.id))
+    rules: ([...(active.data ?? []), ...(off.data ?? [])] as { id: string; rule: string; status: string; source: string }[])
       .map((r) => ({ id: r.id, rule: r.rule, on: r.status === "active", source: (r.source === "ratings" ? "ratings" : r.source === "founder" ? "you" : "edits") as VoiceSource }))
       .sort((a, b) => Number(b.on) - Number(a.on)),
     setup: {

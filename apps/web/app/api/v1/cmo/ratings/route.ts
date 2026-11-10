@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { DRAFT_REASON_CODES } from "@/components/cards/labels";
 import { rpcOrThrow, withApi } from "@/lib/api/handler";
 import { kickCmoQueue } from "@/lib/cmo/jobs/start";
 import { ratingSheet } from "@/lib/cmo/voice";
@@ -16,7 +17,7 @@ const body = z.object({
         itemId: z.uuid(),
         version: z.number().int().min(0).max(2),
         verdict: z.enum(["up", "down"]),
-        reasonCode: z.enum(["TOO_SALESY", "WRONG_VOICE", "INVENTED_CLAIM", "TOO_LONG", "HOOK_REWRITTEN", "OFF_TOPIC", "OTHER"]).optional(),
+        reasonCode: z.enum(DRAFT_REASON_CODES).optional(),
         note: z.string().trim().max(200).optional(),
       }),
     )
