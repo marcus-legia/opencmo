@@ -22,6 +22,7 @@ export { TITLE_KINDS, TITLE_LOOKS, TITLE_MOTIONS, type TitleInput } from './visu
 export { LAYOUT_MODES, panelRegionAt, readLayout, speakerBandAt, type LayoutMode, type LayoutRange } from './layout';
 export { anchorPoint, LAYOUT_ANCHOR_NAMES, LAYOUT_LABEL, layoutSlots, layoutsFor, slotBox, VIDEO_LAYOUTS, type LayoutSlot, type VideoLayout } from './layouts';
 export { clipScript, clipTranscript, clipWords, findQuote, formatScript, quoteTiming, type QuoteHit, type ScriptLine } from './script';
+export { matchScript, offScript, PARTLY, SAID, sourceWords, type BeatStatus, type BeatTake } from './script-take';
 export { quoteRange } from './ops/visuals';
 export { CAPABILITIES, CAPABILITY_IDS, capabilityIssues, isCapability, isReady, missingCapabilities, type Capability, type CapabilityInfo } from './capabilities';
 export * from './style';
