@@ -9320,6 +9320,36 @@ $$;
 
 
 --
+-- Name: paywall_on_send(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.paywall_on_send() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+begin
+  if auth.uid() is null then
+    return new;
+  end if;
+  if tg_op = 'UPDATE' and new.status is not distinct from old.status then
+    return new;
+  end if;
+  if tg_table_name = 'content_items' then
+    if new.department <> 'post' or new.status not in ('approved', 'published') then
+      return new;
+    end if;
+  elsif new.status not in ('waiting', 'published') then
+    return new;
+  end if;
+  if not public.cmo_paid(new.user_id) then
+    perform public.cmo_plan_required();
+  end if;
+  return new;
+end;
+$$;
+
+
+--
 -- Name: plan_card_decide(public.approvals, text, jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -19386,6 +19416,13 @@ CREATE TRIGGER cmo_runs_first_draft AFTER UPDATE OF status ON public.cmo_runs FO
 
 
 --
+-- Name: content_items content_items_paywall; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER content_items_paywall BEFORE UPDATE OF status ON public.content_items FOR EACH ROW EXECUTE FUNCTION public.paywall_on_send();
+
+
+--
 -- Name: content_items content_items_post_image; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -19544,6 +19581,13 @@ CREATE TRIGGER schedule_follow_content AFTER UPDATE OF status ON public.content_
 --
 
 CREATE TRIGGER schedule_follow_deliverable AFTER INSERT OR UPDATE OF status ON public.deliverables FOR EACH ROW EXECUTE FUNCTION public.schedule_follow_deliverable();
+
+
+--
+-- Name: schedule_slots schedule_slots_paywall; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER schedule_slots_paywall BEFORE INSERT OR UPDATE OF status ON public.schedule_slots FOR EACH ROW EXECUTE FUNCTION public.paywall_on_send();
 
 
 --
@@ -20803,7 +20847,7 @@ ALTER TABLE public.billing_catalog ENABLE ROW LEVEL SECURITY;
 -- Name: billing_catalog billing_catalog_read; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY billing_catalog_read ON public.billing_catalog FOR SELECT TO anon, authenticated USING (on_sale);
+CREATE POLICY billing_catalog_read ON public.billing_catalog FOR SELECT TO authenticated, anon USING (on_sale);
 
 
 --

@@ -11,6 +11,8 @@ select plan(13);
 insert into auth.users (id, email) values
   ('e2190000-0000-4000-8000-00000000000a', 'p4fin@test.local'),
   ('e2190000-0000-4000-8000-00000000000b', 'p4fin-other@test.local');
+-- Posting needs a plan since cmo-review-3 A3 (20270113050000); these founders decide and post, so they have one.
+update public.profiles set plan = 'starter' where id in ('e2190000-0000-4000-8000-00000000000a', 'e2190000-0000-4000-8000-00000000000b');
 update public.profiles set timezone = 'UTC' where id in ('e2190000-0000-4000-8000-00000000000a', 'e2190000-0000-4000-8000-00000000000b');
 select public.zernio_profile_save('e2190000-0000-4000-8000-00000000000a', 'prof-fin');
 select public.social_account_save('e2190000-0000-4000-8000-00000000000a', 'x', '@founder', null, 'acc-fin-x');

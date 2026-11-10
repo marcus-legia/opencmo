@@ -10,6 +10,8 @@ set search_path to public, extensions;
 select plan(16);
 
 insert into auth.users (id, email) values ('e2200000-0000-4000-8000-00000000000a', 'p4fix@test.local');
+-- Posting needs a plan since cmo-review-3 A3 (20270113050000); these founders decide and post, so they have one.
+update public.profiles set plan = 'starter' where id in ('e2200000-0000-4000-8000-00000000000a');
 update public.profiles set timezone = 'UTC' where id = 'e2200000-0000-4000-8000-00000000000a';
 select public.zernio_profile_save('e2200000-0000-4000-8000-00000000000a', 'prof-fix');
 select public.social_account_save('e2200000-0000-4000-8000-00000000000a', 'x', '@fix', null, 'acc-fix-x');

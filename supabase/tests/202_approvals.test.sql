@@ -24,6 +24,8 @@ select ok(exists (select 1 from pg_publication_tables where pubname = 'supabase_
 insert into auth.users (id, email) values
   ('e2020000-0000-4000-8000-00000000000a', 'a0@test.local'),
   ('e2020000-0000-4000-8000-00000000000b', 'a0-other@test.local');
+-- Posting needs a plan since cmo-review-3 A3 (20270113050000); these founders decide and post, so they have one.
+update public.profiles set plan = 'starter' where id in ('e2020000-0000-4000-8000-00000000000a', 'e2020000-0000-4000-8000-00000000000b');
 
 create temp table t_ref (name text primary key, id uuid) on commit drop;
 grant all on t_ref to authenticated;

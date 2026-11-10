@@ -14,6 +14,8 @@ select ok(not has_function_privilege('authenticated', 'public.post_change_propos
 insert into auth.users (id, email) values
   ('e2760000-0000-4000-8000-00000000000a', 'time-a@test.local'),
   ('e2760000-0000-4000-8000-00000000000b', 'time-b@test.local');
+-- Posting needs a plan since cmo-review-3 A3 (20270113050000); these founders decide and post, so they have one.
+update public.profiles set plan = 'starter' where id in ('e2760000-0000-4000-8000-00000000000a', 'e2760000-0000-4000-8000-00000000000b');
 update public.profiles set timezone = 'UTC' where id = 'e2760000-0000-4000-8000-00000000000a';
 select public.zernio_profile_save('e2760000-0000-4000-8000-00000000000a', 'prof-time');
 select public.social_account_save('e2760000-0000-4000-8000-00000000000a', 'threads', '@founder', null, 'acc-time-threads');

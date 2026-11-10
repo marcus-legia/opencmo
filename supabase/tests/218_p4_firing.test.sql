@@ -12,6 +12,8 @@ select plan(36);
 insert into auth.users (id, email) values
   ('e2180000-0000-4000-8000-00000000000a', 'p4a2@test.local'),
   ('e2180000-0000-4000-8000-00000000000b', 'p4a2-paused@test.local');
+-- Posting needs a plan since cmo-review-3 A3 (20270113050000); these founders decide and post, so they have one.
+update public.profiles set plan = 'starter' where id in ('e2180000-0000-4000-8000-00000000000a', 'e2180000-0000-4000-8000-00000000000b');
 update public.profiles set timezone = 'UTC' where id in ('e2180000-0000-4000-8000-00000000000a', 'e2180000-0000-4000-8000-00000000000b');
 update public.profiles set cmo_paused_at = now() where id = 'e2180000-0000-4000-8000-00000000000b';
 select public.zernio_profile_save('e2180000-0000-4000-8000-00000000000a', 'prof-a2');

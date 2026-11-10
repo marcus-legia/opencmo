@@ -14,6 +14,8 @@ select is((public.schedule_rules()->>'minGapHours')::int, 3, 'three hours betwee
 insert into auth.users (id, email) values
   ('e2160000-0000-4000-8000-00000000000a', 'p4a1@test.local'),
   ('e2160000-0000-4000-8000-00000000000b', 'p4a1-other@test.local');
+-- Posting needs a plan since cmo-review-3 A3 (20270113050000); these founders decide and post, so they have one.
+update public.profiles set plan = 'starter' where id in ('e2160000-0000-4000-8000-00000000000a', 'e2160000-0000-4000-8000-00000000000b');
 update public.profiles set timezone = 'UTC' where id = 'e2160000-0000-4000-8000-00000000000a';
 select public.zernio_profile_save('e2160000-0000-4000-8000-00000000000a', 'prof-a1');
 select public.social_account_save('e2160000-0000-4000-8000-00000000000a', 'x', '@founder', null, 'acc-a1-x');
