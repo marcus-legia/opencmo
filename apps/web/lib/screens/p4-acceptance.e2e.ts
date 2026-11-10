@@ -52,6 +52,8 @@ async function decide(userId: string, cardId: string, action: string, extra: Rec
 async function approvedPost(userId: string, orderId: string, platform: string, text: string): Promise<{ item: string; deliverable: string; slot: Slot }> {
   const item = randomUUID();
   assert.equal((await admin.from("content_items").insert({ id: item, user_id: userId, department: "post", platform, day: new Date().toISOString().slice(0, 10), idea: text, status: "in_review", body: { text, alternates: [] } })).error, null);
+  // A card without a time (cmo-review-3 1.2 puts one on new cards): approving it proposes the time on a schedule card.
+  assert.equal((await admin.from("content_items").update({ body: { text, alternates: [], proposed: null } }).eq("id", item)).error, null);
   const { data: d } = await admin.from("deliverables").insert({ user_id: userId, order_id: orderId, kind: "post", ref_kind: "content_item", ref_id: item, status: "waiting_founder" }).select("id").single();
   const { data: card } = await admin.from("approvals").select("id").eq("ref_kind", "content_item").eq("ref_id", item).eq("status", "waiting").single();
   await decide(userId, card!.id, "approve");

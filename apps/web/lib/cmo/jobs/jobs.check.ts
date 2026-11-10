@@ -11,6 +11,7 @@ process.env.OPENCMO_AGENT_FAKE = "1";
 import { checkPost } from "./check-post";
 import { classifyEdits } from "./classify-edits";
 import { EDIT_MODES } from "./edit-taxonomy";
+import { DRAFT_REASONS } from "../../../components/cards/labels";
 import { mondayOf } from "./summarize-memory";
 import { goalBlock, knownNumbers, recall } from "./context";
 import { goalLine, nextGoalFallback } from "./review-week";
@@ -576,6 +577,20 @@ async function main() {
   const migration = readFileSync(new URL("../../../../../supabase/migrations/20261201100000_cmo_draft_outcomes.sql", import.meta.url), "utf8");
   const sqlModes = [...(migration.match(/edit_mode in \(([^)]*)\)/)?.[1] ?? "").matchAll(/'([A-Z_]+)'/g)].map((m) => m[1]);
   assert.deepEqual(sqlModes, [...EDIT_MODES], "EDIT_MODES matches the SQL constraint");
+
+  // cmo-review-3 2.1: a founder's chip is a label the classifier never takes over. SQL hands it no founder rows
+  // (`classified_at` is set) and refuses to relabel one (`cmo_set_edit_mode` answers false): neither counts.
+  const founderLabelled = new Set(["f1"]);
+  const mixed = {
+    unclassified: async () => [{ id: "f1", draft: "We built reminders.", final_text: "I made reminders." }, { id: "m1", draft: "We built reminders.", final_text: "I made them." }],
+    setEditMode: async (id: string) => !founderLabelled.has(id),
+  };
+  assert.deepEqual(await classifyEdits(mixed, { limit: 10 }), { classified: 1, failed: 0 }, "a founder-labelled row is not counted as classified");
+  // The chips are the same list in the card, the route and SQL.
+  const reasons = readFileSync(new URL("../../../../../supabase/migrations/20270113020000_draft_reasons.sql", import.meta.url), "utf8");
+  const sqlReasons = [...(reasons.match(/reason_code in \(([^)]*)\)/)?.[1] ?? "").matchAll(/'([A-Z_]+)'/g)].map((m) => m[1]);
+  assert.deepEqual(sqlReasons, DRAFT_REASONS.map((r) => r.code), "DRAFT_REASONS matches the SQL constraint");
+  for (const r of DRAFT_REASONS) assert.ok(reasons.includes(`when '${r.code}' then '${r.label.replace("'", "''")}'`), `SQL names ${r.code} as the card does`);
 
   console.log("jobs.check — hàng đợi CMO: W1, W2, W4, W6-lite, W7, W8 memory, W9 review, inbox, vòng lặp, kiểm bài, lease, hoãn, classify_edits đều đúng.");
 }

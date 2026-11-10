@@ -30,7 +30,7 @@ State: ✅ done · 🟡 partial · ❌ not built.
 | Part | Where | What it does | State |
 |---|---|---|---|
 | Timezone | `profiles.timezone` (`20261227093000`), set from the browser (`20270106010000`) | every slot, the digest hour and best time run in the founder's timezone | ✅ |
-| Slots | `schedule_slots`, `schedule_propose`, `schedule_pick_time`, `schedule_change` | a time per platform for each approved deliverable; one `schedule` card per slot | ✅ |
+| Slots | `schedule_slots`, `schedule_propose`, `schedule_pick_time`, `schedule_change` | a time per platform for each approved deliverable; one `schedule` card per slot, except a post whose card carried its time (`post_proposal`, `schedule_take_proposal`) | ✅ |
 | Default slots and rules | `packages/contracts/schedule-defaults.json`, `schedule_rules()` | Buffer 2026 times per platform, 3 hours between posts on one platform, daily caps, ±4 minutes of jitter | ✅ |
 | Best time from data | `best_slots`, `best_slots_refresh`, `best_time_rules()` | the founder's own hours take over once a platform has 10 posts with metrics | ✅ |
 | Firing | Modal `sweep` → `schedule_claim_due` → `jobs/publish-post.ts` (Vercel, posts with the Zernio key); worker `publish_media` only streams a video to Zernio's upload URL | a due slot is claimed with a lease and posted; past its window it is `missed` and asks again | ✅ |
@@ -57,6 +57,12 @@ State: ✅ done · 🟡 partial · ❌ not built.
 - **Schedule:** deliverable (approved) → proposed slot (best time per platform, founder's timezone, gaps, caps) →
   schedule card (platform, account, time; all three approved) → `waiting` (an edit raises a new card) → `due` (Modal
   `sweep`, every minute, lease).
+- **A post's time is on its card** (cmo-review-3 1.2): when the post card is raised, `post_proposal` picks the first
+  free time (gaps and caps, other post cards' times included) and stores it on the item (`body.proposed`). Approving the
+  post approves that time: `schedule_take_proposal` checks the gap, the daily cap and `schedule_ready_check` again, then
+  makes the slot `waiting` with an approved `schedule` row (no card) that `schedule_approval_holds` reads at firing.
+  If the time is gone, one schedule card asks: "The time you approved is no longer free. Pick a new one." Video
+  deliverables, Retry and "I posted it" are unchanged.
 - **Publish mode** (an account is connected): due → `publishing` → `publish_post` on Vercel; for a video the worker
   first streams the file to Zernio's presigned URL (`publish_media`, no Zernio key on the worker), then Vercel posts → signed webhook (status, post id, failure reason) → `published` → metrics after 24 h.
 - **Intent mode** (no connected account for that platform): due → a notice (push, email, in-app: "time to post on

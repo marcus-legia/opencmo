@@ -148,6 +148,8 @@ async function main() {
   // F11–F12: a post's image arrives after its time was approved: the card goes back to the founder with the image.
   const post = randomUUID();
   ok(await admin.from("content_items").insert({ id: post, user_id: userId, department: "post", platform: "LinkedIn", day: new Date().toISOString().slice(0, 10), idea: "Launch", status: "in_review", body: { text: "We shipped the editor.", alternates: [] } }), "post");
+  // A card without a time (cmo-review-3 1.2 puts one on new cards): its time is approved on a schedule card.
+  ok(await admin.from("content_items").update({ body: { text: "We shipped the editor.", alternates: [], proposed: null } }).eq("id", post), "post without a time");
   const postDeliverable = ok(await admin.from("deliverables").insert({ user_id: userId, order_id: order.id, kind: "post", ref_kind: "content_item", ref_id: post, status: "waiting_founder" }).select("id").single(), "post deliverable") as { id: string };
   const postCard = ok(await admin.from("approvals").select("id").eq("ref_kind", "content_item").eq("ref_id", post).eq("status", "waiting").single(), "post card") as { id: string };
   await decide(userId, postCard.id, "approve");

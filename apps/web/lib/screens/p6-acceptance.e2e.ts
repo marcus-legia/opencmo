@@ -103,6 +103,8 @@ async function main() {
   // F6: ten posts with numbers → the founder's own best hour; a new approved post is proposed at 14:00 and says why.
   assert.equal(run.output.best_hours, 2, "14:00 and 09:00 each have two posts or more");
   const next = ok(await admin.from("content_items").insert({ user_id: userId, department: "post", platform: "X", day: new Date().toISOString().slice(0, 10), idea: "Next", status: "in_review", body: { text: "The next post, to be scheduled." } }).select("id").single(), "next post") as { id: string };
+  // A card without a time (cmo-review-3 1.2 puts one on new cards): the schedule card proposes it and says why.
+  ok(await admin.from("content_items").update({ body: { text: "The next post, to be scheduled.", proposed: null } }).eq("id", next.id), "next post without a time");
   // Writer's post_draft order owns the post, as in production: approving it decides its deliverable.
   ok(await admin.from("deliverables").insert({ user_id: userId, order_id: order.id, kind: "post", ref_kind: "content_item", ref_id: next.id, status: "waiting_founder" }), "next deliverable");
   const card = ok(await admin.from("approvals").select("id, content_hash").eq("ref_id", next.id).eq("status", "waiting").single(), "post card") as { id: string; content_hash: string };
