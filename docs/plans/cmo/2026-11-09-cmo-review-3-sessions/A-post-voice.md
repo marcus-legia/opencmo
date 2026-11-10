@@ -49,7 +49,7 @@ row is B's (the request below).
   - pgTAP and e2e as in plan §3.2.
 - [x] **A2 Code review of group 1** (plan §7): `/code-review high` on A1's commits and the security checklist. Write
   the outcome under "Reviews".
-- [ ] **A3 Paywall on decisions.** Once B0 has landed, call `cmo_require_paid` in `approval_decide` (approve, the
+- [x] **A3 Paywall on decisions.** (done by the reviewer session, 2026-11-10: `59d88c79`, `e6990571`, `0ce47a93`.) Once B0 has landed, call `cmo_require_paid` in `approval_decide` (approve, the
   schedule actions, `change_time`) and in `cmo_post_myself`. Then:
   - the card shows `PlanSheet` on a 402 `plan_required`;
   - the card is put back, and the drafts stay;
@@ -193,6 +193,19 @@ e2e run. Seen and kept: the dialog's focus ring when it opens is the shared `v2-
   `cmo:eval --provider fake`); CI green on the PR through `9dcd4311`.
 - Waiting: **A3** (paywall on decisions) waits on B0 (`cmo_require_paid`, the 402 mapping, `PlanSheet.tsx`); none is on
   the branch yet. **A8**'s rebase, schema dump and final `/code-review high` on A's whole diff run after A3.
+
+- **2026-11-10, A3 (reviewer session), `a44c15a6..e6990571`, `/code-review high`:** 9 findings.
+  - Fixed in `0ce47a93`: only a step out of a state before approval asks for a plan (a post approved while paid can
+    still be marked posted); INSERT and slots sent straight to due/reminded/publishing are gated; the migration is
+    `20270114050000`, after B0; the v1 workspace shows the plan sheet; one import path; `?rate=1` read from the URL;
+    the dashboard e2e targets its card.
+  - Kept: the dump's `billing_catalog_read` role order is pg_dump's own output.
+  - Checks: pgTAP 182 files / 3104+ tests green (CI `database` on `0ce47a93`); 280 has 16 cases; typecheck green.
+  - e2e (v2, desktop), against the same specs on `91d41599`: A3 broke nothing. `ui-v2-activation` (B's free run) is
+    green now; four tests A3's paid founders surfaced were fixed in `0752b354` and `c16b4187` (Today counted another
+    spec's decision; "Approve for this time"; an underline axe wanted).
+  - **Red before A3 and still red** (not fixed here): `ui-v2-dashboard` 14 and 109, `ui-v2-schedule` 123 and 142,
+    `ui-v2-voice` 37 and 68, `ui-v2-writer` 204 and 340.
 
 ## Requests
 
