@@ -6,7 +6,7 @@ create extension if not exists pgtap with schema extensions;
 begin;
 set search_path to public, extensions;
 
-select plan(24);
+select plan(28);
 
 select ok(not has_function_privilege('authenticated', 'public.schedule_take_proposal(public.deliverables,text)', 'execute'), 'the slot rule is internal');
 select ok(not has_function_privilege('authenticated', 'public.post_change_proposal(public.approvals,text,jsonb)', 'execute'), 'the change goes through approval_decide');
@@ -49,7 +49,7 @@ select ok((select (snapshot->'proposed'->>'at')::timestamptz > now() from t_card
 select isnt((select snapshot->'proposed'->>'at' from t_card where name = 'X one'), (select snapshot->'proposed'->>'at' from t_card where name = 'X two'),
   'two cards waiting side by side do not promise the same time');
 select is((select snapshot->'proposed' from t_card where name = 'Threads'),
-  public.post_proposal_snapshot('e2760000-0000-4000-8000-00000000000a', (select body from public.content_items where id = 'e2762000-0000-4000-8000-00000000000a')),
+  public.post_proposal_snapshot((select body from public.content_items where id = 'e2762000-0000-4000-8000-00000000000a')),
   'the snapshot holds the proposal the post stores');
 
 -- A redraft that writes a whole new body keeps the time the card shows; a null drops it.
@@ -63,6 +63,21 @@ where id = 'e2762000-0000-4000-8000-00000000000c';
 delete from t_card where name = 'X two';
 insert into t_card select c.idea, a.id, a.content_hash, c.id, a.snapshot from public.approvals a join public.content_items c on c.id = a.ref_id
 where a.ref_kind = 'content_item' and a.status = 'waiting' and c.id = 'e2762000-0000-4000-8000-00000000000c';
+
+-- Moved to another platform: a new time is picked for it.
+update public.content_items set platform = 'LinkedIn' where id = 'e2762000-0000-4000-8000-00000000000b';
+select is((select body->'proposed'->>'platform' from public.content_items where id = 'e2762000-0000-4000-8000-00000000000b'), 'linkedin',
+  'a post moved to LinkedIn gets a LinkedIn time');
+update public.content_items set platform = 'X' where id = 'e2762000-0000-4000-8000-00000000000b';
+delete from t_card where name = 'X one';
+insert into t_card select c.idea, a.id, a.content_hash, c.id, a.snapshot from public.approvals a join public.content_items c on c.id = a.ref_id
+where a.ref_kind = 'content_item' and a.status = 'waiting' and c.id = 'e2762000-0000-4000-8000-00000000000b';
+
+-- The account row changing (renamed here) does not change the card: its hash holds.
+update public.social_accounts set handle = '@renamed' where user_id = 'e2760000-0000-4000-8000-00000000000a' and platform = 'threads';
+select is(public.approval_hash(public.approval_snapshot('content_item', 'e2762000-0000-4000-8000-00000000000a')),
+  (select hash from t_card where name = 'Threads'), 'a renamed account does not lock the card');
+update public.social_accounts set handle = '@founder' where user_id = 'e2760000-0000-4000-8000-00000000000a' and platform = 'threads';
 
 -- Another founder cannot change or approve the card.
 set local role authenticated;
@@ -83,6 +98,7 @@ reset role;
 create temp table t_slot on commit drop as
 select s.* from public.schedule_slots s join public.deliverables d on d.id = s.deliverable_id
 where d.ref_id = 'e2762000-0000-4000-8000-00000000000a';
+grant select on t_slot to authenticated;
 select is((select count(*)::int from t_slot), 1, 'one slot');
 select is((select status from t_slot), 'waiting', 'it waits for its time');
 select is((select to_char(publish_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') from t_slot),
@@ -118,11 +134,45 @@ set local role authenticated;
 set local request.jwt.claims = '{"sub":"e2760000-0000-4000-8000-00000000000a","role":"authenticated"}';
 select public.approval_decide((select id from t_card where name = 'Gone'), 'approve', jsonb_build_object('content_hash', (select hash from t_card where name = 'Gone')));
 reset role;
+create temp table t_gone on commit drop as
+select s.* from public.schedule_slots s join public.deliverables d on d.id = s.deliverable_id where d.ref_id = 'e2762000-0000-4000-8000-00000000000d';
 select is((select count(*)::int from public.approvals a join public.schedule_slots s on s.id = a.ref_id join public.deliverables d on d.id = s.deliverable_id
   where a.ref_kind = 'schedule_slot' and a.status = 'waiting' and d.ref_id = 'e2762000-0000-4000-8000-00000000000d'), 1, 'one schedule card asks');
 select is((select a.snapshot->>'last_error' from public.approvals a join public.schedule_slots s on s.id = a.ref_id join public.deliverables d on d.id = s.deliverable_id
   where a.ref_kind = 'schedule_slot' and a.status = 'waiting' and d.ref_id = 'e2762000-0000-4000-8000-00000000000d'),
   'The time you approved is no longer free. Pick a new one.', 'and says why');
+
+-- Asked again later (that card expired): the new card does not claim the founder approved its time.
+reset role;
+update public.approvals set status = 'expired' where ref_kind = 'schedule_slot' and ref_id = (select id from t_gone);
+update public.schedule_slots set status = 'missed' where id = (select id from t_gone);
+select public.schedule_propose((select deliverable_id from t_gone));
+select is((select s.error from public.schedule_slots s where s.deliverable_id = (select deliverable_id from t_gone) and s.status = 'proposed'),
+  null, 'a later time is a plain proposal');
+
+-- A time the founder picks by hand is kept next to another post, as a schedule card's is.
+insert into public.deliverables (id, user_id, order_id, kind, ref_kind, ref_id, status)
+values ('e2763000-0000-4000-8000-00000000000b', 'e2760000-0000-4000-8000-00000000000a', 'e2761000-0000-4000-8000-00000000000a',
+  'post', 'content_item', 'e2762000-0000-4000-8000-0000000000fe', 'decided');
+insert into public.schedule_slots (user_id, deliverable_id, platform, account_id, mode, publish_at, window_ends_at, status)
+values ('e2760000-0000-4000-8000-00000000000a', 'e2763000-0000-4000-8000-00000000000b', 'threads', null, 'intent',
+  date_trunc('day', now()) + interval '20 days 10 hours', date_trunc('day', now()) + interval '20 days 10 hours 15 minutes', 'waiting');
+insert into public.content_items (id, user_id, department, platform, day, idea, status, body) values
+  ('e2762000-0000-4000-8000-00000000000e', 'e2760000-0000-4000-8000-00000000000a', 'post', 'Threads', current_date, 'Picked', 'in_review',
+   '{"text":"At the founder''s hour."}');
+insert into public.deliverables (user_id, order_id, kind, ref_kind, ref_id, status)
+values ('e2760000-0000-4000-8000-00000000000a', 'e2761000-0000-4000-8000-00000000000a', 'post', 'content_item', 'e2762000-0000-4000-8000-00000000000e', 'waiting_founder');
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"e2760000-0000-4000-8000-00000000000a","role":"authenticated"}';
+create temp table t_pick on commit drop as
+select * from public.approval_decide((select a.id from public.approvals a where a.ref_id = 'e2762000-0000-4000-8000-00000000000e' and a.status = 'waiting'),
+  'change_time', jsonb_build_object('content_hash', (select a.content_hash from public.approvals a where a.ref_id = 'e2762000-0000-4000-8000-00000000000e' and a.status = 'waiting'),
+    'publish_at', to_char(date_trunc('day', now()) + interval '20 days 11 hours', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')));
+select public.approval_decide((select id from t_pick), 'approve', jsonb_build_object('content_hash', (select content_hash from t_pick)));
+reset role;
+select is((select s.status || ' ' || to_char(s.publish_at at time zone 'UTC', 'HH24:MI') from public.schedule_slots s join public.deliverables d on d.id = s.deliverable_id
+  where d.ref_id = 'e2762000-0000-4000-8000-00000000000e'), 'waiting 11:00',
+  'the founder''s hour is kept an hour after another post');
 
 -- "I posted it" on the second X post: nothing is scheduled for it.
 set local role authenticated;

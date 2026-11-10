@@ -46,7 +46,10 @@ select is((select status from public.approvals where ref_id = 'e2352000-0000-400
   'and the replacement is still held');
 select is((select raised from public.card_budget where user_id = 'e2350000-0000-4000-8000-00000000000a'), 10, 'replacements are not counted');
 
--- Nothing is released before its day; tomorrow both come back, oldest first.
+-- Nothing is released before its day; tomorrow both come back, oldest first. Every row here has the transaction's
+-- `now()`, so post 11's card is made the older one explicitly (otherwise the tie is broken by heap order).
+update public.approvals set created_at = created_at - interval '1 minute'
+where ref_id = 'e2352000-0000-4000-8000-000000000011' and status = 'held';
 select is(public.approval_release_held(), 0, 'held cards wait for their day');
 update public.approvals set held_until = now() - interval '1 minute' where user_id = 'e2350000-0000-4000-8000-00000000000a' and status = 'held';
 -- Today's budget is spent, so releasing now only moves them to tomorrow.

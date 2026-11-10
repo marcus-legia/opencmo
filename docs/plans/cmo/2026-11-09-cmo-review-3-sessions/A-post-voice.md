@@ -24,7 +24,7 @@ row is B's (the request below).
 
 - [x] **A0 Research note** (below, before any code): what the code does now for each item, with `file:line`, what
   changes, and how it is checked.
-- [ ] **A1 (1.2) The post card carries its time.**
+- [x] **A1 (1.2) The post card carries its time.**
   - When the card is raised, the proposal is stored on the item: `body.proposed` = `{platform, at, account_id,
     mode}`, picked by `schedule_pick_time`.
   - The snapshot and hash include it.
@@ -37,7 +37,7 @@ row is B's (the request below).
   - `decide_card` (chat and MCP) says that the shown time is approved.
   - Update the docs: `approval.md` and `schedule-publish.md`, and their `.html` twins.
   - pgTAP and e2e as in plan §3.2.
-- [ ] **A2 Code review of group 1** (plan §7): `/code-review high` on A1's commits and the security checklist. Write
+- [x] **A2 Code review of group 1** (plan §7): `/code-review high` on A1's commits and the security checklist. Write
   the outcome under "Reviews".
 - [ ] **A3 Paywall on decisions.** Once B0 has landed, call `cmo_require_paid` in `approval_decide` (approve, the
   schedule actions, `change_time`) and in `cmo_post_myself`. Then:
@@ -108,7 +108,37 @@ three RPCs are new; the `save_marketing_document` trigger reads `strategy.voice`
 
 ## Reviews
 
-(One entry per `/code-review` run: date, commit range, findings, what was done with each.)
+### Group 1 (A2), 2026-11-10, `f7e48a75..ed968ea8`
+
+`/code-review high`: 10 findings, all fixed. The SQL ones change functions of the same unmerged migration, so they
+went in one commit; the web ones in a second.
+
+1. The snapshot read the account's handle live, so a renamed or removed account locked the card ("This card
+   changed") → the handle is stored on the proposal; `post_proposal_snapshot` reads the post alone. pgTAP: a renamed
+   account keeps the hash.
+2. A copy-and-open time approved before the founder connected the account would post in intent mode → fallback card
+   "You connected X since you approved it. Check the time and the account."
+3. A time the founder picked by hand could be refused by the gap rule at approval → `picked: founder` skips the gap
+   (as `schedule_change` does); the cap still holds. pgTAP: a picked hour an hour after another post is kept.
+4. The proposal was used again on every later proposal, so later cards said "the time you approved" → used only for the
+   post's first slot on the platform. pgTAP: a later card has no error.
+5. A failed `schedule_ready_check` was reported as "no longer free" → the card shows the check's own words.
+6. The approve toast promised the time even when the server fell back → it says a card asks again if the time was
+   taken meanwhile.
+7. A redraft that moved the post to another platform kept the old platform's time → a platform change picks again.
+   pgTAP: moved to LinkedIn, a LinkedIn time.
+8. The meta line read the raw snapshot, not the parsed proposal → one parse for both.
+9. Three copies of the platform names → `PLATFORM_LABEL`.
+10. `approval_snapshot` called the proposal function twice → once, through a lateral join.
+
+Security checklist (SQL, a route): every new function is `security definer` with `search_path = public` and revoked
+from `public, anon, authenticated` (pgTAP 182, the allowlist, stays green); the only door is `approval_decide`, which
+checks the owner, the status and the hash before the post branch; `change_time` and `change_account` read the item
+and the account by the card's user (another founder's card: "Card not found."); the approved schedule row is written
+only inside `schedule_propose`, from the founder's own decision; error text is English. No credits move.
+
+Also fixed while testing: pgTAP 235 relied on heap order for two cards with the same `created_at`; it now sets the
+order.
 
 ## Requests
 
