@@ -29,3 +29,15 @@ export function researchCard(brief: string, handles: string[] = []): PriceCard {
     credits: JOB_PRICES.competitor_research ?? 0,
   };
 }
+
+/** A script the CMO chat orders (cmo-review-3 I0): the founder records the video; nothing builds it for them. */
+export function scriptCard(brief: string): PriceCard {
+  return {
+    changes: [
+      `Write a script and storyboard: ${clip(brief, 200)}`,
+      "3 to 8 beats with what to say and what to show, on a script card in Approvals for your OK",
+      "You record the video yourself; read the script on your phone while you film",
+    ],
+    credits: JOB_PRICES.write_video_brief ?? 0,
+  };
+}

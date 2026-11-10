@@ -20,7 +20,7 @@ export type CmoEvalTask = {
   expectedWriteBehavior: "auto_save" | "pending_confirmation" | "no_write" | "confirm_card";
   prompt: string;
   /** auto_save: the write that must happen, and what its input must say. */
-  expect?: { tool: "remember" | "update_document" | "set_week_goal" | "set_cmo_paused" | "decide_card"; input: RegExp };
+  expect?: { tool: "remember" | "update_document" | "set_week_goal" | "set_cmo_paused" | "decide_card" | "create_task"; input: RegExp };
   /** Canned results for read tools, as the real tool would return them (inside `untrusted_data`). */
   toolOutputs?: Record<string, unknown>;
   pending?: string;
@@ -93,6 +93,15 @@ export const CMO_TASKS: CmoEvalTask[] = [
         },
       },
     },
+  },
+  {
+    // cmo-review-3 I0: a script the founder asks for is ordered from the chat, behind its price card, and is a script
+    // (agent video), never a video the CMO makes.
+    id: "cmo-order-script",
+    category: "founder_said",
+    expectedWriteBehavior: "confirm_card",
+    prompt: "Write me a script for a 30 second demo of the reminder flow. I'll film it myself.",
+    expect: { tool: "create_task", input: /"agent":"video"/ },
   },
   {
     id: "cmo-reddit-injection",

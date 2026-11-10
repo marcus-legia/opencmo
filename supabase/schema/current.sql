@@ -4562,6 +4562,48 @@ $_$;
 
 
 --
+-- Name: cmo_order_script(text, date, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_order_script(p_brief text, p_day date DEFAULT NULL::date, p_brain text DEFAULT NULL::text) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_item public.content_items;
+  v_root public.work_orders;
+  v_order public.work_orders;
+  v_run public.cmo_runs;
+  v_free integer;
+  v_price integer := public.cmo_job_price('write_video_brief');
+  v_input jsonb;
+begin
+  if p_brain is not null and p_brain <> 'claude' then
+    raise exception 'This request is not valid.' using errcode = '22023';
+  end if;
+  v_item := public.cmo_add_item('video', p_brief, coalesce(p_day, current_date), 'Asked in the CMO chat', '{}'::jsonb);
+  v_root := public.work_order_week_root(v_user);
+  v_free := v_root.budget_credits - v_root.spent_credits - coalesce((
+    select sum(budget_credits - spent_credits) from public.work_orders
+    where parent_id = v_root.id and status not in ('done', 'failed', 'cancelled')), 0);
+  v_order := public.work_order_create(v_user, v_root.week, v_root.id, 'write_video_brief',
+    left('Script for “' || v_item.idea || '”', 200),
+    jsonb_build_object('objective', v_item.idea, 'reason', 'Asked in the CMO chat', 'platform', v_item.platform,
+      'done_when', 'The founder approved the script.'),
+    least(v_price, greatest(v_free, 0)), (v_item.day + interval '23 hours 59 minutes') at time zone 'UTC', '{}', 'chat',
+    v_item.id);
+  v_input := jsonb_build_object('idea', v_item.idea, 'reason', 'Asked in the CMO chat', 'seconds', public.cmo_video_seconds(),
+    'aspect', '9:16', 'platform', v_item.platform, 'order_id', v_order.id, 'source', 'chat')
+    || case when p_brain = 'claude' then '{"brain": "claude"}'::jsonb else '{}'::jsonb end;
+  v_run := public.cmo_enqueue(v_user, 'write_video_brief', v_input);
+  return jsonb_build_object('item_id', v_item.id, 'order_id', v_order.id, 'run_id', v_run.id, 'status', v_run.status,
+    'day', v_item.day, 'credits', v_run.credits);
+end;
+$$;
+
+
+--
 -- Name: cmo_paid(uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -5597,6 +5639,57 @@ begin
   return true;
 end;
 $_$;
+
+
+--
+-- Name: cmo_script_edit_beat(uuid, integer, text, text, timestamp with time zone); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_script_edit_beat(p_order uuid, p_beat integer, p_say text, p_show text, p_version timestamp with time zone) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_order public.work_orders;
+  v_beats integer;
+  v_say text := nullif(trim(coalesce(p_say, '')), '');
+  v_show text := nullif(trim(coalesce(p_show, '')), '');
+  v_beat jsonb;
+begin
+  select * into v_order from public.work_orders
+  where id = p_order and user_id = v_user and kind = 'write_video_brief' for update;
+  if not found or jsonb_typeof(v_order.brief->'storyboard') is distinct from 'array' then
+    raise exception 'Script not found.' using errcode = 'P0002';
+  end if;
+  if not exists (select 1 from public.approvals where user_id = v_user and ref_kind = 'work_order' and ref_id = v_order.id
+                 and kind = 'script' and status in ('approved', 'edited')) then
+    raise exception 'Approve the script first.' using errcode = 'P0001';
+  end if;
+  if p_version is distinct from v_order.updated_at then
+    raise exception 'This script changed. Look at it again before editing.' using errcode = 'P0001';
+  end if;
+  v_beats := jsonb_array_length(v_order.brief->'storyboard');
+  if p_beat is null or p_beat < 1 or p_beat > v_beats then
+    raise exception 'That beat is not in this script.' using errcode = '22023';
+  end if;
+  if v_say is null and v_show is null then
+    raise exception 'Write what to say or what to show.' using errcode = '22023';
+  end if;
+  if char_length(coalesce(v_say, '')) > 300 or char_length(coalesce(v_show, '')) > 300 then
+    raise exception 'Keep each line of a beat under 300 characters.' using errcode = '22023';
+  end if;
+  v_beat := (v_order.brief->'storyboard'->(p_beat - 1))
+    || case when v_say is not null then jsonb_build_object('say', v_say) else '{}'::jsonb end
+    || case when v_show is not null then jsonb_build_object('show', v_show) else '{}'::jsonb end;
+  update public.work_orders set brief = jsonb_set(brief, array['storyboard', (p_beat - 1)::text], v_beat), updated_at = clock_timestamp()
+  where id = v_order.id
+  returning * into v_order;
+  insert into public.work_order_events (user_id, order_id, department, kind, text)
+  values (v_user, v_order.id, 'writer', 'note', left('You edited beat ' || p_beat || ' of “' || coalesce(v_order.title, 'the script') || '”', 200));
+  return jsonb_build_object('version', v_order.updated_at, 'beat', p_beat, 'say', v_beat->>'say', 'show', v_beat->>'show');
+end;
+$$;
 
 
 --
