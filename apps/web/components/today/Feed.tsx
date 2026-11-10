@@ -25,7 +25,7 @@ import type { ApprovalCard as Card } from "@/lib/screens/approval-card";
 import type { DashboardScreen, TodayRowData } from "@/lib/screens/dashboard";
 
 import { ContextColumn } from "./ContextColumn";
-import { KIND_ICON, kindLabel, whenLabel } from "./cards";
+import { KIND_ICON, PLATFORM_ICON, kindLabel, whenLabel } from "./cards";
 
 type Step = "planned" | "waiting" | "making" | "scheduled" | "posted";
 
@@ -124,7 +124,7 @@ function CardRow({ card, inv, open, onToggle, onLater, onDecide, sample }: { car
   return (
     <Row
       inv={inv}
-      icon={KIND_ICON[card.kind]}
+      icon={card.kind === "post" && card.account ? (PLATFORM_ICON[card.account.platform] ?? KIND_ICON.post) : KIND_ICON[card.kind]}
       kind={label}
       title={card.title}
       meta={meta}
@@ -354,7 +354,7 @@ export function Feed({ email }: { email?: string | null }) {
       .map((s) => (
         <Row
           key={s.id}
-          icon={KIND_ICON.post}
+          icon={PLATFORM_ICON[s.where.platform] ?? KIND_ICON.post}
           kind={`${s.where.platform === "x" ? "X" : s.where.platform.charAt(0).toUpperCase() + s.where.platform.slice(1)} post`}
           title={s.title}
           meta={s.note ?? dayLine.format(new Date(s.at))}

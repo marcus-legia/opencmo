@@ -3,6 +3,22 @@ import type { ReactNode } from "react";
 import type { ApprovalCard as Card, CardKind } from "@/lib/screens/approval-card";
 import { PLATFORM_LABEL } from "@/lib/screens/common";
 
+/** A post's tile by platform: X's mark for X, LinkedIn's for LinkedIn, a generic post mark otherwise. */
+export const PLATFORM_ICON: Record<string, ReactNode> = {
+  linkedin: (
+    <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-4 0v7h-4v-7a6 6 0 0 1 6-6z" />
+      <rect width="4" height="12" x="2" y="9" />
+      <circle cx="4" cy="4" r="2" />
+    </svg>
+  ),
+  threads: (
+    <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
+    </svg>
+  ),
+};
+
 /** The artboards' row tiles (Main.dc.html), by card kind. */
 export const KIND_ICON: Record<CardKind, ReactNode> = {
   post: (

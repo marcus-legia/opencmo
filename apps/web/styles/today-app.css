@@ -135,3 +135,7 @@ html[data-ui="v2"] .k .td-chat .cmo-chat-head h2 { font: 500 12.5px Geist, ui-sa
 /* The version switch of a post card as the artboard's `.vt`. */
 .td-cardhost .v2-card-versions { display: inline-flex; gap: 2px; padding: 2px; border-radius: 7px; background: var(--bg); border: 1px solid var(--line); }
 .td-cardhost .v2-card-versions .v2-card-link { height: 24px; min-height: 0; padding: 0 9px; border-radius: 5px; color: var(--muted); font-size: 12px; text-decoration: none; }
+/* The artboards rely on the browser's list markers; the app's base CSS turns them off. */
+html[data-ui="v2"] .k ul { list-style: disc; }
+html[data-ui="v2"] .k ol { list-style: decimal; }
+html[data-ui="v2"] .k :is(.td-menu, .cmo-messages) :is(ul, ol), html[data-ui="v2"] .k .cmo-messages { list-style: none; }
