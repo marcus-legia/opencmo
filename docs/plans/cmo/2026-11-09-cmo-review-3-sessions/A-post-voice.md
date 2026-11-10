@@ -1,0 +1,87 @@
+# Session A: the post card and the voice (1.2, 2.1, 2.2, 2.3)
+
+Plan: [`../2026-11-09-cmo-review-3-plan.md`](../2026-11-09-cmo-review-3-plan.md) §3.2 and §4. Rules: §6 and §7.
+
+Branch: `claude/okara-spec-opencmo-b7qlx2`. Pull before each item, and push after each commit.
+
+**Owns:**
+- migrations `20270113010000`–`20270113999999`, and pgTAP tests `276`–`285`;
+- these SQL functions: `approval_decide`, `cmo_decide_post`, `cmo_post_myself`, `schedule_propose`,
+  `schedule_follow_deliverable`, `correction_from_edits`, `cmo_decide_correction`, and the post card's part of
+  `approval_snapshot`. Also the new `cmo_rate_drafts`, `cmo_accept_corrections`, `cmo_edit_correction` and
+  `cmo_voice_undo`, and the tables `cmo_draft_ratings` and `cmo_voice_events`;
+- `apps/web/components/cards/**`;
+- `apps/web/lib/cmo/jobs/classify-edits.ts`, `lib/cmo/jobs/distill-ratings.ts` (new), and `lib/cmo/voice.ts` (new);
+- the `distill_ratings` entry in `lib/cmo/jobs/runner.ts` and `packages/contracts/capabilities.json`;
+- `apps/web/components/screens/library/LibraryScreen.tsx` (the Voice tab only);
+- `apps/web/lib/cmo/skills/no-ai-slop.check.ts`;
+- `docs/architecture/approval.md` and `schedule-publish.md`, with their `.html` twins.
+
+**Waits on:** nothing for A1–A2. A3 waits on B0 (`cmo_require_paid`, the 402 mapping, `PlanSheet.tsx`). A5's Today
+row is B's (the request below).
+
+## Todo, in order
+
+- [ ] **A0 Research note** (below, before any code): what the code does now for each item, with `file:line`, what
+  changes, and how it is checked.
+- [ ] **A1 (1.2) The post card carries its time.**
+  - When the card is raised, the proposal is stored on the item: `body.proposed` = `{platform, at, account_id,
+    mode}`, picked by `schedule_pick_time`.
+  - The snapshot and hash include it.
+  - The card gets the actions `change_time` and `change_account`.
+  - On approve, `schedule_propose` makes the slot `waiting` with no card. It still runs `schedule_ready_check` and the
+    gap and cap rules. If the time can no longer be used, it falls back to one `schedule` card with the line "The time
+    you approved is no longer free. Pick a new one."
+  - The card UI shows "Goes out … on X (@handle)", or "Opens X to post at …" when there is no account. It has a time
+    picker, the same as Schedule's.
+  - `decide_card` (chat and MCP) says that the shown time is approved.
+  - Update the docs: `approval.md` and `schedule-publish.md`, and their `.html` twins.
+  - pgTAP and e2e as in plan §3.2.
+- [ ] **A2 Code review of group 1** (plan §7): `/code-review high` on A1's commits and the security checklist. Write
+  the outcome under "Reviews".
+- [ ] **A3 Paywall on decisions.** Once B0 has landed, call `cmo_require_paid` in `approval_decide` (approve, the
+  schedule actions, `change_time`) and in `cmo_post_myself`. Then:
+  - the card shows `PlanSheet` on a 402 `plan_required`;
+  - the card is put back, and the drafts stay;
+  - pgTAP: unpaid approve is refused with the code, and paid is unchanged.
+- [ ] **A4 (2.1) A reason picked on every draft.**
+  - Add the columns `reason_code` and `labelled_by` to `cmo_draft_outcomes`, with a check of the list.
+  - Show the chips on Skip, and the optional "What did you fix?" chips on an edited approve.
+  - A founder label sets `edit_mode` and `classified_at`. Make the classifier skip those rows.
+  - In `correction_from_edits`, two founder labels are enough, and founder skips count too.
+  - Add the field to the route zod schema and to `decide.ts`.
+  - pgTAP and `jobs.check.ts` as in plan §4.1.
+- [ ] **A5 (2.2) Rate your first drafts.**
+  - Add the table `cmo_draft_ratings`, with RLS, grants and pgTAP.
+  - Add `cmo_rate_drafts` (at most 5 rows a round and 1 round a day) and the job `distill_ratings`:
+    - Haiku, price 0;
+    - `NO_AI_SLOP` embedded and listed in `no-ai-slop.check.ts`;
+    - at most 5 rules of under 200 characters each, and the code drops a rule no rating supports;
+    - the rules are written as proposed corrections with `source = 'ratings'`.
+  - `cmo_accept_corrections` activates the ticked rules in one transaction.
+  - The rating sheet lives in `components/cards/` and opens from B's Today row.
+  - Export `rateDraftsPending(supabase)` from `lib/cmo/voice.ts`.
+  - Tests: an eval fake case, pgTAP and e2e, as in plan §4.2.
+- [ ] **A6 (2.3) The voice as a page with history and Undo.**
+  - Add the table `cmo_voice_events`, and `cmo_edit_correction` and `cmo_voice_undo`.
+  - Write events from every rule change, and from a trigger on `save_marketing_document` for `strategy.voice` and
+    `avoid`.
+  - The Voice tab has three parts: Rules, From your setup, and Learned notes, plus the history with Undo.
+  - pgTAP and e2e as in plan §4.3.
+- [ ] **A7 Code review of group 2** (plan §7), written under "Reviews".
+- [ ] **A8 Finish.**
+  - Rebase, regenerate `supabase/schema/current.sql`, and run every check of plan §7.
+  - Take the screenshots of the post card and the rating sheet, look at them, and attach them.
+  - Run `/code-review high` on A's whole diff and hand it to the reviewer.
+
+## Research note
+
+(A0 goes here.)
+
+## Reviews
+
+(One entry per `/code-review` run: date, commit range, findings, what was done with each.)
+
+## Requests
+
+(Other sessions write their requests here.)

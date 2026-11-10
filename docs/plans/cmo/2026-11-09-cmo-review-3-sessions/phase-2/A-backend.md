@@ -1,6 +1,9 @@
 # Session A: backend (I0, and the RPCs for I1 and I2)
 
-Plan: [`../2026-11-09-cmo-review-3-plan.md`](../2026-11-09-cmo-review-3-plan.md) §3.
+> **Phase 2, not started.** Kept from the first draft of the plan (2026-11-09). It starts after phase 1 is reviewed, and
+> the reviewer re-checks it against `main` first. Links to the plan point to its §8. I2 (the prompter) is already on `main`.
+
+Plan: [`../../2026-11-09-cmo-review-3-plan.md`](../../2026-11-09-cmo-review-3-plan.md) §8.
 
 **Owns:**
 - `supabase/migrations/*`, from `20270113010000`;
