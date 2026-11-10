@@ -14,13 +14,19 @@ import type { CmoState, DocumentRow } from "@/lib/cmo/state";
 
 import { useWorkspace } from "./workspace";
 
+// The old Brain and Library parts, as panes: loaded only when one is open.
+const BrainPane = dynamic(() => import("./panes").then((m) => m.BrainPane), { ssr: false, loading: () => <p className="meta" style={{ marginTop: "16px" }}>Loading…</p> });
+const LibraryPane = dynamic(() => import("./panes").then((m) => m.LibraryPane), { ssr: false, loading: () => <p className="meta" style={{ marginTop: "16px" }}>Loading…</p> });
+
 // The Brand Kit's editor draws a frame with the clip renderer: loaded only when the Brand Kit is open.
 const BrandView = dynamic(() => import("@/components/clipping/web/BrandView").then((m) => m.BrandView), {
   ssr: false,
   loading: () => <p className="meta" style={{ marginTop: "16px" }}>Loading your Brand Kit…</p>,
 });
 
-export type DocId = DocumentKind | "brand";
+/** What used to be the Brain and Library pages, now panes of this drawer (`components/today/panes.tsx`). */
+export type PaneId = "plan" | "learned" | "past" | "voice" | "skills";
+export type DocId = DocumentKind | "brand" | PaneId;
 
 /** The five documents of the Context column, with who reads each (Main.dc.html). */
 export const DOC_ROWS: { id: DocId; title: string; readBy: string; readers: string[] }[] = [
@@ -30,6 +36,32 @@ export const DOC_ROWS: { id: DocId; title: string; readBy: string; readers: stri
   { id: "content_strategy", title: "Content plan", readBy: "Planner, Writer", readers: ["Planner", "Writer"] },
   { id: "brand", title: "Brand Kit", readBy: "Post images, slideshows", readers: ["Studio"] },
 ];
+
+type Row = { id: DocId; title: string; readBy: string; readers: string[] };
+
+/** The drawer's other sections, after the documents: the CMO's week and memory (was Brain), how it writes (was Library). */
+export const PANE_GROUPS: { title: string; rows: Row[] }[] = [
+  {
+    title: "Your CMO",
+    rows: [
+      { id: "plan", title: "Plan and orders", readBy: "This week's goal, orders and measures", readers: [] },
+      { id: "learned", title: "What it learned", readBy: "Lessons, rules from your edits", readers: [] },
+      { id: "past", title: "Past weeks", readBy: "Each week against its goal", readers: [] },
+    ],
+  },
+  {
+    title: "How it writes",
+    rows: [
+      { id: "voice", title: "Voice", readBy: "Writer, Sales", readers: [] },
+      { id: "skills", title: "Skills", readBy: "Writing and video recipes", readers: [] },
+    ],
+  },
+];
+const ROWS: Row[] = [...DOC_ROWS, ...PANE_GROUPS.flatMap((g) => g.rows)];
+const PANES: ReadonlySet<string> = new Set(PANE_GROUPS.flatMap((g) => g.rows.map((row) => row.id)));
+
+/** Whether `?doc=` names something this drawer shows. */
+export const isDocId = (value: string | null): value is DocId => !!value && ROWS.some((row) => row.id === value);
 
 /** The first document nobody has written yet, for the "+" of the Context column and the drawer; null when all are. */
 export function missingDocument(written: Partial<Record<DocumentKind, unknown>>): DocumentKind | null {
@@ -115,8 +147,9 @@ export function ContextDrawer({ doc, edit = false, onClose, onOpen }: { doc: Doc
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose, editing]);
 
-  const row = DOC_ROWS.find((r) => r.id === doc)!;
-  const kind = doc === "brand" ? null : doc;
+  const row = ROWS.find((r) => r.id === doc)!;
+  const pane = PANES.has(doc) ? (doc as PaneId) : null;
+  const kind = doc === "brand" || pane ? null : (doc as DocumentKind);
   const written = kind ? state?.documents[kind] : undefined;
   const missing = state ? missingDocument(state.documents) : null;
 
@@ -173,7 +206,24 @@ export function ContextDrawer({ doc, edit = false, onClose, onOpen }: { doc: Doc
             </button>
           ))}
 
-          {learned.length > 0 ? (
+          {PANE_GROUPS.map((group) => (
+            <div key={group.title} style={{ borderTop: "1px solid var(--line)", paddingTop: "12px", marginTop: "10px" }}>
+              <div className="sec">
+                <h2>{group.title}</h2>
+              </div>
+              {group.rows.map((r) => (
+                <button key={r.id} type="button" className="doc" aria-current={r.id === doc} onClick={() => onOpen(r.id)}>
+                  <DocIcon current={r.id === doc} />
+                  <span>
+                    <span style={{ fontSize: "13.5px", fontWeight: r.id === doc ? "500" : undefined }}>{r.title}</span>
+                    <span className="u">{r.readBy}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          ))}
+
+          {learned.length > 0 && doc !== "learned" ? (
             <div style={{ borderTop: "1px solid var(--line)", paddingTop: "12px", marginTop: "10px" }}>
               <div className="sec">
                 <h2>What your CMO learned</h2>
@@ -198,7 +248,7 @@ export function ContextDrawer({ doc, edit = false, onClose, onOpen }: { doc: Doc
           className="drawer"
           aria-label={row.title}
           role="dialog"
-          style={{ flex: "0 1 640px", minWidth: "0", background: "var(--panel)", borderRight: "1px solid var(--line)", position: "relative", zIndex: "2", display: "flex", flexDirection: "column", boxShadow: "12px 0 32px rgba(0,0,0,.18)", maxHeight: "calc(100vh - 48px)" }}
+          style={{ flex: pane ? "0 1 960px" : "0 1 640px", minWidth: "0", background: "var(--panel)", borderRight: "1px solid var(--line)", position: "relative", zIndex: "2", display: "flex", flexDirection: "column", boxShadow: "12px 0 32px rgba(0,0,0,.18)", maxHeight: "calc(100vh - 48px)" }}
         >
           <div style={{ height: "52px", display: "flex", alignItems: "center", gap: "8px", padding: "0 12px 0 20px", borderBottom: "1px solid var(--line)", flex: "none" }}>
             <svg className="i" viewBox="0 0 24 24" aria-hidden="true" style={{ color: "var(--muted)" }}>
@@ -220,17 +270,23 @@ export function ContextDrawer({ doc, edit = false, onClose, onOpen }: { doc: Doc
             </button>
           </div>
           <div style={{ flex: "1 1 auto", overflow: "auto", padding: "4px 28px 24px" }}>
-            <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginTop: "16px" }}>
-              <span className="meta" style={{ alignSelf: "center" }}>
-                Read by
-              </span>
-              {row.readers.map((r) => (
-                <span key={r} className="chip">
-                  {r}
+            {row.readers.length ? (
+              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginTop: "16px" }}>
+                <span className="meta" style={{ alignSelf: "center" }}>
+                  Read by
                 </span>
-              ))}
-            </div>
-            {kind ? (
+                {row.readers.map((r) => (
+                  <span key={r} className="chip">
+                    {r}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+            {pane ? (
+              <div className="v2 td-cardhost td-v2host td-pane">
+                {pane === "voice" || pane === "skills" ? <LibraryPane pane={pane} /> : <BrainPane pane={pane} />}
+              </div>
+            ) : kind ? (
               !state ? (
                 <p className="meta" style={{ marginTop: "16px" }}>Loading…</p>
               ) : draft ? (

@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 
 import { DOCUMENT_KINDS, type DocumentKind } from "@/lib/cmo/documents";
 
-import { ContextDrawer, DOC_ROWS, missingDocument, type DocId } from "./ContextDrawer";
+import { ContextDrawer, DOC_ROWS, isDocId, missingDocument, type DocId } from "./ContextDrawer";
 import { siteLabel, useWorkspace } from "./workspace";
 
 /** The artboard's colour squares for competitors, in order. */
@@ -167,7 +167,7 @@ export function ContextColumn({ goal }: { goal: { text: string | null; done: num
           ))}
         </div>
       </div>
-      {doc && DOC_ROWS.some((r) => r.id === doc) ? <ContextDrawer doc={doc as DocId} edit={editing} onClose={() => router.push("/app", { scroll: false })} onOpen={openDoc} /> : null}
+      {isDocId(doc) ? <ContextDrawer doc={doc} edit={editing} onClose={() => router.push("/app", { scroll: false })} onOpen={openDoc} /> : null}
     </aside>
   );
 }

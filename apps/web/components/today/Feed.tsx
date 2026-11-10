@@ -191,7 +191,7 @@ const AGENT_ROWS: { key: "brain" | "writer" | "studio" | "schedule" | "sales" | 
   {
     key: "brain",
     label: "Planner",
-    href: "/app/brain",
+    href: "/app?doc=plan",
     icon: (
       <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
         <rect width="18" height="18" x="3" y="4" rx="2" />

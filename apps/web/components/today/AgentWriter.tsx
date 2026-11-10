@@ -215,7 +215,7 @@ export function AgentWriter() {
               </div>
             ))}
             <div style={{ marginTop: "10px" }}>
-              <Link href="/app/library?tab=voice" className="ghost" style={{ textDecoration: "none" }}>
+              <Link href="/app?doc=voice" className="ghost" style={{ textDecoration: "none" }}>
                 Edit your voice
               </Link>
             </div>

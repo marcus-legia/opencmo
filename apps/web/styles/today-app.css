@@ -320,3 +320,10 @@ html:not([data-theme="dark"]) .k { --ok: #16744c; --warn: #8f5a0e; }
 @media (max-width: 640px) {
   .td-viewsbar > a.pill[href*="settings-connected-accounts"], .td-viewsbar > span.pill, .td-viewsbar > a.ib[aria-label="Open the editor"], .td-viewsbar > span[style*="width: 1px"], .td-viewsbar > span[style*="width:1px"] { display: none; }
 }
+
+/* Brain and Library's parts as panes of the Context drawer (components/today/panes.tsx). */
+.td-pane { margin-top: 16px; display: flex; flex-direction: column; gap: 14px; }
+.td-pane-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.td-pane .scr-split { display: flex; flex-direction: column; gap: 14px; }
+.td-pane .scr-split > * { min-width: 0; }
+.td-pane .scr-side { display: flex; flex-direction: column; gap: 14px; max-width: none; }
