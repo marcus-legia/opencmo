@@ -368,8 +368,15 @@ function Workspace({
     let live = true;
     api<Script>(`/clips/${encodeURIComponent(clipId)}/script`).then(
       (found) => live && setScript(found),
-      // 404: the edit did not come from a script. Any other failure only hides the tab.
-      () => live && setScript(null),
+      (error: unknown) => {
+        if (!live) return;
+        // 404: this edit came from no script (or no longer does): the tab goes, and an open Script tab falls back to
+        // Media instead of leaving the panel empty. Any other failure (the network) keeps the script on screen.
+        if (error instanceof ApiError && error.status === 404) {
+          setScript(null);
+          setLeftTab((tab) => (tab === "script" ? "media" : tab));
+        }
+      },
     );
     return () => {
       live = false;

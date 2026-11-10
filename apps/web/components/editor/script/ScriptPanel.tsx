@@ -139,7 +139,12 @@ export function ScriptPanel({
       // The marker follows the order; a marker the founder deleted comes back for this beat.
       const marker = markerOf(index);
       const comment = `Say: ${answer.say}\nShow: ${answer.show}`;
-      await run([marker ? { op: "set_marker", marker_id: marker.id, comment } : scriptMarkers(beats)[index]!]);
+      try {
+        await run([marker ? { op: "set_marker", marker_id: marker.id, comment } : scriptMarkers(beats)[index]!]);
+      } catch {
+        // The script is saved; only the timeline's note is behind. Say that, not "could not save" (review of #188).
+        setNote("The beat is saved. Its marker on the timeline did not update: edit the beat again to retry.");
+      }
     } catch (error) {
       if (error instanceof ApiError && error.status === 409) {
         setNote(error.message);
