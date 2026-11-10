@@ -6758,8 +6758,10 @@ html[data-theme] .ed2-zoom {
   display: grid;
   gap: 6px;
 }
-/* A link inside a sentence is told apart by more than its colour (WCAG 1.4.1, axe `link-in-text-block`). */
-.cic-steps a {
+/* A link inside a sentence is told apart by more than its colour (WCAG 1.4.1, axe `link-in-text-block`); `.v2` too, whose
+   `.v2 a` drops underlines. */
+.cic-steps a,
+.v2 .cic-steps a {
   text-decoration: underline;
   text-underline-offset: 2px;
 }
