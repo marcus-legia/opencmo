@@ -42,10 +42,8 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   const planCredit = plans.find((plan) => plan.id === "starter" && plan.slug && plan.credits > 0);
 
   if (UI_V2) {
-    const { data: balance } = await supabase.rpc("credit_balance", { p_user_id: (await supabase.auth.getUser()).data.user?.id ?? "" });
     return (
       <BillingV2
-        balance={typeof balance === "number" ? balance : null}
         planId={planId}
         paid={paid}
         plans={plans}

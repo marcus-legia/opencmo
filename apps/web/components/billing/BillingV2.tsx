@@ -1,4 +1,6 @@
+import { BalanceV2 } from "@/components/billing/BalanceV2";
 import { BillingButton } from "@/components/billing/BillingButton";
+import { AccountUsageLoader } from "@/components/clipping/web/AccountUsage";
 import { LocalTime } from "@/components/LocalTime";
 import { Panel } from "@/components/ui";
 import type { SellablePlan } from "@/lib/billing-catalog";
@@ -11,10 +13,9 @@ type Pack = { slug: string; credits: number; price_cents: number };
 /**
  * Billing in the v2 frame (Today redesign, canvas Settings.dc.html › Billing). The same data and rules as the classic
  * page: prices only from the catalogue rows (no row, no number), packs only for paid plans, checkout and the portal
- * through Creem. Only the layout changed.
+ * through Creem, the same usage rows and watermark note. Only the layout changed.
  */
 export function BillingV2({
-  balance,
   planId,
   paid,
   plans,
@@ -26,7 +27,6 @@ export function BillingV2({
   start,
   site,
 }: {
-  balance: number | null;
   planId: string;
   paid: boolean;
   plans: SellablePlan[];
@@ -48,7 +48,10 @@ export function BillingV2({
             <span className="v2-mono is-muted">Settings</span>
           </span>
           <h1 className="v2-title scr-title">Billing</h1>
-          <p className="scr-head-sub">Every paid job shows its cost before it runs. Credits come back for work that failed or was blocked.</p>
+          <p className="scr-head-sub">
+            Every paid job shows its cost before it runs. Credits come back for work that failed or was blocked.
+            {current?.watermark ? " Free clips carry a watermark." : ""}
+          </p>
         </div>
       </header>
       {justPaid && (
@@ -84,10 +87,17 @@ export function BillingV2({
           </div>
           <div className="td-billing-balance">
             <span className="v2-mono is-muted">Credits left</span>
-            <span className="td-billing-balance-n v2-num">{balance ?? "–"}</span>
+            <BalanceV2 />
           </div>
         </div>
       </section>
+
+      {/* The classic page's usage rows (exports left today, held per video, when quotas reset), kept whole. */}
+      <Panel id="billing-usage" title="Usage">
+        <div className="v2-panel-body td-billing-usage">
+          <AccountUsageLoader emphasizeCredits />
+        </div>
+      </Panel>
 
       <Panel id="billing-plans" title="Plans">
         <div className="v2-panel-body td-billing-grid">

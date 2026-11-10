@@ -8,12 +8,13 @@ import { NewMenu } from "@/components/editor/slides/NewMenu";
 import { Icon } from "@/components/icons";
 import { useShellState } from "@/components/shell-v2/ShellState";
 import { Button, ButtonLink, EmptyState, SampleTag, Tabs } from "@/components/ui";
+import type { ApprovedScript } from "@/app/api/v1/cmo/scripts/route";
 import type { Project } from "@/lib/clipping-types";
 import { STUDIO_KINDS, type StudioScreen as Data, type TeamStep } from "@/lib/screens/studio";
 
 import { ErrorNote, PageHeader, Panel, Screen, SkeletonBlocks } from "../parts";
 import { useTabParam } from "../useTabParam";
-import { isSample, useScreen } from "../useScreen";
+import { useScreen } from "../useScreen";
 import { StudioCard, type CardActions } from "./StudioCard";
 import { StudioDrawer } from "./StudioDrawer";
 import { cutShorts, finishedNote, markFinished, type EditState } from "./finish";
@@ -277,12 +278,20 @@ export function TeamSteps({ steps, compact = false }: { steps: TeamStep[]; compa
 
 /**
  * Scripts the founder approved in Writer and still has to film (canvas Projects.dc.html): the founder makes the videos,
- * so the editor's home starts with what to record. Read from Writer's screen; nothing shows when there is none.
+ * so the editor's home starts with what to record. Nothing shows when there is none.
  */
 function ScriptsToFilm() {
-  const [writer] = useScreen("writer");
-  if (writer.status !== "ready" || isSample(writer.live)) return null;
-  const scripts = writer.data.drafts.filter((d) => d.scriptId && d.column !== "posted");
+  const [scripts, setScripts] = useState<ApprovedScript[]>([]);
+  useEffect(() => {
+    let alive = true;
+    // A small list of its own: Studio does not load Writer's whole screen for it. No list rather than an error here.
+    void api<{ scripts: ApprovedScript[] }>("/cmo/scripts")
+      .then((r) => alive && setScripts(r.scripts))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
   if (scripts.length === 0) return null;
   return (
     <section className="td-group" aria-labelledby="scripts-to-film">
@@ -297,7 +306,7 @@ function ScriptsToFilm() {
                 <Icon name="video" size={14} />
               </span>
               <span className="td-row-title">{d.title}</span>
-              <a className="v2-button is-quiet is-compact" href={`/app/script/${encodeURIComponent(d.scriptId!)}/prompter`}>
+              <a className="v2-button is-quiet is-compact" href={`/app/script/${encodeURIComponent(d.id)}/prompter`}>
                 <Icon name="smartphone" size={14} />
                 Read on your phone
               </a>

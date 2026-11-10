@@ -40,6 +40,20 @@ export function LogsDrawer({ onClose }: { onClose: () => void }) {
     panel.current?.focus();
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
+      if (event.key !== "Tab" || !panel.current) return;
+      // A modal dialog keeps focus inside: Tab from the last control goes to the first, Shift+Tab the other way.
+      const focusable = [...panel.current.querySelectorAll<HTMLElement>("button, [href], [tabindex]:not([tabindex='-1'])")].filter((el) => !el.hasAttribute("disabled"));
+      if (focusable.length === 0) return;
+      const first = focusable[0]!;
+      const last = focusable[focusable.length - 1]!;
+      const active = document.activeElement;
+      if (event.shiftKey && (active === first || active === panel.current)) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (active === last || !panel.current.contains(active))) {
+        event.preventDefault();
+        first.focus();
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => {
@@ -59,18 +73,8 @@ export function LogsDrawer({ onClose }: { onClose: () => void }) {
       .sort((a, b) => b.at.localeCompare(a.at));
   }, [logs, filter]);
 
-  // This week's spend and refunds, from the ledger itself (a hold is negative, a refund or grant positive).
-  const sums = useMemo(() => {
-    const since = Date.now() - 7 * 86_400_000;
-    let spent = 0;
-    let back = 0;
-    for (const c of logs?.credits ?? []) {
-      if (Date.parse(c.at) < since) continue;
-      if (c.delta < 0) spent -= c.delta;
-      else if (/refund/i.test(c.reason)) back += c.delta;
-    }
-    return { spent, back };
-  }, [logs]);
+  // Computed by the route over every row of the last 7 days, not only the rows listed here.
+  const sums = logs ? { spent: logs.week.spent, back: logs.week.returned } : { spent: 0, back: 0 };
 
   let lastDay = "";
   return (
@@ -100,7 +104,7 @@ export function LogsDrawer({ onClose }: { onClose: () => void }) {
             <b className="v2-num">{sums.spent}</b> <span className="v2-mono is-muted">credits spent in 7 days</span>
           </span>
           <span>
-            <b className="v2-num">{sums.back}</b> <span className="v2-mono is-muted">refunded</span>
+            <b className="v2-num">{sums.back}</b> <span className="v2-mono is-muted">returned to you</span>
           </span>
         </div>
         <div className="td-drawer-body">

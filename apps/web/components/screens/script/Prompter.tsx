@@ -38,8 +38,6 @@ export function Prompter({ title, beats }: { title: string; beats: ScriptBeat[] 
   const [index, setIndex] = useState(0);
   const [auto, setAuto] = useState(false);
   const swipe = useRef<number | null>(null);
-  // A swipe also ends in a click on the tap zone under it; this keeps that click from moving a second beat.
-  const swiped = useRef(false);
   useWakeLock();
 
   const beat = beats[index]!;
@@ -57,16 +55,21 @@ export function Prompter({ title, beats }: { title: string; beats: ScriptBeat[] 
     return () => window.clearTimeout(timer);
   }, [auto, index]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Taps and swipes are read from pointerup, not click: after a swipe the browser can drop the next tap's click.
   const onDown = (event: PointerEvent) => {
     swipe.current = event.clientX;
   };
-  const onUp = (event: PointerEvent) => {
+  const onUp = (event: PointerEvent<HTMLDivElement>) => {
     const from = swipe.current;
     swipe.current = null;
     if (from === null) return;
     const dx = event.clientX - from;
-    swiped.current = Math.abs(dx) > 40;
-    if (swiped.current) go(dx < 0 ? 1 : -1);
+    if (Math.abs(dx) > 40) {
+      go(dx < 0 ? 1 : -1);
+    } else if (Math.abs(dx) < 10) {
+      const box = event.currentTarget.getBoundingClientRect();
+      go(event.clientX > box.left + box.width / 2 ? 1 : -1);
+    }
   };
 
   return (
@@ -93,15 +96,19 @@ export function Prompter({ title, beats }: { title: string; beats: ScriptBeat[] 
           <span className="v2-num">{beat.seconds} s</span>
         </div>
       </div>
-      <div className="td-prompter-stage" onPointerDown={onDown} onPointerUp={onUp}>
+      {/* Taps and swipes on the words are a shortcut for the buttons below, which stay the accessible controls. */}
+      <div
+        className="td-prompter-stage"
+        onPointerDown={onDown}
+        onPointerUp={onUp}
+        onPointerCancel={() => (swipe.current = null)}
+      >
         <span className="td-prompter-kind">
           <Icon name={SHOT_ICON[beat.shot]} size={15} />
           {SHOT_LABEL[beat.shot]}
         </span>
         <p className="td-prompter-show">Show: {beat.show}</p>
         <p className="td-prompter-words">{beat.say}</p>
-        <button type="button" className="td-prompter-tap is-prev" aria-label="Previous beat" tabIndex={-1} onClick={() => (swiped.current ? (swiped.current = false) : go(-1))} />
-        <button type="button" className="td-prompter-tap is-next" aria-label="Next beat" tabIndex={-1} onClick={() => (swiped.current ? (swiped.current = false) : go(1))} />
       </div>
       <footer className="td-prompter-foot">
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
