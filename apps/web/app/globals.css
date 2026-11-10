@@ -3083,6 +3083,15 @@ html[data-theme] .rail-avatar {
   width: 30px;
   padding: 0;
 }
+.ed2-icon svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
 .ed2-chip {
   border-color: transparent;
   background: transparent;

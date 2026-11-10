@@ -1422,6 +1422,7 @@ function Workspace({
         onExport={() => void startExport()}
         onCancelExport={() => void cancelExport()}
         finish={UI_V2 ? { clipId, documentHash: state.documentHash } : undefined}
+        home={UI_V2 ? { label: "Feed", onOpen: () => void leave("/app") } : undefined}
       />
       <div className="ed2-body" ref={layout.bodyRef}>
       {/* In the v2 shell the Assistant is column 2 of the frame; here it would be a second chat beside it. */}

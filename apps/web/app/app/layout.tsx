@@ -63,6 +63,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     return (
       <>
         <script dangerouslySetInnerHTML={{ __html: RAIL_BOOT + THEME_BOOT + COLUMNS_BOOT + "document.documentElement.dataset.ui='v2';" }} />
+        {/* Every v2 screen sets its text in Geist; without this the browser finds the font only after the CSS. */}
+        <link rel="preload" href="/fonts/geist.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
         <TimezoneSync />
         <ShellV2 {...account} chatLive={agentChatProvider("cmo") !== null} hideSample={isProduction()}>
           {children}

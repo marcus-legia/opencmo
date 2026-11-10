@@ -82,10 +82,14 @@ test("a script card opens its edit with a marker per beat; nothing builds a vide
   expect(markers).toEqual(['"name":"01 · To camera"', '"name":"02 · Screen"', '"name":"03 · To camera"']);
   expect((await db.from("approvals").select("status").eq("id", card!.id).single()).data!.status).toBe("approved");
 
-  // The Writer screen opens the same edit again, and places nothing twice.
+  // The Writer agent page (AgentWriter.dc.html) opens the same edit again from the approved script's row, and places
+  // nothing twice.
   await page.goto("/app/writer");
-  await page.getByRole("tab", { name: "Video briefs" }).click();
-  await page.getByRole("button", { name: "Open in editor", exact: true }).click();
+  const openEdit = page.getByRole("button", { name: "Open in editor", exact: true });
+  if (!(await openEdit.isVisible().catch(() => false))) {
+    await page.getByRole("button", { name: /Script · you film/ }).first().click();
+  }
+  await openEdit.click();
   await expect(page).toHaveURL(new RegExp(`/app/editor/${clipId}`), { timeout: 60_000 });
   const { data: again } = await db.from("editor_projects").select("document").eq("clip_id", clipId).single();
   expect((JSON.stringify(again!.document).match(/"name":"0[1-3] · /g) ?? []).length).toBe(3);
@@ -156,12 +160,16 @@ const TAKE_SCRIPT: Beat[] = [
   { say: "Paylane sends the reminder for you.", show: "Paylane's reminder screen", shot: "screen", seconds: 4 },
   { say: "Start a free trial today.", show: "You, to camera", shot: "talking_head", seconds: 3 },
 ];
-/** A take with a false start of beat 1, an aside, and beat 3 never said. */
+/**
+ * A take with a false start of beat 1 and an aside. Every beat is said: "Keep only the script" proposes nothing while a
+ * beat is missing (review of #188, finding 3; the missing case is in `editor-core/src/script-take.test.ts`).
+ */
 const TAKE = [
   line("Your invoice is", 0.2, 1.0),
   line("Your invoice is late", 1.4, 2.6),
   line("Paylane sends the reminder for you", 3.0, 5.6),
   line("okay hold on I lost my place", 6.4, 8.8),
+  line("Start a free trial today", 9.0, 9.9),
 ];
 const NAME = "script-take.mp4";
 
@@ -191,8 +199,7 @@ test("I3: the take against the script, and Keep only the script cuts after the c
   await expect(takes).toHaveCount(3, { timeout: 60_000 });
   await expect(takes.nth(0)).toHaveText(/^Said/);
   await expect(takes.nth(1)).toHaveText(/^Said/);
-  await expect(takes.nth(2)).toHaveText(/^Not said/);
-  await expect(panel).toContainText("Beat 3 is missing");
+  await expect(takes.nth(2)).toHaveText(/^Said/);
 
   // Proposed, never cut on its own.
   const readDoc = async () => {
@@ -223,7 +230,7 @@ test("I3: the take against the script, and Keep only the script cuts after the c
   const inCut = (time: number, cuts: Cut[]) => cuts.some((range) => range.start <= time && time < range.end);
   await expect.poll(async () => inCut(0.5, await removed()) && inCut(7.5, await removed()), { timeout: 30_000 }).toBe(true);
   const cuts = await removed();
-  for (const kept of [1.5, 2.2, 3.5, 5.0]) expect(inCut(kept, cuts), `${kept}s is the script and stays`).toBe(false);
+  for (const kept of [1.5, 2.2, 3.5, 5.0, 9.5]) expect(inCut(kept, cuts), `${kept}s is the script and stays`).toBe(false);
   // Nothing left to propose once it is cut.
   await expect(panel.getByTestId("script-keep")).toHaveCount(0, { timeout: 30_000 });
 });

@@ -183,7 +183,7 @@ html[data-ui="v2"] .k :is(.td-menu, .cmo-messages) :is(ul, ol), html[data-ui="v2
 /* ---- the editor (Editor.dc.html): the real editor, in the artboard's tokens and type ----
    Its design-system tokens point at the artboard's; the theme switch and the credits leave its top bar (the app sets
    the theme, Billing shows the credits). Lanes and media colours keep their own. */
-.pg-editor .ed2 {
+.pg-editor :is(.ed2, .td-assistant) {
   --ds-font-sans: Geist, ui-sans-serif, system-ui, sans-serif;
   --ds-font-display: Geist, ui-sans-serif, system-ui, sans-serif;
   --ds-font-mono: "Geist Mono", ui-monospace, monospace;
@@ -199,3 +199,50 @@ html[data-ui="v2"] .k :is(.td-menu, .cmo-messages) :is(ul, ol), html[data-ui="v2
 }
 .pg-editor .ed2-top :is(.ed2-theme, .ed2-credits) { display: none; }
 .pg-editor .td-body > :not(aside) { flex: 1 1 auto; min-width: 0; position: relative; }
+
+/* The editor's chrome in the artboard's shapes: the top bar (back to the feed, the clip, the save state, icon Undo and
+   Redo, Mark finished, Export), the left panel's segmented tabs, the Script tab's beats with their take states and the
+   dashed "Keep only the script" box, the grey stage. Every control is the editor's own; only its look changes. */
+.pg-editor .ed2-top { height: 48px; flex-shrink: 0; gap: 8px; padding: 0 12px; background: var(--top); border-bottom: 1px solid var(--line); font-size: 13px; }
+.pg-editor .ed2-top .ed2-row { gap: 8px; min-width: 0; }
+.pg-editor .ed2-home { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-size: 12.5px; }
+.pg-editor .ed2-home:hover { background: var(--hover); color: var(--text); }
+.pg-editor .ed2-divider { width: 1px; height: 18px; background: var(--line-2); flex-shrink: 0; }
+.pg-editor .ed2-top .beta-badge { height: 18px; padding: 0 6px; border: 0; border-radius: 4px; background: var(--raised); color: var(--subtle); font: 500 10.5px Geist, ui-sans-serif, system-ui, sans-serif; letter-spacing: 0; text-transform: none; display: inline-flex; align-items: center; }
+.pg-editor .ed2-top .ed2-status { font-size: 11.5px; color: var(--subtle); background: transparent; border: 0; padding: 0; gap: 5px; }
+.pg-editor .ed2-top .ed2-status::before { content: "·"; margin-right: 2px; }
+.pg-editor .ed2-top .ed2-status-dot { display: none; }
+.pg-editor .ed2-top .ed2-status[data-state="error"], .pg-editor .ed2-top .ed2-status[data-state="conflict"] { color: var(--bad); }
+.pg-editor .ed2-btn { height: 30px; padding: 0 12px; border-radius: 7px; border: 1px solid var(--line-2); background: transparent; color: var(--text); font-size: 12.5px; font-weight: 400; display: inline-flex; align-items: center; gap: 6px; box-shadow: none; }
+.pg-editor .ed2-btn:hover:not(:disabled) { background: var(--hover); }
+.pg-editor .ed2-btn:is(.ed2-primary, .is-primary) { border: 0; background: var(--accent); color: var(--accent-ink); font-size: 13px; font-weight: 600; padding: 0 14px; }
+.pg-editor .ed2-btn:is(.ed2-primary, .is-primary):hover:not(:disabled) { background: var(--accent-hover); }
+.pg-editor .ed2-btn:disabled { opacity: .55; cursor: default; }
+.pg-editor .ed2-top .ed2-icon { width: 28px; height: 28px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--muted); display: inline-flex; align-items: center; justify-content: center; }
+.pg-editor .ed2-top .ed2-icon:hover:not(:disabled) { background: var(--hover); color: var(--text); }
+.pg-editor .ed2-top .ed2-icon:disabled { opacity: .4; }
+.pg-editor .ed2-link { color: var(--accent); font-size: 12.5px; }
+
+.pg-editor .ed2-left { background: var(--panel); border-right: 1px solid var(--line); }
+.pg-editor .ed2-left-tabs { display: flex; gap: 2px; padding: 8px; border-bottom: 1px solid var(--line); }
+.pg-editor .ed2-left-tabs .ed2-tab { flex: 1; height: 28px; padding: 0 6px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-size: 12px; font-weight: 500; }
+.pg-editor .ed2-left-tabs .ed2-tab:hover { color: var(--text); }
+.pg-editor .ed2-left-tabs .ed2-tab[aria-selected="true"] { background: var(--raised); color: var(--text); border: 0; }
+
+.pg-editor .ed2-scr { padding: 12px; gap: 10px; }
+.pg-editor .ed2-scr-title { min-width: 0; flex: 1 1 auto; font-size: 13px; font-weight: 600; font-family: Geist, ui-sans-serif, system-ui, sans-serif; }
+.pg-editor .ed2-scr-label { font-size: 11.5px; color: var(--subtle); text-transform: none; letter-spacing: 0; font-weight: 400; }
+.pg-editor .ed2-scr-beats { display: flex; flex-direction: column; gap: 8px; list-style: none; padding: 0; margin: 0; }
+.pg-editor .ed2-scr-beat { border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+.pg-editor .ed2-scr-beat.is-current { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.pg-editor .ed2-scr-row { padding: 9px 10px; gap: 4px; font-size: 13px; color: var(--text); background: transparent; }
+.pg-editor .ed2-scr-num { font-family: "Geist Mono", ui-monospace, monospace; font-size: 11px; color: var(--subtle); }
+.pg-editor .ed2-scr-take { display: inline-flex; align-items: center; height: 18px; padding: 0 6px; border-radius: 4px; font-size: 10.5px; font-weight: 500; }
+.pg-editor .ed2-scr-take.is-said { background: var(--ok-wash); color: var(--ok); }
+.pg-editor .ed2-scr-take.is-partly { background: var(--warn-wash); color: var(--warn); }
+.pg-editor .ed2-scr-take.is-missing { background: var(--bad-wash); color: var(--bad); }
+.pg-editor .ed2-scr-missing { color: var(--bad); font-size: 11.5px; }
+.pg-editor .ed2-scr .ed2-trn-foot { margin: 0 12px 12px; padding: 10px; border: 1px dashed var(--line-2); border-radius: 8px; background: transparent; font-size: 12.5px; }
+
+.pg-editor .ed2-center { background: var(--stage); }
+.pg-editor .ed2-framebar, .pg-editor .ed2-tl-wrap { background: var(--panel); border-color: var(--line); }
