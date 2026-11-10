@@ -11,6 +11,7 @@ process.env.OPENCMO_AGENT_FAKE = "1";
 import { checkPost } from "./check-post";
 import { classifyEdits } from "./classify-edits";
 import { fakeRules, groundedRules } from "./distill-ratings";
+import { eventLine, sheetDrafts } from "../voice";
 import { EDIT_MODES } from "./edit-taxonomy";
 import { DRAFT_REASONS } from "../../../components/cards/labels";
 import { mondayOf } from "./summarize-memory";
@@ -607,6 +608,20 @@ async function main() {
     "unsupported, repeated and too long rules are dropped",
   );
   assert.deepEqual(fakeRules(rated.filter((r) => r.verdict === "up")), [], "thumbs up only: no rule");
+
+  // cmo-review-3 2.2–2.3: the sheet takes the first post's versions, then the next posts' first, five at most; the
+  // history says each change in plain words.
+  const draftRow = (id: string, alternates: string[]) => ({ id, platform: "X", idea: id, body: { text: `${id} text`, alternates }, created_at: "" });
+  assert.deepEqual(
+    sheetDrafts([draftRow("a", ["a1", "a2"]), draftRow("b", ["b1"]), draftRow("c", []), draftRow("d", [])]).map((d) => `${d.itemId}:${d.version}`),
+    ["a:0", "a:1", "a:2", "b:0", "c:0"],
+    "the sheet's five versions",
+  );
+  const rule = { correction_id: "r", field: null, before_status: null as string | null, after_status: "active" as string | null, before: null as unknown, after: "Help first." as unknown };
+  assert.equal(eventLine(rule), "Rule added: “Help first.”");
+  assert.equal(eventLine({ ...rule, before_status: "active", before: "Old words." }), "Rule changed: “Old words.” → “Help first.”");
+  assert.equal(eventLine({ ...rule, before_status: "active", after_status: "rejected", before: "Help first." }), "Rule turned off: “Help first.”");
+  assert.equal(eventLine({ correction_id: null, field: "avoid", before_status: null, after_status: null, before: null, after: ["hype", "synergy"] }), "Words to avoid: hype, synergy");
 
   // The chips are the same list in the card, the route and SQL.
   const reasons = readFileSync(new URL("../../../../../supabase/migrations/20270113020000_draft_reasons.sql", import.meta.url), "utf8");

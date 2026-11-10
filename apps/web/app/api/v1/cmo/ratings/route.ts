@@ -28,7 +28,7 @@ const body = z.object({
  * One round of ratings. `cmo_rate_drafts` checks the drafts are the founder's own and waiting, and holds one round a
  * day; it queues `distill_ratings` (free), which runs right after the answer.
  */
-export const POST = withApi({ body, rateLimit: { bucket: "presets", limit: 20, windowSeconds: 3600 } }, async ({ supabase, body }) => {
+export const POST = withApi({ body, rateLimit: { bucket: "presets", limit: 60, windowSeconds: 3600 } }, async ({ supabase, body }) => {
   const out = await rpcOrThrow<{ round: string; run_id: string }>(supabase, "cmo_rate_drafts", {
     p_ratings: body.ratings.map((r) => ({
       item_id: r.itemId,

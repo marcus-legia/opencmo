@@ -99,7 +99,7 @@ batching is by row (one `short_batch` for the shorts of one video) rather than a
 | `shorts_batch` | Studio Shorts | 3 shorts with hook and reasons | approve the batch, send back | ✅ |
 | `slideshow` | Studio Slideshow | slides, MP4 and PNG | approve, quick text edit per slide, open in Slides | ✅ |
 | `schedule` | Schedule | platform, account, date and time, the deliverable; for a post, only when its approved time is gone, a retry or an older card | approve, change time (re-approve), cancel | ✅ |
-| `correction` | Brain (repeated edits) | a rule learned from edits, with its source edits | approve, edit, reject | ✅ |
+| `correction` | Brain (repeated edits) | a rule learned from edits, with its source edits; rules from the founder's ratings raise no card (cmo-review-3 2.2: the rating sheet accepts them together) | approve, edit, reject; later edit, turn off and Undo in Library → Voice (2.3) | ✅ |
 | `skill` | Brain | a proposed skill change | — | ❌ not built |
 
 ## 6. Rules

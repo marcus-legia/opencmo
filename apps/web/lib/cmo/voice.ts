@@ -110,3 +110,73 @@ export async function ratingSheet(supabase: SupabaseClient, now = new Date()): P
   }
   return { drafts: ratedToday ? [] : sheetDrafts(await waitingPosts(supabase)), latest, ratedToday };
 }
+
+// ------------------------------------------------------------------ the Voice page (2.3)
+
+/** Who changed it, as the page names it (`cmo_voice_events.source`). */
+export const VOICE_SOURCE_LABEL = { setup: "Setup", you: "You", edits: "Learned from your edits", ratings: "From your ratings" } as const;
+export type VoiceSource = keyof typeof VOICE_SOURCE_LABEL;
+
+export type VoiceRule = { id: string; rule: string; on: boolean; source: VoiceSource };
+export type VoiceEvent = { id: string; what: string; source: VoiceSource; at: string; undone: boolean; canUndo: boolean };
+export type VoicePage = {
+  /** Active rules, then the ones turned off from this page or by Undo (rules never used stay out). */
+  rules: VoiceRule[];
+  /** From the strategy document (`Business` tab): the voice line and the words to avoid. */
+  setup: { voice: string | null; avoid: string[] };
+  /** Newest first; only the newest event not undone offers Undo. */
+  history: VoiceEvent[];
+};
+
+type EventRow = {
+  id: string;
+  seq: number;
+  correction_id: string | null;
+  field: "voice" | "avoid" | null;
+  source: VoiceSource;
+  before: unknown;
+  after: unknown;
+  before_status: string | null;
+  after_status: string | null;
+  undone_at: string | null;
+  created_at: string;
+};
+
+const clipText = (s: string, n = 120) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
+const words = (v: unknown): string => (typeof v === "string" ? v : Array.isArray(v) ? v.filter((x) => typeof x === "string").join(", ") : "");
+
+/** One line per event, in plain words: what the Writer follows now. */
+export function eventLine(e: Pick<EventRow, "correction_id" | "field" | "before" | "after" | "before_status" | "after_status">): string {
+  if (e.field === "voice") return words(e.after) ? `Voice: “${clipText(words(e.after))}”` : "Voice line removed";
+  if (e.field === "avoid") return words(e.after) ? `Words to avoid: ${clipText(words(e.after))}` : "Words to avoid cleared";
+  const after = clipText(words(e.after));
+  if (e.after_status === "rejected") return `Rule turned off: “${after}”`;
+  if (e.before_status === "active" && words(e.before) !== words(e.after)) return `Rule changed: “${clipText(words(e.before), 60)}” → “${after}”`;
+  if (e.before_status === "rejected") return `Rule turned on: “${after}”`;
+  return `Rule added: “${after}”`;
+}
+
+export async function voicePage(supabase: SupabaseClient): Promise<VoicePage> {
+  const [rules, events, strategy] = await Promise.all([
+    supabase.from("cmo_corrections").select("id, rule, status, source, decided_at").in("status", ["active", "rejected"]).order("decided_at", { ascending: false, nullsFirst: false }).limit(60),
+    supabase.from("cmo_voice_events").select("id, seq, correction_id, field, source, before, after, before_status, after_status, undone_at, created_at").order("seq", { ascending: false }).limit(30),
+    supabase.from("marketing_documents").select("body").eq("kind", "strategy").order("version", { ascending: false }).limit(1).maybeSingle<{ body: Record<string, unknown> }>(),
+  ]);
+  for (const r of [rules, events, strategy]) if (r.error) throw new Error(`voice page: ${r.error.message}`);
+  const rows = (events.data ?? []) as EventRow[];
+  // A rule off now is listed only when it was on before (from this page, or undone): a proposal set aside is not.
+  const wasOn = new Set(rows.filter((e) => e.correction_id && (e.before_status === "active" || e.after_status === "active")).map((e) => e.correction_id!));
+  const latest = rows.find((e) => !e.undone_at)?.id ?? null;
+  const body = strategy.data?.body ?? {};
+  return {
+    rules: ((rules.data ?? []) as { id: string; rule: string; status: string; source: string }[])
+      .filter((r) => r.status === "active" || wasOn.has(r.id))
+      .map((r) => ({ id: r.id, rule: r.rule, on: r.status === "active", source: (r.source === "ratings" ? "ratings" : r.source === "founder" ? "you" : "edits") as VoiceSource }))
+      .sort((a, b) => Number(b.on) - Number(a.on)),
+    setup: {
+      voice: typeof body.voice === "string" && body.voice.trim() ? body.voice : null,
+      avoid: Array.isArray(body.avoid) ? body.avoid.filter((w): w is string => typeof w === "string" && !!w.trim()) : [],
+    },
+    history: rows.map((e) => ({ id: e.id, what: eventLine(e), source: e.source, at: e.created_at, undone: !!e.undone_at, canUndo: e.id === latest })),
+  };
+}

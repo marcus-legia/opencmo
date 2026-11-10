@@ -11,7 +11,7 @@ const body = z.object({
 });
 
 /** "Use these rules" (cmo-review-3 2.2): one transaction, no card per rule (`cmo_accept_corrections`). */
-export const POST = withApi({ body, rateLimit: { bucket: "presets", limit: 30, windowSeconds: 3600 } }, async ({ supabase, body }) => {
+export const POST = withApi({ body, rateLimit: { bucket: "presets", limit: 60, windowSeconds: 3600 } }, async ({ supabase, body }) => {
   const accepted = await rpcOrThrow<number>(supabase, "cmo_accept_corrections", {
     p_round: body.round,
     p_ids: body.rules.map((r) => r.id),

@@ -3438,6 +3438,8 @@ declare
   v_user uuid := public.require_user();
   v_n integer := coalesce(cardinality(p_ids), 0);
   v_text text;
+  v_before public.cmo_corrections;
+  v_after public.cmo_corrections;
   v_done integer := 0;
 begin
   if v_n > 5 or v_n <> coalesce(cardinality(p_texts), 0) then
@@ -3451,11 +3453,15 @@ begin
     if char_length(v_text) not between 3 and 200 then
       raise exception 'Write each rule in 3 to 200 characters.' using errcode = '22023';
     end if;
-    update public.cmo_corrections set status = 'active', rule = v_text, decided_at = now()
-    where id = p_ids[i] and user_id = v_user and round_id = p_round and source = 'ratings' and status = 'proposed';
+    select * into v_before from public.cmo_corrections
+    where id = p_ids[i] and user_id = v_user and round_id = p_round and source = 'ratings' and status = 'proposed' for update;
     if not found then
       raise exception 'This rule was already decided.' using errcode = 'P0001';
     end if;
+    update public.cmo_corrections set status = 'active', rule = v_text, decided_at = now()
+    where id = v_before.id returning * into v_after;
+    -- Kept with the founder's words: "From your ratings" either way (the founder edits on the sheet).
+    perform public.cmo_voice_rule_event(v_before, v_after, 'ratings');
     v_done := v_done + 1;
   end loop;
   update public.cmo_corrections set status = 'rejected', decided_at = now()
@@ -3598,6 +3604,7 @@ CREATE FUNCTION public.cmo_decide_correction(p_id uuid, p_action text, p_text te
 declare
   v_user uuid := public.require_user();
   v_row public.cmo_corrections;
+  v_before public.cmo_corrections;
   v_text text := nullif(trim(coalesce(p_text, '')), '');
 begin
   if p_action is null or p_action not in ('approve', 'edit', 'reject') then
@@ -3613,12 +3620,16 @@ begin
   if v_row.status = 'rejected' or (v_row.status = 'active' and p_action <> 'reject') then
     raise exception 'This rule was already decided.' using errcode = 'P0001';
   end if;
+  v_before := v_row;
   update public.cmo_corrections
   set status = case p_action when 'reject' then 'rejected' else 'active' end,
       rule = case p_action when 'edit' then v_text else rule end,
       decided_at = now()
   where id = v_row.id
   returning * into v_row;
+  -- The page's history (cmo-review-3 2.3): kept as learned, or in the founder's own words.
+  perform public.cmo_voice_rule_event(v_before, v_row,
+    case when p_action = 'approve' then case v_row.source when 'ratings' then 'ratings' else 'edits' end else 'you' end);
   return v_row;
 end;
 $$;
@@ -3987,6 +3998,46 @@ begin
     select public.platform_profile_id(c.platform) into new.platform from public.content_items c where c.id = new.item_id;
   end if;
   return new;
+end;
+$$;
+
+
+--
+-- Name: cmo_edit_correction(uuid, text, boolean); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_edit_correction(p_id uuid, p_text text DEFAULT NULL::text, p_active boolean DEFAULT NULL::boolean) RETURNS public.cmo_corrections
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_row public.cmo_corrections;
+  v_before public.cmo_corrections;
+  v_text text := nullif(trim(coalesce(p_text, '')), '');
+begin
+  if p_text is not null and (v_text is null or char_length(v_text) not between 3 and 200) then
+    raise exception 'Write the rule in 3 to 200 characters.' using errcode = '22023';
+  end if;
+  if v_text is null and p_active is null then
+    raise exception 'Change the words, or turn the rule on or off.' using errcode = '22023';
+  end if;
+  select * into v_row from public.cmo_corrections where id = p_id and user_id = v_user for update;
+  if not found then
+    raise exception 'Rule not found.' using errcode = 'P0002';
+  end if;
+  if v_row.status = 'proposed' then
+    raise exception 'Decide this rule on its card first.' using errcode = 'P0001';
+  end if;
+  v_before := v_row;
+  update public.cmo_corrections
+  set rule = coalesce(v_text, rule),
+      status = case when p_active is null then status when p_active then 'active' else 'rejected' end,
+      decided_at = now()
+  where id = v_row.id
+  returning * into v_row;
+  perform public.cmo_voice_rule_event(v_before, v_row, 'you');
+  return v_row;
 end;
 $$;
 
@@ -5439,6 +5490,102 @@ $$;
 CREATE FUNCTION public.cmo_video_seconds() RETURNS integer
     LANGUAGE sql IMMUTABLE
     AS $$ select 60 $$;
+
+
+--
+-- Name: cmo_voice_rule_event(public.cmo_corrections, public.cmo_corrections, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_voice_rule_event(p_before public.cmo_corrections, p_after public.cmo_corrections, p_source text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  if coalesce(current_setting('opencmo.voice_undo', true), '') = 'on' then
+    return;
+  end if;
+  if p_before.status is not distinct from p_after.status and p_before.rule is not distinct from p_after.rule then
+    return;
+  end if;
+  if p_before.status is distinct from 'active' and p_after.status is distinct from 'active' then
+    return;
+  end if;
+  insert into public.cmo_voice_events (user_id, correction_id, source, before, after, before_status, after_status)
+  values (p_after.user_id, p_after.id, p_source,
+    case when p_before.status = 'active' then to_jsonb(p_before.rule) end, to_jsonb(p_after.rule),
+    p_before.status, p_after.status);
+end;
+$$;
+
+
+--
+-- Name: cmo_voice_events; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.cmo_voice_events (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    seq bigint NOT NULL,
+    user_id uuid NOT NULL,
+    correction_id uuid,
+    field text,
+    source text NOT NULL,
+    before jsonb,
+    after jsonb,
+    before_status text,
+    after_status text,
+    undone_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT cmo_voice_events_after_status_check CHECK ((after_status = ANY (ARRAY['proposed'::text, 'active'::text, 'rejected'::text]))),
+    CONSTRAINT cmo_voice_events_before_status_check CHECK ((before_status = ANY (ARRAY['proposed'::text, 'active'::text, 'rejected'::text]))),
+    CONSTRAINT cmo_voice_events_field_check CHECK ((field = ANY (ARRAY['voice'::text, 'avoid'::text]))),
+    CONSTRAINT cmo_voice_events_one_target CHECK (((correction_id IS NULL) <> (field IS NULL))),
+    CONSTRAINT cmo_voice_events_size CHECK (((octet_length(COALESCE((before)::text, ''::text)) <= 8192) AND (octet_length(COALESCE((after)::text, ''::text)) <= 8192))),
+    CONSTRAINT cmo_voice_events_source_check CHECK ((source = ANY (ARRAY['setup'::text, 'you'::text, 'edits'::text, 'ratings'::text])))
+);
+
+
+--
+-- Name: cmo_voice_undo(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_voice_undo() RETURNS public.cmo_voice_events
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_event public.cmo_voice_events;
+  v_doc public.marketing_documents;
+begin
+  perform pg_advisory_xact_lock(hashtextextended(v_user::text || ':voice', 1713));
+  select * into v_event from public.cmo_voice_events
+  where user_id = v_user and undone_at is null order by seq desc limit 1 for update;
+  if not found then
+    raise exception 'There is nothing to undo.' using errcode = 'P0002';
+  end if;
+  perform set_config('opencmo.voice_undo', 'on', true);
+  if v_event.correction_id is not null then
+    update public.cmo_corrections
+    set rule = coalesce(v_event.before #>> '{}', rule),
+        status = case v_event.before_status when 'active' then 'active' else 'rejected' end,
+        decided_at = now()
+    where id = v_event.correction_id and user_id = v_user;
+  else
+    perform pg_advisory_xact_lock(hashtextextended(v_user::text || ':doc:strategy', 1713));
+    select * into v_doc from public.marketing_documents
+    where user_id = v_user and kind = 'strategy' order by version desc limit 1;
+    if found then
+      insert into public.marketing_documents (user_id, kind, version, body, created_by)
+      values (v_user, 'strategy', v_doc.version + 1,
+        case when v_event.before is null then v_doc.body - v_event.field
+          else jsonb_set(v_doc.body, array[v_event.field], v_event.before) end, 'user');
+    end if;
+  end if;
+  perform set_config('opencmo.voice_undo', '', true);
+  update public.cmo_voice_events set undone_at = now() where id = v_event.id returning * into v_event;
+  return v_event;
+end;
+$$;
 
 
 --
@@ -8460,6 +8607,41 @@ begin
   where task_id = p_task_id and status = 'running';
   get diagnostics v_rows = row_count;
   return v_rows = 1;
+end;
+$$;
+
+
+--
+-- Name: marketing_documents_voice_events(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.marketing_documents_voice_events() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_prev jsonb;
+  v_field text;
+begin
+  if new.kind <> 'strategy' or coalesce(current_setting('opencmo.voice_undo', true), '') = 'on' then
+    return new;
+  end if;
+  begin
+    select body into v_prev from public.marketing_documents
+    where user_id = new.user_id and kind = 'strategy' and version < new.version
+    order by version desc limit 1;
+    foreach v_field in array array['voice', 'avoid'] loop
+      continue when (v_prev->v_field) is not distinct from (new.body->v_field);
+      continue when v_prev is null and new.body->v_field is null;
+      insert into public.cmo_voice_events (user_id, field, source, before, after)
+      values (new.user_id, v_field, case when new.created_by = 'user' then 'you' else 'setup' end,
+        v_prev->v_field, new.body->v_field);
+    end loop;
+  exception when others then
+    -- The history is a view of the change; never a reason a document is not saved.
+    raise warning 'voice event for document % failed: %', new.id, sqlerrm;
+  end;
+  return new;
 end;
 $$;
 
@@ -16256,6 +16438,20 @@ CREATE TABLE public.cmo_lessons (
 
 
 --
+-- Name: cmo_voice_events_seq_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.cmo_voice_events ALTER COLUMN seq ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.cmo_voice_events_seq_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
 -- Name: credit_ledger; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -17264,6 +17460,14 @@ ALTER TABLE ONLY public.cmo_runs
 
 
 --
+-- Name: cmo_voice_events cmo_voice_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cmo_voice_events
+    ADD CONSTRAINT cmo_voice_events_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: content_items content_items_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -18064,6 +18268,13 @@ CREATE INDEX cmo_runs_user_created_idx ON public.cmo_runs USING btree (user_id, 
 
 
 --
+-- Name: cmo_voice_events_user_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX cmo_voice_events_user_idx ON public.cmo_voice_events USING btree (user_id, seq DESC);
+
+
+--
 -- Name: content_items_caption_key; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -18806,6 +19017,13 @@ CREATE TRIGGER jobs_storage_expiry BEFORE UPDATE OF status, finished_at ON publi
 
 
 --
+-- Name: marketing_documents marketing_documents_voice_events; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER marketing_documents_voice_events AFTER INSERT ON public.marketing_documents FOR EACH ROW EXECUTE FUNCTION public.marketing_documents_voice_events();
+
+
+--
 -- Name: marketing_documents marketing_documents_write_budget; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -19241,6 +19459,22 @@ ALTER TABLE ONLY public.cmo_memories
 
 ALTER TABLE ONLY public.cmo_runs
     ADD CONSTRAINT cmo_runs_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: cmo_voice_events cmo_voice_events_correction_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cmo_voice_events
+    ADD CONSTRAINT cmo_voice_events_correction_id_fkey FOREIGN KEY (correction_id) REFERENCES public.cmo_corrections(id) ON DELETE CASCADE;
+
+
+--
+-- Name: cmo_voice_events cmo_voice_events_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cmo_voice_events
+    ADD CONSTRAINT cmo_voice_events_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
 
 
 --
@@ -20147,6 +20381,12 @@ ALTER TABLE public.cmo_memories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.cmo_runs ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: cmo_voice_events; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.cmo_voice_events ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: content_items; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -20550,6 +20790,13 @@ CREATE POLICY "read own studio steps" ON public.studio_steps FOR SELECT TO authe
 --
 
 CREATE POLICY "read own turn ratings" ON public.agent_turn_ratings FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
+
+
+--
+-- Name: cmo_voice_events read own voice events; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "read own voice events" ON public.cmo_voice_events FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
 
 
 --
