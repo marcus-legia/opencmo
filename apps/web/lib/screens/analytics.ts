@@ -8,6 +8,8 @@ import { z } from "zod";
 import { AccountSchema, PlatformSchema, WhereSchema, day, iso } from "./common";
 
 export const RANGES = [7, 30, 90] as const;
+/** The rows of "Best times to post"; a post counts in the nearest one. */
+export const BEST_HOURS = [9, 12, 15, 18, 21] as const;
 export const RangeSchema = z.union([z.literal(7), z.literal(30), z.literal(90)]);
 export type Range = z.infer<typeof RangeSchema>;
 
@@ -56,7 +58,14 @@ export const AnalyticsScreenSchema = z.object({
       vsMedian: z.number().min(0).nullable(),
       read: z.string().max(200).nullable(),
       url: z.url().nullable(),
+      /** When it went out; the row says the day. */
+      publishedAt: iso.optional(),
     }),
   ),
+  /**
+   * "Best times to post": rows are the hours in `BEST_HOURS`, columns Monday to Sunday, each 0 to 3 (darker means more
+   * views per post than the median, in the founder's time zone). Null until enough posts went out to say.
+   */
+  bestTimes: z.array(z.array(z.number().int().min(0).max(3)).length(7)).length(5).nullable().optional(),
 });
 export type AnalyticsScreen = z.infer<typeof AnalyticsScreenSchema>;

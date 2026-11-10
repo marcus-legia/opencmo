@@ -94,44 +94,44 @@ html[data-theme="dark"] .td-scrim { background: rgba(0, 0, 0, .5); }
 html[data-ui="v2"] .k :is(h1, h2, h3, h4) { font-family: Geist, ui-sans-serif, system-ui, sans-serif; }
 html[data-ui="v2"] .k .td-chat .cmo-chat-head h2 { font: 500 12.5px Geist, ui-sans-serif, system-ui, sans-serif; letter-spacing: 0; color: var(--text); }
 
-/* ---- an approval card opened in a feed row (Main.dc.html `.detail`) ----
+/* ---- an approval card opened in place: a feed row (Main.dc.html `.detail`) or the Calendar drawer ----
    The card is the real component (every kind keeps its actions); here it takes the artboard's look: no box of its own,
    no head (the row is the head), the artboard's buttons, fields and type. Inside the inverted first row, the artboard's
    tokens switch to its inverted ones first, so the card follows. */
 .pg-main .item.inv .detail { --text: var(--inv-text); --muted: var(--inv-muted); --subtle: var(--inv-muted); --line: var(--inv-line); --line-2: var(--inv-line); --bg: var(--inv); --panel: var(--inv-panel); --raised: var(--inv); --hover: var(--inv); color: var(--inv-text); }
-.pg-main .detail {
+.td-cardhost {
   --v2-ink: var(--text); --v2-ink2: var(--muted); --v2-ink3: var(--subtle); --v2-line: var(--line); --v2-line2: var(--line-2);
   --v2-paper: var(--bg); --v2-paper2: var(--panel); --v2-paper3: var(--raised); --v2-card: var(--bg); --v2-hover: var(--hover);
   --v2-brand: var(--accent); --v2-brand-deep: var(--accent); --v2-sans: Geist, ui-sans-serif, system-ui, sans-serif; --v2-mono: "Geist Mono", ui-monospace, monospace;
 }
-.pg-main .detail .v2-card { border: 0; border-radius: 0; background: transparent; box-shadow: none; overflow: visible; color: inherit; font-family: Geist, ui-sans-serif, system-ui, sans-serif; }
-.pg-main .detail .v2-card-heading { display: none; }
-.pg-main .detail .v2-card-heading + .v2-card-body, .pg-main .detail .v2-card-body { padding: 0; gap: 12px; }
-.pg-main .detail .v2-card-text { margin: 0; font-size: 14.5px; line-height: 1.55; color: var(--text); }
-.pg-main .detail :is(.v2-mono, .v2-card-meta, .v2-muted, .v2-card-captions-head, .v2-card-options legend, .v2-card-edit-label, .v2-numeral) { font: 400 11.5px Geist, ui-sans-serif, system-ui, sans-serif; letter-spacing: 0; text-transform: none; color: var(--subtle); }
-.pg-main .detail .v2-card-meta a, .pg-main .detail .v2-card-link { color: var(--text); }
-.pg-main .detail :is(.v2-card-draft, .v2-card-quote, .v2-card-facts > div, .v2-card-caption, .v2-card-edits li, .v2-card-slides li, .v2-card-beats li[data-editing]) { border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); }
-.pg-main .detail .v2-card-quote { border-width: 0 0 0 2px; border-color: var(--line-2); border-radius: 0 6px 6px 0; color: var(--muted); }
-.pg-main .detail .v2-card-state { border-radius: 8px; font-size: 12.5px; }
-.pg-main .detail .v2-card-state b { font: 600 12px Geist, ui-sans-serif, system-ui, sans-serif; text-transform: none; }
-.pg-main .detail .v2-chip { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 999px; border: 1px solid var(--line); background: var(--raised); color: var(--muted); font: 400 11.5px Geist, ui-sans-serif, system-ui, sans-serif; }
-.pg-main .detail .v2-actions { justify-content: flex-end; gap: 8px; }
-.pg-main .detail .v2-button { min-height: 0; height: 32px; padding: 0 12px; border-radius: 7px; font: 400 13px Geist, ui-sans-serif, system-ui, sans-serif; letter-spacing: 0; text-transform: none; }
-.pg-main .detail .v2-button.is-primary { padding: 0 14px; border: 0; background: var(--accent); color: var(--accent-ink); font-weight: 600; }
-.pg-main .detail .v2-button.is-primary:hover { background: var(--accent-hover); }
-.pg-main .item.inv .detail .v2-button.is-primary { background: var(--inv-text); color: var(--inv); }
-.pg-main .detail .v2-button.is-secondary { border: 1px solid var(--line-2); background: transparent; color: var(--text); }
-.pg-main .detail .v2-button.is-secondary:hover { background: var(--hover); }
-.pg-main .detail .v2-button.is-quiet { padding: 0 10px; border: 0; background: transparent; color: var(--muted); }
-.pg-main .detail .v2-button.is-danger { border: 1px solid var(--line-2); background: transparent; color: var(--text); }
-.pg-main .detail .v2-input { min-height: 0; height: 32px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--text); font: 400 13px Geist, ui-sans-serif, system-ui, sans-serif; }
-.pg-main .detail textarea.v2-input { height: auto; min-height: 96px; font-size: 14px; line-height: 1.55; }
-.pg-main .detail .v2-field { color: var(--muted); font-size: 12px; }
-.pg-main .detail .v2-toggle-track { width: 30px; height: 18px; border: 0; border-radius: 999px; background: var(--line-2); }
-.pg-main .detail .v2-toggle-track::after { top: 2px; left: 2px; width: 14px; height: 14px; background: #fff; box-shadow: none; }
-.pg-main .detail .v2-toggle[aria-checked="true"] .v2-toggle-track { background: var(--accent); }
-.pg-main .detail .v2-toggle[aria-checked="true"] .v2-toggle-track::after { transform: translateX(12px); }
-.pg-main .detail .v2-toggle { min-height: 32px; color: var(--text); font-size: 12.5px; }
+.td-cardhost .v2-card { border: 0; border-radius: 0; background: transparent; box-shadow: none; overflow: visible; color: inherit; font-family: Geist, ui-sans-serif, system-ui, sans-serif; }
+.td-cardhost .v2-card-heading { display: none; }
+.td-cardhost .v2-card-heading + .v2-card-body, .td-cardhost .v2-card-body { padding: 0; gap: 12px; }
+.td-cardhost .v2-card-text { margin: 0; font-size: 14.5px; line-height: 1.55; color: var(--text); }
+.td-cardhost :is(.v2-mono, .v2-card-meta, .v2-muted, .v2-card-captions-head, .v2-card-options legend, .v2-card-edit-label, .v2-numeral) { font: 400 11.5px Geist, ui-sans-serif, system-ui, sans-serif; letter-spacing: 0; text-transform: none; color: var(--subtle); }
+.td-cardhost .v2-card-meta a, .td-cardhost .v2-card-link { color: var(--text); }
+.td-cardhost :is(.v2-card-draft, .v2-card-quote, .v2-card-facts > div, .v2-card-caption, .v2-card-edits li, .v2-card-slides li, .v2-card-beats li[data-editing]) { border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); }
+.td-cardhost .v2-card-quote { border-width: 0 0 0 2px; border-color: var(--line-2); border-radius: 0 6px 6px 0; color: var(--muted); }
+.td-cardhost .v2-card-state { border-radius: 8px; font-size: 12.5px; }
+.td-cardhost .v2-card-state b { font: 600 12px Geist, ui-sans-serif, system-ui, sans-serif; text-transform: none; }
+.td-cardhost .v2-chip { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 999px; border: 1px solid var(--line); background: var(--raised); color: var(--muted); font: 400 11.5px Geist, ui-sans-serif, system-ui, sans-serif; }
+.td-cardhost .v2-actions { justify-content: flex-end; gap: 8px; }
+.td-cardhost .v2-button { min-height: 0; height: 32px; padding: 0 12px; border-radius: 7px; font: 400 13px Geist, ui-sans-serif, system-ui, sans-serif; letter-spacing: 0; text-transform: none; }
+.td-cardhost .v2-button.is-primary { padding: 0 14px; border: 0; background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.td-cardhost .v2-button.is-primary:hover { background: var(--accent-hover); }
+.item.inv .td-cardhost .v2-button.is-primary { background: var(--inv-text); color: var(--inv); }
+.td-cardhost .v2-button.is-secondary { border: 1px solid var(--line-2); background: transparent; color: var(--text); }
+.td-cardhost .v2-button.is-secondary:hover { background: var(--hover); }
+.td-cardhost .v2-button.is-quiet { padding: 0 10px; border: 0; background: transparent; color: var(--muted); }
+.td-cardhost .v2-button.is-danger { border: 1px solid var(--line-2); background: transparent; color: var(--text); }
+.td-cardhost .v2-input { min-height: 0; height: 32px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--text); font: 400 13px Geist, ui-sans-serif, system-ui, sans-serif; }
+.td-cardhost textarea.v2-input { height: auto; min-height: 96px; font-size: 14px; line-height: 1.55; }
+.td-cardhost .v2-field { color: var(--muted); font-size: 12px; }
+.td-cardhost .v2-toggle-track { width: 30px; height: 18px; border: 0; border-radius: 999px; background: var(--line-2); }
+.td-cardhost .v2-toggle-track::after { top: 2px; left: 2px; width: 14px; height: 14px; background: #fff; box-shadow: none; }
+.td-cardhost .v2-toggle[aria-checked="true"] .v2-toggle-track { background: var(--accent); }
+.td-cardhost .v2-toggle[aria-checked="true"] .v2-toggle-track::after { transform: translateX(12px); }
+.td-cardhost .v2-toggle { min-height: 32px; color: var(--text); font-size: 12.5px; }
 /* The version switch of a post card as the artboard's `.vt`. */
-.pg-main .detail .v2-card-versions { display: inline-flex; gap: 2px; padding: 2px; border-radius: 7px; background: var(--bg); border: 1px solid var(--line); }
-.pg-main .detail .v2-card-versions .v2-card-link { height: 24px; min-height: 0; padding: 0 9px; border-radius: 5px; color: var(--muted); font-size: 12px; text-decoration: none; }
+.td-cardhost .v2-card-versions { display: inline-flex; gap: 2px; padding: 2px; border-radius: 7px; background: var(--bg); border: 1px solid var(--line); }
+.td-cardhost .v2-card-versions .v2-card-link { height: 24px; min-height: 0; padding: 0 9px; border-radius: 5px; color: var(--muted); font-size: 12px; text-decoration: none; }

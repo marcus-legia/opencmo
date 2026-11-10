@@ -113,7 +113,7 @@ function Row({
           {actions}
         </div>
       )}
-      {open && children ? <div className="detail">{children}</div> : null}
+      {open && children ? <div className="detail td-cardhost">{children}</div> : null}
     </div>
   );
 }
