@@ -8,15 +8,20 @@ import { ApiError, api, jsonBody } from "@/components/clipping/api";
 import { CAPTION_ACTION, DECIDABLE_IN_WAVE_1, type ApprovalCard, type Caption, type ScheduleOptions } from "@/lib/screens/approval-card";
 import { PLATFORM_LABEL } from "@/lib/screens/common";
 
+import type { DraftReason } from "./labels";
 import { formatWhen } from "./schedule";
 
 /** The actions `approval_decide` accepts, per kind (contract doc S3). */
 export type Decision =
-  /** `drop` (week plan card): the items the founder unticked; they are removed if still only planned. */
-  | { action: "approve"; text?: string; drop?: string[] }
+  /**
+   * `drop` (week plan card): the items the founder unticked; they are removed if still only planned. `reasonCode`
+   * (post card, edited): what the founder fixed, picked once and optional (cmo-review-3 2.1).
+   */
+  | { action: "approve"; text?: string; drop?: string[]; reasonCode?: DraftReason }
   /** `beat` (script cards): the beat whose words `text` replaces; absent, `text` is the whole draft. */
   | { action: "edit"; text: string; beat?: number }
-  | { action: "skip"; reason?: string }
+  /** `reasonCode` (post card): the chip picked; `reason` the founder's own words ("Something else"). */
+  | { action: "skip"; reason?: string; reasonCode?: DraftReason }
   | { action: "replied" }
   | { action: "dismissed"; reason?: string }
   | { action: "reject"; reason?: string }

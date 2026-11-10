@@ -117,6 +117,9 @@ batching is by row (one `short_batch` for the shorts of one video) rather than a
    (MCP: a confirm code lasts 600 s). Expired cards ask again; they never run late.
 5. **Reminders never decide.** Email or push opens the card; no approve button in an email (mail scanners open links).
 6. **Every decision teaches.** Approve-as-is, edits and their mode, send-back and skip reasons go to the brain's memory.
+   A post's Skip offers reasons as chips, and an edited approve asks once, optional, "What did you fix?"
+   (cmo-review-3 2.1): a chip that names an edit is the founder's label (`labelled_by = 'founder'`), never relabelled
+   by the classifier, and two of a kind in 14 days propose a rule (the model's labels need three).
 
 ## 7. Reaching a founder who is not in the app
 

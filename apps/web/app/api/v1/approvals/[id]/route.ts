@@ -43,6 +43,8 @@ const body = z.object({
   /** Price card: the keyframe (0-based) to make again. */
   index: z.number().int().min(0).max(100).optional(),
   reason: z.string().trim().max(400).optional(),
+  /** Post card, `skip` or an edited `approve`: the chip the founder picked (cmo-review-3 2.1); SQL checks the list too. */
+  reasonCode: z.enum(["TOO_SALESY", "WRONG_VOICE", "INVENTED_CLAIM", "TOO_LONG", "HOOK_REWRITTEN", "OFF_TOPIC", "OTHER"]).optional(),
   goal: z.string().trim().max(300).optional(),
   target: z.number().int().min(1).max(1_000_000).optional(),
   /** Schedule card, `change_time`: the new time, with its offset. */
@@ -66,9 +68,10 @@ export const POST = withApi(
   { body, rateLimit: { bucket: "presets", limit: 60, windowSeconds: 3600 } },
   async ({ supabase, user, body, params }) => {
     if (!UUID.test(params.id ?? "")) throw new ApiError(404, "Card not found.");
-    const { action, contentHash, publishAt, accountId, options, ...rest } = body;
-    // SQL reads the schedule fields by their column names.
+    const { action, contentHash, publishAt, accountId, options, reasonCode, ...rest } = body;
+    // SQL reads the schedule fields and the chip by their column names.
     const schedule = {
+      ...(reasonCode !== undefined && { reason_code: reasonCode }),
       ...(publishAt !== undefined && { publish_at: publishAt }),
       ...(accountId !== undefined && { account_id: accountId }),
       ...(options !== undefined && { options }),

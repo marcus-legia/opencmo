@@ -100,3 +100,19 @@ export function approvedLine(card: ApprovalCard): string {
       return "You approved the week plan";
   }
 }
+
+/**
+ * The reasons a founder can pick on a post draft (cmo-review-3 2.1), in the order the card shows them. Codes are the
+ * values `approval_decide` checks (`cmo_reason_label` in SQL holds the same names); the first five are also edit labels,
+ * so a pick teaches the CMO at once. `OTHER` opens the free text box.
+ */
+export const DRAFT_REASONS = [
+  { code: "TOO_SALESY", label: "Too salesy" },
+  { code: "WRONG_VOICE", label: "Doesn't sound like me" },
+  { code: "INVENTED_CLAIM", label: "Made something up" },
+  { code: "TOO_LONG", label: "Too long" },
+  { code: "HOOK_REWRITTEN", label: "Weak first line" },
+  { code: "OFF_TOPIC", label: "Off topic" },
+  { code: "OTHER", label: "Something else" },
+] as const;
+export type DraftReason = (typeof DRAFT_REASONS)[number]["code"];

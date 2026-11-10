@@ -34,7 +34,8 @@ import { useConnectedPlatforms } from "./connected";
 import { openScript } from "./open-script";
 import { blockedReason, editCaption, type Decision } from "./decide";
 import { renderAgain, saveSlideText, slidesHref } from "./slides";
-import { NUMERAL, cardHead, headNote } from "./labels";
+import { NUMERAL, cardHead, headNote, type DraftReason } from "./labels";
+import { ReasonChips } from "./ReasonChips";
 import { approveBlocked, formatWhen, fromLocalInput, sameOptions, savedOptions, toLocalInput } from "./schedule";
 
 export type DecideHandler = (card: Card, decision: Decision) => Promise<boolean>;
@@ -71,6 +72,9 @@ const DECLINE: Partial<Record<Card["kind"], { label: string; action: "skip" | "d
   schedule: { label: "Cancel", action: "cancel" },
   plan: { label: "Skip", action: "skip" },
 };
+
+/** What an edited approve can say it fixed: the chips that are edit labels (cmo-review-3 2.1). */
+const FIX_REASONS: readonly DraftReason[] = ["TOO_SALESY", "WRONG_VOICE", "INVENTED_CLAIM", "TOO_LONG", "HOOK_REWRITTEN"];
 
 function firstText(card: Card): string {
   if (card.body.kind === "post") return card.body.platforms[0]?.versions[0] ?? "";
@@ -124,6 +128,8 @@ export function ApprovalCard({
   /** Script card: the beat being edited. */
   const [beat, setBeat] = useState(0);
   const [reason, setReason] = useState("");
+  /** Post card: the chip picked on Skip, or as "What did you fix?" on an edited approve (cmo-review-3 2.1). */
+  const [reasonCode, setReasonCode] = useState<DraftReason | null>(null);
   /** Schedule card: the platform's fields as the founder is changing them, and the change-time picker. */
   const [options, setOptions] = useState<ScheduleOptions>(() => (card.body.kind === "schedule" ? card.body.options : {}));
   const [moving, setMoving] = useState(false);
@@ -242,7 +248,9 @@ export function ApprovalCard({
     // The first version is what the card's hash covers as is; any other text is sent as the founder's edit.
     if (card.kind === "post") {
       const text = editing ? draft.trim() : shown;
-      return run({ action: "approve", text: text !== firstText(card) ? text : undefined });
+      // The chip goes only with words the founder changed; picking another version as written is not an edit.
+      const fixed = editing && text !== shown && reasonCode && FIX_REASONS.includes(reasonCode) ? reasonCode : undefined;
+      return run({ action: "approve", text: text !== firstText(card) ? text : undefined, ...(fixed ? { reasonCode: fixed } : {}) });
     }
     if (card.kind === "correction" && editing) return run({ action: "edit", text: draft.trim() });
     if (card.kind === "script" && editing) {
@@ -463,6 +471,9 @@ export function ApprovalCard({
             <CorrectionBody body={card.body} editing={editing} draft={draft} onDraft={setDraft} />
           )}
 
+          {card.body.kind === "post" && editing && draft.trim() !== shown && card.status === "waiting" ? (
+            <ReasonChips label="What did you fix? Optional: your CMO learns from it." value={reasonCode} onChange={setReasonCode} only={FIX_REASONS} disabled={busy} />
+          ) : null}
           {proposed ? (
             <p className="v2-card-meta" data-testid="post-when">
               {postWhen(proposed)}
@@ -539,13 +550,24 @@ export function ApprovalCard({
               className="v2-card-decline"
               onSubmit={(event) => {
                 event.preventDefault();
+                if (card.kind === "post") {
+                  // Words of their own only with "Something else"; a chip alone says it.
+                  const words = reasonCode === "OTHER" ? reason.trim() || undefined : undefined;
+                  void run({ action: "skip", ...(reasonCode ? { reasonCode } : {}), ...(words ? { reason: words } : {}) });
+                  return;
+                }
                 void run({ action: decline.action, reason: reason.trim() || undefined });
               }}
             >
-              <label className="v2-field">
-                <span>Why? Your CMO learns from it (optional)</span>
-                <input className="v2-input" value={reason} maxLength={400} autoFocus onChange={(event) => setReason(event.target.value)} />
-              </label>
+              {card.kind === "post" ? (
+                <ReasonChips label="Why skip it? Optional: your CMO learns from it." value={reasonCode} onChange={setReasonCode} disabled={busy} />
+              ) : null}
+              {card.kind !== "post" || reasonCode === "OTHER" ? (
+                <label className="v2-field">
+                  <span>{card.kind === "post" ? "What was wrong with it?" : "Why? Your CMO learns from it (optional)"}</span>
+                  <input className="v2-input" value={reason} maxLength={400} autoFocus onChange={(event) => setReason(event.target.value)} />
+                </label>
+              ) : null}
               <div className="v2-actions">
                 <Button type="submit" variant="primary" compact disabled={busy}>
                   {decline.label}

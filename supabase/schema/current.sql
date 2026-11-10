@@ -1629,6 +1629,7 @@ declare
   v_caption public.content_items;
   v_title text;
   v_slot public.schedule_slots;
+  v_code text := nullif(v_payload->>'reason_code', '');
 begin
   if jsonb_typeof(v_payload) <> 'object' then
     raise exception 'The decision is malformed.' using errcode = '22023';
@@ -1700,7 +1701,16 @@ begin
       if p_action not in ('approve', 'skip') then
         raise exception 'Choose approve or skip.' using errcode = '22023';
       end if;
-      perform public.cmo_decide_post(v_row.ref_id, p_action, v_payload->>'text', v_payload->>'reason');
+      -- The founder's chip (cmo-review-3 2.1): checked here, kept on the decision's outcome. Without words of their
+      -- own, the chip's name is the skip reason the planner and the voice note read.
+      if v_code is not null and public.cmo_reason_label(v_code) is null then
+        raise exception 'Pick one of the reasons on the card.' using errcode = '22023';
+      end if;
+      if p_action = 'skip' and v_reason is null and v_code is not null and v_code <> 'OTHER' then
+        v_reason := public.cmo_reason_label(v_code);
+      end if;
+      perform public.cmo_decide_post(v_row.ref_id, p_action, v_payload->>'text', coalesce(v_payload->>'reason', v_reason));
+      perform public.cmo_label_outcome(v_user, v_row.ref_id, v_code);
     when 'reply' then
       if p_action not in ('replied', 'dismissed') then
         raise exception 'Choose replied or dismissed.' using errcode = '22023';
@@ -4183,6 +4193,31 @@ $$;
 
 
 --
+-- Name: cmo_label_outcome(uuid, uuid, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_label_outcome(p_user uuid, p_item uuid, p_code text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_mode text := case when p_code in ('TOO_SALESY', 'WRONG_VOICE', 'INVENTED_CLAIM', 'TOO_LONG', 'HOOK_REWRITTEN') then p_code end;
+begin
+  if p_code is null then
+    return;
+  end if;
+  update public.cmo_draft_outcomes
+  set reason_code = p_code,
+      labelled_by = case when v_mode is not null then 'founder' else labelled_by end,
+      edit_mode = coalesce(v_mode, edit_mode),
+      classified_at = case when v_mode is not null then now() else classified_at end
+  where user_id = p_user and item_id = p_item and department = 'post'
+    and (action = 'skip' or edit_mode is distinct from 'NO_MEANINGFUL_EDIT');
+end;
+$$;
+
+
+--
 -- Name: cmo_mark_posted(uuid, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -4510,6 +4545,25 @@ CREATE FUNCTION public.cmo_read_limit(p_bucket text) RETURNS integer
     when 'chat_social' then 120 when 'chat_site' then 30
     when 'research_credits' then 30
     else 0 end
+$$;
+
+
+--
+-- Name: cmo_reason_label(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_reason_label(p_code text) RETURNS text
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO 'public'
+    AS $$
+  select case p_code
+    when 'TOO_SALESY' then 'Too salesy'
+    when 'WRONG_VOICE' then 'Doesn''t sound like me'
+    when 'INVENTED_CLAIM' then 'Made something up'
+    when 'TOO_LONG' then 'Too long'
+    when 'HOOK_REWRITTEN' then 'Weak first line'
+    when 'OFF_TOPIC' then 'Off topic'
+    when 'OTHER' then 'Something else' end
 $$;
 
 
@@ -5146,8 +5200,9 @@ begin
                                       'TOO_LONG', 'HOOK_REWRITTEN', 'CTA_REMOVED', 'FULL_REWRITE') then
     raise exception 'Unknown edit mode.' using errcode = '22023';
   end if;
-  update public.cmo_draft_outcomes set edit_mode = p_mode, classified_at = now()
-  where id = p_id and classified_at is null;
+  -- A founder's label is never overwritten: it sets `classified_at`, and is checked here too.
+  update public.cmo_draft_outcomes set edit_mode = p_mode, classified_at = now(), labelled_by = 'model'
+  where id = p_id and classified_at is null and labelled_by is distinct from 'founder';
   return found;
 end;
 $$;
@@ -5958,12 +6013,15 @@ declare
   v_rule text;
   v_since timestamptz;
   v_n integer;
+  v_founder integer;
   v_edits jsonb;
   v_id uuid;
 begin
   select * into v_o from public.cmo_draft_outcomes where id = p_outcome;
   v_rule := public.correction_rule(v_o.edit_mode);
-  if v_o.id is null or v_rule is null or v_o.department <> 'post' or v_o.action <> 'approve' then
+  -- An approve's label (the founder's or the model's), or a skip the founder labelled with a chip (cmo-review-3 2.1).
+  if v_o.id is null or v_rule is null or v_o.department <> 'post'
+     or not (v_o.action = 'approve' or (v_o.action = 'skip' and v_o.labelled_by = 'founder')) then
     return null;
   end if;
   -- The same lock as `cmo_propose_correction`: one proposal at a time per founder.
@@ -5973,9 +6031,11 @@ begin
   end if;
   v_since := greatest(now() - interval '14 days', coalesce((
     select max(created_at) from public.cmo_corrections where user_id = v_o.user_id and edit_mode = v_o.edit_mode), '-infinity'));
-  select count(*) into v_n from public.cmo_draft_outcomes
-  where user_id = v_o.user_id and department = 'post' and action = 'approve' and edit_mode = v_o.edit_mode and decided_at > v_since;
-  if v_n < 3 then
+  select count(*), count(*) filter (where labelled_by = 'founder') into v_n, v_founder from public.cmo_draft_outcomes
+  where user_id = v_o.user_id and department = 'post' and edit_mode = v_o.edit_mode and decided_at > v_since
+    and (action = 'approve' or (action = 'skip' and labelled_by = 'founder'));
+  -- The founder said it twice; the model needs three to be sure.
+  if v_founder < 2 and v_n < 3 then
     return null;
   end if;
   -- An approved rule with the same words already holds; five waiting rules are enough for one founder.
@@ -15927,10 +15987,13 @@ CREATE TABLE public.cmo_draft_outcomes (
     outcome_replies integer,
     outcome_checked_at timestamp with time zone,
     outcome_status text,
+    reason_code text,
+    labelled_by text,
     CONSTRAINT cmo_draft_outcomes_action_check CHECK ((action = ANY (ARRAY['approve'::text, 'skip'::text, 'replied'::text, 'dismissed'::text]))),
     CONSTRAINT cmo_draft_outcomes_chosen_version_check CHECK (((chosen_version >= 0) AND (chosen_version <= 2))),
     CONSTRAINT cmo_draft_outcomes_department_check CHECK ((department = ANY (ARRAY['post'::text, 'sales'::text]))),
     CONSTRAINT cmo_draft_outcomes_edit_mode_check CHECK ((edit_mode = ANY (ARRAY['NO_MEANINGFUL_EDIT'::text, 'TOO_SALESY'::text, 'WRONG_VOICE'::text, 'INVENTED_CLAIM'::text, 'TOO_LONG'::text, 'HOOK_REWRITTEN'::text, 'CTA_REMOVED'::text, 'FULL_REWRITE'::text]))),
+    CONSTRAINT cmo_draft_outcomes_labelled_by_check CHECK ((labelled_by = ANY (ARRAY['founder'::text, 'model'::text]))),
     CONSTRAINT cmo_draft_outcomes_model_check CHECK ((char_length(model) <= 100)),
     CONSTRAINT cmo_draft_outcomes_outcome_replies_check CHECK (((outcome_replies >= 0) AND (outcome_replies <= 1000000))),
     CONSTRAINT cmo_draft_outcomes_outcome_status_check CHECK ((outcome_status = ANY (ARRAY['found'::text, 'not_found'::text, 'gone'::text]))),
@@ -15938,6 +16001,7 @@ CREATE TABLE public.cmo_draft_outcomes (
     CONSTRAINT cmo_draft_outcomes_outcome_votes_check CHECK (((outcome_votes >= '-100000'::integer) AND (outcome_votes <= 10000000))),
     CONSTRAINT cmo_draft_outcomes_platform_check CHECK (((platform IS NULL) OR (public.platform_profile(platform) IS NOT NULL))),
     CONSTRAINT cmo_draft_outcomes_prompt_version_check CHECK ((char_length(prompt_version) <= 40)),
+    CONSTRAINT cmo_draft_outcomes_reason_code_check CHECK ((reason_code = ANY (ARRAY['TOO_SALESY'::text, 'WRONG_VOICE'::text, 'INVENTED_CLAIM'::text, 'TOO_LONG'::text, 'HOOK_REWRITTEN'::text, 'OFF_TOPIC'::text, 'OTHER'::text]))),
     CONSTRAINT cmo_draft_outcomes_similarity_check CHECK (((similarity >= (0)::double precision) AND (similarity <= (1)::double precision)))
 );
 
