@@ -4652,11 +4652,18 @@ begin
   v_free := v_root.budget_credits - v_root.spent_credits - coalesce((
     select sum(budget_credits - spent_credits) from public.work_orders
     where parent_id = v_root.id and status not in ('done', 'failed', 'cancelled')), 0);
+  -- The founder confirmed this price on the chat's card, so it is theirs to spend, not the brain's weekly budget: when
+  -- the week has less than the price left, the root grows by what is missing and the order spends exactly that. The
+  -- brain gets no more room for its own work, and the order is never "over budget" for a charge the founder chose.
+  if greatest(v_free, 0) < v_price then
+    update public.work_orders set budget_credits = budget_credits + (v_price - greatest(v_free, 0)), updated_at = now()
+    where id = v_root.id;
+  end if;
   v_order := public.work_order_create(v_user, v_root.week, v_root.id, 'write_video_brief',
     left('Script for “' || v_item.idea || '”', 200),
     jsonb_build_object('objective', v_item.idea, 'reason', 'Asked in the CMO chat', 'platform', v_item.platform,
       'done_when', 'The founder approved the script.'),
-    least(v_price, greatest(v_free, 0)), (v_item.day + interval '23 hours 59 minutes') at time zone 'UTC', '{}', 'chat',
+    v_price, (v_item.day + interval '23 hours 59 minutes') at time zone 'UTC', '{}', 'chat',
     v_item.id);
   v_input := jsonb_build_object('idea', v_item.idea, 'reason', 'Asked in the CMO chat', 'seconds', public.cmo_video_seconds(),
     'aspect', '9:16', 'platform', v_item.platform, 'order_id', v_order.id, 'source', 'chat')
@@ -5646,8 +5653,11 @@ begin
     if coalesce(v_item->>'platform', 'reddit') not in ('reddit', 'hn') then
       raise exception 'A conversation comes from Reddit or Hacker News.' using errcode = '22023';
     end if;
-    v_karma := case when jsonb_typeof(v_item->'min_karma') = 'number' then (v_item->>'min_karma')::numeric::integer end;
-    v_age := case when jsonb_typeof(v_item->'min_account_age_days') = 'number' then (v_item->>'min_account_age_days')::numeric::integer end;
+    -- Clamped while still numeric: a huge number (1e10) cast to integer first would abort the whole scan's save.
+    v_karma := case when jsonb_typeof(v_item->'min_karma') = 'number' and (v_item->>'min_karma')::numeric between 0 and 1000000
+      then (v_item->>'min_karma')::numeric::integer end;
+    v_age := case when jsonb_typeof(v_item->'min_account_age_days') = 'number' and (v_item->>'min_account_age_days')::numeric between 0 and 3650
+      then (v_item->>'min_account_age_days')::numeric::integer end;
     insert into public.opportunities (
       user_id, run_id, platform, url, community, title, author, snippet, posted_at, comments, score, score_parts, reply,
       priority, gen, rule, rule_why, min_karma, min_account_age_days
@@ -5757,6 +5767,10 @@ begin
   v_beat := (v_order.brief->'storyboard'->(p_beat - 1))
     || case when v_say is not null then jsonb_build_object('say', v_say) else '{}'::jsonb end
     || case when v_show is not null then jsonb_build_object('show', v_show) else '{}'::jsonb end;
+  -- The order's brief is capped at 4096 bytes (`work_orders_brief_check`): say so in words before the constraint does.
+  if octet_length(jsonb_set(v_order.brief, array['storyboard', (p_beat - 1)::text], v_beat)::text) > 4096 then
+    raise exception 'This script is too long to save. Shorten this beat or another one.' using errcode = '22023';
+  end if;
   update public.work_orders set brief = jsonb_set(brief, array['storyboard', (p_beat - 1)::text], v_beat), updated_at = clock_timestamp()
   where id = v_order.id
   returning * into v_order;

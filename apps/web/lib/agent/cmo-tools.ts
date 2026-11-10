@@ -245,8 +245,9 @@ export type PricedTask = { input: z.infer<typeof taskInput>; card: PriceCard };
 /** The card for a priced task, or null when `create_task` runs at once (a free or dated task, or input it refuses). */
 export function pricedTaskCard(input: unknown): PricedTask | null {
   const parsed = taskInput.safeParse(input);
-  // `thread` belongs to x_writer: let create_task refuse it now instead of after the founder approved a card.
-  if (!parsed.success || !(parsed.data.agent in PRICED_AGENTS) || parsed.data.thread) return null;
+  // `thread` belongs to x_writer and `have_video` to video: let create_task refuse them now instead of after the
+  // founder approved a card for a task that could never start.
+  if (!parsed.success || !(parsed.data.agent in PRICED_AGENTS) || parsed.data.thread || (parsed.data.have_video && parsed.data.agent !== "video")) return null;
   const task = parsed.data;
   // A script is written at once whatever its day (the day is when the founder means to film), so it is priced on any
   // `when`; a reminder for a video the founder has costs nothing. Sales and research are priced when they run now.

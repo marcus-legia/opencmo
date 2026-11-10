@@ -67,7 +67,16 @@ export function formatScript(lines: ScriptLine[], maxWords = 2500): string {
 	return out.join('\n');
 }
 
-export const token = (text: string): string => text.toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^\p{L}\p{N}']+/gu, '').replace(/^'+|'+$/g, '');
+/** Quotes trimmed from both ends by index: a regex like /^'+|'+$/ backtracks on long runs of quotes (CodeQL). */
+function trimQuotes(text: string): string {
+	let start = 0;
+	let end = text.length;
+	while (start < end && text[start] === "'") start++;
+	while (end > start && text[end - 1] === "'") end--;
+	return text.slice(start, end);
+}
+
+export const token = (text: string): string => trimQuotes(text.toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^\p{L}\p{N}']+/gu, ''));
 
 const tokens = (text: string): string[] => text.split(/\s+/).map(token).filter(Boolean);
 

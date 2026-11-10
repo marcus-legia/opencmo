@@ -2,7 +2,7 @@
 -- calendar item with an "Upload video" button; only the Sunday plan wrote scripts (C1). Asked in the chat, the CMO now
 -- orders the same thing the week plan orders for a video item, in one transaction:
 --   1. the calendar item (`cmo_add_item`: the founder's own, with its limits);
---   2. the `write_video_brief` order on this week's root, budgeted as `work_orders_plan_week` budgets one;
+--   2. the `write_video_brief` order on this week's root, with the price as its budget (the founder confirmed it);
 --   3. the Writer run, which holds the price (`cmo_enqueue`: the paywall and the credit hold).
 -- Unlike `writer_order_start`, a refusal here (no plan, no credits, the daily cap) is not swallowed into a failed order:
 -- the whole order rolls back and the chat says why. The script card is raised when Writer finishes, as for the week
@@ -31,11 +31,18 @@ begin
   v_free := v_root.budget_credits - v_root.spent_credits - coalesce((
     select sum(budget_credits - spent_credits) from public.work_orders
     where parent_id = v_root.id and status not in ('done', 'failed', 'cancelled')), 0);
+  -- The founder confirmed this price on the chat's card, so it is theirs to spend, not the brain's weekly budget: when
+  -- the week has less than the price left, the root grows by what is missing and the order spends exactly that. The
+  -- brain gets no more room for its own work, and the order is never "over budget" for a charge the founder chose.
+  if greatest(v_free, 0) < v_price then
+    update public.work_orders set budget_credits = budget_credits + (v_price - greatest(v_free, 0)), updated_at = now()
+    where id = v_root.id;
+  end if;
   v_order := public.work_order_create(v_user, v_root.week, v_root.id, 'write_video_brief',
     left('Script for “' || v_item.idea || '”', 200),
     jsonb_build_object('objective', v_item.idea, 'reason', 'Asked in the CMO chat', 'platform', v_item.platform,
       'done_when', 'The founder approved the script.'),
-    least(v_price, greatest(v_free, 0)), (v_item.day + interval '23 hours 59 minutes') at time zone 'UTC', '{}', 'chat',
+    v_price, (v_item.day + interval '23 hours 59 minutes') at time zone 'UTC', '{}', 'chat',
     v_item.id);
   v_input := jsonb_build_object('idea', v_item.idea, 'reason', 'Asked in the CMO chat', 'seconds', public.cmo_video_seconds(),
     'aspect', '9:16', 'platform', v_item.platform, 'order_id', v_order.id, 'source', 'chat')

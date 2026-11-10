@@ -6,7 +6,7 @@ create extension if not exists pgtap with schema extensions;
 begin;
 set search_path to public, extensions;
 
-select plan(12);
+select plan(13);
 
 select ok(not has_function_privilege('anon', 'public.cmo_script_edit_beat(uuid,integer,text,text,timestamptz)', 'execute'), 'anon cannot edit');
 
@@ -54,6 +54,21 @@ select throws_ok(format($$ select public.cmo_script_edit_beat(%L, 2, '  ', null,
   '22023', null, 'empty words are refused');
 select throws_ok(format($$ select public.cmo_script_edit_beat(%L, 2, %L, null, %L) $$, (select id from t where name = 'brief'), repeat('x', 301), (select version from v)),
   '22023', null, 'over 300 characters is refused');
+-- A brief near its 4096-byte cap: a longer beat is refused in words, not by the constraint.
+reset role;
+update public.work_orders set brief = jsonb_set(brief, '{key_points}', to_jsonb(repeat('k', 3200))) where id = (select id from t where name = 'brief');
+delete from v;
+insert into v select updated_at from public.work_orders where id = (select id from t where name = 'brief');
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"e2910000-0000-4000-8000-00000000000a","role":"authenticated"}';
+select throws_ok(format($$ select public.cmo_script_edit_beat(%L, 1, %L, %L, %L) $$, (select id from t where name = 'brief'), repeat('s', 300), repeat('w', 300), (select version from v)),
+  '22023', 'This script is too long to save. Shorten this beat or another one.', 'a beat that would overflow the brief is refused in words');
+reset role;
+update public.work_orders set brief = brief - 'key_points' where id = (select id from t where name = 'brief');
+delete from v;
+insert into v select updated_at from public.work_orders where id = (select id from t where name = 'brief');
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"e2910000-0000-4000-8000-00000000000a","role":"authenticated"}';
 select lives_ok(format($$ select public.cmo_script_edit_beat(%L, 2, 'New second words.', null, %L) $$, (select id from t where name = 'brief'), (select version from v)),
   'the founder edits beat 2');
 select throws_ok(format($$ select public.cmo_script_edit_beat(%L, 3, 'Late words.', null, %L) $$, (select id from t where name = 'brief'), (select version from v)),

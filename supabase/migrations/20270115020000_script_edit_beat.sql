@@ -45,6 +45,10 @@ begin
   v_beat := (v_order.brief->'storyboard'->(p_beat - 1))
     || case when v_say is not null then jsonb_build_object('say', v_say) else '{}'::jsonb end
     || case when v_show is not null then jsonb_build_object('show', v_show) else '{}'::jsonb end;
+  -- The order's brief is capped at 4096 bytes (`work_orders_brief_check`): say so in words before the constraint does.
+  if octet_length(jsonb_set(v_order.brief, array['storyboard', (p_beat - 1)::text], v_beat)::text) > 4096 then
+    raise exception 'This script is too long to save. Shorten this beat or another one.' using errcode = '22023';
+  end if;
   update public.work_orders set brief = jsonb_set(brief, array['storyboard', (p_beat - 1)::text], v_beat), updated_at = clock_timestamp()
   where id = v_order.id
   returning * into v_order;

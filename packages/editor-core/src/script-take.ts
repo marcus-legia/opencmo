@@ -60,9 +60,19 @@ function hits(needle: string[], hay: string[]): Hit[] {
 	return out;
 }
 
-/** Each beat's take: said, partly said or missing, and where the kept take is. */
+/** Under this many words a beat is a short phrase ("Try it now") that also turns up by chance elsewhere in a take. */
+const SHORT_BEAT = 4;
+
+/**
+ * Each beat's take: said, partly said or missing, and where the kept take is.
+ *
+ * A long beat keeps its LAST good take: saying it again is a retake. A short beat keeps its FIRST good take after the
+ * previous beat's take: a short phrase heard later is more often the same words said in passing than a retake, and
+ * keeping the later one would offer the real take for the cut.
+ */
 export function matchScript(beats: readonly { say: string }[], words: readonly Word[]): BeatTake[] {
 	const hay = words.map((word) => token(word.text));
+	let after = -Infinity;
 	return beats.map((beat, index) => {
 		const needle = beat.say.split(/\s+/).map(token).filter(Boolean);
 		if (!needle.length) return { beat: index, status: 'missing', score: 0, takes: 0 };
@@ -75,8 +85,10 @@ export function matchScript(beats: readonly { say: string }[], words: readonly W
 				if (hit.score > previous.score) good[good.length - 1] = hit;
 			} else good.push(hit);
 		}
-		const best = good.length ? good.at(-1)! : all.reduce<Hit | null>((top, hit) => (!top || hit.score > top.score ? hit : top), null);
+		const pick = needle.length < SHORT_BEAT ? (good.find((hit) => words[hit.first]!.start >= after) ?? good[0]) : good.at(-1);
+		const best = pick ?? all.reduce<Hit | null>((top, hit) => (!top || hit.score > top.score ? hit : top), null);
 		if (!best || best.score < PARTLY) return { beat: index, status: 'missing', score: round(best?.score ?? 0), takes: 0 };
+		after = words[best.last]!.end;
 		return {
 			beat: index,
 			status: best.score >= SAID ? 'said' : 'partly',
@@ -89,11 +101,15 @@ export function matchScript(beats: readonly { say: string }[], words: readonly W
 }
 
 /**
- * The stretches of speech that match no kept take, in source seconds, ready for `remove_ranges`. Empty when no beat
- * was said: a video that is not this script is never proposed for a cut down to nothing.
+ * The stretches of speech that match no kept take, in source seconds, ready for `remove_ranges`.
+ *
+ * Empty unless EVERY beat was found (said, or said in part) and one was said in full. A beat marked missing is most
+ * often a beat the founder said in their own words, and what they said would then be offered for the cut as an
+ * aside. The founder still confirms every cut; this keeps the list from proposing their real content.
  */
 export function offScript(words: readonly Word[], takes: readonly BeatTake[]): Range[] {
-	const kept = takes.filter((take) => take.status !== 'missing' && take.start !== undefined && take.end !== undefined) as Required<BeatTake>[];
+	if (!takes.length || takes.some((take) => take.status === 'missing')) return [];
+	const kept = takes.filter((take) => take.start !== undefined && take.end !== undefined) as Required<BeatTake>[];
 	if (!kept.some((take) => take.status === 'said')) return [];
 	const inKept = (word: Word) => kept.some((take) => word.start >= take.start - 1e-6 && word.end <= take.end + 1e-6);
 	const ranges: Range[] = [];

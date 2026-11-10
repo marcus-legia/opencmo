@@ -6,14 +6,14 @@ create extension if not exists pgtap with schema extensions;
 begin;
 set search_path to public, extensions;
 
-select plan(13);
+select plan(14);
 
 select ok(not has_function_privilege('anon', 'public.cmo_order_script(text,date,text)', 'execute'), 'anon cannot order a script');
 
 insert into auth.users (id, email) values
   ('e2900000-0000-4000-8000-00000000000a', 'script-paid@test.local'),
   ('e2900000-0000-4000-8000-00000000000b', 'script-free@test.local');
-update public.profiles set plan = 'starter', credit_balance = 10 where id = 'e2900000-0000-4000-8000-00000000000a';
+update public.profiles set plan = 'starter', credit_balance = 10, weekly_credit_budget = 0 where id = 'e2900000-0000-4000-8000-00000000000a';
 
 create temp table t_order (result jsonb) on commit drop;
 grant all on t_order to authenticated;
@@ -40,6 +40,8 @@ select is((select -sum(delta)::int from public.credit_ledger where user_id = 'e2
   'its price is held');
 select is((select count(*)::int from public.work_orders where user_id = 'e2900000-0000-4000-8000-00000000000a' and kind = 'build_video'), 0,
   'nothing builds the video');
+select is((select budget_credits from public.work_orders where id = (select (result->>'order_id')::uuid from t_order)),
+  public.cmo_job_price('write_video_brief'), 'the order is budgeted at the price the founder confirmed, even past the week''s budget');
 
 -- No plan, no credits: the plan code, and the calendar item rolls back with it.
 set local role authenticated;

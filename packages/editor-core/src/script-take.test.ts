@@ -64,4 +64,26 @@ describe('matchScript', () => {
 		expect(takes.every((take) => take.status === 'missing')).toBe(true);
 		expect(offScript(words, takes)).toEqual([]);
 	});
+	it('a beat said in other words is missing, and then nothing is offered for the cut', () => {
+		const transcript: Transcript = [
+			line('Editing video should be as easy as editing text.', 0, 3),
+			line('You just strike out what you said and it is gone from the video.', 4, 8),
+			line('Try it free on your next video.', 9, 11),
+		];
+		const words = sourceWords(transcript, { start: 0, end: 12 }, []);
+		const takes = matchScript(BEATS, words);
+		expect(takes[1]!.status).toBe('missing');
+		expect(offScript(words, takes)).toEqual([]);
+	});
+
+	it('a short beat keeps its first take after the beat before it, not a later chance match', () => {
+		const beats = [{ say: 'Editing video should be as easy as editing text.' }, { say: 'Try it now.' }];
+		const transcript: Transcript = [
+			line('Editing video should be as easy as editing text.', 0, 3),
+			line('Try it now.', 3.5, 4.5),
+			line('Honestly people tell me to try it now and they do.', 6, 9),
+		];
+		const takes = matchScript(beats, sourceWords(transcript, { start: 0, end: 10 }, []));
+		expect(takes[1]!.start).toBeLessThan(4);
+	});
 });
