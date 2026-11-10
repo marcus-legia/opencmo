@@ -34,7 +34,7 @@ import { openScript } from "./open-script";
 import { blockedReason, editCaption, type Decision } from "./decide";
 import { renderAgain, saveSlideText, slidesHref } from "./slides";
 import { NUMERAL, cardHead, headNote } from "./labels";
-import { approveBlocked, fromLocalInput, sameOptions, savedOptions, toLocalInput } from "./schedule";
+import { approveBlocked, formatWhen, fromLocalInput, sameOptions, savedOptions, toLocalInput } from "./schedule";
 
 export type DecideHandler = (card: Card, decision: Decision) => Promise<boolean>;
 
@@ -75,6 +75,21 @@ function firstText(card: Card): string {
   if (card.body.kind === "post") return card.body.platforms[0]?.versions[0] ?? "";
   if (card.body.kind === "correction") return card.body.rule;
   return "";
+}
+
+const PLATFORM_NAME = { x: "X", threads: "Threads", linkedin: "LinkedIn" } as const;
+
+/**
+ * The time a post card approves with its words (cmo-review-3 1.2): "Goes out Tue 11 Nov, 09:00 on X (@handle)", or,
+ * with no account, "Opens X to post at …". A time already past says that approving asks for a new one.
+ */
+export function postWhen(proposed: NonNullable<Extract<Card["body"], { kind: "post" }>["proposed"]>, now = Date.now()): string {
+  const when = formatWhen(proposed.at, proposed.timezone);
+  const where = PLATFORM_NAME[proposed.platform];
+  if (new Date(proposed.at).getTime() <= now) return `Its time (${when}) has passed. Approve it and pick a new time, or change it here.`;
+  return proposed.mode === "publish"
+    ? `Goes out ${when} on ${where}${proposed.handle ? ` (${proposed.handle})` : ""}, your time.`
+    : `Opens ${where} to post at ${when}, your time. You post it from your account.`;
 }
 
 function decidedNote(card: Card): string | null {
@@ -264,12 +279,24 @@ export function ApprovalCard({
   const blockedFor = (action: Extract<Action, { run: () => void }>) =>
     action.declines ? declineBlocked : action.checks ? blockedReason(card, sample, action.checks) : blocked;
   const primary = (label = PRIMARY_ACTION[card.kind]): Action => ({ label, variant: "primary", run: approve });
+  const proposed = card.body.kind === "post" ? card.body.proposed : undefined;
+  const postChangeTime: Action | null = proposed
+    ? {
+        label: "Change time",
+        variant: "secondary",
+        checks: "change_time",
+        run: () => {
+          setNewTime(toLocalInput(proposed.at, proposed.timezone));
+          setMoving(true);
+        },
+      }
+    : null;
 
   const actions: Action[] = (() => {
     switch (card.body.kind) {
       case "post":
         // A thread (P6 W4) is approved as written: one edited post would no longer match the thread it opens.
-        if (card.body.platforms.some((p) => p.thread)) return [primary("Approve thread"), ...declineAction];
+        if (card.body.platforms.some((p) => p.thread)) return [primary("Approve thread"), ...(postChangeTime ? [postChangeTime] : []), ...declineAction];
         if (postYourself && postPlatform && isPublishPlatform(postPlatform)) {
           const target = intentFor(postPlatform, postText());
           return [
@@ -284,11 +311,12 @@ export function ApprovalCard({
               },
             },
             editAction(),
-            { label: "Approve and schedule", variant: "quiet", run: approve },
+            ...(postChangeTime ? [postChangeTime] : []),
+            { label: proposed ? "Approve for this time" : "Approve and schedule", variant: "quiet", run: approve },
             ...declineAction,
           ];
         }
-        return [primary(editing ? "Approve edit" : "Approve"), editAction(), ...declineAction];
+        return [primary(editing ? "Approve edit" : "Approve"), editAction(), ...(postChangeTime ? [postChangeTime] : []), ...declineAction];
       case "reply":
         return [
           { label: PRIMARY_ACTION.reply, variant: "primary", run: copyReply },
@@ -358,6 +386,8 @@ export function ApprovalCard({
   // The price card shows its price large in the body; `meta` already names the account and time.
   const foot = [card.priceCredits !== null && card.kind !== "price" ? `${card.priceCredits} credits` : null, card.meta || null].filter(Boolean).join(" · ");
   const decided = decidedNote(card);
+  /** The time picker's zone: a schedule card's, or a post card's that carries its time. */
+  const pickerZone = card.body.kind === "schedule" ? card.body.timezone : proposed?.timezone ?? null;
 
   const headRow = (
     <span className="v2-card-head">
@@ -434,6 +464,11 @@ export function ApprovalCard({
             <CorrectionBody body={card.body} editing={editing} draft={draft} onDraft={setDraft} />
           )}
 
+          {proposed ? (
+            <p className="v2-card-meta" data-testid="post-when">
+              {postWhen(proposed)}
+            </p>
+          ) : null}
           {foot ? <div className="v2-card-meta">{foot}</div> : null}
 
           {"lookNote" in card.body && card.body.lookNote ? (
@@ -474,22 +509,25 @@ export function ApprovalCard({
             </p>
           ) : null}
 
-          {moving && card.body.kind === "schedule" ? (
+          {moving && pickerZone ? (
             <form
               className="v2-card-decline"
               onSubmit={(event) => {
                 event.preventDefault();
-                if (card.body.kind !== "schedule") return;
-                const at = fromLocalInput(newTime, card.body.timezone);
+                const at = fromLocalInput(newTime, pickerZone);
                 if (at) void run({ action: "change_time", publishAt: at });
               }}
             >
               <label className="v2-field" htmlFor={`${card.id}-time`}>
-                <span>New time, your time ({card.body.timezone}). A new card asks you to approve it.</span>
+                <span>
+                  {card.body.kind === "post"
+                    ? `New time, your time (${pickerZone}). The card shows it before you approve.`
+                    : `New time, your time (${pickerZone}). A new card asks you to approve it.`}
+                </span>
                 <input id={`${card.id}-time`} className="v2-input is-compact" type="datetime-local" required value={newTime} autoFocus onChange={(event) => setNewTime(event.target.value)} />
               </label>
               <div className="v2-actions">
-                <Button type="submit" variant="primary" compact disabled={busy || !fromLocalInput(newTime, card.body.timezone)}>
+                <Button type="submit" variant="primary" compact disabled={busy || !fromLocalInput(newTime, pickerZone)}>
                   Save new time
                 </Button>
                 <Button variant="quiet" compact onClick={() => setMoving(false)}>

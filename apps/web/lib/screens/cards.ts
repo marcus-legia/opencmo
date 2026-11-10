@@ -57,6 +57,28 @@ function firstSentence(text: string): { head: string; rest: string } {
 
 type Built = Pick<ApprovalCard, "title" | "summary" | "meta" | "body">;
 
+type PostBody = Extract<ApprovalCard["body"], { kind: "post" }>;
+
+/** A post card's time as SQL snapshots it (`post_proposal_snapshot`); anything malformed means no time on the card. */
+function proposedOf(v: unknown): Pick<PostBody, "proposed"> {
+  if (!v || typeof v !== "object") return {};
+  const p = v as Record<string, unknown>;
+  const platform = p.platform === "x" || p.platform === "threads" || p.platform === "linkedin" ? p.platform : null;
+  const mode = p.mode === "publish" || p.mode === "intent" ? p.mode : null;
+  if (!platform || !mode || typeof p.at !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(p.at)) return {};
+  return {
+    proposed: {
+      platform,
+      at: new Date(p.at).toISOString(),
+      mode,
+      accountId: mode === "publish" && typeof p.account_id === "string" ? p.account_id : null,
+      handle: typeof p.handle === "string" ? clip(p.handle, 100) : null,
+      // The founder's timezone is added on the server (`schedule-enrich.ts`); it is not part of what the card approves.
+      timezone: "UTC",
+    },
+  };
+}
+
 const PLATFORM_NAME = { x: "X", threads: "Threads", linkedin: "LinkedIn", tiktok: "TikTok", youtube: "YouTube", instagram: "Instagram" } as const;
 
 type CaptionRow = { caption_id: string; clip_id: string; profile: string; text: string; title: string | null };
@@ -84,7 +106,9 @@ function build(row: ApprovalRow): Built | null {
       return {
         title: head || clip(str(s.idea), 200),
         summary: clip(rest || str(s.rationale) || text, 400),
-        meta: `${versions.length} ${versions.length === 1 ? "version" : "versions"} · ${profile.label} · you post it on your account`,
+        meta: `${versions.length} ${versions.length === 1 ? "version" : "versions"} · ${profile.label} · ${
+          s.proposed && typeof s.proposed === "object" && (s.proposed as { mode?: unknown }).mode === "publish" ? "goes out from your account at its time" : "you post it on your account"
+        }`,
         body: {
           kind: "post",
           platforms: [
@@ -98,6 +122,7 @@ function build(row: ApprovalRow): Built | null {
           ],
           checks: [],
           why: str(s.rationale) || null,
+          ...proposedOf(s.proposed),
         },
       };
     }

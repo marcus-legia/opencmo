@@ -91,14 +91,14 @@ batching is by row (one `short_batch` for the shorts of one video) rather than a
 |---|---|---|---|---|
 | `plan` | Brain | the week plan, item by item | approve, edit or remove items | ✅ (`20270106050000`) |
 | `goal` | Brain | goal, metric, target | approve, change target, reject | ✅ |
-| `post` | Writer | text per platform, 1–2 alternates, checks passed | approve, edit then approve, skip with reason | ✅ X, Threads, LinkedIn |
+| `post` | Writer | text per platform, 1–2 alternates, checks passed, and the time and account it goes out on | approve (the words and the time at once), edit then approve, change time, skip with reason | ✅ X, Threads, LinkedIn |
 | `reply` | Sales | thread, score with evidence, reply draft | copy and open, replied, dismiss | ✅ |
 | `script` | Studio Director | storyboard: words, picture, motion per beat | approve, send back | ✅ |
 | `price` | Studio | what will be made, one price for all of it | approve, cancel | ✅ |
 | `finished_video` | Studio | preview player, length, frame, look check note | approve = finished, open in editor, send back | ✅ |
 | `shorts_batch` | Studio Shorts | 3 shorts with hook and reasons | approve the batch, send back | ✅ |
 | `slideshow` | Studio Slideshow | slides, MP4 and PNG | approve, quick text edit per slide, open in Slides | ✅ |
-| `schedule` | Schedule | platform, account, date and time, the deliverable | approve, change time (re-approve), cancel | ✅ |
+| `schedule` | Schedule | platform, account, date and time, the deliverable; for a post, only when its approved time is gone, a retry or an older card | approve, change time (re-approve), cancel | ✅ |
 | `correction` | Brain (repeated edits) | a rule learned from edits, with its source edits | approve, edit, reject | ✅ |
 | `skill` | Brain | a proposed skill change | — | ❌ not built |
 
@@ -109,6 +109,10 @@ batching is by row (one `short_batch` for the shorts of one video) rather than a
 2. **Outbound and paid never auto-approve.** Only free, internal, reversible items may skip a card, and only on opt-in.
 3. **Few cards.** Batch what belongs together (shorts of one video, slides of one slideshow, posts of one day); keep the
    daily count low.
+   A post card carries its time (cmo-review-3 1.2): `body.proposed` (platform, time, account, mode) is in the snapshot,
+   so approving the post approves its time and account too. `schedule_propose` then makes the slot `waiting` with that
+   approval and raises no schedule card; a time that can no longer be used falls back to one schedule card that says
+   so. Changing the time or account raises the post card again.
 4. **Cards expire.** Schedule cards when their time passes; price cards when the price changes or after a set time
    (MCP: a confirm code lasts 600 s). Expired cards ask again; they never run late.
 5. **Reminders never decide.** Email or push opens the card; no approve button in an email (mail scanners open links).

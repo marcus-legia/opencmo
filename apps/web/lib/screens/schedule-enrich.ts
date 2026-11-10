@@ -84,9 +84,20 @@ function slotState(slot: SlotRow): Extract<ApprovalCard["body"], { kind: "schedu
   return slot.error?.code === "no_account" ? "no_account" : "failed";
 }
 
+/** A post card's time (cmo-review-3 1.2) is shown and picked in the founder's timezone, like a schedule card's. */
+function withPostTimezone(card: ApprovalCard, timezone: string): ApprovalCard {
+  if (card.body.kind !== "post" || !card.body.proposed) return card;
+  return { ...card, body: { ...card.body, proposed: { ...card.body.proposed, timezone } } };
+}
+
 export async function enrichScheduleCards(supabase: SupabaseClient, userId: string, cards: ApprovalCard[]): Promise<ApprovalCard[]> {
   const schedule = cards.filter((c) => c.body.kind === "schedule");
-  if (!schedule.length) return cards;
+  if (!schedule.length) {
+    if (!cards.some((c) => c.body.kind === "post" && c.body.proposed)) return cards;
+    const { data } = await supabase.from("profiles").select("timezone").eq("id", userId).maybeSingle();
+    const timezone = (data as { timezone?: string } | null)?.timezone ?? "UTC";
+    return cards.map((card) => withPostTimezone(card, timezone));
+  }
   const bodies = schedule.map((c) => c.body as Extract<ApprovalCard["body"], { kind: "schedule" }>);
   const accountIds = [...new Set(bodies.flatMap((b) => (b.accountId ? [b.accountId] : [])))];
   const slotIds = bodies.map((b) => b.slotId);
@@ -120,7 +131,7 @@ export async function enrichScheduleCards(supabase: SupabaseClient, userId: stri
   const info = await creatorInfo(new Map(accountRows.map((a) => [a.id, a.zernio_account_id])), [...new Set(tiktokIds)]);
 
   return cards.map((card) => {
-    if (card.body.kind !== "schedule") return card;
+    if (card.body.kind !== "schedule") return withPostTimezone(card, timezone);
     const b = card.body;
     const clip = clipOf.get(b.slotId);
     const render = clip ? renders.get(clip) : undefined;

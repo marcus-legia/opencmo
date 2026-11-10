@@ -33,7 +33,7 @@ export const DECISION_TOOL_SPECS: ToolSpec[] = [
     description: [
       "Decide a card that waits on the founder in Approvals, ONLY when the founder asks for it in this message (\"approve the pricing post\", \"skip the second reply\").",
       "card_id comes from list_approvals. The founder sees a confirmation card and must confirm it; you never decide on your own.",
-      "Actions by card kind: post approve|skip (text = the version to post, reason for skip); reply replied|dismissed; goal approve|reject (goal, target to edit);",
+      "Actions by card kind: post approve|skip (text = the version to post, reason for skip), and change_time|change_account when the card shows a time (approving a post approves the time and account the card shows); reply replied|dismissed; goal approve|reject (goal, target to edit);",
       "finished_video/shorts_batch/slideshow approve|send_back (reason); script/price approve|cancel; schedule approve|cancel|retry,",
       "change_time (publish_at = local time YYYY-MM-DDTHH:MM in the founder's time zone) or change_account (account_id from the card's platform, or null to copy and post by hand).",
     ].join(" "),
@@ -245,7 +245,8 @@ async function prepareCard(supabase: SupabaseClient, raw: unknown): Promise<Prep
   const changes: string[] = [];
   const what = `${clip(card.title, 120)}${card.meta ? ` (${clip(card.meta, 80)})` : ""}`;
   if (input.action === "change_time") {
-    if (card.kind !== "schedule" || !input.publish_at) return refused("change_time is for schedule cards, with publish_at YYYY-MM-DDTHH:MM.");
+    const timed = card.kind === "schedule" || (card.body.kind === "post" && !!card.body.proposed);
+    if (!timed || !input.publish_at) return refused("change_time is for schedule cards and post cards that show a time, with publish_at YYYY-MM-DDTHH:MM.");
     const zone = await founderTimezone(supabase);
     let iso: string;
     try {
@@ -257,7 +258,8 @@ async function prepareCard(supabase: SupabaseClient, raw: unknown): Promise<Prep
     payload.publish_at = iso;
     changes.push(`Move "${what}" to ${localLabel(iso, zone)} (${zone})`);
   } else if (input.action === "change_account") {
-    if (card.kind !== "schedule" || input.account_id === undefined) return refused("change_account is for schedule cards, with account_id (or null).");
+    const timed = card.kind === "schedule" || (card.body.kind === "post" && !!card.body.proposed);
+    if (!timed || input.account_id === undefined) return refused("change_account is for schedule cards and post cards that show a time, with account_id (or null).");
     if (input.account_id !== null) {
       const { data: account } = await supabase.from("social_accounts").select("id, handle, platform").eq("id", input.account_id).maybeSingle<{ id: string; handle: string | null; platform: string }>();
       if (!account) return refused("That account is not one of your connected accounts.");
@@ -272,7 +274,19 @@ async function prepareCard(supabase: SupabaseClient, raw: unknown): Promise<Prep
     if (input.reason) changes.push(`Reason: ${clip(input.reason, 160)}`);
     if (input.goal || input.target) changes.push(`Goal: ${input.goal ?? card.title}${input.target ? ` (target ${input.target})` : ""}`);
   }
-  if (card.kind === "post" && input.action === "approve") changes.push("It goes out at its approved time; nothing is posted by OpenCMO now.");
+  if (card.kind === "post" && input.action === "approve") {
+    // The time on the card is approved with the words (cmo-review-3 1.2): the confirmation names it.
+    const proposed = card.body.kind === "post" ? card.body.proposed : undefined;
+    if (proposed && Date.parse(proposed.at) > Date.now()) {
+      const zone = await founderTimezone(supabase);
+      const where = proposed.platform === "x" ? "X" : proposed.platform === "threads" ? "Threads" : "LinkedIn";
+      changes.push(
+        proposed.mode === "publish"
+          ? `This approves its time too: it goes out on ${where}${proposed.handle ? ` (${proposed.handle})` : ""} on ${localLabel(proposed.at, zone)} (${zone}).`
+          : `This approves its time too: on ${localLabel(proposed.at, zone)} (${zone}) you get it to copy and post on ${where}.`,
+      );
+    } else changes.push("It goes out at its approved time; nothing is posted by OpenCMO now.");
+  }
 
   return {
     ok: true,

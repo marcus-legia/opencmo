@@ -65,6 +65,23 @@ const PostBody = z.object({
   checks: z.array(z.string().max(60)),
   /** "Why": the insight or plan line the draft came from. */
   why: z.string().max(200).nullable(),
+  /**
+   * When and where it goes out (cmo-review-3 1.2): part of the card's hash, so approving the post approves this time
+   * and account too and no schedule card follows. Absent on a post that gets its time after approval (an older card, a
+   * platform Schedule does not post to, no free time in the next two weeks).
+   */
+  proposed: z
+    .object({
+      platform: PlatformSchema.extract(["x", "threads", "linkedin"]),
+      at: iso,
+      /** `publish`: from the connected account; `intent`: at that time the founder gets the post to copy and open. */
+      mode: z.enum(["publish", "intent"]),
+      accountId: z.string().nullable(),
+      handle: z.string().max(100).nullable(),
+      /** IANA name the time is shown and picked in (`profiles.timezone`), added on the server like a schedule card's. */
+      timezone: z.string().max(64),
+    })
+    .optional(),
 });
 
 const ReplyBody = z.object({

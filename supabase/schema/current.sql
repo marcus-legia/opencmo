@@ -1691,6 +1691,12 @@ begin
   end if;
   case v_row.kind
     when 'post' then
+      -- The time and account the card shows change through the post's proposal, which raises the card again; the
+      -- answer is the new card, so the founder approves what they now see (cmo-review-3 1.2).
+      if p_action in ('change_time', 'change_account') then
+        perform set_config('opencmo.decided_via', '', true);
+        return public.post_change_proposal(v_row, p_action, v_payload);
+      end if;
       if p_action not in ('approve', 'skip') then
         raise exception 'Choose approve or skip.' using errcode = '22023';
       end if;
@@ -2100,7 +2106,11 @@ begin
     return v;
   end if;
   if p_ref_kind = 'content_item' then
-    select case when public.thread_valid(body) then jsonb_build_object('thread', body->'thread') end into v_extra
+    -- A thread (P6 W4) and the time the post goes out (cmo-review-3 1.2): both are what the founder approves.
+    select coalesce(case when public.thread_valid(body) then jsonb_build_object('thread', body->'thread') end, '{}'::jsonb)
+        || coalesce(jsonb_build_object('proposed', public.post_proposal_snapshot(user_id, body)) - case
+             when public.post_proposal_snapshot(user_id, body) is null then 'proposed' else '' end, '{}'::jsonb)
+      into v_extra
     from public.content_items where id = p_ref_id;
     return v || coalesce(v_extra, '{}'::jsonb);
   end if;
@@ -4347,9 +4357,12 @@ begin
     raise exception 'This post goes out from your connected account. Approve it and pick its time instead.' using errcode = 'P0001';
   end if;
 
+  -- Posted already: the time on the card is not used (`schedule_take_proposal` reads this).
+  perform set_config('opencmo.posted_self', 'on', true);
   perform public.approval_decide(p_approval, 'approve',
     jsonb_build_object('content_hash', p_content_hash, 'via', 'app')
       || case when nullif(trim(coalesce(p_text, '')), '') is null then '{}'::jsonb else jsonb_build_object('text', p_text) end);
+  perform set_config('opencmo.posted_self', '', true);
   perform public.cmo_mark_posted(v_item.id);
 
   select * into v_row from public.approvals where id = p_approval;
@@ -5891,6 +5904,44 @@ begin
   return new;
 end;
 $_$;
+
+
+--
+-- Name: content_items_post_proposal(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.content_items_post_proposal() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_proposed jsonb;
+begin
+  if new.department <> 'post' or new.status <> 'in_review' then
+    return new;
+  end if;
+  if tg_op = 'UPDATE' and old.status = 'in_review' then
+    if new.body ? 'proposed' then
+      if jsonb_typeof(new.body->'proposed') = 'null' then
+        new.body := new.body - 'proposed';
+      end if;
+    elsif old.body ? 'proposed' then
+      new.body := coalesce(new.body, '{}'::jsonb) || jsonb_build_object('proposed', old.body->'proposed');
+    end if;
+    return new;
+  end if;
+  begin
+    v_proposed := public.post_proposal(new.user_id, new.platform, new.id);
+  exception when others then
+    -- A time is a convenience on the card; never a reason the draft cannot wait for the founder.
+    raise warning 'post proposal for content item % failed: %', new.id, sqlerrm;
+    v_proposed := null;
+  end;
+  new.body := coalesce(new.body, '{}'::jsonb) - 'proposed'
+    || case when v_proposed is null then '{}'::jsonb else jsonb_build_object('proposed', v_proposed) end;
+  return new;
+end;
+$$;
 
 
 --
@@ -8765,6 +8816,148 @@ CREATE FUNCTION public.platform_profile_id(p_label text) RETURNS text
     when 'youtube shorts' then 'youtube'
     else null end
 $$;
+
+
+--
+-- Name: post_change_proposal(public.approvals, text, jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.post_change_proposal(p_card public.approvals, p_action text, p_payload jsonb) RETURNS public.approvals
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $_$
+declare
+  v_item public.content_items;
+  v_rules jsonb := public.schedule_rules();
+  v_p jsonb;
+  v_at timestamptz;
+  v_account public.social_accounts;
+  v_row public.approvals;
+begin
+  select * into v_item from public.content_items
+  where id = p_card.ref_id and user_id = p_card.user_id and department = 'post' for update;
+  if not found or v_item.status <> 'in_review' then
+    raise exception 'This post was already decided.' using errcode = 'P0001';
+  end if;
+  if public.post_proposal_snapshot(v_item.user_id, v_item.body) is null then
+    raise exception 'This post gets its time after you approve it.' using errcode = 'P0001';
+  end if;
+  v_p := v_item.body->'proposed';
+  if p_action = 'change_time' then
+    begin
+      v_at := (p_payload->>'publish_at')::timestamptz;
+    exception when others then
+      v_at := null;
+    end;
+    if v_at is null or p_payload->>'publish_at' !~ '(Z|[+-][0-9]{2}(:?[0-9]{2})?)$' then
+      raise exception 'Pick a time, with its time zone.' using errcode = '22023';
+    end if;
+    if v_at < now() + interval '5 minutes' or v_at > now() + interval '60 days' then
+      raise exception 'Pick a time between five minutes and 60 days from now.' using errcode = '22023';
+    end if;
+    if public.schedule_day_count(v_item.user_id, v_p->>'platform', v_at, null)
+       >= (v_rules->'platforms'->(v_p->>'platform')->>'dailyCap')::integer then
+      raise exception 'That day already has % posts on %.', (v_rules->'platforms'->(v_p->>'platform')->>'dailyCap'),
+        public.schedule_platform_label(v_p->>'platform') using errcode = 'P0001';
+    end if;
+    v_p := v_p || jsonb_build_object('at', to_char(date_trunc('second', v_at) at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'));
+  else
+    if p_payload->>'account_id' is null then
+      v_p := v_p || '{"account_id": null, "mode": "intent"}'::jsonb;
+    else
+      select * into v_account from public.social_accounts
+      where id::text = p_payload->>'account_id' and user_id = v_item.user_id and platform = v_p->>'platform' and status = 'connected';
+      if not found then
+        raise exception 'Choose one of your connected % accounts.', public.schedule_platform_label(v_p->>'platform')
+          using errcode = '22023';
+      end if;
+      v_p := v_p || jsonb_build_object('account_id', v_account.id, 'mode', 'publish');
+    end if;
+  end if;
+  -- `approvals_sync` raises the card again for the changed body; the old one is superseded.
+  update public.content_items set body = jsonb_set(body, '{proposed}', v_p), updated_at = now() where id = v_item.id;
+  select * into v_row from public.approvals
+  where ref_kind = 'content_item' and ref_id = v_item.id and status in ('waiting', 'held')
+  order by created_at desc limit 1;
+  return v_row;
+end;
+$_$;
+
+
+--
+-- Name: post_proposal(uuid, text, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.post_proposal(p_user uuid, p_platform_label text, p_item uuid) RETURNS jsonb
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_platform text := public.platform_profile_id(p_platform_label);
+  v_at timestamptz;
+  v_account uuid;
+begin
+  -- The same platforms `schedule_propose` gives a slot to.
+  if v_platform is null or v_platform not in ('x', 'threads', 'linkedin') then
+    return null;
+  end if;
+  v_at := public.schedule_pick_time(p_user, v_platform, null, p_item);
+  if v_at is null then
+    return null;
+  end if;
+  select id into v_account from public.social_accounts
+  where user_id = p_user and platform = v_platform and status = 'connected'
+  order by connected_at, id limit 1;
+  return jsonb_build_object('platform', v_platform,
+    'at', to_char(v_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+    'account_id', v_account, 'mode', case when v_account is null then 'intent' else 'publish' end);
+end;
+$$;
+
+
+--
+-- Name: post_proposal_snapshot(uuid, jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.post_proposal_snapshot(p_user uuid, p_body jsonb) RETURNS jsonb
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_at timestamptz := public.post_proposed_at(p_body);
+  v_p jsonb := p_body->'proposed';
+  v_handle text;
+begin
+  if v_at is null or v_p->>'platform' not in ('x', 'threads', 'linkedin') or v_p->>'mode' not in ('publish', 'intent') then
+    return null;
+  end if;
+  if v_p->>'mode' = 'publish' then
+    select handle into v_handle from public.social_accounts
+    where user_id = p_user and id::text = v_p->>'account_id' and platform = v_p->>'platform';
+  end if;
+  return jsonb_build_object('platform', v_p->>'platform', 'at', v_p->>'at',
+    'account_id', case when v_p->>'mode' = 'publish' then v_p->>'account_id' end,
+    'mode', v_p->>'mode', 'handle', left(v_handle, 100));
+end;
+$$;
+
+
+--
+-- Name: post_proposed_at(jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.post_proposed_at(p_body jsonb) RETURNS timestamp with time zone
+    LANGUAGE plpgsql IMMUTABLE
+    SET search_path TO 'public'
+    AS $_$
+begin
+  if jsonb_typeof(p_body->'proposed') is distinct from 'object'
+     or coalesce(p_body->'proposed'->>'at', '') !~ '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$' then
+    return null;
+  end if;
+  return (p_body->'proposed'->>'at')::timestamptz;
+end;
+$_$;
 
 
 --
@@ -12234,6 +12427,16 @@ $$;
 --
 
 CREATE FUNCTION public.schedule_pick_time(p_user uuid, p_platform text, p_deliverable uuid) RETURNS timestamp with time zone
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$ select public.schedule_pick_time(p_user, p_platform, p_deliverable, null::uuid) $$;
+
+
+--
+-- Name: schedule_pick_time(uuid, text, uuid, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.schedule_pick_time(p_user uuid, p_platform text, p_deliverable uuid, p_item uuid) RETURNS timestamp with time zone
     LANGUAGE plpgsql STABLE SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
@@ -12264,6 +12467,10 @@ begin
         where user_id = p_user and platform = p_platform
           and status in ('proposed', 'waiting', 'due', 'reminded', 'publishing', 'published')
           and publish_at > v_at - v_gap and publish_at < v_at + v_gap);
+      continue when exists (select 1 from public.content_items c
+        where c.user_id = p_user and c.department = 'post' and c.status = 'in_review'
+          and c.id is distinct from p_item and c.body->'proposed'->>'platform' = p_platform
+          and public.post_proposed_at(c.body) > v_at - v_gap and public.post_proposed_at(c.body) < v_at + v_gap);
       continue when public.schedule_day_count(p_user, p_platform, v_at, null) >= v_cap;
       continue when v_parent is not null and exists (select 1 from public.schedule_slots s
         join public.deliverables d on d.id = s.deliverable_id
@@ -12308,6 +12515,7 @@ declare
   v_account uuid;
   v_slot uuid;
   v_n integer := 0;
+  v_taken text;
 begin
   select * into v_d from public.deliverables where id = p_deliverable;
   if not found then
@@ -12331,6 +12539,15 @@ begin
       and status = 'failed' and (window_ends_at > now() or error->>'code' = 'unconfirmed'));
     continue when (select count(*) from public.schedule_slots where deliverable_id = v_d.id and platform = v_platform)
       >= (v_rules->>'maxProposals')::integer;
+    -- The post card carried its time (cmo-review-3 1.2): approving the post approved it, so no schedule card asks.
+    v_taken := 'none';
+    if v_d.kind = 'post' then
+      v_taken := public.schedule_take_proposal(v_d, v_platform);
+      if v_taken = 'taken' then
+        v_n := v_n + 1;
+        continue;
+      end if;
+    end if;
     v_at := public.schedule_pick_time(v_d.user_id, v_platform, v_d.id);
     continue when v_at is null;
     select id into v_account from public.social_accounts
@@ -12344,6 +12561,11 @@ begin
       case when v_platform = 'tiktok' then '{"allow_comment": false, "allow_duet": false, "allow_stitch": false,
         "brand_organic": false, "brand_content": false}'::jsonb else '{}'::jsonb end)
     returning id into v_slot;
+    -- The time the founder approved is gone: the card says so, as a missed post's card does.
+    if v_taken = 'gone' then
+      update public.schedule_slots set error = jsonb_build_object('code', 'missed',
+        'message', 'The time you approved is no longer free. Pick a new one.') where id = v_slot;
+    end if;
     perform public.approval_raise(v_d.user_id, 'schedule_slot', v_slot);
     v_n := v_n + 1;
   end loop;
@@ -12386,6 +12608,109 @@ CREATE FUNCTION public.schedule_rules() RETURNS jsonb
     LANGUAGE sql IMMUTABLE
     SET search_path TO 'public'
     AS $$ select '{"minGapHours": 3, "windowMinutes": 15, "leadMinutes": 30, "horizonDays": 14, "maxProposals": 3, "jitterSeconds": 240, "platforms": {"x": {"times": ["09:00"], "dailyCap": 5}, "threads": {"times": ["09:00", "12:00"], "dailyCap": 2}, "linkedin": {"times": ["16:00"], "dailyCap": 1}, "tiktok": {"times": ["09:00", "13:00"], "dailyCap": 2}, "instagram": {"times": ["09:00"], "dailyCap": 1}, "youtube": {"times": ["16:00", "19:00"], "dailyCap": 2}}}'::jsonb $$;
+
+
+--
+-- Name: deliverables; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.deliverables (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    order_id uuid NOT NULL,
+    kind text NOT NULL,
+    ref_kind text NOT NULL,
+    ref_id uuid NOT NULL,
+    status text DEFAULT 'ready'::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    parent_id uuid,
+    post_id uuid,
+    CONSTRAINT deliverables_kind_check CHECK ((kind = ANY (ARRAY['post'::text, 'caption'::text, 'video'::text, 'short'::text, 'slideshow'::text, 'image'::text, 'reply'::text, 'insight'::text, 'metric'::text]))),
+    CONSTRAINT deliverables_parent_check CHECK (((parent_id IS NULL) OR (kind = 'caption'::text))),
+    CONSTRAINT deliverables_post_image_check CHECK (((post_id IS NOT NULL) = (kind = 'image'::text))),
+    CONSTRAINT deliverables_ref_kind_check CHECK ((ref_kind = ANY (ARRAY['content_item'::text, 'opportunity'::text, 'insight'::text, 'clip'::text]))),
+    CONSTRAINT deliverables_status_check CHECK ((status = ANY (ARRAY['ready'::text, 'waiting_founder'::text, 'decided'::text])))
+);
+
+
+--
+-- Name: schedule_take_proposal(public.deliverables, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.schedule_take_proposal(p_d public.deliverables, p_platform text) RETURNS text
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_rules jsonb := public.schedule_rules();
+  v_item public.content_items;
+  v_p jsonb;
+  v_at timestamptz;
+  v_gap interval := make_interval(hours => (v_rules->>'minGapHours')::integer);
+  v_slot public.schedule_slots;
+  v_snapshot jsonb;
+  v_id uuid;
+begin
+  -- "I posted it" approves and marks the post posted at once: nothing is scheduled for it.
+  if coalesce(current_setting('opencmo.posted_self', true), '') = 'on' then
+    return 'none';
+  end if;
+  select * into v_item from public.content_items where id = p_d.ref_id and user_id = p_d.user_id and status = 'approved';
+  if not found then
+    return 'none';
+  end if;
+  v_p := v_item.body->'proposed';
+  v_at := public.post_proposed_at(v_item.body);
+  if v_at is null or v_p->>'platform' is distinct from p_platform or v_p->>'mode' not in ('publish', 'intent') then
+    return 'none';
+  end if;
+  if v_at < now() + interval '1 minute' then
+    return 'gone';
+  end if;
+  if exists (select 1 from public.schedule_slots
+      where user_id = p_d.user_id and platform = p_platform and deliverable_id <> p_d.id
+        and status in ('proposed', 'waiting', 'due', 'reminded', 'publishing', 'published')
+        and publish_at > v_at - v_gap and publish_at < v_at + v_gap)
+     or public.schedule_day_count(p_d.user_id, p_platform, v_at, null)
+        >= (v_rules->'platforms'->p_platform->>'dailyCap')::integer then
+    return 'gone';
+  end if;
+  v_slot.user_id := p_d.user_id;
+  v_slot.deliverable_id := p_d.id;
+  v_slot.platform := p_platform;
+  v_slot.mode := v_p->>'mode';
+  v_slot.account_id := case when v_slot.mode = 'publish' then (v_p->>'account_id')::uuid end;
+  v_slot.options := '{}'::jsonb;
+  if v_slot.mode = 'publish' and not exists (select 1 from public.social_accounts
+      where id = v_slot.account_id and user_id = p_d.user_id and platform = p_platform) then
+    return 'gone';
+  end if;
+  begin
+    perform public.schedule_ready_check(v_slot);
+  exception when others then
+    return 'gone';
+  end;
+  begin
+    insert into public.schedule_slots (user_id, deliverable_id, platform, account_id, mode, publish_at, jitter_seconds,
+      window_ends_at, options, status)
+    values (v_slot.user_id, v_slot.deliverable_id, p_platform, v_slot.account_id, v_slot.mode, v_at, public.schedule_jitter(),
+      v_at + make_interval(mins => (v_rules->>'windowMinutes')::integer), v_slot.options, 'waiting')
+    returning * into v_slot;
+  exception when unique_violation then
+    return 'gone';
+  end;
+  -- The approval the firing checks (`schedule_approval_holds`): the slot as it is now, decided with the post card.
+  v_snapshot := public.approval_snapshot('schedule_slot', v_slot.id);
+  insert into public.approvals (user_id, kind, department, ref_kind, ref_id, snapshot, content_hash, post_at, account,
+    status, decided_at, decided_via)
+  values (v_slot.user_id, 'schedule', 'schedule', 'schedule_slot', v_slot.id, v_snapshot, public.approval_hash(v_snapshot),
+    v_at, left(v_snapshot->>'handle', 100), 'approved', now(),
+    coalesce(nullif(current_setting('opencmo.decided_via', true), ''), 'app'))
+  returning id into v_id;
+  update public.schedule_slots set approval_id = v_id, updated_at = now() where id = v_slot.id;
+  return 'taken';
+end;
+$$;
 
 
 --
@@ -15762,29 +16087,6 @@ CREATE TABLE public.creem_webhook_receipts (
 
 
 --
--- Name: deliverables; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.deliverables (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    user_id uuid NOT NULL,
-    order_id uuid NOT NULL,
-    kind text NOT NULL,
-    ref_kind text NOT NULL,
-    ref_id uuid NOT NULL,
-    status text DEFAULT 'ready'::text NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    parent_id uuid,
-    post_id uuid,
-    CONSTRAINT deliverables_kind_check CHECK ((kind = ANY (ARRAY['post'::text, 'caption'::text, 'video'::text, 'short'::text, 'slideshow'::text, 'image'::text, 'reply'::text, 'insight'::text, 'metric'::text]))),
-    CONSTRAINT deliverables_parent_check CHECK (((parent_id IS NULL) OR (kind = 'caption'::text))),
-    CONSTRAINT deliverables_post_image_check CHECK (((post_id IS NOT NULL) = (kind = 'image'::text))),
-    CONSTRAINT deliverables_ref_kind_check CHECK ((ref_kind = ANY (ARRAY['content_item'::text, 'opportunity'::text, 'insight'::text, 'clip'::text]))),
-    CONSTRAINT deliverables_status_check CHECK ((status = ANY (ARRAY['ready'::text, 'waiting_founder'::text, 'decided'::text])))
-);
-
-
---
 -- Name: editor_feedback; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -18135,6 +18437,13 @@ CREATE TRIGGER content_items_post_image AFTER UPDATE OF status ON public.content
 
 
 --
+-- Name: content_items content_items_post_proposal; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER content_items_post_proposal BEFORE INSERT OR UPDATE OF status, body ON public.content_items FOR EACH ROW EXECUTE FUNCTION public.content_items_post_proposal();
+
+
+--
 -- Name: deliverables deliverables_caption_rules; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -19448,7 +19757,7 @@ ALTER TABLE public.billing_catalog ENABLE ROW LEVEL SECURITY;
 -- Name: billing_catalog billing_catalog_read; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY billing_catalog_read ON public.billing_catalog FOR SELECT TO authenticated, anon USING (on_sale);
+CREATE POLICY billing_catalog_read ON public.billing_catalog FOR SELECT TO anon, authenticated USING (on_sale);
 
 
 --

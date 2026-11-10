@@ -22,7 +22,7 @@ row is B's (the request below).
 
 ## Todo, in order
 
-- [ ] **A0 Research note** (below, before any code): what the code does now for each item, with `file:line`, what
+- [x] **A0 Research note** (below, before any code): what the code does now for each item, with `file:line`, what
   changes, and how it is checked.
 - [ ] **A1 (1.2) The post card carries its time.**
   - When the card is raised, the proposal is stored on the item: `body.proposed` = `{platform, at, account_id,
@@ -76,7 +76,35 @@ row is B's (the request below).
 
 ## Research note
 
-(A0 goes here.)
+A0, 2026-11-10, against the branch head `f7e48a75` (= `main` `e442855` + the plan).
+
+**1.2, the post card's time.**
+- Now: `cmo_decide_post` approves the words; `approval_close` makes the `post` deliverable `decided`;
+  `schedule_follow_deliverable` (`current.sql:12057`) calls `schedule_propose` (`:12298`), which picks a time
+  (`schedule_pick_time`, `:12236`), inserts a `proposed` slot and raises a `schedule` card (`approval_raise`, `:1931`).
+- The firing never posts without the founder: `schedule_claim_due` and `publish_slot_start` check
+  `schedule_approval_holds` (`:11693`), an `approvals` row of the slot, `approved`, whose hash equals the slot's
+  snapshot now. So "no schedule card" cannot mean "no approval row": the post card's decision writes that row.
+- Change: a `BEFORE` trigger on `content_items` stores `body.proposed` when a post enters review (a redraft keeps it);
+  `approval_snapshot` puts it, with the handle, in the post card's snapshot; `approval_decide` takes `change_time` and
+  `change_account` on a post card (`post_change_proposal`, same limits as `schedule_change`); `schedule_propose` first
+  tries `schedule_take_proposal` (gap, cap, `schedule_ready_check`, unique slot), which inserts the slot `waiting`
+  with an `approved` schedule row and no card. A time that is gone takes the old path, with the slot's `missed`
+  message "The time you approved is no longer free. Pick a new one." `schedule_pick_time` also avoids the times other
+  waiting post cards propose. "I posted it" (`cmo_post_myself`) sets `opencmo.posted_self`, so nothing is scheduled.
+- Check: pgTAP `276`; `screens.check.ts` (the card contract); e2e `ui-v2-schedule.spec.ts` (approve a post, the slot
+  waits at the shown time, it shows on Schedule); old tests that test the schedule card set `proposed` to null.
+
+**2.1, reasons.** `cmo_decide_post` (`:3719`) writes `cmo_draft_outcomes` (skip: no edit mode; approve: version and
+similarity, `NO_MEANINGFUL_EDIT` at or above `cmo_as_written()`); the skip reason becomes a voice note.
+`classify-edits.ts` labels approves with `classified_at is null` (`cmo_unclassified_outcomes`).
+`correction_from_edits` (`:5900`) counts approves only, 3 in 14 days. Change as plan §4.1.
+
+**2.2, ratings.** No table yet. `cmo_corrections` has `rule`, `source_edits`, `edit_mode`, `times`, `status`; a
+`source` column is new. The Haiku job goes through `lib/cmo/agents/registry.ts`, price 0 like `classify_edits`.
+
+**2.3, voice page.** `LibraryScreen.tsx:103` shows the voice notes; rules are only cards. `cmo_voice_events` and the
+three RPCs are new; the `save_marketing_document` trigger reads `strategy.voice` and `strategy.avoid`.
 
 ## Reviews
 

@@ -26,7 +26,10 @@ export type Decision =
   | { action: "cancel"; reason?: string }
   /** Finished video and shorts batch: not yet, with what to change. */
   | { action: "send_back"; reason?: string }
-  /** Schedule (P4): a new time in UTC `YYYY-MM-DDTHH:MM:SSZ`; the slot moves and a new card asks again. */
+  /**
+   * Schedule (P4): a new time in UTC `YYYY-MM-DDTHH:MM:SSZ`; the slot moves and a new card asks again. A post card that
+   * carries its time (cmo-review-3 1.2) takes it too: the card is raised again with the new time.
+   */
   | { action: "change_time"; publishAt: string }
   /** Schedule: the platform's fields changed; a new card asks again. */
   | { action: "set_options"; options: ScheduleOptions }
@@ -120,7 +123,7 @@ export function decidedMessage(card: ApprovalCard, decision: Decision, sample: b
     case "redo":
       return `Making keyframe ${decision.index + 1} again. A new card comes when it is ready${suffix}.`;
     case "change_time":
-      return `New time saved. A new card asks you to approve it${suffix}.`;
+      return card.kind === "post" ? `New time saved. Approve the post when it is right${suffix}.` : `New time saved. A new card asks you to approve it${suffix}.`;
     case "set_options":
       return `Changes saved. A new card asks you to approve them${suffix}.`;
     case "posted_self":
@@ -142,7 +145,14 @@ export function decidedMessage(card: ApprovalCard, decision: Decision, sample: b
       if (card.kind === "script") return `Beat changed. The script is planned again and comes back as a new card${suffix}.`;
       return `Approved${suffix}.`;
     default:
-      // Since P4 an approved post gets its time on a schedule card; it is never opened or posted from here.
+      // A post card that shows its time approves it too (cmo-review-3 1.2); an older one gets a schedule card after.
+      if (card.body.kind === "post" && card.body.proposed && new Date(card.body.proposed.at).getTime() > Date.now()) {
+        const p = card.body.proposed;
+        const when = formatWhen(p.at, p.timezone);
+        return p.mode === "publish"
+          ? `Approved. It goes out on ${PLATFORM_LABEL[p.platform]} on ${when}, your time${suffix}.`
+          : `Approved. On ${when} a card gives you the post to copy and open${suffix}.`;
+      }
       if (card.kind === "post") return `Approved. A schedule card asks you for its time${suffix}.`;
       if (card.kind === "script") return `Script approved. The keyframes are being made${suffix}.`;
       if (card.kind === "price") return `Price approved. The video is being made${suffix}.`;

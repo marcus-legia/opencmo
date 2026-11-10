@@ -38,10 +38,11 @@ async function connectX(db: SupabaseClient, userId: string) {
 }
 
 /**
- * A post Writer left for the founder, under its order (as the runner files it), approved by the founder: Schedule
- * proposes its time on a schedule card (A3). Returns the slot and that card.
+ * A post Writer left for the founder, under its order (as the runner files it). Since cmo-review-3 1.2 its card shows a
+ * time; these tests drop it first (an older card without one), so approving it makes Schedule propose the time on a
+ * schedule card (A3). Returns the item and its waiting card.
  */
-async function approvedPost(db: SupabaseClient, user: E2EUser, platform: "X" | "LinkedIn", text: string) {
+async function waitingPost(db: SupabaseClient, user: E2EUser, platform: "X" | "LinkedIn" | "Threads", text: string, timed: boolean) {
   const week = new Date();
   week.setUTCDate(week.getUTCDate() - ((week.getUTCDay() + 6) % 7));
   const order = await db
@@ -56,7 +57,14 @@ async function approvedPost(db: SupabaseClient, user: E2EUser, platform: "X" | "
     .insert({ id: itemId, user_id: user.id, department: "post", platform, day: new Date().toISOString().slice(0, 10), idea: text, status: "in_review", body: { text, alternates: [] } });
   expect(item.error).toBeNull();
   expect((await db.from("deliverables").insert({ user_id: user.id, order_id: order.data!.id, kind: "post", ref_kind: "content_item", ref_id: itemId, status: "waiting_founder" })).error).toBeNull();
-  const { data: card } = await db.from("approvals").select("id, content_hash").eq("ref_kind", "content_item").eq("ref_id", itemId).eq("status", "waiting").single();
+  if (!timed) expect((await db.from("content_items").update({ body: { text, alternates: [], proposed: null } }).eq("id", itemId)).error).toBeNull();
+  const { data: card } = await db.from("approvals").select("id, content_hash, snapshot").eq("ref_kind", "content_item").eq("ref_id", itemId).eq("status", "waiting").single();
+  return { itemId, card: card as { id: string; content_hash: string; snapshot: { proposed?: { at: string; mode: string } } } };
+}
+
+/** A post approved from a card without a time: Schedule asks for its time on a schedule card. */
+async function approvedPost(db: SupabaseClient, user: E2EUser, platform: "X" | "LinkedIn", text: string) {
+  const { itemId, card } = await waitingPost(db, user, platform, text, false);
 
   const me = createClient(state().url, state().anon, { auth: { persistSession: false } });
   expect((await me.auth.signInWithPassword({ email: user.email, password: user.password })).error).toBeNull();
@@ -83,6 +91,34 @@ const mondayOf = (iso: string) => {
   d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
   return d.toISOString().slice(0, 10);
 };
+
+test("a post card shows its time; approving it schedules the post then, with no schedule card", async ({ page }) => {
+  const db = admin();
+  const user = await founder(db);
+  await connectX(db, user.id);
+  const { itemId, card } = await waitingPost(db, user, "X", "Cut a demo by deleting words, not by scrubbing a timeline.", true);
+  expect(card.snapshot.proposed?.mode).toBe("publish");
+  const at = card.snapshot.proposed!.at;
+
+  await signIn(page, user);
+  const view = await openCard(page, card.id);
+  await expect(view.getByTestId("post-when")).toContainText("Goes out");
+  await expect(view.getByTestId("post-when")).toContainText("on X (@founder)");
+  await view.getByRole("button", { name: "Approve", exact: true }).click();
+  await expect(page.getByText(/Approved\. It goes out on X on/)).toBeVisible();
+
+  const deliverable = (await db.from("deliverables").select("id").eq("ref_kind", "content_item").eq("ref_id", itemId).single()).data!.id;
+  const readSlot = async () => (await db.from("schedule_slots").select("id, status, publish_at, approval_id").eq("deliverable_id", deliverable).maybeSingle()).data as SlotRow | null;
+  await expect.poll(async () => (await readSlot())?.status).toBe("waiting");
+  const slot = (await readSlot())!;
+  expect(new Date(slot.publish_at).toISOString()).toBe(new Date(at).toISOString());
+  // The approval the firing reads is the post card's decision: no schedule card waits.
+  expect((await db.from("approvals").select("status").eq("id", slot.approval_id!).single()).data?.status).toBe("approved");
+  expect((await db.from("approvals").select("id").eq("ref_kind", "schedule_slot").eq("ref_id", slot.id).eq("status", "waiting")).data).toEqual([]);
+
+  await page.goto(`/app/schedule?from=${mondayOf(slot.publish_at)}`);
+  await expect(page.locator(`[data-slot-id="${slot.id}"]`)).toBeVisible();
+});
 
 test("Settings → Accounts: connect Threads through the fake Zernio, then disconnect it", async ({ page }) => {
   const db = admin();
