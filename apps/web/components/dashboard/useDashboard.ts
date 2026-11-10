@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, api } from "@/components/clipping/api";
 import { useLive } from "@/components/clipping/useLive";
 import { useShellAccount } from "@/components/clipping/web/WebShell";
+import { isPlanRequired } from "@/lib/plan-offer";
 import { decide, decidedMessage, type Decision } from "@/components/cards/decide";
 import { approvedLine } from "@/components/cards/labels";
 import { useShellState } from "@/components/shell-v2/ShellState";
@@ -30,6 +31,8 @@ export function useDashboard() {
   const { reportQueue, toast } = useShellState();
   const { userId } = useShellAccount();
   const [state, setState] = useState<DashboardState>({ status: "loading" });
+  // Approving or posting without a plan (cmo-review-3 A3): the card goes back and the plan sheet answers instead of a toast.
+  const [planSheet, setPlanSheet] = useState(false);
   // Bumped by every decision: a read that started before it carries the old queue and must not overwrite it.
   const epoch = useRef(0);
 
@@ -111,6 +114,10 @@ export function useDashboard() {
               : shown;
           return { ...current, data: { ...current.data, today, queue, log: current.data.log.filter((event) => event.id !== line.id) } };
         });
+        if (isPlanRequired(error)) {
+          setPlanSheet(true);
+          return false;
+        }
         toast(error instanceof ApiError ? error.message : "Something went wrong. Please try again.");
         // A changed or already decided card: read the queue again so the founder sees what is true now.
         if (error instanceof ApiError && error.status !== 0) void load();
@@ -130,5 +137,7 @@ export function useDashboard() {
     [queue],
   );
 
-  return { state, decideCard, waiting, setPausedAt, reload: load };
+  const closePlanSheet = useCallback(() => setPlanSheet(false), []);
+
+  return { state, decideCard, waiting, setPausedAt, reload: load, planSheet, closePlanSheet };
 }

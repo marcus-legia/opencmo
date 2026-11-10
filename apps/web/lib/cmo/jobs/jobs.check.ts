@@ -629,7 +629,7 @@ async function main() {
   const reasons = readFileSync(new URL("../../../../../supabase/migrations/20270113020000_draft_reasons.sql", import.meta.url), "utf8");
   const sqlReasons = [...(reasons.match(/reason_code in \(([^)]*)\)/)?.[1] ?? "").matchAll(/'([A-Z_]+)'/g)].map((m) => m[1]);
   assert.deepEqual(sqlReasons, DRAFT_REASONS.map((r) => r.code), "DRAFT_REASONS matches the SQL constraint");
-  for (const r of DRAFT_REASONS) assert.ok(reasons.includes(`when '${r.code}' then '${r.label.replace("'", "''")}'`), `SQL names ${r.code} as the card does`);
+  for (const r of DRAFT_REASONS) assert.ok(reasons.includes(`when '${r.code}' then '${r.label.replaceAll("'", "''")}'`), `SQL names ${r.code} as the card does`);
 
   console.log("jobs.check — hàng đợi CMO: W1, W2, W4, W6-lite, W7, W8 memory, W9 review, inbox, vòng lặp, kiểm bài, lease, hoãn, classify_edits đều đúng.");
 }

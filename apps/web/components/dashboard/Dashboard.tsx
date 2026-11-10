@@ -7,9 +7,11 @@
  */
 
 import Link from "next/link";
-import { useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
+import { PlanSheet } from "@/components/billing/PlanSheet";
+import { RatingSheet } from "@/components/cards/RatingSheet";
 import { Icon } from "@/components/icons";
 import { useShellState } from "@/components/shell-v2/ShellState";
 import { isTodayPrompt } from "@/lib/cmo/today";
@@ -24,7 +26,7 @@ import { fillChat, TodayBlock } from "./TodayBlock";
 import { useDashboard } from "./useDashboard";
 
 export function Dashboard() {
-  const { state, decideCard, waiting, setPausedAt, reload } = useDashboard();
+  const { state, decideCard, waiting, setPausedAt, reload, planSheet, closePlanSheet } = useDashboard();
   const { focusChat, workVersion } = useShellState();
   // `?ask=1` (the Brain and Writer pages link to it) lands in the shell's chat. The History API drops the flag, not the
   // router: a router change would render this dynamic page again on the server.
@@ -43,6 +45,22 @@ export function Dashboard() {
     url.searchParams.delete("prompt");
     window.history.replaceState(null, "", url.pathname + url.search);
   }, [asking, prompt, focusChat]);
+  // `?rate=1` is Today's "Rate your first drafts" row (cmo-review-3 2.2): the sheet opens over the feed, and closing it
+  // drops the flag and reads the feed again, so the row reflects the round.
+  const rateAsked = search.get("rate") === "1";
+  const [rating, setRating] = useState(false);
+  useEffect(() => {
+    if (rateAsked) setRating(true);
+  }, [rateAsked]);
+  const closeRating = useCallback(() => {
+    setRating(false);
+    const url = new URL(window.location.href);
+    if (url.searchParams.has("rate")) {
+      url.searchParams.delete("rate");
+      window.history.replaceState(null, "", url.pathname + url.search);
+    }
+    void reload();
+  }, [reload]);
   // Work the chat starts (a task, a draft) shows up in the queue and the graph.
   useEffect(() => {
     if (workVersion > 0) void reload();
@@ -81,6 +99,8 @@ export function Dashboard() {
 
   return (
     <div className="v2-dash td-feed" data-testid="v2-dashboard">
+      <PlanSheet open={planSheet} onClose={closePlanSheet} />
+      <RatingSheet open={rating} onClose={closeRating} />
       <DashboardHeader count={count} goal={week.deliverables} pausedAt={data.cmo.pausedAt} pauseLive={live.cmo} onPaused={setPausedAt} onAsk={focusChat} />
 
       {/* The week's loop in one line (canvas "flow"): what waits, what goes out, what is done. Numbers only from the screen. */}
