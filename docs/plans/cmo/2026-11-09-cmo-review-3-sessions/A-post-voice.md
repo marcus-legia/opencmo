@@ -179,6 +179,21 @@ rating round (one a day, five ratings); the founder's notes and the drafts go to
 `escapeForTag`, and the model's rules are kept only when a rating supports them; routes use allowlisted rate limits;
 error text is English. No credits move.
 
+### Screenshots (A8, 2026-11-10)
+
+In [`shots-A/`](shots-A/), looked at: the post card with its time ("Goes out Thu 12 Nov, 10:00 on X (@founder)", and
+"Opens X to post at …" with no account), the Skip chips, the rating sheet and "Your CMO learned:", at 1280 and 390 px,
+light and dark. No Docker here, so they come from a harness that renders the real components with the real
+stylesheets (fetch stubbed); the e2e specs (`ui-v2-schedule`, `ui-v2-writer`, `ui-v2-voice`) cover the live path in CI's
+e2e run. Seen and kept: the dialog's focus ring when it opens is the shared `v2-dialog` behaviour.
+
+### State at hand-off (2026-11-10)
+
+- Done: A0, A1 + A2, A4–A7. Every push green locally (pgTAP on a local Postgres, typecheck, build, check:contracts,
+  `cmo:eval --provider fake`); CI green on the PR through `9dcd4311`.
+- Waiting: **A3** (paywall on decisions) waits on B0 (`cmo_require_paid`, the 402 mapping, `PlanSheet.tsx`); none is on
+  the branch yet. **A8**'s rebase, schema dump and final `/code-review high` on A's whole diff run after A3.
+
 ## Requests
 
 (Other sessions write their requests here.)
