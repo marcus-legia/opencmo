@@ -9327,21 +9327,21 @@ CREATE FUNCTION public.paywall_on_send() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO ''
     AS $$
+declare
+  v_old text := case when tg_op = 'UPDATE' then old.status end;
+  v_sends boolean;
 begin
-  if auth.uid() is null then
-    return new;
-  end if;
-  if tg_op = 'UPDATE' and new.status is not distinct from old.status then
+  if auth.uid() is null or (tg_op = 'UPDATE' and new.status is not distinct from old.status) then
     return new;
   end if;
   if tg_table_name = 'content_items' then
-    if new.department <> 'post' or new.status not in ('approved', 'published') then
-      return new;
-    end if;
-  elsif new.status not in ('waiting', 'published') then
-    return new;
+    v_sends := new.department = 'post' and new.status in ('approved', 'published')
+      and (v_old is null or v_old not in ('approved', 'published'));
+  else
+    v_sends := new.status in ('waiting', 'due', 'reminded', 'publishing', 'published')
+      and (v_old is null or v_old = 'proposed' or (v_old = 'failed' and new.status <> 'published'));
   end if;
-  if not public.cmo_paid(new.user_id) then
+  if v_sends and not public.cmo_paid(new.user_id) then
     perform public.cmo_plan_required();
   end if;
   return new;
@@ -19419,7 +19419,7 @@ CREATE TRIGGER cmo_runs_first_draft AFTER UPDATE OF status ON public.cmo_runs FO
 -- Name: content_items content_items_paywall; Type: TRIGGER; Schema: public; Owner: -
 --
 
-CREATE TRIGGER content_items_paywall BEFORE UPDATE OF status ON public.content_items FOR EACH ROW EXECUTE FUNCTION public.paywall_on_send();
+CREATE TRIGGER content_items_paywall BEFORE INSERT OR UPDATE OF status ON public.content_items FOR EACH ROW EXECUTE FUNCTION public.paywall_on_send();
 
 
 --

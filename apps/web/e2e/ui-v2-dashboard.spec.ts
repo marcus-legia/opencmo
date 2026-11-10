@@ -26,8 +26,8 @@ test("on the fixture, approving drops every count, logs it, and empties the queu
   const writer = page.getByRole("link", { name: /^Writer, working/ });
   await expect(writer).toContainText("1 waiting on you");
 
-  // After 1.2 a post you post yourself reads "Approve for this time"; others still read "Approve".
-  await queue.getByRole("button", { name: /^Approve( for this time)?$/ }).first().click();
+  // The X post card itself; after 1.2 a post you post yourself reads "Approve for this time", others "Approve".
+  await queue.locator('[data-card-id="card-post"]').getByRole("button", { name: /^Approve( for this time)?$/ }).click();
   await expect(headline).toHaveText("4 things wait on you.");
   await expect(badge).toHaveText("4 waiting on you");
   await expect(queue.getByTestId("queue-count")).toHaveText("4");
@@ -82,7 +82,7 @@ test("on live rows, cards decide through approval_decide, a changed card is refu
 
     // Approve the first (open) card: the server decides it and the post moves on.
     // After 1.2 a post you post yourself reads "Approve for this time"; others still read "Approve".
-    await queue.getByRole("button", { name: /^Approve( for this time)?$/ }).first().click();
+    await queue.getByTestId("approval-card").filter({ hasText: "Live card one" }).getByRole("button", { name: /^Approve( for this time)?$/ }).click();
     await expect(headline).toHaveText("1 thing waits on you.");
     await expect.poll(async () => (await admin.from("content_items").select("status").eq("id", first).single()).data?.status).toBe("approved");
     await expect.poll(async () => (await admin.from("approvals").select("status, decided_via").eq("ref_id", first).eq("status", "approved").maybeSingle()).data?.decided_via).toBe("app");

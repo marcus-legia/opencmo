@@ -11,7 +11,7 @@ select plan(16);
 select ok(not has_function_privilege('authenticated', 'public.cmo_label_outcome(uuid,uuid,text)', 'execute'), 'the label is written through approval_decide only');
 
 insert into auth.users (id, email) values ('e2770000-0000-4000-8000-00000000000a', 'reasons-a@test.local');
--- Posting needs a plan since cmo-review-3 A3 (20270113050000); these founders decide and post, so they have one.
+-- Posting needs a plan since cmo-review-3 A3 (20270114050000); these founders decide and post, so they have one.
 update public.profiles set plan = 'starter' where id in ('e2770000-0000-4000-8000-00000000000a');
 update public.profiles set timezone = 'UTC' where id = 'e2770000-0000-4000-8000-00000000000a';
 

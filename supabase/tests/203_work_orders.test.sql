@@ -19,7 +19,7 @@ select is((select count(*)::int from pg_publication_tables where pubname = 'supa
 insert into auth.users (id, email) values
   ('e2030000-0000-4000-8000-00000000000a', 'b1@test.local'),
   ('e2030000-0000-4000-8000-00000000000b', 'b1-other@test.local');
--- Posting needs a plan since cmo-review-3 A3 (20270113050000); these founders decide and post, so they have one.
+-- Posting needs a plan since cmo-review-3 A3 (20270114050000); these founders decide and post, so they have one.
 update public.profiles set plan = 'starter' where id in ('e2030000-0000-4000-8000-00000000000a', 'e2030000-0000-4000-8000-00000000000b');
 
 create temp table t (name text primary key, id uuid) on commit drop;

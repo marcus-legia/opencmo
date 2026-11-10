@@ -7,7 +7,7 @@
  */
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 
 import { PlanSheet } from "@/components/billing/PlanSheet";
@@ -45,20 +45,14 @@ export function Dashboard() {
     url.searchParams.delete("prompt");
     window.history.replaceState(null, "", url.pathname + url.search);
   }, [asking, prompt, focusChat]);
-  // `?rate=1` is Today's "Rate your first drafts" row (cmo-review-3 2.2): the sheet opens over the feed, and closing it
-  // drops the flag and reads the feed again, so the row reflects the round.
-  const rateAsked = search.get("rate") === "1";
-  const [rating, setRating] = useState(false);
-  useEffect(() => {
-    if (rateAsked) setRating(true);
-  }, [rateAsked]);
+  // `?rate=1` is Today's "Rate your first drafts" row (cmo-review-3 2.2): the sheet opens over the feed while the flag is
+  // there. Closing drops it (Next keeps `useSearchParams` in step with `replaceState`) and reads the feed again, so the
+  // row reflects the round.
+  const rating = search.get("rate") === "1";
   const closeRating = useCallback(() => {
-    setRating(false);
     const url = new URL(window.location.href);
-    if (url.searchParams.has("rate")) {
-      url.searchParams.delete("rate");
-      window.history.replaceState(null, "", url.pathname + url.search);
-    }
+    url.searchParams.delete("rate");
+    window.history.replaceState(null, "", url.pathname + url.search);
     void reload();
   }, [reload]);
   // Work the chat starts (a task, a draft) shows up in the queue and the graph.

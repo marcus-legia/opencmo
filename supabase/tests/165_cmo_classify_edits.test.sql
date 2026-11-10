@@ -8,7 +8,7 @@ set search_path to public, extensions;
 select plan(10);
 
 insert into auth.users (id, email) values ('e1650000-0000-4000-8000-00000000000a', 'classify-a@test.local');
--- Posting needs a plan since cmo-review-3 A3 (20270113050000); these founders decide and post, so they have one.
+-- Posting needs a plan since cmo-review-3 A3 (20270114050000); these founders decide and post, so they have one.
 update public.profiles set plan = 'starter' where id in ('e1650000-0000-4000-8000-00000000000a');
 insert into public.content_items (id, user_id, department, platform, day, idea, status, body) values
   ('e1651000-0000-4000-8000-000000000001', 'e1650000-0000-4000-8000-00000000000a', 'post', 'x', current_date, 'Edited', 'in_review',

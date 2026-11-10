@@ -23,6 +23,8 @@ async function founder(db: SupabaseClient): Promise<E2EUser> {
   const created = await db.auth.admin.createUser({ email: user.email, password: user.password, email_confirm: true });
   expect(created.error).toBeNull();
   user.id = created.data.user!.id;
+  // Approving and posting need a plan (cmo-review-3 A3); these founders decide and post.
+  expect((await db.from("profiles").update({ plan: "starter" }).eq("id", user.id)).error).toBeNull();
   const doc = await db
     .from("marketing_documents")
     .insert({ user_id: user.id, kind: "product", version: 1, created_by: "user", body: { name: "OpenCMO", one_liner: "An AI CMO for solo founders." } });

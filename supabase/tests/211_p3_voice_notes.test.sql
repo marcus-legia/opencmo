@@ -26,7 +26,7 @@ select is(public.platform_profile_id('Reddit'), null, 'Reddit has no profile');
 insert into auth.users (id, email) values
   ('e2110000-0000-4000-8000-00000000000a', 'voice@test.local'),
   ('e2110000-0000-4000-8000-00000000000b', 'voice-other@test.local');
--- Posting needs a plan since cmo-review-3 A3 (20270113050000); these founders decide and post, so they have one.
+-- Posting needs a plan since cmo-review-3 A3 (20270114050000); these founders decide and post, so they have one.
 update public.profiles set plan = 'starter' where id in ('e2110000-0000-4000-8000-00000000000a', 'e2110000-0000-4000-8000-00000000000b');
 insert into public.credit_ledger (user_id, delta, reason, ref_kind, ref_id)
 select 'e2110000-0000-4000-8000-00000000000a', 0, 'noop', 'job', gen_random_uuid() where false;

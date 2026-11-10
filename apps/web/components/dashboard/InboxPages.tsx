@@ -3,12 +3,13 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
-import { PlanSheet, isPlanRequired } from "@/components/billing/PlanSheet";
+import { PlanSheet } from "@/components/billing/PlanSheet";
 import { ApprovalCard } from "@/components/cards/ApprovalCard";
 import { decide, decidedMessage, type Decision } from "@/components/cards/decide";
 import { ApiError, api } from "@/components/clipping/api";
 import { useShellState } from "@/components/shell-v2/ShellState";
 import { Button, EmptyState, MonoLabel } from "@/components/ui";
+import { isPlanRequired } from "@/lib/plan-offer";
 import type { ApprovalCard as Card } from "@/lib/screens/approval-card";
 
 import { ApprovalQueue } from "./ApprovalQueue";

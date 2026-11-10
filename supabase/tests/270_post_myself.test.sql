@@ -14,7 +14,7 @@ select ok(not has_function_privilege('anon', 'public.cmo_post_myself(uuid,text,t
 insert into auth.users (id, email) values
   ('e2700000-0000-4000-8000-00000000000a', 'pm-a@test.local'),
   ('e2700000-0000-4000-8000-00000000000b', 'pm-b@test.local');
--- Posting needs a plan since cmo-review-3 A3 (20270113050000); these founders decide and post, so they have one.
+-- Posting needs a plan since cmo-review-3 A3 (20270114050000); these founders decide and post, so they have one.
 update public.profiles set plan = 'starter' where id in ('e2700000-0000-4000-8000-00000000000a', 'e2700000-0000-4000-8000-00000000000b');
 update public.profiles set timezone = 'UTC' where id = 'e2700000-0000-4000-8000-00000000000a';
 select public.zernio_profile_save('e2700000-0000-4000-8000-00000000000a', 'prof-pm');
