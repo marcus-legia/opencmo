@@ -96,7 +96,7 @@ export default async function LandingPage() {
             <div className="lv-container lv-stack-16">
               <p className="lv-eyebrow">Pricing</p>
               <h2 id="pricing-title" className="lv-h2">One plan, paid monthly or yearly.</h2>
-              <p className="lv-lede">There is no free trial. You see the plans and their prices after you sign in.</p>
+              <p className="lv-lede">Your first plan and drafts are free. Pick a plan to approve and post them. You see the plans and their prices after you sign in.</p>
             </div>
           </section>
         )}

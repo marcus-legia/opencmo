@@ -61,7 +61,7 @@ export function BillingV2({
       )}
       {start && !paid && (
         <p className="v2-card-state is-needs_credits" role="status" data-testid="billing-start">
-          Pick a plan to start. OpenCMO has no free trial. Once you pay, your CMO reads your website and plans your first week within minutes.
+          Your first plan and drafts are free. Pick a plan to approve and post them.
         </p>
       )}
 

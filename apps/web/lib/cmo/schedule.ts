@@ -44,6 +44,24 @@ async function dueLinks(admin: SupabaseClient, items: (string | undefined)[]): P
   return out;
 }
 
+/**
+ * The users with a plan on sale or credits left: SQL `cmo_paid`, the one rule (`cmo_paid_users`). A chunk that cannot
+ * be read counts its users as unpaid: their loops wait a day.
+ */
+async function paidUsers(admin: SupabaseClient, users: string[]): Promise<Set<string>> {
+  const out = new Set<string>();
+  for (let i = 0; i < users.length; i += 500) {
+    const { data, error } = await admin.rpc("cmo_paid_users", { p_users: users.slice(i, i + 500) });
+    if (error) {
+      // These users wait a day; the others still get their loops.
+      console.warn("[cron] cmo: could not read plans", error.message);
+      continue;
+    }
+    for (const id of (data ?? []) as string[]) out.add(id);
+  }
+  return out;
+}
+
 export async function enqueueDueLoops(admin: SupabaseClient): Promise<{ users: number; queued: number; inbox: number }> {
   const today = isoDay();
   const weekday = new Date().getUTCDay();
@@ -86,6 +104,8 @@ export async function enqueueDueLoops(admin: SupabaseClient): Promise<{ users: n
   for (const r of (replied ?? []) as { user_id: string }[]) repliesBy.set(r.user_id, (repliesBy.get(r.user_id) ?? 0) + 1);
   const socialReader = socialReaderReady();
   const modes = await brainModes(admin, users);
+  // CMO review 3, 3.1: loops run for accounts with a plan or credits left, the same rule as `cmo_require_paid`.
+  const paid = await paidUsers(admin, users);
 
   let queued = 0;
   let inbox = 0;
@@ -107,6 +127,7 @@ export async function enqueueDueLoops(admin: SupabaseClient): Promise<{ users: n
       connectedAccounts: connectedBy.get(user) ?? 0,
       repliesDue: repliesBy.get(user) ?? 0,
       socialReader,
+      paid: paid.has(user),
     };
     // Mode B: the run reads what it needs, then waits in the founder's inbox for their Claude.
     const claude = modes.get(user)?.brain === "claude";

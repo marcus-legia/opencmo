@@ -79,7 +79,13 @@ export function useDashboard() {
         text: decision.action === "approve" || decision.action === "edit" || decision.action === "replied" || decision.action === "posted_self" ? approvedLine(card) : `You set aside: ${card.title}`.slice(0, 200),
       };
       epoch.current += 1;
-      setState({ ...before, data: { ...before.data, queue: before.data.queue.filter((c) => c.id !== card.id), log: [line, ...before.data.log].slice(0, 50) } });
+      // Today counts the decision at once: the row leaves and "N of M done" moves; the reload brings the server's rows.
+      const today = before.data.today;
+      const decidedRow = today.rows.some((row) => row.action.type === "card" && row.action.approvalId === card.id);
+      const nextToday = decidedRow
+        ? { ...today, rows: today.rows.filter((row) => !(row.action.type === "card" && row.action.approvalId === card.id)), done: today.done + 1 }
+        : today;
+      setState({ ...before, data: { ...before.data, today: nextToday, queue: before.data.queue.filter((c) => c.id !== card.id), log: [line, ...before.data.log].slice(0, 50) } });
       try {
         await decide(card, decision, sample);
         toast(decidedMessage(card, decision, sample));
@@ -95,7 +101,15 @@ export function useDashboard() {
             const index = before.data.queue.findIndex((c) => c.id === card.id);
             queue.splice(Math.min(Math.max(0, index), queue.length), 0, card);
           }
-          return { ...current, data: { ...current.data, queue, log: current.data.log.filter((event) => event.id !== line.id) } };
+          // Today: put back only the row this decision took out, into what is on screen now (a reload may have
+          // brought new rows meanwhile).
+          const removed = before.data.today.rows.find((row) => row.action.type === "card" && row.action.approvalId === card.id);
+          const shown = current.data.today;
+          const today =
+            removed && !shown.rows.some((row) => row.id === removed.id)
+              ? { ...shown, rows: [removed, ...shown.rows].slice(0, 5), done: Math.max(0, shown.done - 1) }
+              : shown;
+          return { ...current, data: { ...current.data, today, queue, log: current.data.log.filter((event) => event.id !== line.id) } };
         });
         toast(error instanceof ApiError ? error.message : "Something went wrong. Please try again.");
         // A changed or already decided card: read the queue again so the founder sees what is true now.

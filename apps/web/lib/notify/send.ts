@@ -57,7 +57,7 @@ export type Founder = { id: string; email: string | null; timezone: string; dige
 export async function sendDigestEmail(admin: SupabaseClient, sender: EmailSender, founder: Founder, opts: { appUrl: string; now: Date }): Promise<boolean> {
   if (!founder.email) return false;
   const clock = localClock(opts.now, founder.timezone);
-  const input = await loadDigestInput(admin, founder.id, { appUrl: opts.appUrl, dateLabel: clock.dateLabel, now: opts.now });
+  const input = await loadDigestInput(admin, founder.id, { appUrl: opts.appUrl, dateLabel: clock.dateLabel, now: opts.now, asService: true, timezone: founder.timezone });
   if (!input.waiting.length) return false;
   const url = unsubscribeUrl(opts.appUrl, await token(admin, founder.id));
   const c = await claim(admin, founder.id, "digest", input.waiting.map((w) => w.id));

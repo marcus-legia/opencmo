@@ -13,6 +13,18 @@ import { ErrorNote, SkeletonBlocks } from "../parts";
 const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
 const count = (v: unknown) => (Array.isArray(v) ? v.length : 0);
 
+/**
+ * Who reads each document (CMO review 3, 3.3), from the jobs' prompts: the weekly plan, the post and thread drafts,
+ * the Reddit scan and its replies, and competitor research all put the documents in front of the model
+ * (`documentsBlock` in `lib/cmo/jobs/context.ts`). Change this when a job stops reading one.
+ */
+const USED_BY: Record<DocumentKind, string[]> = {
+  product: ["Planner", "Writer", "Sales", "Research"],
+  strategy: ["Planner", "Writer", "Sales", "Research"],
+  competitors: ["Planner", "Writer", "Sales", "Research"],
+  content_strategy: ["Planner", "Writer", "Sales", "Research"],
+};
+
 /** One line that says what the document holds, from its own content. */
 export function documentGist(kind: DocumentKind, body: Body): string {
   switch (kind) {
@@ -74,7 +86,8 @@ export function BusinessDocs() {
   return (
     <div className="scr-lib-business">
       <p className="scr-small scr-muted">
-        Research drafted these{site ? ` from ${site}` : ""}. You own them now: edit anything that is wrong.
+        Research drafted these{site ? ` from ${site}` : ""}. You own them now: edit anything that is wrong. Edit it here and
+        every draft after uses it.
       </p>
       <div className="scr-doc-grid">
         {DOCUMENT_KINDS.map((kind) => {
@@ -82,6 +95,9 @@ export function BusinessDocs() {
           return (
             <article key={kind} className="scr-doc-card" data-kind={kind}>
               <h3>{DOCUMENTS[kind].title}</h3>
+              <span className="scr-tiny scr-muted" data-testid="doc-used-by">
+                Used by {USED_BY[kind].join(", ")}
+              </span>
               <p className="scr-small">{row ? documentGist(kind, row.body) : DOCUMENTS[kind].summary}</p>
               <span className="scr-tiny scr-muted">{row ? provenance(kind, row) : "Not written yet"}</span>
               <Button compact variant="secondary" onClick={() => setEditing(kind)} aria-label={`Edit ${DOCUMENTS[kind].title}`}>

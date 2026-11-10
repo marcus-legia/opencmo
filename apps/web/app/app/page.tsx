@@ -7,7 +7,6 @@ import { Dashboard } from "@/components/dashboard/Dashboard";
 import { UI_V2 } from "@/lib/screens/flag";
 import { loadWorkspace } from "@/lib/cmo/load-workspace";
 import { loadCmoState } from "@/lib/cmo/state";
-import { hasPlanOrCredits } from "@/lib/paid-first";
 import { createServerClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -29,25 +28,19 @@ export default async function CmoHome({ searchParams }: { searchParams: Promise<
   }
 
   const supabase = await createServerClient();
-  const site = typeof params.site === "string" ? params.site.slice(0, 300) : "";
   const { data: { user } } = await supabase.auth.getUser();
+  const site = typeof params.site === "string" ? params.site.slice(0, 300) : "";
   const state = await loadCmoState(supabase);
   const started = Object.keys(state.documents).length > 0;
 
-  // Paid first, no free trial (owner, 2026-11-08): a new account with no plan and no credits picks a plan before the
-  // CMO does any work. A founder who already started keeps the Dashboard and the drafts waiting there. `paid=1` is
-  // Creem's return: the webhook may land after the founder does, so it reaches Setup, which says the payment is still
-  // on its way (anyone can type `paid=1`; only a plan or credits read here count as paid, and onboarding checks again).
-  const paid = started || (user ? await hasPlanOrCredits(supabase, user.id) : false);
-  if (!paid && params.paid !== "1") {
-    redirect(site ? `/app/billing?start=1&site=${encodeURIComponent(site)}` : "/app/billing?start=1");
-  }
-
-  // v2: a founder with no documents starts at Setup (S13), with the website they typed on the landing page; the
-  // Dashboard reads its own data client-side.
+  // The first run is free (CMO review 3, 3.1, replacing "paid first" of 2026-11-08): a new account goes to Setup and
+  // gets its documents, its first week and its first drafts before any plan. The paywall answers the first action that
+  // sends something out or costs credits again (`cmo_require_paid`). `paid=1` is Creem's return, which anyone can type:
+  // Setup says the payment arrived only when the plan or credits are there, and that it is on its way otherwise.
   if (UI_V2) {
-    if (Object.keys(state.documents).length === 0) {
-      const query = new URLSearchParams({ ...(site ? { site } : {}), ...(params.paid === "1" ? { paid: paid ? "1" : "pending" } : {}) }).toString();
+    if (!started) {
+      const paid = params.paid === "1" ? ((await supabase.rpc("cmo_require_paid", { p_user: user?.id ?? null })).error ? "pending" : "1") : null;
+      const query = new URLSearchParams({ ...(site ? { site } : {}), ...(paid ? { paid } : {}) }).toString();
       redirect(query ? `/app/setup?${query}` : "/app/setup");
     }
     return <Dashboard />;

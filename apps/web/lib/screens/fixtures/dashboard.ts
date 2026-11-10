@@ -6,6 +6,19 @@ import { at } from "./shared";
 /** `Main.dc.html` at 10:42:00, Thursday 29 Oct. */
 export const dashboardFixture: DashboardScreen = {
   cmo: { mode: "opencmo", pausedAt: null },
+  // What `buildToday` makes of this morning: Threads failed at 08:00, LinkedIn has been quiet for three days.
+  today: {
+    rows: [
+      { id: "failed:out-1", reason: "failed_post", level: "critical", title: "Threads: today's post did not go out", detail: "Cut a video by deleting words from its transcript.", department: "publish", platform: "threads", action: { type: "card", approvalId: SCHEDULE_CARD.id, label: "Retry or post it yourself" } },
+      { id: "silent:linkedin", reason: "silent", level: "high", title: "LinkedIn: nothing posted for 3 days", detail: `A post for LinkedIn is waiting: “${POST_CARD.title}”`, department: "writer", platform: "linkedin", action: { type: "card", approvalId: POST_CARD.id, label: "Open the post" } },
+      { id: `card:${PRICE_CARD.id}`, reason: "waiting", level: "normal", title: PRICE_CARD.title, detail: null, department: PRICE_CARD.department, platform: null, action: { type: "card", approvalId: PRICE_CARD.id, label: "Open" } },
+      { id: `card:${SHORTS_CARD.id}`, reason: "waiting", level: "normal", title: SHORTS_CARD.title, detail: null, department: SHORTS_CARD.department, platform: null, action: { type: "card", approvalId: SHORTS_CARD.id, label: "Open" } },
+      { id: `card:${REPLY_CARD.id}`, reason: "waiting", level: "normal", title: REPLY_CARD.title, detail: null, department: REPLY_CARD.department, platform: null, action: { type: "card", approvalId: REPLY_CARD.id, label: "Open" } },
+    ],
+    done: 2,
+    total: 7,
+    more: 0,
+  },
   week: {
     goal: "Launch the editor",
     deliverables: { done: 9, total: 14 },
@@ -58,6 +71,7 @@ export const dashboardFixture: DashboardScreen = {
 /** What production shows for a part that has no backend yet: nothing, never sample numbers. */
 export const dashboardEmpty: DashboardScreen = {
   cmo: { mode: "opencmo", pausedAt: null },
+  today: { rows: [], done: 0, total: 0, more: 0 },
   week: { goal: null, deliverables: { done: 0, total: 0 }, workingNow: 0, wordsDraftedToday: 0, credits: { used: 0, budget: 0 } },
   team: {
     brain: { state: "on_track", watching: 0, nextCheckAt: null },

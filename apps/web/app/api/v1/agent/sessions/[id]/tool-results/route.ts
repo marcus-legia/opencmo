@@ -4,6 +4,7 @@ import { KEYFRAMES_MAX } from "@opencmo/editor-core";
 
 import { withApi } from "@/lib/api/handler";
 import { continueTurn } from "@/lib/agent/session";
+import { requirePaidForCmoSession } from "@/lib/paid-first";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -48,4 +49,8 @@ const body = z.object({
  * chờ gì (đã Stop, đã trả) thì 409, trước khi stream mở.
  */
 // Up to 8 results with 4 images each: the default 256 KB cap refused real captures with a 413 before zod ran.
-export const POST = withApi({ body, rateLimit: { bucket: "agent-continue", limit: 300, windowSeconds: 3600 }, maxBodyBytes: 4 * 1024 * 1024 }, async ({ supabase, user, body, params }) => continueTurn(supabase, user.id, params.id, body.results));
+export const POST = withApi({ body, rateLimit: { bucket: "agent-continue", limit: 300, windowSeconds: 3600 }, maxBodyBytes: 4 * 1024 * 1024 }, async ({ supabase, user, body, params }) => {
+  // A CMO turn goes on only on a paid account (CMO review 3, 3.1), however it is continued.
+  await requirePaidForCmoSession(supabase, user.id, params.id);
+  return continueTurn(supabase, user.id, params.id, body.results);
+});

@@ -221,6 +221,12 @@ async function main(): Promise<void> {
     assert.equal(signedOut.message, "Please sign in again.");
   });
 
+  await check("cmo_require_paid's P0402 is a 402 that carries plan_required", async () => {
+    const error = apiErrorFromPostgrest({ code: "P0402", message: "Pick a plan to keep going. Your first plan and drafts stay here." });
+    assert.equal(error.status, 402);
+    assert.deepEqual(error.detail, { code: "plan_required", message: "Pick a plan to keep going. Your first plan and drafts stay here." });
+  });
+
   await check("chỉ đúng câu quota SQL thành 429", async () => {
     assert.equal(
       apiErrorFromPostgrest({

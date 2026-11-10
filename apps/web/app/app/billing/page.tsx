@@ -17,7 +17,7 @@ import type { LedgerEntry } from "@/lib/types";
  */
 export default async function BillingPage({ searchParams }: { searchParams: Promise<{ paid?: string; start?: string; site?: string }> }) {
   const { paid: justPaid, start, site: siteParam } = await searchParams;
-  // Sent here by `/app` before the first payment (paid first, no free trial: owner, 2026-11-08).
+  // `start=1`: a link that asks for a plan up front (the plan sheet's Billing link, older emails). The first run is free.
   const site = typeof siteParam === "string" ? siteParam.slice(0, 300) : undefined;
   const supabase = await createServerClient();
 
@@ -69,8 +69,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
       {justPaid === "1" && <p className="page-sub" role="status">Payment received. Credits arrive within a minute.</p>}
       {start === "1" && !paid && (
         <p className="page-sub" role="status" data-testid="billing-start">
-          Pick a plan to start. OpenCMO has no free trial. Once you pay, your CMO reads your website and plans your first
-          week within minutes.
+          Your first plan and drafts are free. Pick a plan to approve and post them.
         </p>
       )}
 

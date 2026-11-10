@@ -82,7 +82,7 @@ export function ApprovalQueue({
       <div className="v2-queue-head">
         <h2 id="wait-title" className="v2-panel-title">
           <span className="v2-mark is-small" aria-hidden="true" />
-          Waiting on you · <span data-testid="queue-count">{count}</span>
+          Everything waiting · <span data-testid="queue-count">{count}</span>
           {live ? null : <SampleTag />}
         </h2>
         <span className="v2-queue-note">The only approval queue</span>

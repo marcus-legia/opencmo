@@ -3513,6 +3513,59 @@ $$;
 
 
 --
+-- Name: cmo_apply_onboarding_answers(uuid, boolean); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_apply_onboarding_answers(p_user uuid, p_handle_given boolean DEFAULT false) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_profile public.profiles;
+  v_doc public.marketing_documents;
+  v_line text;
+  v_cadence text;
+  v_next text;
+begin
+  select * into v_profile from public.profiles where id = p_user;
+  if not found then
+    return;
+  end if;
+
+  if v_profile.x_handle is not null then
+    -- The same lock `save_marketing_document` takes, so a version number is never taken twice.
+    perform pg_advisory_xact_lock(hashtextextended(p_user::text || ':doc:product', 1713));
+    select * into v_doc from public.marketing_documents where user_id = p_user and kind = 'product' order by version desc limit 1;
+    if found and (coalesce(btrim(v_doc.body->>'x_handle'), '') = ''
+        or (p_handle_given and lower(regexp_replace(btrim(v_doc.body->>'x_handle'), '^@', '')) <> lower(v_profile.x_handle))) then
+      insert into public.marketing_documents (user_id, kind, version, body, created_by)
+      values (p_user, 'product', v_doc.version + 1, v_doc.body || jsonb_build_object('x_handle', '@' || v_profile.x_handle), 'user');
+    end if;
+  end if;
+
+  if v_profile.post_platforms is not null then
+    perform pg_advisory_xact_lock(hashtextextended(p_user::text || ':doc:content_strategy', 1713));
+    select * into v_doc from public.marketing_documents where user_id = p_user and kind = 'content_strategy' order by version desc limit 1;
+    if found then
+      v_line := 'The founder posts on ' || (
+        select string_agg(case p when 'x' then 'X' when 'threads' then 'Threads' else 'LinkedIn' end, ', ' order by array_position(array['x', 'threads', 'linkedin'], p))
+        from unnest(v_profile.post_platforms) p
+      ) || case when v_profile.post_platforms = array['x'] then ' only.' else '.' end;
+      v_cadence := coalesce(v_doc.body->>'cadence', '');
+      -- One such sentence, always first: the earlier answer is replaced, the founder's own words are kept.
+      -- concat, not ||: an empty rhythm must leave the sentence alone, never make the whole value null.
+      v_next := btrim(concat(v_line, ' ', btrim(regexp_replace(v_cadence, 'The founder posts on [^.]*\.\s*', '', 'g'))));
+      if v_next is distinct from v_cadence then
+        insert into public.marketing_documents (user_id, kind, version, body, created_by)
+        values (p_user, 'content_strategy', v_doc.version + 1, v_doc.body || jsonb_build_object('cadence', v_next), 'user');
+      end if;
+    end if;
+  end if;
+end;
+$$;
+
+
+--
 -- Name: cmo_as_written(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -4052,8 +4105,10 @@ CREATE FUNCTION public.cmo_enqueue(p_user uuid, p_kind text, p_input jsonb) RETU
     AS $$
 declare
   v_row public.cmo_runs;
+  -- A plan on sale, read without `is_paid`'s ownership check: this runs inside other users' transactions too.
+  v_plan boolean := coalesce((select plan in ('starter', 'creator') from public.profiles where id = p_user), false);
   v_price integer := case
-    when p_input->>'brain' = 'claude' and public.is_paid(p_user) then 0
+    when p_input->>'brain' = 'claude' and v_plan then 0
     else public.cmo_job_price(p_kind)
   end;
   v_key text := case when p_kind in ('post_draft', 'write_caption', 'write_video_brief', 'write_slides', 'publish_post')
@@ -4062,7 +4117,7 @@ begin
   -- The founder's own Claude answers inbox items over MCP, which is for paid plans only: a free founder's inbox item
   -- could never be answered, and its price was charged for nothing (review R5). Their run thinks with OpenCMO
   -- instead, and is refused below when they cannot pay for it.
-  if p_input->>'brain' = 'claude' and not public.is_paid(p_user) then
+  if p_input->>'brain' = 'claude' and not v_plan then
     p_input := p_input - 'brain';
     v_price := public.cmo_job_price(p_kind);
   end if;
@@ -4093,6 +4148,13 @@ begin
   order by created_at desc limit 1;
   if found then
     return v_row;
+  end if;
+
+  -- Read under the lock above, so two requests at once cannot both be the free one.
+  if v_price > 0 and public.cmo_first_run_free(p_user, p_kind) then
+    v_price := 0;
+  elsif v_price > 0 and not public.cmo_paid(p_user) then
+    perform public.cmo_plan_required();
   end if;
 
   if (select count(*) from public.cmo_runs
@@ -4136,6 +4198,35 @@ begin
   return new;
 end;
 $$;
+
+
+--
+-- Name: cmo_first_run_free(uuid, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_first_run_free(p_user uuid, p_kind text) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select p_user is not null
+    and p_kind in ('plan_week', 'post_draft')
+    and not public.cmo_paid(p_user)
+    and not exists (
+      select 1 from public.cmo_runs r
+      where r.user_id = p_user and r.kind = p_kind and r.status in ('queued', 'running', 'done')
+    )
+    -- A failed run gives the free run back, at most twice: runs made to fail cannot become free work every day.
+    and (select count(*) from public.cmo_runs r where r.user_id = p_user and r.kind = p_kind and r.status = 'failed') < 3;
+$$;
+
+
+--
+-- Name: cmo_free_onboard_runs(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_free_onboard_runs() RETURNS integer
+    LANGUAGE sql IMMUTABLE
+    AS $$ select 2 $$;
 
 
 --
@@ -4386,6 +4477,115 @@ $$;
 
 
 --
+-- Name: cmo_onboard_step(uuid, jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_onboard_step(p_run uuid, p_steps jsonb) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $_$
+declare
+  v_user uuid := public.require_user();
+begin
+  if p_steps is null or jsonb_typeof(p_steps) <> 'array' or jsonb_array_length(p_steps) > 12
+     or exists (
+       select 1 from jsonb_array_elements(p_steps) e
+       where jsonb_typeof(e) <> 'object'
+          or coalesce(e->>'id', '') !~ '^[a-z_]{1,40}$'
+          or coalesce(e->>'status', '') not in ('running', 'done', 'failed')
+          or (select count(*) from jsonb_object_keys(e)) <> 2
+     ) then
+    raise exception 'These steps are not valid.' using errcode = '22023';
+  end if;
+  update public.cmo_runs set steps = p_steps
+  where id = p_run and user_id = v_user and kind = 'onboard' and status = 'running';
+  return found;
+end;
+$_$;
+
+
+--
+-- Name: cmo_onboarding_answers(jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_onboarding_answers(p_answers jsonb) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $_$
+declare
+  v_user uuid := public.require_user();
+  v_handle text;
+  v_platforms text[];
+  v_heard text;
+  v_note text;
+begin
+  if p_answers is null or jsonb_typeof(p_answers) <> 'object' or octet_length(p_answers::text) > 1024
+     or exists (select 1 from jsonb_object_keys(p_answers) k where k not in ('x_handle', 'platforms', 'heard_from', 'heard_from_note')) then
+    raise exception 'These answers are not valid.' using errcode = '22023';
+  end if;
+
+  if p_answers ? 'x_handle' then
+    v_handle := regexp_replace(btrim(coalesce(p_answers->>'x_handle', '')), '^@', '');
+    if v_handle !~ '^[A-Za-z0-9_]{1,15}$' then
+      raise exception 'An X handle has 1 to 15 letters, numbers or underscores.' using errcode = '22023';
+    end if;
+  end if;
+  if p_answers ? 'platforms' then
+    if jsonb_typeof(p_answers->'platforms') <> 'array' then
+      raise exception 'These answers are not valid.' using errcode = '22023';
+    end if;
+    select array_agg(distinct v) into v_platforms from jsonb_array_elements_text(p_answers->'platforms') v;
+    if v_platforms is null or not (v_platforms <@ array['x', 'threads', 'linkedin']) then
+      raise exception 'Pick X, Threads or LinkedIn.' using errcode = '22023';
+    end if;
+  end if;
+  if p_answers ? 'heard_from' then
+    v_heard := p_answers->>'heard_from';
+    if v_heard is null or v_heard not in ('search', 'x', 'reddit', 'linkedin', 'youtube', 'ai_assistant', 'friend', 'newsletter', 'other') then
+      raise exception 'These answers are not valid.' using errcode = '22023';
+    end if;
+    v_note := nullif(left(btrim(coalesce(p_answers->>'heard_from_note', '')), 100), '');
+  elsif p_answers ? 'heard_from_note' then
+    raise exception 'These answers are not valid.' using errcode = '22023';
+  end if;
+
+  update public.profiles set
+    x_handle = coalesce(v_handle, x_handle),
+    post_platforms = coalesce(v_platforms, post_platforms),
+    heard_from = coalesce(v_heard, heard_from),
+    heard_from_note = case when v_heard is not null then v_note else heard_from_note end
+  where id = v_user;
+
+  perform public.cmo_apply_onboarding_answers(v_user, v_handle is not null);
+end;
+$_$;
+
+
+--
+-- Name: cmo_paid(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_paid(p_user uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select coalesce((select p.plan in ('starter', 'creator') or p.credit_balance > 0 from public.profiles p where p.id = p_user), false);
+$$;
+
+
+--
+-- Name: cmo_paid_users(uuid[]); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_paid_users(p_users uuid[]) RETURNS SETOF uuid
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select u from unnest(p_users) u where public.cmo_paid(u);
+$$;
+
+
+--
 -- Name: cmo_pause(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -4415,6 +4615,20 @@ CREATE FUNCTION public.cmo_paused(p_user uuid) RETURNS boolean
     LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO 'public'
     AS $$ select coalesce((select cmo_paused_at is not null from public.profiles where id = p_user), false) $$;
+
+
+--
+-- Name: cmo_plan_required(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_plan_required() RETURNS void
+    LANGUAGE plpgsql
+    SET search_path TO ''
+    AS $$
+begin
+  raise exception 'Pick a plan to keep going. Your first plan and drafts stay here.' using errcode = 'P0402';
+end;
+$$;
 
 
 --
@@ -4938,6 +5152,25 @@ CREATE FUNCTION public.cmo_reply_outcomes_due(p_user uuid, p_limit integer) RETU
     and o.decided_at <= now() - interval '3 days' and p.reply is not null
   order by o.decided_at desc
   limit greatest(1, least(coalesce(p_limit, 10), 50));
+$$;
+
+
+--
+-- Name: cmo_require_paid(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_require_paid(p_user uuid) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+begin
+  if p_user is null or (auth.uid() is not null and auth.uid() <> p_user) then
+    raise exception 'Not found.' using errcode = 'P0002';
+  end if;
+  if not public.cmo_paid(p_user) then
+    perform public.cmo_plan_required();
+  end if;
+end;
 $$;
 
 
@@ -9750,6 +9983,113 @@ $_$;
 
 
 --
+-- Name: product_event(uuid, text, text, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.product_event(p_user uuid, p_kind text, p_platform text, p_ref uuid) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  insert into public.product_events (user_id, kind, platform, paid, ref_id)
+  values (p_user, p_kind, nullif(lower(regexp_replace(coalesce(p_platform, ''), '[^A-Za-z_]', '', 'g')), ''), public.cmo_paid(p_user), p_ref)
+  on conflict (kind, ref_id) do nothing;
+exception when others then
+  raise warning 'product event % not recorded for %: %', p_kind, p_user, sqlerrm;
+end;
+$$;
+
+
+--
+-- Name: product_events_approve(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.product_events_approve() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  if new.kind in ('post', 'reply') and new.status in ('approved', 'edited') and old.status not in ('approved', 'edited') then
+    perform public.product_event(new.user_id, 'approve', new.snapshot->>'platform', new.id);
+  end if;
+  return new;
+end;
+$$;
+
+
+--
+-- Name: product_events_onboarded(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.product_events_onboarded() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  if new.kind = 'onboard' and new.status = 'done' and old.status is distinct from 'done' then
+    perform public.product_event(new.user_id, 'onboarded', null, new.user_id);
+  end if;
+  return new;
+end;
+$$;
+
+
+--
+-- Name: product_events_posted(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.product_events_posted() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  if new.status = 'published' and old.status is distinct from 'published' then
+    perform public.product_event(new.user_id, 'posted', new.platform, new.id);
+  end if;
+  return new;
+end;
+$$;
+
+
+--
+-- Name: product_events_reply(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.product_events_reply() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  if new.status = 'replied' and old.status is distinct from 'replied' then
+    perform public.product_event(new.user_id, 'reply_copied', new.platform, new.id);
+  end if;
+  return new;
+end;
+$$;
+
+
+--
+-- Name: product_events_slot(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.product_events_slot() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  if new.status = 'waiting' and (tg_op = 'INSERT' or old.status is distinct from 'waiting') then
+    perform public.product_event(new.user_id, 'schedule', new.platform, new.id);
+  end if;
+  if new.status = 'published' and (tg_op = 'INSERT' or old.status is distinct from 'published')
+     and not exists (select 1 from public.deliverables d where d.id = new.deliverable_id and d.ref_kind = 'content_item') then
+    perform public.product_event(new.user_id, 'posted', new.platform, new.id);
+  end if;
+  return new;
+end;
+$$;
+
+
+--
 -- Name: product_mentioned(uuid, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -13769,6 +14109,12 @@ begin
   if exists(select 1 from public.cmo_runs where user_id = v_user and kind = p_kind and status = 'running') then
     raise exception 'Your marketing plan is already being built. Give it a minute.' using errcode = 'P0001';
   end if;
+  -- Runs that failed on our side (a site we could not read, a model error) do not count; the 5-a-day cap below
+  -- still bounds the retries.
+  if not public.cmo_paid(v_user)
+     and (select count(*) from public.cmo_runs where user_id = v_user and kind = p_kind and status <> 'failed') >= public.cmo_free_onboard_runs() then
+    perform public.cmo_plan_required();
+  end if;
   if (select count(*) from public.cmo_runs
       where user_id = v_user and kind = p_kind and created_at > now() - interval '1 day') >= 5 then
     raise exception 'You can rebuild your plan 5 times a day. Try again tomorrow, or edit the documents directly.' using errcode = 'P0001';
@@ -16161,6 +16507,86 @@ CREATE TABLE public.account_metrics (
 
 
 --
+-- Name: product_events; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.product_events (
+    id bigint NOT NULL,
+    user_id uuid NOT NULL,
+    kind text NOT NULL,
+    platform text,
+    paid boolean NOT NULL,
+    ref_id uuid NOT NULL,
+    at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT product_events_kind_check CHECK ((kind = ANY (ARRAY['onboarded'::text, 'approve'::text, 'schedule'::text, 'posted'::text, 'reply_copied'::text]))),
+    CONSTRAINT product_events_platform_check CHECK (((platform IS NULL) OR (platform ~ '^[a-z_]{1,40}$'::text)))
+);
+
+
+--
+-- Name: profiles; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.profiles (
+    id uuid NOT NULL,
+    email text,
+    plan text DEFAULT 'free'::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    credit_balance integer DEFAULT 0 NOT NULL,
+    retention_from timestamp with time zone DEFAULT now() NOT NULL,
+    retention_exempt boolean DEFAULT false NOT NULL,
+    weekly_credit_budget integer DEFAULT 80 NOT NULL,
+    timezone text DEFAULT 'UTC'::text NOT NULL,
+    digest_hour smallint DEFAULT 7,
+    cmo_paused_at timestamp with time zone,
+    timezone_source text DEFAULT 'default'::text NOT NULL,
+    creem_customer_id text,
+    x_handle text,
+    post_platforms text[],
+    heard_from text,
+    heard_from_note text,
+    CONSTRAINT profiles_digest_hour_check CHECK (((digest_hour >= 0) AND (digest_hour <= 23))),
+    CONSTRAINT profiles_heard_from_check CHECK (((heard_from IS NULL) OR (heard_from = ANY (ARRAY['search'::text, 'x'::text, 'reddit'::text, 'linkedin'::text, 'youtube'::text, 'ai_assistant'::text, 'friend'::text, 'newsletter'::text, 'other'::text])))),
+    CONSTRAINT profiles_heard_from_note_check CHECK (((heard_from_note IS NULL) OR (char_length(heard_from_note) <= 100))),
+    CONSTRAINT profiles_post_platforms_check CHECK (((post_platforms IS NULL) OR (((cardinality(post_platforms) >= 1) AND (cardinality(post_platforms) <= 3)) AND (post_platforms <@ ARRAY['x'::text, 'threads'::text, 'linkedin'::text])))),
+    CONSTRAINT profiles_timezone_check CHECK (((char_length(timezone) >= 1) AND (char_length(timezone) <= 64))),
+    CONSTRAINT profiles_timezone_source_check CHECK ((timezone_source = ANY (ARRAY['default'::text, 'browser'::text, 'founder'::text]))),
+    CONSTRAINT profiles_weekly_credit_budget_check CHECK (((weekly_credit_budget >= 0) AND (weekly_credit_budget <= 10000))),
+    CONSTRAINT profiles_x_handle_check CHECK (((x_handle IS NULL) OR (x_handle ~ '^[A-Za-z0-9_]{1,15}$'::text)))
+);
+
+
+--
+-- Name: activation; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW public.activation WITH (security_invoker='true') AS
+ WITH onboarded AS (
+         SELECT product_events.user_id,
+            min(product_events.at) AS at
+           FROM public.product_events
+          WHERE (product_events.kind = 'onboarded'::text)
+          GROUP BY product_events.user_id
+        ), approved AS (
+         SELECT product_events.user_id,
+            min(product_events.at) AS at
+           FROM public.product_events
+          WHERE (product_events.kind = 'approve'::text)
+          GROUP BY product_events.user_id
+        )
+ SELECT ((p.created_at AT TIME ZONE 'UTC'::text))::date AS signup_day,
+    public.cmo_paid(p.id) AS paid,
+    (count(*))::integer AS signups,
+    (count(o.user_id))::integer AS onboarded,
+    (count(a.user_id) FILTER (WHERE (a.at <= (o.at + '24:00:00'::interval))))::integer AS approved_24h,
+    round(((100.0 * (count(a.user_id) FILTER (WHERE (a.at <= (o.at + '24:00:00'::interval))))::numeric) / (NULLIF(count(o.user_id), 0))::numeric), 1) AS approved_24h_pct
+   FROM ((public.profiles p
+     LEFT JOIN onboarded o ON ((o.user_id = p.id)))
+     LEFT JOIN approved a ON ((a.user_id = p.id)))
+  GROUP BY (((p.created_at AT TIME ZONE 'UTC'::text))::date), (public.cmo_paid(p.id));
+
+
+--
 -- Name: agent_messages; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -16793,27 +17219,16 @@ CREATE TABLE public.post_metrics (
 
 
 --
--- Name: profiles; Type: TABLE; Schema: public; Owner: -
+-- Name: product_events_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.profiles (
-    id uuid NOT NULL,
-    email text,
-    plan text DEFAULT 'free'::text NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    credit_balance integer DEFAULT 0 NOT NULL,
-    retention_from timestamp with time zone DEFAULT now() NOT NULL,
-    retention_exempt boolean DEFAULT false NOT NULL,
-    weekly_credit_budget integer DEFAULT 80 NOT NULL,
-    timezone text DEFAULT 'UTC'::text NOT NULL,
-    digest_hour smallint DEFAULT 7,
-    cmo_paused_at timestamp with time zone,
-    timezone_source text DEFAULT 'default'::text NOT NULL,
-    creem_customer_id text,
-    CONSTRAINT profiles_digest_hour_check CHECK (((digest_hour >= 0) AND (digest_hour <= 23))),
-    CONSTRAINT profiles_timezone_check CHECK (((char_length(timezone) >= 1) AND (char_length(timezone) <= 64))),
-    CONSTRAINT profiles_timezone_source_check CHECK ((timezone_source = ANY (ARRAY['default'::text, 'browser'::text, 'founder'::text]))),
-    CONSTRAINT profiles_weekly_credit_budget_check CHECK (((weekly_credit_budget >= 0) AND (weekly_credit_budget <= 10000)))
+ALTER TABLE public.product_events ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.product_events_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
 );
 
 
@@ -17779,6 +18194,22 @@ ALTER TABLE ONLY public.post_metrics
 
 
 --
+-- Name: product_events product_events_kind_ref_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.product_events
+    ADD CONSTRAINT product_events_kind_ref_id_key UNIQUE (kind, ref_id);
+
+
+--
+-- Name: product_events product_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.product_events
+    ADD CONSTRAINT product_events_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: profiles profiles_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -18619,6 +19050,13 @@ CREATE INDEX post_metrics_user_idx ON public.post_metrics USING btree (user_id, 
 
 
 --
+-- Name: product_events_user_kind; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX product_events_user_kind ON public.product_events USING btree (user_id, kind, at);
+
+
+--
 -- Name: profiles_creem_customer_unique; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -19050,6 +19488,41 @@ CREATE TRIGGER marketing_documents_write_budget BEFORE INSERT ON public.marketin
 --
 
 CREATE TRIGGER media_assets_record_storage_deletions BEFORE DELETE ON public.media_assets FOR EACH ROW EXECUTE FUNCTION public.record_media_storage_deletions();
+
+
+--
+-- Name: approvals product_events_approve; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER product_events_approve AFTER UPDATE OF status ON public.approvals FOR EACH ROW EXECUTE FUNCTION public.product_events_approve();
+
+
+--
+-- Name: cmo_runs product_events_onboarded; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER product_events_onboarded AFTER UPDATE OF status ON public.cmo_runs FOR EACH ROW EXECUTE FUNCTION public.product_events_onboarded();
+
+
+--
+-- Name: content_items product_events_posted; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER product_events_posted AFTER UPDATE OF status ON public.content_items FOR EACH ROW EXECUTE FUNCTION public.product_events_posted();
+
+
+--
+-- Name: opportunities product_events_reply; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER product_events_reply AFTER UPDATE OF status ON public.opportunities FOR EACH ROW EXECUTE FUNCTION public.product_events_reply();
+
+
+--
+-- Name: schedule_slots product_events_slot; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER product_events_slot AFTER INSERT OR UPDATE OF status ON public.schedule_slots FOR EACH ROW EXECUTE FUNCTION public.product_events_slot();
 
 
 --
@@ -19877,6 +20350,14 @@ ALTER TABLE ONLY public.post_metrics
 
 
 --
+-- Name: product_events product_events_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.product_events
+    ADD CONSTRAINT product_events_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
 -- Name: profiles profiles_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -20590,6 +21071,12 @@ ALTER TABLE public.page_captures ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.post_metrics ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: product_events; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.product_events ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: profiles; Type: ROW SECURITY; Schema: public; Owner: -

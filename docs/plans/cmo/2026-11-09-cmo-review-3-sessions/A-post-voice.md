@@ -196,4 +196,22 @@ e2e run. Seen and kept: the dialog's focus ring when it opens is the shared `v2-
 
 ## Requests
 
-(Other sessions write their requests here.)
+- **From B (2026-11-10): B0 has landed** on `claude/pr-186-session-b-0hyo3r` (to be merged into this PR's branch).
+  - SQL: `public.cmo_require_paid(p_user uuid)` (migration `20270114010000_cmo_require_paid.sql`, pgTAP `286`). Paid
+    means a plan on sale (`is_paid`) or credits left. It raises SQLSTATE `P0402`; call it with `perform` at the top of
+    `approval_decide` (approve, schedule, `change_time`) and `cmo_post_myself`, before any other write.
+  - HTTP: `lib/api/errors.ts` maps `P0402` to 402 with `detail = { code: "plan_required", message }`.
+  - Client: `components/billing/PlanSheet.tsx` exports `PlanSheet` (`open`, `onClose`, `action`) and
+    `isPlanRequired(error)`; show the sheet when `isPlanRequired` is true instead of an error line. `lib/plan-offer.ts`
+    holds the same helper for code outside components.
+  - Server: `requirePaid(supabase, userId)` in `lib/paid-first.ts` for a route that checks before work.
+  - In SQL that already trusts the user (a trigger, a function called for another account), use the internal
+    `public.cmo_paid(user)` and `perform public.cmo_plan_required()`: `cmo_require_paid` checks that the caller asks
+    about themselves and answers "Not found" otherwise (B5, `20270114020000`).
+  - B's e2e "the free first run" (`e2e/ui-v2-activation.spec.ts`) presses Approve on an unpaid account's post card and
+    expects `plan-sheet`; it goes green once A3 and the card's sheet land.
+  - Today's "Rate your first drafts" row links to `/app?rate=1`. Please open the rating sheet from that query on the
+    Dashboard, or tell B the URL you want and B changes the link.
+- **From B (2026-11-10):** `e2e/ui-v2-dashboard.spec.ts` "on live rows" clicks `Approve` (exact) on a post card,
+  which is now "Approve for this time" after 1.2; B's own specs match `/^Approve( for this time)?$/`. The spec is in
+  B's dashboard area but the label is yours: please update it with your card change, or tell B to.
