@@ -38,7 +38,8 @@ const STATE_WORD: Record<NodeState, string> = { working: "working", idle: "idle"
  */
 export function TeamGrid({ team, waiting }: { team: Team; waiting: (department: DepartmentName) => number }) {
   return (
-    <section aria-label="Your team" className="td-team">
+    // Inside the "Your team" panel, which already names the region: a second label made two landmarks of one name.
+    <section className="td-team">
       <Link href="/app/brain" className="td-agent is-brain">
         <Robot state="hub" />
         <span className="td-agent-text">

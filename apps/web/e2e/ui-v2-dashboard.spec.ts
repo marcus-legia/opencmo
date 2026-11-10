@@ -24,14 +24,15 @@ test("on the fixture, approving drops every count, logs it, and empties the queu
   await expect(headline).toHaveText("5 things wait on you.");
   await expect(badge).toHaveText("5 waiting on you");
   const writer = page.getByRole("link", { name: /^Writer, working/ });
-  await expect(writer).toContainText("1 waiting on you");
+  // The team row says it short since the Today redesign ("1 waiting"); a node with nothing waiting shows no chip.
+  await expect(writer).toContainText("1 waiting");
 
   // The X post card itself; after 1.2 a post you post yourself reads "Approve for this time", others "Approve".
   await queue.locator('[data-card-id="card-post"]').getByRole("button", { name: /^Approve( for this time)?$/ }).click();
   await expect(headline).toHaveText("4 things wait on you.");
   await expect(badge).toHaveText("4 waiting on you");
   await expect(queue.getByTestId("queue-count")).toHaveText("4");
-  await expect(writer).toContainText("Nothing waiting");
+  await expect(writer).not.toContainText("waiting");
   await expect(page.getByTestId("live-log").locator("li").first()).toContainText("You approved the X post");
 
   // The schedule card decides the TikTok row of "Going out today".

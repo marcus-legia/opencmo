@@ -127,7 +127,8 @@ test("Settings → Accounts: connect Threads through the fake Zernio, then disco
   const user = await founder(db);
   await signIn(page, user);
   await page.goto("/app/settings");
-  const panel = page.locator("#settings-connected-accounts");
+  // The panel is the section the heading names (`Panel`: the id is on its h2).
+  const panel = page.locator('section[aria-labelledby="settings-connected-accounts"]');
   await panel.getByRole("button", { name: "Connect Threads" }).click();
   await expect(page.getByRole("status").filter({ hasText: "Threads is connected." })).toBeVisible();
   expect(new URL(page.url()).searchParams.has("connected")).toBe(false);

@@ -204,7 +204,8 @@ test("Library → Voice: notes with platform, source and weight; delete asks fir
 test("Writer filters drafts per platform", async ({ page }) => {
   await signIn(page, state().users.a);
   await page.goto("/app/writer?sample=1");
-  const cards = page.locator(".scr-board-card");
+  // One row per draft since the Today redesign.
+  const cards = page.locator(".td-row-item");
   await expect(cards).toHaveCount(8);
   const filter = page.getByRole("group", { name: "Platform" });
   await filter.getByRole("button", { name: "LinkedIn", exact: true }).click();
@@ -364,7 +365,7 @@ test("a voice note learned from a decision shows live in Writer and Library, and
   await page.goto("/app/library?tab=voice");
   const row = page.getByTestId("voice-note");
   await expect(row).toHaveCount(1);
-  const voice = page.getByRole("region", { name: /^Voice/ });
+  const voice = page.getByRole("region", { name: /^Learned notes/ });
   await expect(voice).toContainText(note.body);
   await expect(voice.getByText(/sample/i)).toHaveCount(0);
   await expect(row).toContainText("X · Approved as written");
