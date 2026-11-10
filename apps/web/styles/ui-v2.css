@@ -617,7 +617,7 @@ html[data-ui="v2"] body { background: var(--v2-paper); }
 .v2-card-slide-n { position: absolute; top: 4px; left: 4px; padding: 0 4px; font: 500 10px var(--v2-mono); background: var(--v2-paper); color: var(--v2-ink); }
 .v2-card-slides.is-strip[data-aspect="16:9"] li { flex-basis: 160px; aspect-ratio: 16 / 9; }
 .v2-card-slides.is-strip[data-aspect="1:1"] li { flex-basis: 112px; aspect-ratio: 1; }
-.v2-card-state.is-help_only { background: var(--v2-brand-soft); color: var(--v2-waiting); }
+.v2-card-state.is-help_only, .v2-card-state.is-not_verified, .v2-card-state.is-requires_disclosure { background: var(--v2-brand-soft); color: var(--v2-waiting); }
 
 /* P5 C1: "New" offers a video or a slideshow. */
 .v2-new { position: relative; }

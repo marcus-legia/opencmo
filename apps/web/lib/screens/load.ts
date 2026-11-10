@@ -25,7 +25,7 @@ import { buildMeasures, type WeekCounts } from "./brain-measures";
 import { APPROVAL_COLUMNS, approvalToCard, type ApprovalRow } from "./cards";
 import { enrichScheduleCards } from "./schedule-enrich";
 import { signStudioCards } from "./studio-sign";
-import { DEPARTMENTS, TEAM, type CmoState, type Department } from "./common";
+import { DEPARTMENTS, TEAM, salesNeeds, salesRuleKind, type CmoState, type Department } from "./common";
 import type { DashboardScreen } from "./dashboard";
 import { SKILL_READERS, type LibraryScreen } from "./library";
 import type { RailStatus } from "./rail";
@@ -1242,12 +1242,14 @@ async function sales({ supabase }: LoadContext): Promise<Partial<SalesScreen>> {
   return parts<SalesScreen>("sales", {
     threads: async () => {
       const [rows, cards] = await Promise.all([
-        supabase.from("opportunities").select("id, url, community, title, posted_at, comments, score, score_parts, reply, status, rule, rule_why").order("created_at", { ascending: false }).limit(30),
+        supabase.from("opportunities").select("id, url, community, title, posted_at, comments, score, score_parts, reply, status, rule, rule_why, min_karma, min_account_age_days").order("created_at", { ascending: false }).limit(30),
         waitingByRef(supabase, "opportunity"),
       ]);
       type Part = { label?: string; score?: number; max?: number; evidence?: string };
-      return (must(rows, "opportunities") as { id: string; url: string; community: string; title: string; posted_at: string | null; comments: number; score: number; score_parts: Part[] | null; reply: string | null; status: "in_review" | "replied" | "dismissed"; rule: "mention_ok" | "help_only" | "skip" | null; rule_why: string | null }[])
+      return (must(rows, "opportunities") as { id: string; url: string; community: string; title: string; posted_at: string | null; comments: number; score: number; score_parts: Part[] | null; reply: string | null; status: "in_review" | "replied" | "dismissed"; rule: string | null; rule_why: string | null; min_karma: number | null; min_account_age_days: number | null }[])
         .map((r) => {
+          const kind = salesRuleKind(r.rule);
+          const needs = salesNeeds(r.min_karma, r.min_account_age_days);
           const parts = (r.score_parts ?? []).filter((p) => ["Pain", "Fit", "Timing", "Reach", "Evidence"].includes(p.label ?? "") && typeof p.score === "number" && typeof p.max === "number" && p.max > 0);
           return {
             id: r.id,
@@ -1259,13 +1261,17 @@ async function sales({ supabase }: LoadContext): Promise<Partial<SalesScreen>> {
             url: r.url,
             // P5 R1: the rule the draft was written under. Threads from before it are help first, no product mention.
             rule: {
-              kind: r.rule === "mention_ok" ? ("mention_allowed" as const) : r.rule === "skip" ? ("skipped" as const) : ("help_only" as const),
-              text: (r.rule_why ?? (r.rule ? "" : "Rules not checked: help first")).slice(0, 200) || (r.rule === "skip" ? "Skipped by the community's rules" : "Help only"),
+              kind,
+              text: (r.rule_why ?? (r.rule ? "" : "Rules not checked: help first")).slice(0, 200) || (kind === "skipped" ? "Skipped by the community's rules" : "Help only"),
+              ...(needs ? { needs } : {}),
             },
             parts: parts.map((p) => ({ label: p.label as "Pain", score: p.score!, max: p.max! })),
             quotes: parts.filter((p) => typeof p.evidence === "string" && p.evidence).map((p) => ({ text: p.evidence!.slice(0, 400), from: p.label!.toLowerCase() })),
             draft: r.rule === "skip" ? null : r.reply,
-            draftChecks: r.rule === "skip" || !r.reply ? null : `No links · under 120 words · ${r.rule === "mention_ok" ? "product named at most once" : "no product mention"}`,
+            draftChecks:
+              kind === "skipped" || !r.reply
+                ? null
+                : `No links · under 120 words · ${kind === "mention_allowed" || kind === "requires_disclosure" ? "product named at most once, saying it is yours" : "no product mention"}`,
             status: r.status === "in_review" ? ("open" as const) : r.status,
             approvalId: cards.get(r.id) ?? null,
           };

@@ -52,10 +52,10 @@ export function lessonsBlock(lessons: Lesson[]): string {
  * then the latest lessons for its topic and `general`, then the most important unexpired notes for that topic.
  * Without a topic (the weekly plan) it reads every topic.
  */
-export async function recall(store: CmoStore, userId: string, limit: number, topic?: MemoryTopic): Promise<string> {
+export async function recall(store: CmoStore, userId: string, limit: number, topic?: MemoryTopic, keep: (text: string) => boolean = () => true): Promise<string> {
   const [rules, lessons, memories] = await Promise.all([store.corrections(userId), store.lessons(userId), store.memories(userId, limit, topic)]);
   const relevant = topic ? lessons.filter((l) => l.topic === topic || l.topic === "general") : lessons;
-  return [correctionsBlock(rules), lessonsBlock(relevant), memoriesBlock(memories)].filter(Boolean).join("\n\n");
+  return [correctionsBlock(rules.filter(keep)), lessonsBlock(relevant), memoriesBlock(memories.filter(keep))].filter(Boolean).join("\n\n");
 }
 
 /**

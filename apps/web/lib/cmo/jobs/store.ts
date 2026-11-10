@@ -5,6 +5,7 @@ import type { SupabaseClient as BaseClient } from "@supabase/supabase-js";
 import { DOCUMENT_KINDS, type DocumentKind } from "../documents";
 import { latestPerTopic } from "./context";
 import type { CmoStore, DraftRating, CompetitorInsight, ConnectedAccountRow, ReplyOutcomeDue, ZernioPostRow, Documents, NicheVideoInsight, SubredditRule, Goal, InboxState, ItemRow, Lesson, MemoryEvent, QueuedRun } from "./types";
+import { toVerdict } from "./types";
 
 const ITEM_COLUMNS =
   "id, run_id, department, platform, day, idea, reason, status, priority, body, final_text, external_url, decided_at, published_at, created_at";
@@ -179,14 +180,27 @@ export function supabaseStore(admin: BaseClient): CmoStore {
     },
     saveOpportunities: (userId, runId, items) => rpc<number>("cmo_save_opportunities", { p_user: userId, p_run: runId, p_items: items }),
     async subredditRule(subreddit) {
-      const { data, error } = await admin.from("subreddit_rules").select("subreddit, verdict, summary, read_at").eq("subreddit", subreddit.toLowerCase()).maybeSingle();
+      const { data, error } = await admin
+        .from("subreddit_rules")
+        .select("subreddit, verdict, summary, read_at, min_karma, min_account_age_days, megathread")
+        .eq("subreddit", subreddit.toLowerCase())
+        .maybeSingle();
       if (error) throw new Error(`subreddit_rules: ${error.message}`);
-      return (data as SubredditRule | null) ?? null;
+      // Rows written before 5.1 carry the old values.
+      return data ? { ...(data as SubredditRule), verdict: toVerdict((data as { verdict: unknown }).verdict) } : null;
     },
     async saveSubredditRule(rule) {
       const { error } = await admin
         .from("subreddit_rules")
-        .upsert({ subreddit: rule.subreddit.toLowerCase(), verdict: rule.verdict, summary: rule.summary.slice(0, 200), read_at: new Date().toISOString() });
+        .upsert({
+          subreddit: rule.subreddit.toLowerCase(),
+          verdict: rule.verdict,
+          summary: rule.summary.slice(0, 200),
+          min_karma: rule.min_karma ?? null,
+          min_account_age_days: rule.min_account_age_days ?? null,
+          megathread: rule.megathread ?? false,
+          read_at: new Date().toISOString(),
+        });
       if (error) throw new Error(`subreddit_rules: ${error.message}`);
     },
     async salesSettings(userId) {
@@ -197,7 +211,7 @@ export function supabaseStore(admin: BaseClient): CmoStore {
     },
     recentMentions: (userId) => rpc<number>("sales_mention_count_for", { p_user: userId }),
     async waitingMentions(userId) {
-      const { count, error } = await admin.from("opportunities").select("id", { count: "exact", head: true }).eq("user_id", userId).eq("status", "in_review").eq("rule", "mention_ok");
+      const { count, error } = await admin.from("opportunities").select("id", { count: "exact", head: true }).eq("user_id", userId).eq("status", "in_review").in("rule", ["safe", "requires_disclosure", "mention_ok"]);
       if (error) throw new Error(`opportunities: ${error.message}`);
       return count ?? 0;
     },

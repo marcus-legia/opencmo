@@ -308,6 +308,11 @@ function ThreadDetail({
           {thread.title}
         </a>
       </h2>
+      {thread.rule.needs ? (
+        <p className="scr-small scr-muted" data-testid="thread-needs">
+          {thread.rule.needs}.
+        </p>
+      ) : null}
       {thread.parts.length > 0 && (
         <div className="scr-scores">
           {thread.parts.map((p) => (

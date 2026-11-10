@@ -148,6 +148,14 @@ function FoldedText({ text, fold }: { text: string; fold: number | null }) {
   );
 }
 
+const RULE_LABEL = {
+  mention_allowed: "Product mention allowed",
+  requires_disclosure: "Say it is yours",
+  help_only: "Help only",
+  not_verified: "Rules not read: help only",
+  skipped: "Skipped",
+} as const;
+
 export function ReplyBody({ body }: { body: Body<"reply"> }) {
   return (
     <>
@@ -171,11 +179,17 @@ export function ReplyBody({ body }: { body: Body<"reply"> }) {
           ))}
         </dl>
       ) : null}
-      {body.rule?.kind === "help_only" ? (
-        // Why the draft never names the product: the subreddit's rule, or the 1-in-10 mention limit.
-        <p className="v2-card-state is-help_only" data-testid="reply-help-only">
-          <b>Help only</b>
+      {body.rule && body.rule.kind !== "mention_allowed" && body.rule.kind !== "skipped" ? (
+        // Why the draft never names the product (the subreddit's rule, the 1-in-10 mention limit, rules not read), or
+        // why it says the product is the founder's in the sentence that names it.
+        <p className={`v2-card-state is-${body.rule.kind}`} data-testid={body.rule.kind === "help_only" ? "reply-help-only" : `reply-${body.rule.kind.replace("_", "-")}`}>
+          <b>{RULE_LABEL[body.rule.kind]}</b>
           <span>{body.rule.text}</span>
+        </p>
+      ) : null}
+      {body.rule?.needs ? (
+        <p className="v2-card-meta" data-testid="reply-needs">
+          {body.rule.needs}. Check your account first: a new or low-karma reply is often removed.
         </p>
       ) : null}
       <div className="v2-card-draft">{body.draft}</div>

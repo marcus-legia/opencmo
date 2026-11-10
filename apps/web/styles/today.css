@@ -235,7 +235,7 @@ html[data-ui="v2"] body { background: var(--v2-paper); -webkit-font-smoothing: a
 .v2 .v2-card-slides li { border-radius: 8px; background: var(--v2-paper); }
 .v2 .v2-card-slides li.is-cover { background: var(--v2-paper); color: var(--v2-ink); border-color: var(--v2-line); }
 .v2 .v2-card-state { border-radius: 8px; }
-.v2 .v2-card-state.is-needs_credits, .v2 .v2-card-state.is-help_only { background: var(--v2-waiting-soft); color: var(--v2-waiting); }
+.v2 .v2-card-state.is-needs_credits, .v2 .v2-card-state.is-help_only, .v2 .v2-card-state.is-not_verified, .v2 .v2-card-state.is-requires_disclosure { background: var(--v2-waiting-soft); color: var(--v2-waiting); }
 .v2 .v2-card-fold { background: var(--v2-waiting-soft); color: var(--v2-waiting); border-radius: 4px; font-family: var(--v2-sans); }
 .v2 .v2-card-keyframe { border-radius: 7px; }
 .v2 .v2-new-choices { border-radius: var(--v2-radius); box-shadow: var(--v2-shadow); overflow: hidden; }

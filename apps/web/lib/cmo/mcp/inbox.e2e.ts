@@ -126,7 +126,7 @@ export async function run(userId: string) {
   await call("submit_sales_scan", {
     id: scan.id,
     step: "check_rules",
-    answer: { rules: Array.from({ length: communities }, (_, index) => ({ index, verdict: "help_only", summary: "No self-promotion" })) },
+    answer: { rules: Array.from({ length: communities }, (_, index) => ({ index, verdict: "no_product_mention", summary: "No self-promotion", minKarma: null, minAccountAgeDays: null, megathread: false })) },
   }, ctx);
   await drain();
   item = await call("get_inbox_item", { id: scan.id }, ctx);

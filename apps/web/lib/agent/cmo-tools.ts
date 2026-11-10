@@ -32,6 +32,7 @@ import { WAIT_FOR_RUN_SPEC } from "./cmo-wait";
 import { RESEARCH_TOOL_SPECS, RESEARCH_TOOLS } from "./cmo-research";
 import { PANEL_SCREENS, PanelOpenSchema, type PanelOpen } from "./panel";
 import type { ToolOutcome, ToolSpec } from "./tools";
+import { salesBanRisk } from "../cmo/sales/ban-risk";
 
 const EMPTY = { type: "object", properties: {}, additionalProperties: false };
 
@@ -254,7 +255,14 @@ export function pricedTaskCard(input: unknown): PricedTask | null {
   return { input: task, card: task.agent === "sales" ? salesScanCard(task.brief) : researchCard(task.brief, task.handles) };
 }
 
-const rememberInput = z.object({ note: z.string().trim().min(1).max(600), topic: z.enum(["general", "post", "sales", "video", "research"]).default("general") });
+// 5.3: a note that would get the founder's Reddit account banned is refused with the reason (SQL checks it again).
+const rememberInput = z
+  .object({ note: z.string().trim().min(1).max(600), topic: z.enum(["general", "post", "sales", "video", "research"]).default("general") })
+  .superRefine((input, ctx) => {
+    if (input.topic !== "general" && input.topic !== "sales") return;
+    const risk = salesBanRisk(input.note, input.topic === "sales");
+    if (risk) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["note"], message: risk });
+  });
 const siteInput = z.object({ url: z.string().trim().min(3).max(300) });
 const runInput = z.object({ run_id: z.string().uuid().optional() });
 const goalInput = z.object({
@@ -429,7 +437,10 @@ async function runTool(supabase: SupabaseClient, name: string, input: unknown, t
     }
     case "remember": {
       const parsed = rememberInput.safeParse(input);
-      if (!parsed.success) return invalid("note must be 1 to 600 characters.");
+      if (!parsed.success) {
+        const risk = parsed.error.issues.find((issue) => issue.code === "custom");
+        return invalid(risk ? risk.message : "note must be 1 to 600 characters.");
+      }
       // 'agent': ranks below the founder's own notes. MCP lands here too, and cannot see what a
       // stateless caller read before, so it never saves at the founder's weight.
       await rpcOrThrow(supabase, "cmo_remember", { p_body: parsed.data.note, p_topic: parsed.data.topic, p_source: "agent" });

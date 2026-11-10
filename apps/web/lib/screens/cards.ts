@@ -18,7 +18,7 @@ import {
   type Caption,
   type CardKind,
 } from "./approval-card";
-import type { Department, ScorePart } from "./common";
+import { salesNeeds, salesRuleKind, type Department, type ScorePart } from "./common";
 
 /** The columns of `approvals` the app reads (RLS: the founder's own). */
 export const APPROVAL_COLUMNS =
@@ -149,8 +149,15 @@ function build(row: ApprovalRow): Built | null {
           draft: str(s.reply),
           rules: "you post it yourself",
           ...(hn ? { platform: "hn" as const } : {}),
-          ...(s.rule === "mention_ok" || s.rule === "help_only"
-            ? { rule: { kind: s.rule === "mention_ok" ? ("mention_allowed" as const) : ("help_only" as const), text: clip(str(s.rule_why), 200) } }
+          // Cards raised before P5 have no rule; a skipped thread has no card.
+          ...(typeof s.rule === "string" && s.rule !== "skip"
+            ? {
+                rule: {
+                  kind: salesRuleKind(s.rule),
+                  text: clip(str(s.rule_why), 200),
+                  ...(salesNeeds(s.min_karma, s.min_account_age_days) ? { needs: salesNeeds(s.min_karma, s.min_account_age_days) } : {}),
+                },
+              }
             : {}),
         },
       };
