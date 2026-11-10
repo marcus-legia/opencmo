@@ -629,3 +629,7 @@ html[data-ui="v2"] .v2-main-body:has(.ed2) {
 /* The classic usage rows inside the v2 panel. */
 .td-billing-usage { font-size: 13px; }
 .td-billing-usage :is(dl, ul) { margin: 0; }
+
+/* CMO review 3, session B: the plan sheet (components/billing/PlanSheet.tsx) and the Today block. */
+.plan-sheet { width: min(560px, calc(100vw - 32px)); }
+.plan-sheet-list { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }

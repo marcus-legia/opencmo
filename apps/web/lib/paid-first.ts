@@ -1,17 +1,21 @@
 import "server-only";
 
-import type { SupabaseClient } from "@/lib/api/handler";
-
-import { isPaidPlan } from "./pricing";
+import { rpcOrThrow, type SupabaseClient } from "@/lib/api/handler";
 
 /**
- * Paid first, no free trial (owner, 2026-11-08): the CMO does work for an account with a paid plan, or with credits
- * left from before paid-first (a pack, a refund, an old signup gift). Read under RLS as the signed-in user.
+ * The paywall (CMO review 3, plan §3.1): the first run is free; the first action that sends something out or costs
+ * credits again needs a plan. The rule lives in SQL (`cmo_require_paid`: a plan on sale, or credits left from before
+ * paid-first) so routes, RPCs and MCP agree. It answers SQLSTATE P0402, which `lib/api/errors.ts` turns into a 402
+ * with `detail.code = "plan_required"`; the client shows `PlanSheet`.
+ *
+ * Throws that 402 `ApiError` for an account without a plan. Called before any model call or credit hold.
  */
+export async function requirePaid(supabase: SupabaseClient, userId: string): Promise<void> {
+  await rpcOrThrow(supabase, "cmo_require_paid", { p_user: userId });
+}
+
+/** Paid first (2026-11-08), read under RLS: a plan on sale or credits left. B5 removes its last callers. */
 export async function hasPlanOrCredits(supabase: SupabaseClient, userId: string): Promise<boolean> {
-  const [{ data: profile }, { data: balance }] = await Promise.all([
-    supabase.from("profiles").select("plan").eq("id", userId).maybeSingle<{ plan: string }>(),
-    supabase.rpc("credit_balance", { p_user_id: userId }),
-  ]);
-  return isPaidPlan(profile?.plan) || (typeof balance === "number" && balance > 0);
+  const { error } = await supabase.rpc("cmo_require_paid", { p_user: userId });
+  return !error;
 }

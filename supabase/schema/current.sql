@@ -4659,6 +4659,25 @@ $$;
 
 
 --
+-- Name: cmo_require_paid(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_require_paid(p_user uuid) RETURNS void
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+begin
+  if p_user is null or (auth.uid() is not null and auth.uid() <> p_user) then
+    raise exception 'Not found.' using errcode = 'P0002';
+  end if;
+  if not public.is_paid(p_user) and public.credit_balance(p_user) <= 0 then
+    raise exception 'Pick a plan to keep going. Your first plan and drafts stay here.' using errcode = 'P0402';
+  end if;
+end;
+$$;
+
+
+--
 -- Name: cmo_resume(); Type: FUNCTION; Schema: public; Owner: -
 --
 

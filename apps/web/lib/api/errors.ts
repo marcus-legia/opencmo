@@ -11,6 +11,10 @@
  * hoặc tên bảng. Danh sách dưới đây là các mã ta cố ý đặt trong migration.
  */
 
+import { PLAN_REQUIRED } from "../plan-offer";
+
+export { PLAN_REQUIRED };
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -47,6 +51,8 @@ const STATUS_BY_CODE: Record<string, number> = {
   "28000": 401,
   // unique_violation do ta chuyển thành câu tiếng Anh (ví dụ tên preset trùng).
   "23505": 409,
+  // `cmo_require_paid`: the account needs a plan for this action (CMO review 3, B0). The UI answers it with PlanSheet.
+  P0402: 402,
 };
 
 /**
@@ -117,6 +123,9 @@ export function apiErrorFromPostgrest(error: PostgrestLikeError): ApiError {
   }
   if (code === "28000") {
     return new ApiError(401, NOT_SIGNED_IN);
+  }
+  if (code === "P0402") {
+    return new ApiError(402, message, { code: PLAN_REQUIRED, message });
   }
   return new ApiError(status, message);
 }

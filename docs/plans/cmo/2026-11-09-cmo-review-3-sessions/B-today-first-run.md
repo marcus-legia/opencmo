@@ -22,7 +22,7 @@ Branch: `claude/okara-spec-opencmo-b7qlx2`. Pull before each item, and push afte
 
 ## Todo, in order
 
-- [ ] **B0 Shared building blocks (first, push at once).**
+- [x] **B0 Shared building blocks (first, push at once).**
   - `cmo_require_paid(p_user)`, with its own SQLSTATE. Map it to 402 and the code `plan_required` in
     `lib/api/errors.ts`.
   - `components/billing/PlanSheet.tsx`, with the plans from the catalogue (no price in code).
