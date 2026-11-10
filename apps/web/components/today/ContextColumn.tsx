@@ -1,12 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { ReactNode } from "react";
 
 import { DOCUMENT_KINDS, type DocumentKind } from "@/lib/cmo/documents";
 
-import { ContextDrawer, DOC_ROWS, type DocId } from "./ContextDrawer";
+import { ContextDrawer, DOC_ROWS, missingDocument, type DocId } from "./ContextDrawer";
 import { siteLabel, useWorkspace } from "./workspace";
 
 /** The artboard's colour squares for competitors, in order. */
@@ -47,8 +46,12 @@ const isToday = (iso: string | undefined) => (iso ? new Date(iso).toDateString()
 export function ContextColumn({ goal }: { goal: { text: string | null; done: number; total: number } | null }) {
   const ws = useWorkspace();
   const router = useRouter();
-  const doc = useSearchParams().get("doc");
-  const openDoc = (id: DocId) => router.push(`/app?doc=${id}`, { scroll: false });
+  const params = useSearchParams();
+  const doc = params.get("doc");
+  const editing = params.get("edit") === "1";
+  // The drawer opens over the feed; `edit=1` opens the document's form. One URL, so Back closes it.
+  const openDoc = (id: DocId, edit = false) => router.push(`/app?doc=${id}${edit ? "&edit=1" : ""}`, { scroll: false });
+  const missing = ws.ready ? missingDocument(ws.documents) : null;
   const site = siteLabel(ws.site);
   const docCount = DOC_ROWS.length;
   const pct = goal && goal.total > 0 ? Math.round((goal.done / goal.total) * 100) : 0;
@@ -61,7 +64,7 @@ export function ContextColumn({ goal }: { goal: { text: string | null; done: num
   );
 
   return (
-    <aside className="left" aria-label="Context">
+    <aside className="left" id="td-context" aria-label="Context">
       <div className="sec" style={{ padding: "0 6px" }}>
         <h2>Context</h2>
         <button type="button" className="ib" aria-label="Edit context" onClick={() => openDoc("product")}>
@@ -93,8 +96,8 @@ export function ContextColumn({ goal }: { goal: { text: string | null; done: num
       </div>
       {ws.summary ? (
         <>
-          <p style={{ margin: "0 6px 4px", color: "var(--muted)", fontSize: "12.5px", lineHeight: "1.5", display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{ws.summary}</p>
-          <button type="button" onClick={() => openDoc("product")} style={{ border: "0", background: "transparent", color: "var(--text)", fontSize: "12px", padding: "0 6px", marginBottom: "16px", textDecoration: "underline", textUnderlineOffset: "2px" }}>
+          <p style={{ margin: "0 6px 4px", color: "var(--muted)", fontSize: "13.5px", lineHeight: "1.5", display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{ws.summary}</p>
+          <button type="button" onClick={() => openDoc("product")} style={{ border: "0", background: "transparent", color: "var(--text)", fontSize: "13px", padding: "0 6px", marginBottom: "16px", textDecoration: "underline", textUnderlineOffset: "2px" }}>
             View more
           </button>
         </>
@@ -108,9 +111,11 @@ export function ContextColumn({ goal }: { goal: { text: string | null; done: num
               {docCount}
             </span>
           </h2>
-          <Link href="/app/library" className="ib" aria-label="Add a document">
-            <Plus />
-          </Link>
+          {missing ? (
+            <button type="button" className="ib" aria-label="Write a missing document" onClick={() => openDoc(missing, true)}>
+              <Plus />
+            </button>
+          ) : null}
         </div>
         {DOC_ROWS.map((row) => {
           const kind = (DOCUMENT_KINDS as readonly string[]).includes(row.id) ? (row.id as DocumentKind) : null;
@@ -119,7 +124,7 @@ export function ContextColumn({ goal }: { goal: { text: string | null; done: num
             <button key={row.id} type="button" className="doc" onClick={() => openDoc(row.id)} style={{ width: "100%", border: "0", background: "transparent", textAlign: "left", font: "inherit", color: "inherit", cursor: "pointer" }}>
               {row.id === "brand" ? <PaletteIcon /> : <DocIcon />}
               <div style={{ flex: "1", minWidth: "0" }}>
-                <span style={{ fontSize: "12.5px" }}>{row.title}</span>
+                <span style={{ fontSize: "13.5px" }}>{row.title}</span>
                 <span className="u">{row.readBy}</span>
               </div>
               {isToday(written?.at) ? <span className="live" style={{ marginTop: "6px" }} title="Updated today"></span> : null}
@@ -134,7 +139,7 @@ export function ContextColumn({ goal }: { goal: { text: string | null; done: num
           <span className="meta">{goal ? `${goal.done} / ${goal.total}` : ""}</span>
         </div>
         <div style={{ padding: "0 6px" }}>
-          <div style={{ fontSize: "12.5px", marginBottom: "6px" }}>{goal?.text ?? "No goal yet. It comes with the week's plan."}</div>
+          <div style={{ fontSize: "13.5px", marginBottom: "6px" }}>{goal?.text ?? "No goal yet. It comes with the week's plan."}</div>
           <div style={{ height: "4px", borderRadius: "4px", background: "var(--line-2)" }}>
             <div style={{ width: `${pct}%`, height: "4px", borderRadius: "4px", background: "var(--accent)" }}></div>
           </div>
@@ -149,7 +154,7 @@ export function ContextColumn({ goal }: { goal: { text: string | null; done: num
               {ws.competitors.length}
             </span>
           </h2>
-          <button type="button" className="ib" aria-label="Add a competitor" onClick={() => openDoc("competitors")}>
+          <button type="button" className="ib" aria-label="Add a competitor" onClick={() => openDoc("competitors", true)}>
             <Plus />
           </button>
         </div>
@@ -157,12 +162,12 @@ export function ContextColumn({ goal }: { goal: { text: string | null; done: num
           {ws.competitors.map((c, i) => (
             <div key={c.name} className="doc" style={{ alignItems: "center" }}>
               <span style={{ width: "16px", height: "16px", borderRadius: "4px", background: SWATCH[i % SWATCH.length], display: "inline-block", flexShrink: 0 }}></span>
-              <span style={{ fontSize: "12.5px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{siteLabel(c.website) ?? c.name}</span>
+              <span style={{ fontSize: "13.5px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{siteLabel(c.website) ?? c.name}</span>
             </div>
           ))}
         </div>
       </div>
-      {doc && DOC_ROWS.some((r) => r.id === doc) ? <ContextDrawer doc={doc as DocId} onClose={() => router.push("/app", { scroll: false })} onOpen={openDoc} /> : null}
+      {doc && DOC_ROWS.some((r) => r.id === doc) ? <ContextDrawer doc={doc as DocId} edit={editing} onClose={() => router.push("/app", { scroll: false })} onOpen={openDoc} /> : null}
     </aside>
   );
 }
