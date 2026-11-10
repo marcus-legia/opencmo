@@ -8,6 +8,31 @@
 -- answers it with the plan sheet. A founder can only ask about themselves; the service role (no `auth.uid()`) can ask
 -- about anyone.
 
+-- Internal: whether an account counts as paid. No ownership check, so it is not callable by founders (`is_paid` hides
+-- another account's plan; this one would not). SQL that decides for a user it already trusts (`cmo_enqueue`,
+-- `start_cmo_run`, `cmo_first_run_free`) calls it; a founder asks through `cmo_require_paid`.
+create or replace function public.cmo_paid(p_user uuid) returns boolean
+  language sql stable security definer
+  set search_path to ''
+as $$
+  select coalesce((select p.plan in ('starter', 'creator') or p.credit_balance > 0 from public.profiles p where p.id = p_user), false);
+$$;
+
+revoke all on function public.cmo_paid(uuid) from public, anon, authenticated;
+grant execute on function public.cmo_paid(uuid) to service_role;
+
+-- Internal: the one refusal, so every caller says the same thing with the same code.
+create or replace function public.cmo_plan_required() returns void
+  language plpgsql
+  set search_path to ''
+as $$
+begin
+  raise exception 'Pick a plan to keep going. Your first plan and drafts stay here.' using errcode = 'P0402';
+end;
+$$;
+
+revoke all on function public.cmo_plan_required() from public, anon, authenticated;
+
 create or replace function public.cmo_require_paid(p_user uuid) returns void
   language plpgsql stable security definer
   set search_path to ''
@@ -16,8 +41,8 @@ begin
   if p_user is null or (auth.uid() is not null and auth.uid() <> p_user) then
     raise exception 'Not found.' using errcode = 'P0002';
   end if;
-  if not public.is_paid(p_user) and public.credit_balance(p_user) <= 0 then
-    raise exception 'Pick a plan to keep going. Your first plan and drafts stay here.' using errcode = 'P0402';
+  if not public.cmo_paid(p_user) then
+    perform public.cmo_plan_required();
   end if;
 end;
 $$;

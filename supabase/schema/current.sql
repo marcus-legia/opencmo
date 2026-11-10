@@ -3975,6 +3975,13 @@ begin
     return v_row;
   end if;
 
+  -- Read under the lock above, so two requests at once cannot both be the free one.
+  if v_price > 0 and public.cmo_first_run_free(p_user, p_kind) then
+    v_price := 0;
+  elsif v_price > 0 and not public.cmo_paid(p_user) then
+    perform public.cmo_plan_required();
+  end if;
+
   if (select count(*) from public.cmo_runs
       where user_id = p_user and kind = p_kind and created_at > now() - interval '1 day'
         and not (input ? 'inbox')) >= public.cmo_job_daily_limit(p_kind) then
@@ -4016,6 +4023,33 @@ begin
   return new;
 end;
 $$;
+
+
+--
+-- Name: cmo_first_run_free(uuid, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_first_run_free(p_user uuid, p_kind text) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select p_user is not null
+    and p_kind in ('plan_week', 'post_draft')
+    and not public.cmo_paid(p_user)
+    and not exists (
+      select 1 from public.cmo_runs r
+      where r.user_id = p_user and r.kind = p_kind and r.status in ('queued', 'running', 'done')
+    );
+$$;
+
+
+--
+-- Name: cmo_free_onboard_runs(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_free_onboard_runs() RETURNS integer
+    LANGUAGE sql IMMUTABLE
+    AS $$ select 2 $$;
 
 
 --
@@ -4239,6 +4273,18 @@ $$;
 
 
 --
+-- Name: cmo_paid(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_paid(p_user uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select coalesce((select p.plan in ('starter', 'creator') or p.credit_balance > 0 from public.profiles p where p.id = p_user), false);
+$$;
+
+
+--
 -- Name: cmo_pause(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -4268,6 +4314,20 @@ CREATE FUNCTION public.cmo_paused(p_user uuid) RETURNS boolean
     LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO 'public'
     AS $$ select coalesce((select cmo_paused_at is not null from public.profiles where id = p_user), false) $$;
+
+
+--
+-- Name: cmo_plan_required(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_plan_required() RETURNS void
+    LANGUAGE plpgsql
+    SET search_path TO ''
+    AS $$
+begin
+  raise exception 'Pick a plan to keep going. Your first plan and drafts stay here.' using errcode = 'P0402';
+end;
+$$;
 
 
 --
@@ -4670,8 +4730,8 @@ begin
   if p_user is null or (auth.uid() is not null and auth.uid() <> p_user) then
     raise exception 'Not found.' using errcode = 'P0002';
   end if;
-  if not public.is_paid(p_user) and public.credit_balance(p_user) <= 0 then
-    raise exception 'Pick a plan to keep going. Your first plan and drafts stay here.' using errcode = 'P0402';
+  if not public.cmo_paid(p_user) then
+    perform public.cmo_plan_required();
   end if;
 end;
 $$;
@@ -13031,6 +13091,10 @@ begin
 
   if exists(select 1 from public.cmo_runs where user_id = v_user and kind = p_kind and status = 'running') then
     raise exception 'Your marketing plan is already being built. Give it a minute.' using errcode = 'P0001';
+  end if;
+  if not public.cmo_paid(v_user)
+     and (select count(*) from public.cmo_runs where user_id = v_user and kind = p_kind) >= public.cmo_free_onboard_runs() then
+    perform public.cmo_plan_required();
   end if;
   if (select count(*) from public.cmo_runs
       where user_id = v_user and kind = p_kind and created_at > now() - interval '1 day') >= 5 then

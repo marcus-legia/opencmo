@@ -19,6 +19,9 @@ insert into public.credit_ledger(user_id, delta, reason) values
 insert into public.credit_ledger(user_id, delta, reason)
 select 'e1120000-0000-4000-8000-00000000000c', -public.credit_balance('e1120000-0000-4000-8000-00000000000c'), 'test drain'
 where public.credit_balance('e1120000-0000-4000-8000-00000000000c') <> 0;
+-- C is on a paid plan with no credits left: "not enough credits", not the free first run (CMO review 3, 3.1) or the
+-- plan sheet.
+update public.profiles set plan = 'starter' where id = 'e1120000-0000-4000-8000-00000000000c';
 
 create temp table bal as select public.credit_balance('e1120000-0000-4000-8000-00000000000a') as v;
 grant select on bal to authenticated, service_role;

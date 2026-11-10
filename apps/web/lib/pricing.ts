@@ -51,7 +51,8 @@ export const PLANS: Plan[] = [
     // Quà đăng ký đã bỏ (migration 20260921150000), nên nói đúng như vậy thay
     // vì liệt kê tính năng của một thứ không chạy được.
     features: [
-      "No monthly credits — pick a plan to add more",
+      "Your first plan and drafts, free",
+      "No monthly credits: pick a plan to approve, post and keep going",
       "Auto captions",
       "Watermarked exports",
       "Account deleted 30 days after sign-up unless you buy a plan",

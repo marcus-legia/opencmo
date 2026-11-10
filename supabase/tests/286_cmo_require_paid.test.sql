@@ -5,7 +5,7 @@ create extension if not exists pgtap with schema extensions;
 begin;
 set search_path to public, extensions;
 
-select plan(7);
+select plan(9);
 
 insert into auth.users (id, email) values
   ('e2860000-0000-4000-8000-00000000000a', 'rp-a@test.local'),
@@ -21,6 +21,8 @@ select lives_ok($$ select public.cmo_require_paid('e2860000-0000-4000-8000-00000
 select throws_ok($$ select public.cmo_require_paid(null) $$, 'P0002', 'Not found.', 'no user: not found');
 
 select ok(not has_function_privilege('anon', 'public.cmo_require_paid(uuid)', 'execute'), 'anon cannot call it');
+select ok(not has_function_privilege('authenticated', 'public.cmo_paid(uuid)', 'execute'), 'founders cannot read another account through cmo_paid');
+select ok(not has_function_privilege('authenticated', 'public.cmo_plan_required()', 'execute'), 'nor call the refusal on its own');
 
 set local role authenticated;
 set local request.jwt.claims = '{"sub":"e2860000-0000-4000-8000-00000000000a","role":"authenticated"}';

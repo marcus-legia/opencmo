@@ -14,8 +14,3 @@ export async function requirePaid(supabase: SupabaseClient, userId: string): Pro
   await rpcOrThrow(supabase, "cmo_require_paid", { p_user: userId });
 }
 
-/** Paid first (2026-11-08), read under RLS: a plan on sale or credits left. B5 removes its last callers. */
-export async function hasPlanOrCredits(supabase: SupabaseClient, userId: string): Promise<boolean> {
-  const { error } = await supabase.rpc("cmo_require_paid", { p_user: userId });
-  return !error;
-}

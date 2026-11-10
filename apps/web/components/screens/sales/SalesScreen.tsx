@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { PlanSheet, isPlanRequired } from "@/components/billing/PlanSheet";
 import { api, jsonBody } from "@/components/clipping/api";
 import { Icon } from "@/components/icons";
 import { Button, ButtonLink, MonoLabel } from "@/components/ui";
@@ -58,6 +59,9 @@ function ScanNow() {
   const [error, setError] = useState<string | null>(null);
   // Mode B: the founder's own Claude runs the scan from its inbox and OpenCMO holds no credits (`/cmo/runs`).
   const [claude, setClaude] = useState(false);
+  // CMO review 3, 3.1: a scan is paid work after the free first run; the 402 opens the plan sheet.
+  const [planSheet, setPlanSheet] = useState(false);
+  const sheet = <PlanSheet open={planSheet} onClose={() => setPlanSheet(false)} action="scan Reddit" />;
 
   async function open() {
     setError(null);
@@ -79,6 +83,11 @@ function ScanNow() {
       await api("/cmo/runs", jsonBody({ kind: "sales_scan" }));
       setStep("started");
     } catch (err) {
+      if (isPlanRequired(err)) {
+        setPlanSheet(true);
+        setStep("idle");
+        return;
+      }
       setError(err instanceof Error ? err.message : "Could not start the scan. Please try again.");
       setStep("confirm");
     }
@@ -100,6 +109,7 @@ function ScanNow() {
           Scan now
         </Button>
         {error && <ErrorNote>{error}</ErrorNote>}
+        {sheet}
       </div>
     );
   }

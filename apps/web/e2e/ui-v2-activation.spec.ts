@@ -4,7 +4,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { showAssistant, signIn, state } from "./helpers";
 
 /**
- * cmo-review-2 S2 (paid first, the first week within minutes, the rail, `/video` hidden, "I posted it"), on the local
+ * cmo-review-2 S2 and CMO review 3, 3.1 (the free first run, the first week within minutes, the rail, `/video` hidden, "I posted it"), on the local
  * stack with the fake model (`OPENCMO_AGENT_FAKE=1`) and a `.test` website (`readSite`'s e2e fake: the stack has no DNS).
  * Times measured here are the fake model's, not Claude's: they prove the chain runs without waiting for Monday.
  */
@@ -27,25 +27,62 @@ async function founder(credits: number) {
 const post = (page: Page, path: string, data: unknown) =>
   page.request.post(path, { data, headers: { origin: new URL(page.url() || "http://127.0.0.1:3100").origin } });
 
-test("paid first: a new account with no plan and no credits picks a plan, and onboarding refuses it", async ({ page }) => {
-  test.setTimeout(120_000);
+test("the free first run: website → documents, plan and drafts with no payment, then Approve asks for a plan", async ({ page }) => {
+  test.setTimeout(240_000);
   const user = await founder(0);
   await signIn(page, user);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  // CMO review 3, 3.1: a new account goes to Setup, not Billing.
   await page.goto("/app?site=paylane.test");
-  await expect(page).toHaveURL(/\/app\/billing\?start=1&site=paylane\.test/);
-  await expect(page.getByTestId("billing-start")).toContainText("OpenCMO has no free trial");
+  await expect(page).toHaveURL(/\/app\/setup\?site=paylane\.test/);
+  await page.getByRole("button", { name: "Read my website" }).click();
+  await expect(page).toHaveURL(/\/app$/, { timeout: 180_000 });
 
-  // The model work behind the website step is refused too, not only the page (after the late-webhook wait).
+  const db = admin();
+  await expect
+    .poll(async () => {
+      const [plans, drafts] = await Promise.all([
+        db.from("approvals").select("id", { count: "exact", head: true }).eq("user_id", user.id).eq("kind", "plan").eq("status", "waiting"),
+        db.from("approvals").select("id", { count: "exact", head: true }).eq("user_id", user.id).eq("kind", "post").eq("status", "waiting"),
+      ]);
+      return (plans.count ?? 0) > 0 && (drafts.count ?? 0) > 0;
+    }, { timeout: 150_000, intervals: [2_000] })
+    .toBe(true);
+  // Nothing was charged: the free runs hold no credits.
+  const { data: runs } = await db.from("cmo_runs").select("kind, credits").eq("user_id", user.id).in("kind", ["plan_week", "post_draft"]);
+  expect((runs ?? []).length).toBeGreaterThan(0);
+  expect((runs ?? []).every((run) => run.credits === 0)).toBe(true);
+  const { count: holds } = await db.from("credit_ledger").select("id", { count: "exact", head: true }).eq("user_id", user.id);
+  expect(holds).toBe(0);
+
+  // Planning again is paid work: a clear 402 with the plan code, before any model call.
+  const again = await post(page, "/api/v1/cmo/runs", { kind: "plan_week" });
+  expect(again.status()).toBe(402);
+  expect(((await again.json()) as { detail: { code: string } }).detail.code).toBe("plan_required");
+
+  // Approve on the post card answers with the plan sheet; the draft stays waiting.
+  await page.reload();
+  const card = page.getByTestId("approval-queue").getByRole("article", { name: /^Writer · Post · X:/ }).first();
+  await card.getByRole("button", { name: /Writer · Post · X/ }).click();
+  await card.getByRole("button", { name: "Approve", exact: true }).click();
+  await expect(page.getByTestId("plan-sheet")).toBeVisible();
+  await expect(page.getByTestId("plan-sheet")).toContainText("Your first plan and drafts were free");
+  const { count: waiting } = await db.from("approvals").select("id", { count: "exact", head: true }).eq("user_id", user.id).eq("kind", "post").eq("status", "waiting");
+  expect(waiting).toBeGreaterThan(0);
+});
+
+test("unpaid onboarding: two runs ever, then the plan code", async ({ page }) => {
+  const user = await founder(0);
+  await signIn(page, user);
+  await page.goto("/app/setup");
+  // Two earlier runs (a typo, then the real site): the third is refused before any website is read.
+  await admin().from("cmo_runs").insert([
+    { user_id: user.id, kind: "onboard", status: "failed", input: { site: "paylane.tset" } },
+    { user_id: user.id, kind: "onboard", status: "done", input: { site: "paylane.test" } },
+  ]);
   const refused = await post(page, "/api/v1/cmo/onboarding", { site: "paylane.test" });
   expect(refused.status()).toBe(402);
-  const { count } = await admin().from("marketing_documents").select("id", { count: "exact", head: true }).eq("user_id", user.id);
-  expect(count).toBe(0);
-
-  // Creem's return link is not a payment: typed by hand, it says the payment is on its way, never that it arrived.
-  await page.goto("/app?paid=1");
-  await expect(page).toHaveURL(/\/app\/setup\?paid=pending/);
-  await expect(page.getByTestId("setup-paid-pending")).toContainText("Waiting for your payment");
-  await expect(page.getByTestId("setup-paid")).toHaveCount(0);
+  expect(((await refused.json()) as { detail: { code: string } }).detail.code).toBe("plan_required");
 });
 
 test("the first week: website → plan card and a first draft, then I posted it with no X account", async ({ page }) => {

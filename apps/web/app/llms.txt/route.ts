@@ -19,7 +19,7 @@ export async function GET() {
     "",
     `> ${SITE_DESCRIPTION}`,
     "",
-    "OpenCMO is software for founders. You enter your website; an AI CMO reads it, writes a strategy and plans your week, and three departments draft the work: Post (posts for X, Threads and LinkedIn in your voice, plus slides and video scripts), Video (slideshows and post images from the approved words, short clips cut from videos you recorded and finished in the editor, where you cut by words and add captions and a voice-over) and Sales (public conversations where people describe the problem you solve, with a reply drafted for you to post yourself). Nothing is published without your approval, and only to accounts you connect. There is no free trial: OpenCMO starts with a paid plan.",
+    "OpenCMO is software for founders. You enter your website; an AI CMO reads it, writes a strategy and plans your week, and three departments draft the work: Post (posts for X, Threads and LinkedIn in your voice, plus slides and video scripts), Video (slideshows and post images from the approved words, short clips cut from videos you recorded and finished in the editor, where you cut by words and add captions and a voice-over) and Sales (public conversations where people describe the problem you solve, with a reply drafted for you to post yourself). Nothing is published without your approval, and only to accounts you connect. Your first plan and drafts are free. Pick a plan to approve and post them.",
     "",
     "## Pricing",
     "",

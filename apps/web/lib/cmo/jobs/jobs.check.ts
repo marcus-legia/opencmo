@@ -422,6 +422,8 @@ async function main() {
   const base = { weekday: 3, duePost: null, dueSales: null, competitorHandles: 0, publishedRecently: 0, socialReader: true };
   assert.deepEqual(dueLoops(base), []);
   assert.deepEqual(dueLoops({ ...base, weekday: 1 }).map((r) => r.kind), ["plan_week", "post_draft"]);
+  // CMO review 3, 3.1: an unpaid account gets no loop at all.
+  assert.deepEqual(dueLoops({ ...base, weekday: 1, paid: false }), []);
   assert.deepEqual(
     dueLoops({ ...base, weekday: 0, competitorHandles: 2, publishedRecently: 3 }).map((r) => r.kind),
     ["competitor_research", "summarize_memory", "review_week", "pull_metrics"],

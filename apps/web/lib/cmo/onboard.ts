@@ -8,8 +8,9 @@ import "server-only";
  * always finished, even on an error.
  *
  * The first week (cmo-review-2 S2.2): the founder should see the plan and a first draft within minutes, not with the
- * Monday plan. Planning (1 credit) and today's draft (1 credit) are ordinary CMO runs, so they charge, cap and show
- * exactly as any other run; the draft is queued once the plan is written.
+ * Monday plan. Planning and today's draft are ordinary CMO runs, so they cap and show exactly as any other run; the
+ * draft is queued once the plan is written. The first of each is free for an account without a plan (CMO review 3,
+ * 3.1: `cmo_first_run_free`, read from history in `cmo_enqueue`); later ones cost 1 credit each.
  */
 
 import { ApiError } from "@/lib/api/errors";
@@ -25,7 +26,7 @@ type RunRow = { id: string };
 
 export type Onboarded = { runId: string; firstWeek: boolean };
 
-/** `started`: when the route began, before its paid check waited, so the first week's deadline counts that wait. */
+/** `started`: when the route began, so the first week's deadline counts everything before the model work. */
 export async function runOnboarding(supabase: SupabaseClient, userId: string, site: string, started = Date.now()): Promise<Onboarded> {
   const run = firstRow(await rpcOrThrow<RunRow | RunRow[]>(supabase, "start_cmo_run", { p_kind: "onboard", p_input: { site } }));
   if (!run) throw new ApiError(500, "Could not start building your plan.");
@@ -55,7 +56,7 @@ const ROUTE_MS = 280_000;
 
 /**
  * Queues the week's plan and runs it, then today's draft (`kickFirstWeek`). False when the plan could not be queued
- * (paused, capped, no credits): the documents are saved either way, and the Monday plan still comes.
+ * (paused, capped, no credits, no plan after the free one): the documents are saved either way.
  */
 async function startFirstWeek(supabase: SupabaseClient, userId: string, started: number): Promise<boolean> {
   const input: Record<string, unknown> = { source: "onboarding" };

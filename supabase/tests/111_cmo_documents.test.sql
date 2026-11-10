@@ -11,6 +11,8 @@ select no_plan();
 insert into auth.users (id, email) values
   ('e1110000-0000-4000-8000-00000000000a', 'cmo-a@test.local'),
   ('e1110000-0000-4000-8000-00000000000b', 'cmo-b@test.local');
+-- A is on a paid plan: this file checks the 5-a-day cap, not the 2 free onboarding runs (CMO review 3, 3.1; 287).
+update public.profiles set plan = 'starter' where id = 'e1110000-0000-4000-8000-00000000000a';
 
 set local role authenticated;
 set local request.jwt.claims = '{"sub":"e1110000-0000-4000-8000-00000000000a"}';

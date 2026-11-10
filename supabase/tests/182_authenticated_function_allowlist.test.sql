@@ -57,6 +57,8 @@ insert into allowed values
   ('cmo_decide_opportunity(uuid,text,text,text)'),
   ('cmo_decide_post(uuid,text,text,text)'),
   ('cmo_post_myself(uuid,text,text)'),
+  -- CMO review 3, B0: a founder asks about themselves only (another account is not found).
+  ('cmo_require_paid(uuid)'),
   ('cmo_script_open(uuid)'),
   ('post_video_start(uuid,uuid)'),
   ('post_video_wanted(uuid)'),

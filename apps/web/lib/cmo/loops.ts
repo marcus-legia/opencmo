@@ -26,6 +26,12 @@ export type LoopState = {
   repliesDue?: number;
   /** Server có khoá ScrapeCreators (hoặc bản giả). */
   socialReader: boolean;
+  /**
+   * The account has a plan or credits left (`cmo_require_paid`). An unpaid account had its free first run at
+   * onboarding (CMO review 3, 3.1) and gets no loop: no Monday plan, no daily draft, no metrics, so the cron's log has
+   * no "not enough credits" noise. Unset counts as paid (older callers and checks).
+   */
+  paid?: boolean;
 };
 
 export type LoopRun = { loop: string; kind: CmoJobKind; input: Record<string, unknown> };
@@ -81,5 +87,6 @@ export const LOOPS: Loop[] = [
 
 /** Việc cần thả hôm nay cho một người dùng, theo thứ tự trong bảng. */
 export function dueLoops(state: LoopState): LoopRun[] {
+  if (state.paid === false) return [];
   return LOOPS.filter((loop) => loop.when(state)).map((loop) => loop.run(state));
 }
