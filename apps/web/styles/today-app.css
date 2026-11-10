@@ -309,3 +309,14 @@ html:not([data-theme="dark"]) .k { --ok: #16744c; --warn: #8f5a0e; }
 .td-docform .text-button { align-self: flex-start; border: 0; background: transparent; color: var(--accent); font-size: 13.5px; padding: 0; cursor: pointer; }
 .td-docform-error { margin: 12px 0 0; color: var(--bad, #b4402f); font-size: 13.5px; }
 .td-brandhost { color: var(--text); }
+
+/* Phone: the feed comes first, then the Context column, then the chat; the bar keeps the business, credits, Logs and
+   the account on one line, with the views under it (accounts connect from Settings). */
+@media (max-width: 900px) {
+  .pg-main .cols > .mid { order: 1; }
+  .pg-main .cols > .left { order: 2; }
+  .pg-main .cols > .chat { order: 3; }
+}
+@media (max-width: 640px) {
+  .td-viewsbar > a.pill[href*="settings-connected-accounts"], .td-viewsbar > span.pill, .td-viewsbar > a.ib[aria-label="Open the editor"], .td-viewsbar > span[style*="width: 1px"], .td-viewsbar > span[style*="width:1px"] { display: none; }
+}
