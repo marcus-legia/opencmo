@@ -154,7 +154,7 @@ begin
       if p_action = 'skip' and v_reason is null and v_code is not null and v_code <> 'OTHER' then
         v_reason := public.cmo_reason_label(v_code);
       end if;
-      perform public.cmo_decide_post(v_row.ref_id, p_action, v_payload->>'text', coalesce(v_payload->>'reason', v_reason));
+      perform public.cmo_decide_post(v_row.ref_id, p_action, v_payload->>'text', v_reason);
       perform public.cmo_label_outcome(v_user, v_row.ref_id, v_code);
     when 'reply' then
       if p_action not in ('replied', 'dismissed') then
@@ -452,6 +452,47 @@ begin
 end;
 $$;
 
+
+-- The weekly quality view counts edit labels of approvals only: a founder's chip on a skip is not an edit.
+CREATE OR REPLACE VIEW public.cmo_draft_quality_weekly WITH (security_invoker='true') AS
+ WITH modes AS (
+         SELECT (date_trunc('week'::text, cmo_draft_outcomes.decided_at))::date AS week,
+            cmo_draft_outcomes.department,
+            cmo_draft_outcomes.model,
+            cmo_draft_outcomes.prompt_version,
+            cmo_draft_outcomes.edit_mode,
+            count(*) AS n
+           FROM public.cmo_draft_outcomes
+          WHERE (cmo_draft_outcomes.edit_mode IS NOT NULL) AND (cmo_draft_outcomes.action = 'approve'::text)
+          GROUP BY ((date_trunc('week'::text, cmo_draft_outcomes.decided_at))::date), cmo_draft_outcomes.department, cmo_draft_outcomes.model, cmo_draft_outcomes.prompt_version, cmo_draft_outcomes.edit_mode
+        ), totals AS (
+         SELECT (date_trunc('week'::text, cmo_draft_outcomes.decided_at))::date AS week,
+            cmo_draft_outcomes.department,
+            cmo_draft_outcomes.model,
+            cmo_draft_outcomes.prompt_version,
+            count(*) AS decided,
+            count(*) FILTER (WHERE ((cmo_draft_outcomes.action = 'approve'::text) AND (cmo_draft_outcomes.similarity >= public.cmo_as_written()))) AS approved_as_written,
+            count(*) FILTER (WHERE ((cmo_draft_outcomes.action = 'approve'::text) AND (cmo_draft_outcomes.similarity < public.cmo_as_written()))) AS approved_edited,
+            count(*) FILTER (WHERE (cmo_draft_outcomes.action = 'replied'::text)) AS replied,
+            count(*) FILTER (WHERE (cmo_draft_outcomes.action = ANY (ARRAY['skip'::text, 'dismissed'::text]))) AS skipped,
+            round((avg(cmo_draft_outcomes.similarity))::numeric, 3) AS mean_similarity
+           FROM public.cmo_draft_outcomes
+          GROUP BY ((date_trunc('week'::text, cmo_draft_outcomes.decided_at))::date), cmo_draft_outcomes.department, cmo_draft_outcomes.model, cmo_draft_outcomes.prompt_version
+        )
+ SELECT week,
+    department,
+    model,
+    prompt_version,
+    decided,
+    approved_as_written,
+    approved_edited,
+    replied,
+    skipped,
+    mean_similarity,
+    COALESCE(( SELECT jsonb_object_agg(m.edit_mode, m.n) AS jsonb_object_agg
+           FROM modes m
+          WHERE ((m.week = t.week) AND (m.department = t.department) AND (m.model = t.model) AND (m.prompt_version = t.prompt_version))), '{}'::jsonb) AS edit_modes
+   FROM totals t;
 
 revoke all on function public.cmo_reason_label(text) from public, anon, authenticated;
 revoke all on function public.cmo_label_outcome(uuid, uuid, text) from public, anon, authenticated;

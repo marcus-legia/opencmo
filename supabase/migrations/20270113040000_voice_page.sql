@@ -13,8 +13,10 @@ create table if not exists public.cmo_voice_events (
   -- A rule (`correction_id`) or a field of the strategy document (`field`).
   correction_id uuid references public.cmo_corrections(id) on delete cascade,
   field text check (field in ('voice', 'avoid')),
-  -- Who changed it, as the page names it: Setup, You, Learned from your edits, From your ratings.
-  source text not null check (source in ('setup', 'you', 'edits', 'ratings')),
+  -- Who changed it, as the page names it: Setup, You, Your CMO (the chat), Learned from your edits, From your ratings.
+  source text not null check (source in ('setup', 'you', 'cmo', 'edits', 'ratings')),
+  -- The strategy version that made a field's event (the chat names itself after the insert: see the trigger).
+  document_id uuid references public.marketing_documents(id) on delete cascade,
   before jsonb,
   after jsonb,
   before_status text check (before_status in ('proposed', 'active', 'rejected')),
@@ -168,8 +170,9 @@ begin
 end;
 $$;
 
--- The strategy's voice and avoid list: an event per field that changed, from the version before. Onboarding and the
--- CMO write as `agent` (Setup); the founder's own save is "You".
+-- The strategy's voice and avoid list: an event per field that changed, from the version before. A job's save
+-- (onboarding, `created_by = 'agent'` at insert) is Setup; the founder's own save is "You". The CMO chat saves as the
+-- founder and then marks the version `agent` (`cmo_chat_save_document`): that update makes its events "Your CMO".
 CREATE OR REPLACE FUNCTION public.marketing_documents_voice_events() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
@@ -181,6 +184,12 @@ begin
   if new.kind <> 'strategy' or coalesce(current_setting('opencmo.voice_undo', true), '') = 'on' then
     return new;
   end if;
+  if tg_op = 'UPDATE' then
+    if old.created_by = 'user' and new.created_by = 'agent' then
+      update public.cmo_voice_events set source = 'cmo' where document_id = new.id and source = 'you';
+    end if;
+    return new;
+  end if;
   begin
     select body into v_prev from public.marketing_documents
     where user_id = new.user_id and kind = 'strategy' and version < new.version
@@ -188,9 +197,9 @@ begin
     foreach v_field in array array['voice', 'avoid'] loop
       continue when (v_prev->v_field) is not distinct from (new.body->v_field);
       continue when v_prev is null and new.body->v_field is null;
-      insert into public.cmo_voice_events (user_id, field, source, before, after)
+      insert into public.cmo_voice_events (user_id, field, source, before, after, document_id)
       values (new.user_id, v_field, case when new.created_by = 'user' then 'you' else 'setup' end,
-        v_prev->v_field, new.body->v_field);
+        v_prev->v_field, new.body->v_field, new.id);
     end loop;
   exception when others then
     -- The history is a view of the change; never a reason a document is not saved.
@@ -201,13 +210,14 @@ end;
 $$;
 
 drop trigger if exists marketing_documents_voice_events on public.marketing_documents;
-create trigger marketing_documents_voice_events after insert on public.marketing_documents
+create trigger marketing_documents_voice_events after insert or update of created_by on public.marketing_documents
   for each row execute function public.marketing_documents_voice_events();
 
 -- Undo: the founder's latest event that is not undone is reverted, and marked so; the next Undo takes the one before.
--- A rule goes back to its words and its state before (one that was only proposed is set aside, so it does not ask
--- again); a strategy field goes back to its value before, as a new version of the document.
-CREATE OR REPLACE FUNCTION public.cmo_voice_undo() RETURNS public.cmo_voice_events
+-- `p_event` is the event the page showed with its Undo: if a newer change came in meanwhile, nothing is undone and the
+-- page reads again. A rule goes back to its words and its state before (one that was only proposed is set aside, so
+-- it does not ask again); a strategy field goes back to its value before (empty when it had none), as a new version.
+CREATE OR REPLACE FUNCTION public.cmo_voice_undo(p_event uuid) RETURNS public.cmo_voice_events
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
@@ -221,6 +231,9 @@ begin
   where user_id = v_user and undone_at is null order by seq desc limit 1 for update;
   if not found then
     raise exception 'There is nothing to undo.' using errcode = 'P0002';
+  end if;
+  if v_event.id is distinct from p_event then
+    raise exception 'Your voice changed since this page loaded. Look at the history again before undoing.' using errcode = 'P0001';
   end if;
   perform set_config('opencmo.voice_undo', 'on', true);
   if v_event.correction_id is not null then
@@ -236,8 +249,9 @@ begin
     if found then
       insert into public.marketing_documents (user_id, kind, version, body, created_by)
       values (v_user, 'strategy', v_doc.version + 1,
-        case when v_event.before is null then v_doc.body - v_event.field
-          else jsonb_set(v_doc.body, array[v_event.field], v_event.before) end, 'user');
+        -- The document keeps both fields (StrategySchema): one that had no value before is emptied, not removed.
+        jsonb_set(v_doc.body, array[v_event.field],
+          coalesce(v_event.before, case v_event.field when 'avoid' then '[]'::jsonb else '""'::jsonb end)), 'user');
     end if;
   end if;
   perform set_config('opencmo.voice_undo', '', true);
@@ -250,7 +264,7 @@ revoke all on function public.cmo_voice_rule_event(public.cmo_corrections, publi
 revoke all on function public.marketing_documents_voice_events() from public, anon, authenticated;
 revoke all on function public.cmo_edit_correction(uuid, text, boolean) from public, anon;
 grant execute on function public.cmo_edit_correction(uuid, text, boolean) to authenticated;
-revoke all on function public.cmo_voice_undo() from public, anon;
-grant execute on function public.cmo_voice_undo() to authenticated;
+revoke all on function public.cmo_voice_undo(uuid) from public, anon;
+grant execute on function public.cmo_voice_undo(uuid) to authenticated;
 
 commit;

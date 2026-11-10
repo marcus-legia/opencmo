@@ -124,11 +124,15 @@ begin
   if exists (select 1 from public.cmo_corrections where user_id = p_user and round_id = p_round) then
     return 0;
   end if;
+  -- The sheet shows the latest round only: rules an earlier round proposed and the founder left are set aside, so a
+  -- rule proposed again belongs to this round and can still be accepted.
+  update public.cmo_corrections set status = 'rejected', decided_at = now()
+  where user_id = p_user and source = 'ratings' and status = 'proposed' and round_id is distinct from p_round;
   foreach v_rule in array coalesce(p_rules[1:5], '{}') loop
     v_rule := trim(coalesce(v_rule, ''));
     continue when char_length(v_rule) not between 3 and 200;
-    continue when exists (select 1 from public.cmo_corrections where user_id = p_user and status in ('proposed', 'active')
-      and lower(rule) = lower(v_rule));
+    continue when exists (select 1 from public.cmo_corrections where user_id = p_user
+      and (status = 'active' or (status = 'proposed' and round_id = p_round)) and lower(rule) = lower(v_rule));
     insert into public.cmo_corrections (user_id, rule, source, round_id) values (p_user, v_rule, 'ratings', p_round);
     v_n := v_n + 1;
   end loop;
@@ -169,6 +173,23 @@ begin
   update public.cmo_corrections set status = 'rejected', decided_at = now()
   where user_id = v_user and round_id = p_round and source = 'ratings' and status = 'proposed';
   return v_done;
+end;
+$$;
+
+-- Only `cmo_rate_drafts` queues `distill_ratings` (a free Haiku call per round): a direct call is refused like the
+-- schedule's own free jobs.
+CREATE OR REPLACE FUNCTION public.enqueue_cmo_run(p_kind text, p_input jsonb DEFAULT '{}'::jsonb) RETURNS public.cmo_runs
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  -- Posting is ordered only by Schedule, for a slot whose card the founder approved.
+  -- The schedule's own jobs are free and spend provider money (the planner model, ScrapeCreators): only the schedule
+  -- queues them (enqueue_cmo_run_for), never a direct call (review R5).
+  if p_kind in ('publish_post', 'review_week', 'pull_metrics', 'summarize_memory', 'distill_ratings') then
+    raise exception 'Unknown task.' using errcode = '22023';
+  end if;
+  return public.cmo_enqueue(public.require_user(), p_kind, p_input);
 end;
 $$;
 

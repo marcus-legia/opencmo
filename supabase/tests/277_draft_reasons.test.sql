@@ -6,7 +6,7 @@ create extension if not exists pgtap with schema extensions;
 begin;
 set search_path to public, extensions;
 
-select plan(14);
+select plan(16);
 
 select ok(not has_function_privilege('authenticated', 'public.cmo_label_outcome(uuid,uuid,text)', 'execute'), 'the label is written through approval_decide only');
 
@@ -35,6 +35,9 @@ select throws_ok(format($$ select public.approval_decide(%L, 'skip', %L) $$, (se
 select is((public.approval_decide((select id from t_card where name = 'Post 1'), 'skip',
   jsonb_build_object('content_hash', (select hash from t_card where name = 'Post 1'), 'reason_code', 'TOO_SALESY'))).reason,
   'Too salesy', 'the chip''s name is the skip reason');
+-- A chip with empty words: the chip's name is still the reason the voice note reads.
+select public.approval_decide((select id from t_card where name = 'Post 6'), 'skip',
+  jsonb_build_object('content_hash', (select hash from t_card where name = 'Post 6'), 'reason_code', 'TOO_LONG', 'reason', ''));
 -- Skip with "Off topic" and words of their own: the words are the reason, the chip is kept.
 select public.approval_decide((select id from t_card where name = 'Post 2'), 'skip',
   jsonb_build_object('content_hash', (select hash from t_card where name = 'Post 2'), 'reason_code', 'OFF_TOPIC', 'reason', 'We do not sell to agencies.'));
@@ -57,6 +60,11 @@ select is((select reason_code || ':' || labelled_by || ':' || edit_mode from pub
   'TOO_SALESY:founder:TOO_SALESY', 'an edited approve keeps the chip as its label');
 select is((select coalesce(reason_code, '-') || ':' || edit_mode from public.cmo_draft_outcomes where item_id = 'e2771000-0000-4000-8000-000000000004'),
   '-:NO_MEANINGFUL_EDIT', 'an approve as written keeps no chip');
+
+select ok(exists (select 1 from public.cmo_memories m join public.cmo_draft_outcomes o on o.id = m.source_outcome
+  where o.item_id = 'e2771000-0000-4000-8000-000000000006' and m.body like '%Too long%'), 'empty words never drop the chip''s reason');
+select is((select edit_modes from public.cmo_draft_quality_weekly where department = 'post' limit 1) ? 'TOO_LONG', false,
+  'a chip on a skip is not counted as an edit');
 
 -- Two founder labels of a kind (a skip and an edit) propose the rule.
 select is((select count(*)::int from public.cmo_corrections where user_id = 'e2770000-0000-4000-8000-00000000000a' and edit_mode = 'TOO_SALESY' and status = 'proposed'),

@@ -78,7 +78,7 @@ row is B's (the request below).
     `avoid`.
   - The Voice tab has three parts: Rules, From your setup, and Learned notes, plus the history with Undo.
   - pgTAP and e2e as in plan §4.3.
-- [ ] **A7 Code review of group 2** (plan §7), written under "Reviews".
+- [x] **A7 Code review of group 2** (plan §7), written under "Reviews".
 - [ ] **A8 Finish.**
   - Rebase, regenerate `supabase/schema/current.sql`, and run every check of plan §7.
   - Take the screenshots of the post card and the rating sheet, look at them, and attach them.
@@ -149,6 +149,35 @@ only inside `schedule_propose`, from the founder's own decision; error text is E
 
 Also fixed while testing: pgTAP 235 relied on heap order for two cards with the same `created_at`; it now sets the
 order.
+
+### Group 2 (A7), 2026-11-10, `e0b8e49d..d545d07f`
+
+`/code-review high`: 10 findings, all fixed (one SQL commit, one web commit, as in group 1).
+
+1. A rule left with "Later" stayed proposed and blocked the same words in the next round → a new round sets the older
+   rounds' waiting rules aside, and only active rules or this round's block a repeat. pgTAP 278.
+2. Undo took no event, so it could revert a change the page never showed → `cmo_voice_undo(p_event)` refuses unless
+   that event is still the newest; the page reads again. pgTAP 279.
+3. A direct `enqueue_cmo_run('distill_ratings')` started free Haiku runs → refused like the schedule's free jobs.
+   pgTAP 278.
+4. The Voice page cut active rules at 60 and turned-off rules at 30 events → all active rules (200), and every rule
+   that was ever on, from its own events.
+5. The CMO chat's strategy saves were labelled "You" (it inserts as the founder, then marks the version `agent`) →
+   that update relabels the version's events "Your CMO". pgTAP 279.
+6. A chip with an empty `reason` lost its reason → the trimmed reason or the chip's name, never "". pgTAP 277.
+7. Undo of a field that had no value removed the key → it is emptied (`""`, `[]`). pgTAP 279.
+8. One chip state served both Skip and "What did you fix?" → two states.
+9. `cmo_draft_quality_weekly` counted skip chips as edits → its edit modes count approvals only. pgTAP 277.
+10. The chip list was typed in three places in TypeScript → the routes and the job read `DRAFT_REASONS`; SQL's list
+    is compared by `jobs.check.ts`.
+
+Security checklist (SQL, RLS, routes, a free job): the two new tables have RLS with a select-own policy, `select` for
+`authenticated` and full grants for `service_role` only, asserted in pgTAP; every write goes through an
+owner-checking RPC (`cmo_rate_drafts`, `cmo_accept_corrections`, `cmo_edit_correction`, `cmo_voice_undo`), all on
+the function allowlist (182); the job's two RPCs are service-role only; the free job is reachable only through a
+rating round (one a day, five ratings); the founder's notes and the drafts go to the model inside tags with
+`escapeForTag`, and the model's rules are kept only when a rating supports them; routes use allowlisted rate limits;
+error text is English. No credits move.
 
 ## Requests
 

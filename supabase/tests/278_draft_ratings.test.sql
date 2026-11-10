@@ -6,7 +6,7 @@ create extension if not exists pgtap with schema extensions;
 begin;
 set search_path to public, extensions;
 
-select plan(20);
+select plan(23);
 
 select has_table('public', 'cmo_draft_ratings', 'the ratings table exists');
 select ok(has_table_privilege('authenticated', 'public.cmo_draft_ratings', 'select'), 'founders read their ratings');
@@ -28,6 +28,7 @@ create temp table t_round (r jsonb) on commit drop;
 grant select, insert on t_round to authenticated, service_role;
 set local role authenticated;
 set local request.jwt.claims = '{"sub":"e2780000-0000-4000-8000-00000000000a","role":"authenticated"}';
+select throws_ok($$ select public.enqueue_cmo_run('distill_ratings', '{}') $$, '22023', 'Unknown task.', 'the free job is queued by a round only');
 select throws_ok($$ select public.cmo_rate_drafts('[]') $$, '22023', 'Rate one to five drafts.', 'an empty round is refused');
 select throws_ok($$ select public.cmo_rate_drafts((select jsonb_agg(jsonb_build_object('item_id', 'e2781000-0000-4000-8000-00000000000a', 'version', 0, 'verdict', 'up')) from generate_series(1, 6))) $$,
   '22023', 'Rate one to five drafts.', 'six ratings are refused');
@@ -76,6 +77,19 @@ reset role;
 select is((select string_agg(status || ':' || rule, ' | ' order by status) from public.cmo_corrections where user_id = 'e2780000-0000-4000-8000-00000000000a'),
   'active:Help first: no pitch, no hype. | rejected:Name one specific step, like a day to send the reminder.', 'the ticked one is active with its words, the other set aside');
 select is((select count(*)::int from public.approvals where ref_kind = 'correction' and user_id = 'e2780000-0000-4000-8000-00000000000a'), 0, 'still no card');
+
+-- A later round: the earlier round's rules still waiting are set aside, and the same words can be proposed again.
+reset role;
+insert into public.cmo_corrections (user_id, rule, source, status, round_id)
+values ('e2780000-0000-4000-8000-00000000000a', 'Keep it short.', 'ratings', 'proposed', (select (r->>'round')::uuid from t_round));
+insert into public.cmo_draft_ratings (user_id, item_id, version, verdict, words, round)
+values ('e2780000-0000-4000-8000-00000000000a', 'e2781000-0000-4000-8000-00000000000b', 0, 'down', 'Buy now.', 'e2782000-0000-4000-8000-00000000000b');
+set local role service_role;
+select is(public.cmo_propose_rating_rules('e2780000-0000-4000-8000-00000000000a', 'e2782000-0000-4000-8000-00000000000b', array['Keep it short.']), 1,
+  'a rule left waiting in an earlier round can be proposed again');
+reset role;
+select is((select string_agg(status, ',' order by round_id = 'e2782000-0000-4000-8000-00000000000b') from public.cmo_corrections where rule = 'Keep it short.'),
+  'rejected,proposed', 'and the earlier one is set aside');
 
 select * from finish();
 rollback;

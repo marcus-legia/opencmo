@@ -1709,7 +1709,7 @@ begin
       if p_action = 'skip' and v_reason is null and v_code is not null and v_code <> 'OTHER' then
         v_reason := public.cmo_reason_label(v_code);
       end if;
-      perform public.cmo_decide_post(v_row.ref_id, p_action, v_payload->>'text', coalesce(v_payload->>'reason', v_reason));
+      perform public.cmo_decide_post(v_row.ref_id, p_action, v_payload->>'text', v_reason);
       perform public.cmo_label_outcome(v_user, v_row.ref_id, v_code);
     when 'reply' then
       if p_action not in ('replied', 'dismissed') then
@@ -4575,11 +4575,15 @@ begin
   if exists (select 1 from public.cmo_corrections where user_id = p_user and round_id = p_round) then
     return 0;
   end if;
+  -- The sheet shows the latest round only: rules an earlier round proposed and the founder left are set aside, so a
+  -- rule proposed again belongs to this round and can still be accepted.
+  update public.cmo_corrections set status = 'rejected', decided_at = now()
+  where user_id = p_user and source = 'ratings' and status = 'proposed' and round_id is distinct from p_round;
   foreach v_rule in array coalesce(p_rules[1:5], '{}') loop
     v_rule := trim(coalesce(v_rule, ''));
     continue when char_length(v_rule) not between 3 and 200;
-    continue when exists (select 1 from public.cmo_corrections where user_id = p_user and status in ('proposed', 'active')
-      and lower(rule) = lower(v_rule));
+    continue when exists (select 1 from public.cmo_corrections where user_id = p_user
+      and (status = 'active' or (status = 'proposed' and round_id = p_round)) and lower(rule) = lower(v_rule));
     insert into public.cmo_corrections (user_id, rule, source, round_id) values (p_user, v_rule, 'ratings', p_round);
     v_n := v_n + 1;
   end loop;
@@ -5529,6 +5533,7 @@ CREATE TABLE public.cmo_voice_events (
     correction_id uuid,
     field text,
     source text NOT NULL,
+    document_id uuid,
     before jsonb,
     after jsonb,
     before_status text,
@@ -5540,15 +5545,15 @@ CREATE TABLE public.cmo_voice_events (
     CONSTRAINT cmo_voice_events_field_check CHECK ((field = ANY (ARRAY['voice'::text, 'avoid'::text]))),
     CONSTRAINT cmo_voice_events_one_target CHECK (((correction_id IS NULL) <> (field IS NULL))),
     CONSTRAINT cmo_voice_events_size CHECK (((octet_length(COALESCE((before)::text, ''::text)) <= 8192) AND (octet_length(COALESCE((after)::text, ''::text)) <= 8192))),
-    CONSTRAINT cmo_voice_events_source_check CHECK ((source = ANY (ARRAY['setup'::text, 'you'::text, 'edits'::text, 'ratings'::text])))
+    CONSTRAINT cmo_voice_events_source_check CHECK ((source = ANY (ARRAY['setup'::text, 'you'::text, 'cmo'::text, 'edits'::text, 'ratings'::text])))
 );
 
 
 --
--- Name: cmo_voice_undo(); Type: FUNCTION; Schema: public; Owner: -
+-- Name: cmo_voice_undo(uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.cmo_voice_undo() RETURNS public.cmo_voice_events
+CREATE FUNCTION public.cmo_voice_undo(p_event uuid) RETURNS public.cmo_voice_events
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
@@ -5562,6 +5567,9 @@ begin
   where user_id = v_user and undone_at is null order by seq desc limit 1 for update;
   if not found then
     raise exception 'There is nothing to undo.' using errcode = 'P0002';
+  end if;
+  if v_event.id is distinct from p_event then
+    raise exception 'Your voice changed since this page loaded. Look at the history again before undoing.' using errcode = 'P0001';
   end if;
   perform set_config('opencmo.voice_undo', 'on', true);
   if v_event.correction_id is not null then
@@ -5577,8 +5585,9 @@ begin
     if found then
       insert into public.marketing_documents (user_id, kind, version, body, created_by)
       values (v_user, 'strategy', v_doc.version + 1,
-        case when v_event.before is null then v_doc.body - v_event.field
-          else jsonb_set(v_doc.body, array[v_event.field], v_event.before) end, 'user');
+        -- The document keeps both fields (StrategySchema): one that had no value before is emptied, not removed.
+        jsonb_set(v_doc.body, array[v_event.field],
+          coalesce(v_event.before, case v_event.field when 'avoid' then '[]'::jsonb else '""'::jsonb end)), 'user');
     end if;
   end if;
   perform set_config('opencmo.voice_undo', '', true);
@@ -7623,7 +7632,7 @@ begin
   -- Posting is ordered only by Schedule, for a slot whose card the founder approved.
   -- The schedule's own jobs are free and spend provider money (the planner model, ScrapeCreators): only the schedule
   -- queues them (enqueue_cmo_run_for), never a direct call (review R5).
-  if p_kind in ('publish_post', 'review_week', 'pull_metrics', 'summarize_memory') then
+  if p_kind in ('publish_post', 'review_week', 'pull_metrics', 'summarize_memory', 'distill_ratings') then
     raise exception 'Unknown task.' using errcode = '22023';
   end if;
   return public.cmo_enqueue(public.require_user(), p_kind, p_input);
@@ -8626,6 +8635,12 @@ begin
   if new.kind <> 'strategy' or coalesce(current_setting('opencmo.voice_undo', true), '') = 'on' then
     return new;
   end if;
+  if tg_op = 'UPDATE' then
+    if old.created_by = 'user' and new.created_by = 'agent' then
+      update public.cmo_voice_events set source = 'cmo' where document_id = new.id and source = 'you';
+    end if;
+    return new;
+  end if;
   begin
     select body into v_prev from public.marketing_documents
     where user_id = new.user_id and kind = 'strategy' and version < new.version
@@ -8633,9 +8648,9 @@ begin
     foreach v_field in array array['voice', 'avoid'] loop
       continue when (v_prev->v_field) is not distinct from (new.body->v_field);
       continue when v_prev is null and new.body->v_field is null;
-      insert into public.cmo_voice_events (user_id, field, source, before, after)
+      insert into public.cmo_voice_events (user_id, field, source, before, after, document_id)
       values (new.user_id, v_field, case when new.created_by = 'user' then 'you' else 'setup' end,
-        v_prev->v_field, new.body->v_field);
+        v_prev->v_field, new.body->v_field, new.id);
     end loop;
   exception when others then
     -- The history is a view of the change; never a reason a document is not saved.
@@ -16363,7 +16378,7 @@ CREATE VIEW public.cmo_draft_quality_weekly WITH (security_invoker='true') AS
             cmo_draft_outcomes.edit_mode,
             count(*) AS n
            FROM public.cmo_draft_outcomes
-          WHERE (cmo_draft_outcomes.edit_mode IS NOT NULL)
+          WHERE ((cmo_draft_outcomes.edit_mode IS NOT NULL) AND (cmo_draft_outcomes.action = 'approve'::text))
           GROUP BY ((date_trunc('week'::text, cmo_draft_outcomes.decided_at))::date), cmo_draft_outcomes.department, cmo_draft_outcomes.model, cmo_draft_outcomes.prompt_version, cmo_draft_outcomes.edit_mode
         ), totals AS (
          SELECT (date_trunc('week'::text, cmo_draft_outcomes.decided_at))::date AS week,
@@ -19020,7 +19035,7 @@ CREATE TRIGGER jobs_storage_expiry BEFORE UPDATE OF status, finished_at ON publi
 -- Name: marketing_documents marketing_documents_voice_events; Type: TRIGGER; Schema: public; Owner: -
 --
 
-CREATE TRIGGER marketing_documents_voice_events AFTER INSERT ON public.marketing_documents FOR EACH ROW EXECUTE FUNCTION public.marketing_documents_voice_events();
+CREATE TRIGGER marketing_documents_voice_events AFTER INSERT OR UPDATE OF created_by ON public.marketing_documents FOR EACH ROW EXECUTE FUNCTION public.marketing_documents_voice_events();
 
 
 --
@@ -19467,6 +19482,14 @@ ALTER TABLE ONLY public.cmo_runs
 
 ALTER TABLE ONLY public.cmo_voice_events
     ADD CONSTRAINT cmo_voice_events_correction_id_fkey FOREIGN KEY (correction_id) REFERENCES public.cmo_corrections(id) ON DELETE CASCADE;
+
+
+--
+-- Name: cmo_voice_events cmo_voice_events_document_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cmo_voice_events
+    ADD CONSTRAINT cmo_voice_events_document_id_fkey FOREIGN KEY (document_id) REFERENCES public.marketing_documents(id) ON DELETE CASCADE;
 
 
 --

@@ -76,7 +76,7 @@ insert into allowed values
   ('cmo_resume()'),
   ('cmo_set_week_goal(date,text,text,integer)'),
   ('cmo_update_item(uuid,text,date)'),
-  ('cmo_voice_undo()'),
+  ('cmo_voice_undo(uuid)'),
   ('complete_caption_translation(uuid,text)'),
   ('create_api_key(text)'),
   ('create_blank_edit(text,text)'),
