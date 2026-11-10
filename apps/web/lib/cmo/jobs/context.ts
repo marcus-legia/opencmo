@@ -41,6 +41,15 @@ export function correctionsBlock(rules: string[]): string {
   return `<founder_rules approved_by="founder">\n${rules.map((r) => `- ${r}`).join("\n")}\n</founder_rules>`;
 }
 
+/** The sentences of `text` that `keep` accepts, joined again; empty when none is. */
+export function keptSentences(text: string, keep: (text: string) => boolean): string {
+  return text
+    .split(/(?<=[.!?])\s+/)
+    .filter((sentence) => sentence.trim() && keep(sentence))
+    .join(" ")
+    .trim();
+}
+
 /** Weekly lessons (memory tier 3): what the summary learned, read before every plan or draft. */
 export function lessonsBlock(lessons: Lesson[]): string {
   if (!lessons.length) return "";
@@ -55,7 +64,10 @@ export function lessonsBlock(lessons: Lesson[]): string {
 export async function recall(store: CmoStore, userId: string, limit: number, topic?: MemoryTopic, keep: (text: string) => boolean = () => true): Promise<string> {
   const [rules, lessons, memories] = await Promise.all([store.corrections(userId), store.lessons(userId), store.memories(userId, limit, topic)]);
   const relevant = topic ? lessons.filter((l) => l.topic === topic || l.topic === "general") : lessons;
-  return [correctionsBlock(rules.filter(keep)), lessonsBlock(relevant), memoriesBlock(memories.filter(keep))].filter(Boolean).join("\n\n");
+  // A lesson is a paragraph the weekly summary wrote, so it is read sentence by sentence: a sentence `keep` refuses
+  // ("add the link in each reply") is dropped and the rest of what was learned stays (review of #188).
+  const kept = relevant.map((l) => ({ ...l, body: keptSentences(l.body, keep) })).filter((l) => l.body);
+  return [correctionsBlock(rules.filter(keep)), lessonsBlock(kept), memoriesBlock(memories.filter(keep))].filter(Boolean).join("\n\n");
 }
 
 /**

@@ -267,16 +267,28 @@ async function main() {
   assert.deepEqual(replyProblems("A due date on the invoice helps. I make Paylane, so I'm biased.", true, ["Paylane"]), []);
   assert.deepEqual(replyProblems("Full disclosure: Paylane is my own tool.", true, ["Paylane"]), []);
   assert.deepEqual(replyProblems("Paylane does this well.", true, ["Paylane"]), ["names the product without saying it is yours"]);
+  // Review of #188: every way people say a product is theirs, and a name counted each time it appears.
+  for (const own of ["I'm building Paylane for this.", "We're building Paylane for this.", "I created Paylane to fix this.", "I'm the developer of Paylane.", "We've been working on Paylane for a year.", "I'm one of the founders of Paylane."]) {
+    assert.deepEqual(replyProblems(own, true, ["Paylane"]), [], own);
+  }
+  assert.ok(replyProblems("I make Paylane, and Paylane sends reminders.", true, ["Paylane"]).includes("names the product more than once"), "twice in one sentence is twice");
   assert.deepEqual(replyProblems("I built Paylane for this. Paylane also sends reminders.", true, ["Paylane"]), [
     "names the product more than once",
     "names the product without saying it is yours",
   ]);
   // 5.1: the rules reader's stand-ins, and the requirement line.
-  const { fakeNeeds, needsLine } = await import("./sales-scan");
+  const { fakeNeeds } = await import("./sales-scan");
+  const { salesNeeds } = await import("@/lib/screens/common");
   assert.equal(fakeVerdict("Disclose your affiliation when you mention your own product."), "requires_disclosure");
   assert.deepEqual(fakeNeeds("You need at least 50 karma. Accounts must be older than 30 days. Self-promo goes in the weekly megathread."), { minKarma: 50, minAccountAgeDays: 30, megathread: true });
-  assert.equal(needsLine(50, 30), "Posting there needs 50 karma and an account 30 days old");
-  assert.equal(needsLine(null, null), "");
+  // The one requirement line the reply card and the Sales screen show (review of #188: no second copy to drift).
+  assert.equal(salesNeeds(50, 30), "Posting there needs 50 karma and an account 30 days old");
+  assert.equal(salesNeeds(null, null), undefined);
+  // Review of #188: an inbox item made before 5.1 is answered in the old shape, and still reads.
+  const { parseAnswer } = await import("./steps");
+  const legacy = parseAnswer("check_rules", { rules: [{ index: 0, verdict: "help_only", summary: "r/x forbids self-promotion" }] });
+  assert.ok(legacy.ok, "an old-shape rules answer is accepted");
+  assert.deepEqual(legacy.ok && legacy.data, { rules: [{ index: 0, verdict: "no_product_mention", summary: "r/x forbids self-promotion", minKarma: null, minAccountAgeDays: null, megathread: false }] });
   const { toVerdict } = await import("./types");
   assert.deepEqual(["mention_ok", "help_only", "skip", "not_verified", "nonsense"].map(toVerdict), ["safe", "no_product_mention", "skip", "not_verified", "not_verified"], "old values map, unknown is not verified");
   // One mention already in the last ten replies: every draft is help only, and says why.

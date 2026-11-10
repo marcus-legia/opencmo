@@ -12,7 +12,7 @@ import { InsightSchema } from "./competitor-research";
 import { DraftSchema, REVIEW_SYSTEM } from "./draft-post";
 import { PlanSchema } from "./plan-week";
 import { ReviewSchema } from "./review-week";
-import { PASS_SCORE, QueriesSchema, ReplySchema, RulesSchema, ScoreSchema } from "./sales-scan";
+import { PASS_SCORE, QueriesSchema, ReplySchema, RulesAnswerSchema, ScoreSchema } from "./sales-scan";
 import { ThreadDraftSchema } from "../writer/types";
 import { LessonSchema } from "./summarize-memory";
 import type { CmoJobKind } from "./types";
@@ -29,7 +29,8 @@ export const INBOX_STEPS = {
   draft_thread: { kind: "post_draft", schema: ThreadDraftSchema, submit: "submit_post_draft" },
   make_queries: { kind: "sales_scan", schema: QueriesSchema, submit: "submit_sales_scan" },
   score_thread: { kind: "sales_scan", schema: ScoreSchema, submit: "submit_sales_scan" },
-  check_rules: { kind: "sales_scan", schema: RulesSchema, submit: "submit_sales_scan" },
+  // Lenient on purpose: an item made before 5.1 asked in the old shape (review of #188).
+  check_rules: { kind: "sales_scan", schema: RulesAnswerSchema, submit: "submit_sales_scan" },
   draft_reply: { kind: "sales_scan", schema: ReplySchema, submit: "submit_sales_scan" },
   summarize_memory: { kind: "summarize_memory", schema: LessonSchema, submit: "submit_memory" },
   competitor_research: { kind: "competitor_research", schema: InsightSchema, submit: "submit_research" },

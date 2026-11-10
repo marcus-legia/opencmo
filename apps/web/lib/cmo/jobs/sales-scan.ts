@@ -18,11 +18,11 @@ import { voiceBlock } from "../writer/context";
 import { hasLink } from "./check-post";
 import { avoidList, documentsBlock, productNames, recall } from "./context";
 import { genModel, promptVersion } from "./edit-taxonomy";
-import { salesBanRisk } from "../sales/ban-risk";
+import { safeForSales } from "../sales/ban-risk";
 import { skillText } from "../skills";
 import { fakeAllowed, LlmError } from "./llm";
 import type { JobContext, JobOutput } from "./runner";
-import { mayMention, type Documents, type Opportunity, type SalesSettings, type ScorePart, type SubredditVerdict } from "./types";
+import { mayMention, toVerdict, type Documents, type Opportunity, type SalesSettings, type ScorePart, type SubredditVerdict } from "./types";
 
 export const PASS_SCORE = 60;
 const MAX_QUERIES = 8;
@@ -91,6 +91,26 @@ export const RulesSchema = z.object({
   ),
 });
 
+/**
+ * The rules step's answer as the inbox takes it (`steps.ts`). An inbox item made before 5.1 shows Claude the old
+ * schema, so its answer has `mention_ok`/`help_only` and no requirements: the old values map (`toVerdict`) and the
+ * new fields default, as `cmo_save_opportunities` and the store already allow. The model's own schema stays strict.
+ */
+export const RulesAnswerSchema = z.object({
+  rules: z.array(
+    z.object({
+      index: z.number().int(),
+      verdict: z
+        .enum(["safe", "requires_disclosure", "no_product_mention", "skip", "mention_ok", "help_only"])
+        .transform((value) => toVerdict(value) as "safe" | "requires_disclosure" | "no_product_mention" | "skip"),
+      summary: z.string(),
+      minKarma: z.number().int().nullable().default(null),
+      minAccountAgeDays: z.number().int().nullable().default(null),
+      megathread: z.boolean().default(false),
+    }),
+  ),
+});
+
 const RULES_SYSTEM = `You read the rules of Reddit communities for a founder who wants to help people there, and say what the rules allow.
 - safe: the rules allow members to mention their own product or work when it helps.
 - requires_disclosure: the rules allow it only when the member says it is their own (disclose affiliation, "say you made it").
@@ -128,12 +148,6 @@ export function fakeNeeds(rules: string): { minKarma: number | null; minAccountA
   };
 }
 
-/** The line a reply card shows for a requirement ("Posting there needs 50 karma and an account 30 days old"). */
-export function needsLine(minKarma?: number | null, minAccountAgeDays?: number | null): string {
-  const parts = [minKarma ? `${minKarma} karma` : "", minAccountAgeDays ? `an account ${minAccountAgeDays} days old` : ""].filter(Boolean);
-  return parts.length ? `Posting there needs ${parts.join(" and ")}` : "";
-}
-
 /** The subreddit of a thread, as the rules cache keys it (`r/SaaS` → `saas`). */
 export const subredditOf = (community: string) => community.trim().replace(/^\/?r\//i, "").toLowerCase();
 
@@ -145,14 +159,37 @@ export function allowedBySettings(thread: RedditThread, settings: SalesSettings)
   return settings.pairs.some(([a, b]) => text.includes(a.toLowerCase()) && text.includes(b.toLowerCase()));
 }
 
-/** Words that say the relation in the sentence that names the product (5.2): "I make X", "our tool", "I'm biased". */
-const DISCLOSURE = /\b(i|we)\s*(['’]m|am|are)?\s*(the\s+)?(make|made|build|built|run|founder|maker|creator|co-?founder|work on|wrote)\b|\b(i|we)['’]?(ve)?\s+(made|built)\b|\bmy (own )?(product|tool|app|startup|company)\b|\bour (product|tool|app)\b|\bbiased\b|\bdisclosure\b|\bfull disclosure\b/i;
+/**
+ * Words that say the relation in the sentence that names the product (5.2): "I make X", "we're building X", "I'm the
+ * developer of X", "our tool", "I'm biased". Every tense people use for their own product, and every role.
+ */
+const DISCLOSURE = new RegExp(
+  [
+    String.raw`\b(i|we)(\s*['’](m|re|ve|d)|\s+(am|are|have|had))?\s+(?:(?:also|just|been)\s+){0,2}(make|made|making|build|built|building|run|running|create|created|creating|develop|developed|developing|wrote|write|writing|founded|launched|work\s+on|working\s+on|maintain|maintaining)\b`,
+    String.raw`\b(i['’]m|i\s+am|we['’]re|we\s+are)\s+(the\s+|a\s+|one\s+of\s+the\s+)?(co-?founders?|founders?|makers?|creators?|developers?|authors?|builders?|ceo|team)\b`,
+    String.raw`\b(my|our)\s+(own\s+)?(product|tool|app|startup|company|project|side\s+project|saas)\b`,
+    String.raw`\bbiased\b`,
+    String.raw`\b(full\s+)?disclosure\b`,
+  ].join("|"),
+  "i",
+);
+
+/** The product's names as a whole-word pattern; null when no name is long enough to count. */
+function productPattern(products: string[], flags: string): RegExp | null {
+  const names = products.filter((name) => name.length >= 3).map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  return names.length ? new RegExp(`(^|[^\\p{L}\\p{N}])(${names.join("|")})(?=$|[^\\p{L}\\p{N}])`, flags) : null;
+}
 
 /** The sentences of a reply that name the product. */
 function namingSentences(reply: string, products: string[]): string[] {
-  const named = (text: string) =>
-    products.some((name) => name.length >= 3 && new RegExp(`(^|[^\\p{L}\\p{N}])${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}($|[^\\p{L}\\p{N}])`, "iu").test(text));
-  return reply.split(/(?<=[.!?])\s+|\n+/).filter(named);
+  const pattern = productPattern(products, "iu");
+  return pattern ? reply.split(/(?<=[.!?])\s+|\n+/).filter((sentence) => pattern.test(sentence)) : [];
+}
+
+/** How many times the reply names the product: twice in one sentence is twice. */
+function mentions(reply: string, products: string[]): number {
+  const pattern = productPattern(products, "giu");
+  return pattern ? [...reply.matchAll(pattern)].length : 0;
 }
 
 /**
@@ -167,7 +204,7 @@ export function replyProblems(reply: string, mayMention: boolean, products: stri
   if (reply.trim().split(/\s+/).length >= REPLY_MAX_WORDS) problems.push(`is not under ${REPLY_MAX_WORDS} words`);
   const naming = namingSentences(reply, products);
   if (!mayMention && naming.length) problems.push("names the product in a help-only reply");
-  if (mayMention && naming.length > 1) problems.push("names the product more than once");
+  if (mayMention && mentions(reply, products) > 1) problems.push("names the product more than once");
   if (mayMention && naming.some((sentence) => !DISCLOSURE.test(sentence))) problems.push("names the product without saying it is yours");
   return problems;
 }
@@ -282,14 +319,14 @@ export async function salesScan(ctx: JobContext): Promise<JobOutput> {
       docs: await store.documents(run.user_id),
       // 5.3: a founder rule that would get the account banned never reaches the reply prompt, even one stored before
       // the check or written by a job.
-      memories: await recall(store, run.user_id, 15, "sales", (text) => salesBanRisk(text, true) === null),
+      memories: await recall(store, run.user_id, 15, "sales", (text) => safeForSales(text, true)),
       seen: await store.seenUrls(run.user_id),
       settings: await store.salesSettings(run.user_id),
       mentionsUsed: await store.recentMentions(run.user_id),
       mentionsWaiting: await store.waitingMentions(run.user_id),
       voice: voiceBlock(
         (await store.voiceNotes(run.user_id, 5))
-          .filter((n) => salesBanRisk(n.body) === null)
+          .filter((n) => safeForSales(n.body))
           .map((n) => ({ body: n.body, platform: n.platform, weight: n.weight, createdAt: n.created_at })),
       ),
     }),

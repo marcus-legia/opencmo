@@ -86,8 +86,11 @@ begin
     if coalesce(v_item->>'platform', 'reddit') not in ('reddit', 'hn') then
       raise exception 'A conversation comes from Reddit or Hacker News.' using errcode = '22023';
     end if;
-    v_karma := case when jsonb_typeof(v_item->'min_karma') = 'number' then (v_item->>'min_karma')::numeric::integer end;
-    v_age := case when jsonb_typeof(v_item->'min_account_age_days') = 'number' then (v_item->>'min_account_age_days')::numeric::integer end;
+    -- Clamped while still numeric: a huge number (1e10) cast to integer first would abort the whole scan's save.
+    v_karma := case when jsonb_typeof(v_item->'min_karma') = 'number' and (v_item->>'min_karma')::numeric between 0 and 1000000
+      then (v_item->>'min_karma')::numeric::integer end;
+    v_age := case when jsonb_typeof(v_item->'min_account_age_days') = 'number' and (v_item->>'min_account_age_days')::numeric between 0 and 3650
+      then (v_item->>'min_account_age_days')::numeric::integer end;
     insert into public.opportunities (
       user_id, run_id, platform, url, community, title, author, snippet, posted_at, comments, score, score_parts, reply,
       priority, gen, rule, rule_why, min_karma, min_account_age_days

@@ -19,4 +19,5 @@ export function salesBanRisk(text: string, sales = false): string | null {
 }
 
 /** For Sales prompts: a rule written before 5.3, or by a job, that would get the account banned is left out. */
-export const safeForSales = (text: string) => salesBanRisk(text) === null;
+/** True when `text` may reach the Sales reply prompt; `sales`: the text is about Sales already (a sales note, a Sales lesson). */
+export const safeForSales = (text: string, sales = false) => salesBanRisk(text, sales) === null;
