@@ -3461,10 +3461,10 @@ $$;
 
 
 --
--- Name: cmo_apply_onboarding_answers(uuid); Type: FUNCTION; Schema: public; Owner: -
+-- Name: cmo_apply_onboarding_answers(uuid, boolean); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.cmo_apply_onboarding_answers(p_user uuid) RETURNS void
+CREATE FUNCTION public.cmo_apply_onboarding_answers(p_user uuid, p_handle_given boolean DEFAULT false) RETURNS void
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
@@ -3484,7 +3484,8 @@ begin
     -- The same lock `save_marketing_document` takes, so a version number is never taken twice.
     perform pg_advisory_xact_lock(hashtextextended(p_user::text || ':doc:product', 1713));
     select * into v_doc from public.marketing_documents where user_id = p_user and kind = 'product' order by version desc limit 1;
-    if found and coalesce(btrim(v_doc.body->>'x_handle'), '') = '' then
+    if found and (coalesce(btrim(v_doc.body->>'x_handle'), '') = ''
+        or (p_handle_given and lower(regexp_replace(btrim(v_doc.body->>'x_handle'), '^@', '')) <> lower(v_profile.x_handle))) then
       insert into public.marketing_documents (user_id, kind, version, body, created_by)
       values (p_user, 'product', v_doc.version + 1, v_doc.body || jsonb_build_object('x_handle', '@' || v_profile.x_handle), 'user');
     end if;
@@ -4453,7 +4454,7 @@ begin
     heard_from_note = case when v_heard is not null then v_note else heard_from_note end
   where id = v_user;
 
-  perform public.cmo_apply_onboarding_answers(v_user);
+  perform public.cmo_apply_onboarding_answers(v_user, v_handle is not null);
 end;
 $_$;
 

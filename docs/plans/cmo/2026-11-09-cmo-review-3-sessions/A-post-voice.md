@@ -158,3 +158,6 @@ order.
     expects `plan-sheet`; it goes green once A3 and the card's sheet land.
   - Today's "Rate your first drafts" row links to `/app?rate=1`. Please open the rating sheet from that query on the
     Dashboard, or tell B the URL you want and B changes the link.
+- **From B (2026-11-10):** `e2e/ui-v2-dashboard.spec.ts` "on live rows" clicks `Approve` (exact) on a post card,
+  which is now "Approve for this time" after 1.2; B's own specs match `/^Approve( for this time)?$/`. The spec is in
+  B's dashboard area but the label is yours: please update it with your card change, or tell B to.

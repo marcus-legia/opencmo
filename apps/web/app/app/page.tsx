@@ -28,16 +28,19 @@ export default async function CmoHome({ searchParams }: { searchParams: Promise<
   }
 
   const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
   const site = typeof params.site === "string" ? params.site.slice(0, 300) : "";
   const state = await loadCmoState(supabase);
   const started = Object.keys(state.documents).length > 0;
 
   // The first run is free (CMO review 3, 3.1, replacing "paid first" of 2026-11-08): a new account goes to Setup and
   // gets its documents, its first week and its first drafts before any plan. The paywall answers the first action that
-  // sends something out or costs credits again (`cmo_require_paid`). `paid=1` is Creem's return; Setup only shows it.
+  // sends something out or costs credits again (`cmo_require_paid`). `paid=1` is Creem's return, which anyone can type:
+  // Setup says the payment arrived only when the plan or credits are there, and that it is on its way otherwise.
   if (UI_V2) {
     if (!started) {
-      const query = new URLSearchParams({ ...(site ? { site } : {}), ...(params.paid === "1" ? { paid: "1" } : {}) }).toString();
+      const paid = params.paid === "1" ? ((await supabase.rpc("cmo_require_paid", { p_user: user?.id ?? null })).error ? "pending" : "1") : null;
+      const query = new URLSearchParams({ ...(site ? { site } : {}), ...(paid ? { paid } : {}) }).toString();
       redirect(query ? `/app/setup?${query}` : "/app/setup");
     }
     return <Dashboard />;

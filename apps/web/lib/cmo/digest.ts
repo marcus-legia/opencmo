@@ -133,7 +133,8 @@ export async function loadDigestInput(
 ): Promise<DigestInput> {
   const since = new Date((opts.now ?? new Date()).getTime() - 24 * 3_600_000).toISOString();
   const [waiting, out, stuck] = await Promise.all([
-    db.from("approvals").select("id, kind, department, snapshot").eq("user_id", userId).eq("status", "waiting").order("created_at").limit(20),
+    // As many as Today reads (100), so a recent urgent card Today ranks first is in the email's list and its claim.
+    db.from("approvals").select("id, kind, department, snapshot").eq("user_id", userId).eq("status", "waiting").order("created_at").limit(100),
     db.from("content_items").select("idea, platform, final_text").eq("user_id", userId).eq("status", "published").gte("published_at", since).limit(20),
     db.from("work_orders").select("title, department, error").eq("user_id", userId).eq("status", "failed").gte("updated_at", since).limit(20),
   ]);

@@ -5,7 +5,7 @@ create extension if not exists pgtap with schema extensions;
 begin;
 set search_path to public, extensions;
 
-select plan(18);
+select plan(19);
 
 insert into auth.users (id, email) values
   ('e2880000-0000-4000-8000-00000000000a', 'os-a@test.local'),
@@ -68,6 +68,16 @@ select is((select body->>'cadence' from public.marketing_documents_latest where 
   'The founder posts on X only. Three posts a week.', 'one sentence, replaced');
 select is((select count(*)::int from public.marketing_documents where user_id = 'e2880000-0000-4000-8000-00000000000a'), 5,
   'two first versions, product v2, content plan v2 and v3: nothing written twice');
+
+-- A handle the founder types replaces the one the CMO guessed; applying again without one keeps it.
+update public.marketing_documents set body = body || '{"x_handle":"@guessed"}' where user_id = 'e2880000-0000-4000-8000-00000000000a' and kind = 'product';
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"e2880000-0000-4000-8000-00000000000a","role":"authenticated"}';
+select public.cmo_onboarding_answers('{"x_handle":"paylane_hq"}');
+select public.cmo_onboarding_answers('{}');
+reset role;
+select is((select body->>'x_handle' from public.marketing_documents_latest where user_id = 'e2880000-0000-4000-8000-00000000000a' and kind = 'product'),
+  '@paylane_hq', 'the founder''s handle wins over the guessed one');
 
 -- An empty rhythm keeps the sentence, never a null.
 update public.marketing_documents set body = '{"cadence":""}' where user_id = 'e2880000-0000-4000-8000-00000000000a' and kind = 'content_strategy';

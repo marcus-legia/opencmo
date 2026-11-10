@@ -42,6 +42,9 @@ export function setupSteps(status: OnboardingStatus): SetupStep[] {
   });
 }
 
+/** How long Setup waits for the first plan and drafts after the documents are saved. */
+export const SETUP_MAX_WAIT_MS = 120_000;
+
 /**
  * Whether Setup is done and goes to the Dashboard: the drafts ended, or the documents are saved and no plan followed
  * (an account that cannot plan: the documents are still worth reading). `settledMs`: time since the run ended.
@@ -49,6 +52,9 @@ export function setupSteps(status: OnboardingStatus): SetupStep[] {
 export function setupFinished(status: OnboardingStatus, settledMs: number): boolean {
   if (!status.run || status.run.status === "running") return false;
   if (status.run.status === "failed") return false;
+  // The documents are saved; whatever is still on its way (a plan waiting in the founder's own Claude, a slow sweep)
+  // shows on the Dashboard. Setup never keeps the founder longer than this.
+  if (settledMs > SETUP_MAX_WAIT_MS) return true;
   if (status.draft === "done" || status.draft === "failed") return true;
   if (status.plan === "failed") return true;
   // The draft is queued when the plan is done (`cmo_runs_first_draft`); give the sweep a moment before leaving.

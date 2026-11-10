@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { withApi } from "@/lib/api/handler";
 import { continueTurn } from "@/lib/agent/session";
+import { requirePaidForCmoSession } from "@/lib/paid-first";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -19,11 +20,13 @@ const body = z.object({
  * same Server-Sent Events as the `turns` route. A waiting tool with no decision counts as Cancel:
  * the Assistant never spends credits the user did not approve.
  */
-export const POST = withApi({ body, rateLimit: { bucket: "agent-continue", limit: 300, windowSeconds: 3600 } }, async ({ supabase, user, body, params }) =>
-  continueTurn(
+export const POST = withApi({ body, rateLimit: { bucket: "agent-continue", limit: 300, windowSeconds: 3600 } }, async ({ supabase, user, body, params }) => {
+  // A CMO turn goes on only on a paid account (CMO review 3, 3.1), however it is continued.
+  await requirePaidForCmoSession(supabase, user.id, params.id);
+  return continueTurn(
     supabase,
     user.id,
     params.id,
     body.decisions.map((decision) => ({ tool_use_id: decision.tool_use_id, approved: decision.approved })),
-  ),
-);
+  );
+});

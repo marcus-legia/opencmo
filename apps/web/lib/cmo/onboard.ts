@@ -63,10 +63,14 @@ export async function runOnboarding(supabase: SupabaseClient, userId: string, si
   // documents only. A failed first plan or draft does not count, so reading the site again retries it (free once for an
   // account without a plan: `cmo_first_run_free`).
   const live = (kind: "plan_week" | "post_draft") =>
-    supabase.from("cmo_runs").select("id", { count: "exact", head: true }).eq("kind", kind).neq("status", "failed");
-  const [{ count: plans }, { count: drafts }] = await Promise.all([live("plan_week"), live("post_draft")]);
-  if (plans === 0) return { runId: run.id, firstWeek: await startFirstWeek(supabase, userId, started) };
-  if (drafts === 0) return { runId: run.id, firstWeek: await startFirstDraft(supabase) };
+    supabase.from("cmo_runs").select("status, input").eq("kind", kind).neq("status", "failed").limit(20);
+  const [{ data: plans }, { data: drafts }] = await Promise.all([live("plan_week"), live("post_draft")]);
+  const planRows = (plans ?? []) as { status: string; input: { brain?: unknown } }[];
+  if (planRows.length === 0) return { runId: run.id, firstWeek: await startFirstWeek(supabase, userId, started) };
+  // The plan is done and its draft failed: draft again. Not while the plan still runs (its own trigger drafts), and not
+  // after a Mode B plan (the founder's Claude drafts).
+  const planDone = planRows.some((row) => row.status === "done" && row.input?.brain !== "claude");
+  if (planDone && (drafts ?? []).length === 0) return { runId: run.id, firstWeek: await startFirstDraft(supabase) };
   return { runId: run.id, firstWeek: false };
 }
 

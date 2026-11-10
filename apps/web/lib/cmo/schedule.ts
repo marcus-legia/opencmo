@@ -45,16 +45,17 @@ async function dueLinks(admin: SupabaseClient, items: (string | undefined)[]): P
 }
 
 /**
- * The users with a plan on sale or credits left: SQL `cmo_paid`, the one rule (`cmo_paid_users`). A read error counts
- * nobody as paid: the loops wait a day.
+ * The users with a plan on sale or credits left: SQL `cmo_paid`, the one rule (`cmo_paid_users`). A chunk that cannot
+ * be read counts its users as unpaid: their loops wait a day.
  */
 async function paidUsers(admin: SupabaseClient, users: string[]): Promise<Set<string>> {
   const out = new Set<string>();
   for (let i = 0; i < users.length; i += 500) {
     const { data, error } = await admin.rpc("cmo_paid_users", { p_users: users.slice(i, i + 500) });
     if (error) {
+      // These users wait a day; the others still get their loops.
       console.warn("[cron] cmo: could not read plans", error.message);
-      return new Set();
+      continue;
     }
     for (const id of (data ?? []) as string[]) out.add(id);
   }

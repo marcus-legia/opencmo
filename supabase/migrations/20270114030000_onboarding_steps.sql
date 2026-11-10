@@ -54,8 +54,9 @@ $$;
 revoke all on function public.cmo_onboard_step(uuid, jsonb) from public, anon;
 grant execute on function public.cmo_onboard_step(uuid, jsonb) to authenticated, service_role;
 
--- Internal: applies the saved answers to the latest documents. Idempotent: a second call changes nothing.
-create or replace function public.cmo_apply_onboarding_answers(p_user uuid) returns void
+-- Internal: applies the saved answers to the latest documents. Idempotent: a second call changes nothing. The handle
+-- fills an empty Product handle; `p_handle_given` (the founder just typed it) also replaces one the CMO guessed.
+create or replace function public.cmo_apply_onboarding_answers(p_user uuid, p_handle_given boolean default false) returns void
   language plpgsql security definer
   set search_path to 'public'
 as $$
@@ -75,7 +76,8 @@ begin
     -- The same lock `save_marketing_document` takes, so a version number is never taken twice.
     perform pg_advisory_xact_lock(hashtextextended(p_user::text || ':doc:product', 1713));
     select * into v_doc from public.marketing_documents where user_id = p_user and kind = 'product' order by version desc limit 1;
-    if found and coalesce(btrim(v_doc.body->>'x_handle'), '') = '' then
+    if found and (coalesce(btrim(v_doc.body->>'x_handle'), '') = ''
+        or (p_handle_given and lower(regexp_replace(btrim(v_doc.body->>'x_handle'), '^@', '')) <> lower(v_profile.x_handle))) then
       insert into public.marketing_documents (user_id, kind, version, body, created_by)
       values (p_user, 'product', v_doc.version + 1, v_doc.body || jsonb_build_object('x_handle', '@' || v_profile.x_handle), 'user');
     end if;
@@ -102,7 +104,7 @@ begin
 end;
 $$;
 
-revoke all on function public.cmo_apply_onboarding_answers(uuid) from public, anon, authenticated;
+revoke all on function public.cmo_apply_onboarding_answers(uuid, boolean) from public, anon, authenticated;
 
 -- The three optional questions. Each key is optional; `{}` only applies what was saved before. Unknown keys and values
 -- out of their lists are refused, so the profile only ever holds what Setup offers.
@@ -154,7 +156,7 @@ begin
     heard_from_note = case when v_heard is not null then v_note else heard_from_note end
   where id = v_user;
 
-  perform public.cmo_apply_onboarding_answers(v_user);
+  perform public.cmo_apply_onboarding_answers(v_user, v_handle is not null);
 end;
 $$;
 

@@ -34,5 +34,7 @@ assert.equal(setupFinished({ ...done, plan: "failed" }, 0), true);
 assert.equal(setupFinished({ ...done, plan: null }, 5_000), false);
 assert.equal(setupFinished({ ...done, plan: null }, 16_000), true, "no plan followed: the documents are still worth reading");
 assert.equal(setupFinished({ ...done, run: null }, 99_000), false);
+assert.equal(setupFinished({ ...done, plan: "queued" }, 60_000), false);
+assert.equal(setupFinished({ ...done, plan: "queued" }, 121_000), true, "a plan waiting in the founder's Claude does not keep Setup forever");
 
 console.log("onboard-status.check: every check passed");

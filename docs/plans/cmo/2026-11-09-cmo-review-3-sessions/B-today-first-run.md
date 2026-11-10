@@ -66,7 +66,7 @@ Branch: `claude/okara-spec-opencmo-b7qlx2`. Pull before each item, and push afte
   - The table is service-role only.
   - pgTAP as in plan §5.4.
 - [x] **B9 Code review of group 3** (plan §7), written under "Reviews".
-- [ ] **B10 Finish.**
+- [x] **B10 Finish.**
   - Rebase, regenerate `supabase/schema/current.sql`, and run every check of plan §7.
   - Take the screenshots of Today and Setup (1280 px and 390 px, light and dark), look at them, and attach them.
   - Run `/code-review high` on B's whole diff and hand it to the reviewer.
@@ -206,6 +206,45 @@ Security checklist: no secrets touched; all migrations are new in this PR (`2027
 `select, delete` to the service role only and nothing to founders (pgTAP 289); no credits move outside
 `credit_hold` (the free run holds nothing); every limit runs before the work it bounds (`requirePaid` before the
 turn, `start_cmo_run` before the site is read).
+**B10, B's whole diff, 2026-11-10, `/code-review high` on `origin/claude/okara-spec-opencmo-b7qlx2...2d0bff9`.** Ten
+findings, fixed in the commit after `2d0bff9` except where noted:
+1. Setup could wait forever for a plan in the founder's own Claude (Mode B): fixed, it leaves 2 minutes after the
+   documents are saved at most (`SETUP_MAX_WAIT_MS`, check).
+2. The email read the 20 oldest waiting cards while Today ranks from 100, so a recent urgent row was dropped: fixed,
+   the email reads 100 like Today.
+3. Reading the site again queued a draft while the first plan still ran, or after a Mode B plan: fixed, only after a
+   finished OpenCMO plan whose draft failed.
+4. A handle the founder typed did not replace one the CMO guessed: fixed, a typed handle wins (pgTAP 288).
+5. One unreadable chunk of `cmo_paid_users` dropped every founder's loops: fixed, only that chunk waits a day.
+6. `/approvals` and `/tool-results` continued a CMO turn without the plan check: fixed, all four turn routes check.
+7. Applied answers write document versions as `created_by = 'user'`: kept. They are the founder's own answers, and
+   Library then says the founder changed the document, which is true.
+8. Today reads waiting cards again next to the queue and the digest: kept for now (one indexed query per load); the
+   email needs it on its own, and passing the queue in would split the reader in two. Noted for a later pass.
+9. Vietnamese comments next to edited code (`loops.ts`, `pricing.ts`): translated.
+10. `/app?paid=1` sent "paid=1" to Setup without checking: fixed, Setup says the payment arrived only when the plan or
+    credits are there, and that it is on its way otherwise.
+
+## Checks (B10, 2026-11-10, on the branch after merging #186's head `9dcd431`)
+
+- pgTAP on a reset database: 179 files, 3048 tests, all pass. `supabase db lint --level warning`: no warning in B's
+  functions (the four left are `caption_check` from `main` and A's `schedule_pick_time`, `post_proposed_at`,
+  `post_proposal_snapshot`).
+- `npm run typecheck`; `npm run check:contracts` (with `cmo:eval -- --provider fake`); `NEXT_PUBLIC_OPENCMO_UI=v2 npm
+  run build`: pass.
+- e2e (`NEXT_PUBLIC_OPENCMO_UI=v2`, desktop project, Chrome, local stack without the clip worker):
+  - pass: `ui-v2-today` (3), `ui-v2-setup` (3), `ui-v2-pages` (13, with "Used by"), `ui-v2-activation` "unpaid
+    onboarding", "the first week", "/video is hidden";
+  - waits on A3: `ui-v2-activation` "the free first run" passes up to Approve (documents, plan and draft with 0
+    credits and no hold, a second plan answered 402 `plan_required`) and expects the plan sheet after Approve, which
+    is A3's `approval_decide` paywall and the card's sheet;
+  - fail before B's change too (`main`'s Today redesign and A's 1.2, not touched by B): `ui-v2-dashboard` "on the
+    fixture" (the Writer chip reads "1 waiting", the spec expects "1 waiting on you"), "the phone shows the team list"
+    (two regions named "Your team"), "on live rows" (the post card's button is now "Approve for this time"). Written
+    to A's requests for the last one.
+- Screenshots, looked at: [`screenshots-B/`](screenshots-B/) — Today at 1280 and 390 px in light and dark, and after
+  approving the top row ("1 of 2 done today"); Setup working at 1280 px light and 390 px dark, and the website step in
+  the other theme at each width.
 
 ## Requests
 

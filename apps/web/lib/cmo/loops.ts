@@ -85,7 +85,7 @@ export const LOOPS: Loop[] = [
   },
 ];
 
-/** Việc cần thả hôm nay cho một người dùng, theo thứ tự trong bảng. */
+/** The runs to queue today for one user, in the table's order; none for an account without a plan or credits. */
 export function dueLoops(state: LoopState): LoopRun[] {
   if (state.paid === false) return [];
   return LOOPS.filter((loop) => loop.when(state)).map((loop) => loop.run(state));

@@ -135,6 +135,11 @@ export function SetupScreen() {
           Payment received. Credits arrive within a minute.
         </p>
       )}
+      {params.get("paid") === "pending" && (
+        <p role="status" className="scr-small scr-muted" data-testid="setup-paid-pending">
+          Your payment has not arrived yet. It usually takes under a minute after checkout; your first run is free either way.
+        </p>
+      )}
       {error && <ErrorNote>{error}</ErrorNote>}
       {phase === "loading" && !error && <SkeletonBlocks rows={2} />}
       {phase === "form" && docs && (
