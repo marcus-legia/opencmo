@@ -41,7 +41,7 @@ Branch: `claude/okara-spec-opencmo-b7qlx2`. Pull before each item, and push afte
   - e2e at 1280 px and 390 px, and screenshots that you look at.
 - [x] **B3 (1.3) Today in the morning email.** The top 3 rows and "N more waiting" in `digest.ts`, with
   `digest.check.ts` cases.
-- [ ] **B4 Code review of group 1** (plan §7), written under "Reviews".
+- [x] **B4 Code review of group 1** (plan §7), written under "Reviews".
 - [x] **B5 (3.1) The free first run.**
   - `cmo_first_run_free`. The rule reads history, never `input.source`.
   - The price-0 path in `cmo_enqueue`, and the budget gate lets it through.
@@ -65,7 +65,7 @@ Branch: `claude/okara-spec-opencmo-b7qlx2`. Pull before each item, and push afte
   - Triggers on `approvals`, `schedule_slots` and `opportunities`, as their own functions.
   - The table is service-role only.
   - pgTAP as in plan §5.4.
-- [ ] **B9 Code review of group 3** (plan §7), written under "Reviews".
+- [x] **B9 Code review of group 3** (plan §7), written under "Reviews".
 - [ ] **B10 Finish.**
   - Rebase, regenerate `supabase/schema/current.sql`, and run every check of plan §7.
   - Take the screenshots of Today and Setup (1280 px and 390 px, light and dark), look at them, and attach them.
@@ -164,7 +164,48 @@ role only) gives per signup day and paid: signups, onboarded, approved within 24
 
 ## Reviews
 
-(One entry per `/code-review` run: date, commit range, findings, what was done with each.)
+Commit hashes are on this branch; it merged #186's branch at `9dcd431` (A's 2.1) after these reviews.
+
+**B4, group 1 (B0, 1.1, 1.3), 2026-11-10, `/code-review high` on `3c23080^..2aab278`.** Ten findings, all fixed in
+`228eb2a` except where noted:
+1. The email cron read Today as the founder first, failed, then read it again as the service role, and re-read the
+   time zone: fixed, `send.ts` passes `asService: true` and `founder.timezone`.
+2. `hasPlanOrCredits` read any RPC error as unpaid: already gone in `b2fa289` (3.1 removed it and its callers).
+3. An unknown `profiles.timezone` made `Intl` throw and dropped Today: fixed, `safeZone` falls back to UTC (test).
+4. A platform with a post already scheduled was called silent: fixed, slots from now to the end of tomorrow mark the
+   platform as `upcoming` (test).
+5. The email's Today rows were not filtered by the claim: fixed in `buildDigest` (card rows only for cards still in
+   `waiting`, the count adjusted; test). The send stays gated on waiting cards: the email tells what waits.
+6. The connection row counted intent slots, which need no account: fixed, `mode = 'publish'` only.
+7. A card already past `expires_at` ranked as expiring today: fixed (test).
+8. Today read its own cards and could list kinds the queue hides: fixed, the Dashboard keeps only cards the queue
+   shows. The second approvals read stays (it is small); the email has no queue to reuse.
+9. The chat prefill gave up after 80 ms, and the email's chat link carried no request: fixed, it waits up to 2 s and
+   the link carries the request (and in `c62ee11` only a request Today itself writes is taken).
+10. A failed decision put back the whole old Today: fixed, only its own row and the count.
+
+**B9, group 3 (3.1–3.4), 2026-11-10, `/code-review high` on `b2fa289^..228eb2a`, with the security checklist.**
+Ten findings, fixed in `c62ee11` except where noted:
+1. An empty Content plan rhythm turned the platforms sentence into `cadence: null`, and every later call added a
+   version: fixed with `concat` (pgTAP 288).
+2. A failed free first plan could never be retried in v2 (onboarding counted failed plans; loops skip unpaid; chat is
+   paid): fixed, reading the site again retries a first plan or draft that failed.
+3. Unpaid onboarding counted runs that failed on our side: fixed, only runs that did not fail count (pgTAP 287).
+4. A failed run gave the free run back forever: fixed, at most three failures per kind (pgTAP 287).
+5. `cmo_enqueue` still used `is_paid` (ownership-checked) for Mode B pricing: fixed, it reads the plan directly.
+6. The chat paywall was only on new turns: fixed, `continue` checks it too (`requirePaidForCmoSession`). The tool
+   result and approval routes only finish a turn that already passed the check.
+7. The cron copied the paid rule into TypeScript and kept half a chunk on an error: fixed, `cmo_paid_users` in SQL,
+   and an error counts nobody.
+8. `?prompt=` let any link type instructions into the CMO chat: fixed, only Today's own requests are taken (test).
+9. `activation` read every earlier signup as never onboarded: fixed, the migration backfills earlier onboardings and
+   approvals (paid is the state at migration time; the note says so).
+10. A redundant condition in the approve trigger: removed.
+
+Security checklist: no secrets touched; all migrations are new in this PR (`20270114…`); the new table grants
+`select, delete` to the service role only and nothing to founders (pgTAP 289); no credits move outside
+`credit_hold` (the free run holds nothing); every limit runs before the work it bounds (`requirePaid` before the
+turn, `start_cmo_run` before the site is read).
 
 ## Requests
 
