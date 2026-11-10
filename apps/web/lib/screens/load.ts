@@ -3,6 +3,8 @@ import "server-only";
 import type { SupabaseClient } from "@/lib/api/handler";
 import { brainMode } from "@/lib/cmo/brain";
 import { loadDigestInput, localClock } from "@/lib/cmo/digest";
+import { buildToday } from "@/lib/cmo/today";
+import { loadTodayInput } from "@/lib/cmo/today-input";
 import { CMO_SKILLS } from "@/lib/cmo/skills/index.gen";
 import { profileIdOf, profileOf, POST_PROFILES } from "@/lib/cmo/platforms";
 import { readyStyles } from "@/lib/agent/styles";
@@ -183,6 +185,8 @@ async function dashboard({ supabase, userId }: LoadContext): Promise<Partial<Das
   return parts<DashboardScreen>("dashboard", {
     cmo: () => cmoState(supabase, userId, prof),
     queue: () => queue,
+    // CMO review 3, 1.1: at most five rows, worked out from the rows above; nothing is stored for it.
+    today: async () => buildToday(await loadTodayInput(supabase, userId, { now, timezone: (await prof).timezone })),
     week: async () => {
       const [{ root, orders }, goal, p] = await Promise.all([tree, weekGoal(supabase), prof]);
       const open = orders.filter((o) => o.status !== "cancelled");
@@ -271,7 +275,7 @@ async function dashboard({ supabase, userId }: LoadContext): Promise<Partial<Das
     digest: async () => {
       const p = await prof;
       const clock = localClock(now, p.timezone);
-      const input = await loadDigestInput(supabase, userId, { appUrl: SITE_URL, dateLabel: clock.dateLabel, now });
+      const input = await loadDigestInput(supabase, userId, { appUrl: SITE_URL, dateLabel: clock.dateLabel, now, today: false });
       if (!input.waiting.length && !input.wentOut.length && !input.stuck.length) return null;
       const dept = (d: string) => ((DEPARTMENTS as readonly string[]).includes(d) ? d : "brain") as Department;
       return {

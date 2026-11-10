@@ -633,3 +633,22 @@ html[data-ui="v2"] .v2-main-body:has(.ed2) {
 /* CMO review 3, session B: the plan sheet (components/billing/PlanSheet.tsx) and the Today block. */
 .plan-sheet { width: min(560px, calc(100vw - 32px)); }
 .plan-sheet-list { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+.td-today { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+.td-today-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.v2 .td-today-head .v2-panel-title { font-size: 13px; font-weight: 600; }
+.td-today-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; border: 1px solid var(--v2-line); border-radius: var(--v2-radius); background: var(--v2-paper2); }
+.td-today-row { padding: 10px 12px; border-top: 1px solid var(--v2-line); }
+.td-today-row:first-child { border-top: 0; }
+.td-today-row.is-critical { box-shadow: inset 3px 0 0 var(--v2-stuck); }
+.td-today-line { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.td-today-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.td-today-title { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 14px; overflow-wrap: anywhere; }
+.td-today-detail { font-size: 13px; overflow-wrap: anywhere; }
+.td-today-line .v2-button { flex: none; }
+.td-today-card { margin-top: 10px; }
+.td-today-empty { margin: 0; padding: 12px; border: 1px dashed var(--v2-line); border-radius: var(--v2-radius); }
+.td-today-more { align-self: flex-start; }
+@media (max-width: 560px) {
+  .td-today-line { flex-direction: column; align-items: stretch; }
+  .td-today-line .v2-button { align-self: flex-start; }
+}

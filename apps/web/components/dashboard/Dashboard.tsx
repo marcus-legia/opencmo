@@ -19,6 +19,7 @@ import { DashboardHeader } from "./Header";
 import { LiveLog } from "./LiveLog";
 import { ResultsPanel, TodayPanel } from "./Tables";
 import { TeamGrid } from "./TeamGraph";
+import { TodayBlock } from "./TodayBlock";
 import { useDashboard } from "./useDashboard";
 
 export function Dashboard() {
@@ -96,6 +97,7 @@ export function Dashboard() {
 
       <div className="v2-dash-cols">
         <div className="v2-dash-main">
+          <TodayBlock today={data.today} cards={data.queue} live={live.today} onDecide={decideCard} onAsk={focusChat} />
           <div id="approval-queue">
             <ApprovalQueue cards={data.queue} live={live.queue} digest={data.digest} onDecide={decideCard} />
           </div>
