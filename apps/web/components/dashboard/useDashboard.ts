@@ -101,7 +101,15 @@ export function useDashboard() {
             const index = before.data.queue.findIndex((c) => c.id === card.id);
             queue.splice(Math.min(Math.max(0, index), queue.length), 0, card);
           }
-          return { ...current, data: { ...current.data, today: before.data.today, queue, log: current.data.log.filter((event) => event.id !== line.id) } };
+          // Today: put back only the row this decision took out, into what is on screen now (a reload may have
+          // brought new rows meanwhile).
+          const removed = before.data.today.rows.find((row) => row.action.type === "card" && row.action.approvalId === card.id);
+          const shown = current.data.today;
+          const today =
+            removed && !shown.rows.some((row) => row.id === removed.id)
+              ? { ...shown, rows: [removed, ...shown.rows].slice(0, 5), done: Math.max(0, shown.done - 1) }
+              : shown;
+          return { ...current, data: { ...current.data, today, queue, log: current.data.log.filter((event) => event.id !== line.id) } };
         });
         toast(error instanceof ApiError ? error.message : "Something went wrong. Please try again.");
         // A changed or already decided card: read the queue again so the founder sees what is true now.

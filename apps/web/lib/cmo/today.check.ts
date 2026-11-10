@@ -126,6 +126,21 @@ check("days count in the founder's time zone, at midnight", () => {
   assert.equal(today.rows[1]!.reason, "waiting");
 });
 
+check("a platform with a post on its way is not silent", () => {
+  const today = buildToday(input({ lastPosted: [{ platform: "x", at: "2026-11-01T08:00:00Z" }], upcoming: ["x"] }));
+  assert.equal(today.rows.length, 0);
+});
+
+check("a card already past its expiry is not 'expiring today'", () => {
+  const today = buildToday(input({ cards: [card("late", "schedule", "2026-11-08T08:00:00Z", { expiresAt: "2026-11-10T08:00:00Z" })] }));
+  assert.equal(today.rows[0]!.reason, "waiting");
+});
+
+check("an unknown time zone falls back to UTC instead of throwing", () => {
+  const today = buildToday(input({ timezone: "Etc/Unknown", lastPosted: [{ platform: "x", at: "2026-11-07T10:00:00Z" }] }));
+  assert.equal(today.rows[0]!.title, "X: nothing posted for 3 days");
+});
+
 check("the connection row shows only for platforms the loader found blocked", () => {
   assert.equal(buildToday(input()).rows.some((row) => row.reason === "setup"), false);
   const today = buildToday(input({ needsAccount: ["x"] }));

@@ -84,6 +84,8 @@ export type TodayInput = {
    * left out: a new founder gets the first-run rows, not a wall of "nothing posted".
    */
   lastPosted: { platform: TodayPlatform; at: string }[];
+  /** Platforms with a post already on its way (a slot between now and the end of tomorrow): not silent. */
+  upcoming?: TodayPlatform[];
   /**
    * Platforms with a post going out tomorrow and no connected account. Only filled when the publish adapter is
    * configured: without it, posting by intent works and there is nothing to connect.
@@ -114,10 +116,25 @@ export function todayPlatform(value: unknown): TodayPlatform | null {
   return (TODAY_PLATFORMS as readonly string[]).includes(key) ? (key as TodayPlatform) : null;
 }
 
+/**
+ * The founder's zone if `Intl` knows it, else UTC. `profiles.timezone` is only length-checked, and an unknown zone
+ * makes `Intl` throw, which would drop Today for that founder.
+ */
+export function safeZone(timezone: string | null | undefined): string {
+  try {
+    if (!timezone) return "UTC";
+    new Intl.DateTimeFormat("en-GB", { timeZone: timezone });
+    return timezone;
+  } catch {
+    return "UTC";
+  }
+}
+
 /** Whole local days between two instants in `timezone` (`later` minus `earlier`). */
 export function daysBetween(earlier: Date | string, later: Date, timezone: string): number {
-  const a = Date.parse(`${localDay(new Date(earlier), timezone)}T00:00:00Z`);
-  const b = Date.parse(`${localDay(later, timezone)}T00:00:00Z`);
+  const zone = safeZone(timezone);
+  const a = Date.parse(`${localDay(new Date(earlier), zone)}T00:00:00Z`);
+  const b = Date.parse(`${localDay(later, zone)}T00:00:00Z`);
   return Math.round((b - a) / 86_400_000);
 }
 
@@ -167,7 +184,8 @@ const byAge = (a: TodayCard, b: TodayCard) => a.raisedAt.localeCompare(b.raisedA
  * A card is shown once: the row that ranks highest takes it.
  */
 export function buildToday(input: TodayInput): Today {
-  const { now, timezone } = input;
+  const { now } = input;
+  const timezone = safeZone(input.timezone);
   const today = localDay(now, timezone);
   const taken = new Set<string>();
   const ranked: TodayRow[] = [];
@@ -200,7 +218,9 @@ export function buildToday(input: TodayInput): Today {
   }
 
   // Silence, per platform; a waiting post for that platform is the row's action.
+  const upcoming = new Set(input.upcoming ?? []);
   const silent = input.lastPosted
+    .filter(({ platform }) => !upcoming.has(platform))
     .map(({ platform, at }) => ({ platform, days: daysBetween(at, now, timezone) }))
     .filter(({ days }) => days >= SILENT_HIGH_DAYS)
     .sort((a, b) => b.days - a.days || a.platform.localeCompare(b.platform));
@@ -218,7 +238,8 @@ export function buildToday(input: TodayInput): Today {
 
   // 3. Cards that expire today, soonest first.
   for (const card of cards
-    .filter((card) => card.expiresAt && localDay(new Date(card.expiresAt), timezone) <= today)
+    // Already past its time: the expiry sweep takes it, and a decision would fail, so it is not "expiring today".
+    .filter((card) => card.expiresAt && Date.parse(card.expiresAt) > now.getTime() && localDay(new Date(card.expiresAt), timezone) <= today)
     .sort((a, b) => (a.expiresAt ?? "").localeCompare(b.expiresAt ?? ""))) {
     push(cardRow(card, "expiring", "Decide it today, or it expires."), card.id);
   }

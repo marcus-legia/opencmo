@@ -45,14 +45,18 @@ export function escapeHtml(s: string): string {
 function todayHref(row: TodayRow): string {
   if (row.action.type === "card") return `/app/inbox/${encodeURIComponent(row.action.approvalId)}`;
   if (row.action.type === "link") return row.action.href;
-  return "/app?ask=1";
+  return `/app?ask=1&prompt=${encodeURIComponent(row.action.prompt)}`;
 }
 
 export function buildDigest(input: DigestInput): Digest {
   const { waiting, wentOut, stuck } = input;
   const base = input.appUrl.replace(/\/$/, "");
-  const todayRows = (input.today?.rows ?? []).slice(0, DIGEST_TODAY_ROWS);
-  const more = Math.max(0, (input.today?.open ?? 0) - todayRows.length);
+  // A card row is shown only if its card is still in `waiting` (the email's claim may have dropped it since the read).
+  const stillWaiting = new Set(waiting.map((w) => w.id));
+  const allRows = input.today?.rows ?? [];
+  const keptRows = allRows.filter((row) => row.action.type !== "card" || stillWaiting.has(row.action.approvalId));
+  const todayRows = keptRows.slice(0, DIGEST_TODAY_ROWS);
+  const more = Math.max(0, (input.today?.open ?? 0) - (allRows.length - keptRows.length) - todayRows.length);
   const empty = waiting.length === 0 && wentOut.length === 0 && stuck.length === 0 && todayRows.length === 0;
   const subject = waiting.length
     ? `${plural(waiting.length, "thing waits", "things wait")} on you · ${input.dateLabel}`
@@ -119,8 +123,8 @@ export function cardTitle(snapshot: Record<string, unknown>): string {
 
 /**
  * `today: false` skips the Today rows (the Dashboard has its own block). The rows read published posts through
- * `my_published_items` under the founder's session and `published_items` under the service role; `asService`
- * says which, and without it the founder's session is tried first.
+ * `my_published_items` under the founder's session and `published_items` under the service role: the email cron
+ * passes `asService: true` and the founder's zone.
  */
 export async function loadDigestInput(
   db: SupabaseClient,
@@ -171,8 +175,7 @@ async function digestToday(
       const { data } = await db.from("profiles").select("timezone").eq("id", userId).maybeSingle<{ timezone: string | null }>();
       timezone = data?.timezone || "UTC";
     }
-    const read = (asService: boolean) => loadTodayInput(db, userId, { now, timezone: timezone!, asService });
-    const input = opts.asService !== undefined ? await read(opts.asService) : await read(false).catch(() => read(true));
+    const input = await loadTodayInput(db, userId, { now, timezone, asService: opts.asService === true });
     const today = buildToday(input);
     return { rows: today.rows, open: today.total - today.done };
   } catch (error) {

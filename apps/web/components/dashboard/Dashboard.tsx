@@ -19,7 +19,7 @@ import { DashboardHeader } from "./Header";
 import { LiveLog } from "./LiveLog";
 import { ResultsPanel, TodayPanel } from "./Tables";
 import { TeamGrid } from "./TeamGraph";
-import { TodayBlock } from "./TodayBlock";
+import { fillChat, TodayBlock } from "./TodayBlock";
 import { useDashboard } from "./useDashboard";
 
 export function Dashboard() {
@@ -27,14 +27,19 @@ export function Dashboard() {
   const { focusChat, workVersion } = useShellState();
   // `?ask=1` (the Brain and Writer pages link to it) lands in the shell's chat. The History API drops the flag, not the
   // router: a router change would render this dynamic page again on the server.
-  const asking = useSearchParams().get("ask") === "1";
+  const search = useSearchParams();
+  const asking = search.get("ask") === "1";
+  // `prompt` (the email's Today rows): the request goes into the chat's box; the founder sends it.
+  const prompt = search.get("prompt")?.slice(0, 300) ?? "";
   useEffect(() => {
     if (!asking) return;
     focusChat();
+    if (prompt) fillChat(prompt);
     const url = new URL(window.location.href);
     url.searchParams.delete("ask");
+    url.searchParams.delete("prompt");
     window.history.replaceState(null, "", url.pathname + url.search);
-  }, [asking, focusChat]);
+  }, [asking, prompt, focusChat]);
   // Work the chat starts (a task, a draft) shows up in the queue and the graph.
   useEffect(() => {
     if (workVersion > 0) void reload();

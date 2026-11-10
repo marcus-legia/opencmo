@@ -58,7 +58,10 @@ check("the top three rows in Today's order, then N more waiting", () => {
   assert.ok(digest.text.includes("4 more waiting: https://opencmo.io/app"), digest.text);
   assert.ok(!digest.text.includes("Waiting on you:"), "the full list is replaced by Today");
   assert.ok(digest.html.indexOf("Today") < digest.html.indexOf("4 more waiting"));
-  assert.ok(digest.html.includes('href="https://opencmo.io/app?ask=1"'), "a chat row opens the chat, it sends nothing");
+  assert.ok(
+    digest.html.includes('href="https://opencmo.io/app?ask=1&amp;prompt=Write%20me%20a%20post%20for%20X%20for%20today."'),
+    "a chat row opens the chat with the request in its box; it sends nothing",
+  );
   assert.ok(digest.html.includes('href="https://opencmo.io/app/inbox/c0"'), "a card row opens the card");
   assert.ok(![...digest.html.matchAll(/href="([^"]*)"/g)].some(([, href]) => /approve|decide/i.test(href!)), "no link decides anything");
   assert.equal(digest.subject, "6 things wait on you · Tuesday 10 Nov");
@@ -66,7 +69,7 @@ check("the top three rows in Today's order, then N more waiting", () => {
 
 check("three rows or fewer: no 'more' line", () => {
   const today = buildToday(todayInput({ cards: cards.slice(0, 2) }));
-  const digest = buildDigest({ ...base, today: { rows: today.rows, open: today.total - today.done } });
+  const digest = buildDigest({ ...base, waiting: cards.slice(0, 2).map((c) => ({ id: c.id, title: c.title, department: c.department })), today: { rows: today.rows, open: today.total - today.done } });
   assert.ok(!digest.text.includes("more waiting"));
   assert.equal(digest.text.split("\n").filter((line) => line.startsWith("- Card")).length, 2);
 });
@@ -79,9 +82,21 @@ check("an empty day says so and is empty", () => {
   assert.ok(!digest.text.includes("Today:"));
 });
 
+check("a card the email's claim dropped is not listed, and the count says so", () => {
+  const today = buildToday(todayInput({ cards: cards.slice(0, 5) }));
+  const digest = buildDigest({
+    ...base,
+    waiting: cards.slice(1, 5).map((c) => ({ id: c.id, title: c.title, department: c.department })),
+    today: { rows: today.rows, open: today.total - today.done },
+  });
+  assert.ok(!digest.text.includes("Card number 0"));
+  assert.ok(digest.text.includes("- Card number 1"));
+  assert.ok(digest.text.includes("1 more waiting"), digest.text);
+});
+
 check("titles are escaped in the HTML", () => {
   const today = buildToday(todayInput({ cards: [{ ...cards[0]!, title: "<script>x</script>" }] }));
-  const digest = buildDigest({ ...base, today: { rows: today.rows, open: 1 } });
+  const digest = buildDigest({ ...base, waiting: [{ id: "c0", title: "<script>x</script>", department: "writer" }], today: { rows: today.rows, open: 1 } });
   assert.ok(!digest.html.includes("<script>"));
   assert.ok(digest.html.includes("&lt;script&gt;"));
 });

@@ -13,7 +13,7 @@ import { DEPARTMENTS, type Department } from "@/lib/screens/common";
 import { localDay, localMidnight } from "@/lib/time-zone";
 
 import { cardTitle } from "./digest";
-import { todayPlatform, type TodayCard, type TodayFailedSlot, type TodayInput, type TodayPlatform } from "./today";
+import { safeZone, todayPlatform, type TodayCard, type TodayFailedSlot, type TodayInput, type TodayPlatform } from "./today";
 
 /** How far back "the last post per platform" looks: a platform quiet for longer than this is not nagged about. */
 const SILENCE_LOOKBACK_DAYS = 60;
@@ -55,7 +55,8 @@ export async function loadTodayInput(
   userId: string,
   opts: { now: Date; timezone: string; asService?: boolean; env?: Record<string, string | undefined> },
 ): Promise<TodayInput> {
-  const { now, timezone } = opts;
+  const { now } = opts;
+  const timezone = safeZone(opts.timezone);
   const today = localDay(now, timezone);
   const dayAfter = (day: string, n: number) => new Date(Date.parse(`${day}T12:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
   const midnight = (day: string) => localMidnight(day, timezone) ?? `${day}T00:00:00Z`;
@@ -65,7 +66,7 @@ export async function loadTodayInput(
   const since = new Date(now.getTime() - SILENCE_LOOKBACK_DAYS * 86_400_000).toISOString();
   const publishing = publishConfigured(opts.env);
 
-  const [waiting, decidedToday, decidedEver, strategy, failed, published, tomorrow, accounts, rate] = await Promise.all([
+  const [waiting, decidedToday, decidedEver, strategy, failed, published, tomorrow, accounts, rate, coming] = await Promise.all([
     db.from("approvals").select("id, kind, department, snapshot, created_at, expires_at").eq("user_id", userId).eq("status", "waiting")
       .order("created_at").limit(100),
     db.from("approvals").select("id", { count: "exact", head: true }).eq("user_id", userId)
@@ -78,14 +79,18 @@ export async function loadTodayInput(
     opts.asService
       ? db.rpc("published_items", { p_user: userId, p_since: since })
       : db.rpc("my_published_items", { p_since: since }),
+    // Only a slot meant to publish needs an account; an intent slot (no account) still reminds the founder to post.
     publishing
-      ? db.from("schedule_slots").select("platform").eq("user_id", userId).in("status", ["proposed", "waiting"])
+      ? db.from("schedule_slots").select("platform").eq("user_id", userId).eq("mode", "publish").in("status", ["proposed", "waiting"])
           .gte("publish_at", startOfTomorrow).lt("publish_at", startOfDayAfter).limit(50)
       : Promise.resolve({ data: [], error: null }),
     publishing
       ? db.from("social_accounts").select("platform").eq("user_id", userId).eq("status", "connected")
       : Promise.resolve({ data: [], error: null }),
     rateDraftsPending(db, userId),
+    // A post already on its way (now to the end of tomorrow): its platform is not silent.
+    db.from("schedule_slots").select("platform").eq("user_id", userId).in("status", ["proposed", "waiting", "due", "reminded", "publishing"])
+      .gte("publish_at", now.toISOString()).lt("publish_at", startOfDayAfter).limit(50),
   ]);
 
   const cardRows = check(waiting, "approvals") as CardDb[];
@@ -134,6 +139,7 @@ export async function loadTodayInput(
     failedSlots,
     lastPosted: [...last.entries()].map(([platform, at]) => ({ platform, at })),
     needsAccount,
+    upcoming: [...new Set((check(coming, "upcoming") as { platform: string }[]).flatMap((slot) => todayPlatform(slot.platform) ?? []))],
     firstRun: { readStrategy: (strategy.count ?? 0) > 0 && (decidedEver.count ?? 0) === 0, rateDrafts: rate },
   };
 }

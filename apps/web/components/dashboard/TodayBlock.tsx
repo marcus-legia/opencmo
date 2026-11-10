@@ -14,15 +14,22 @@ const LEVEL_LABEL: Record<TodayRowData["level"], string | null> = { critical: "C
 /**
  * Puts `prompt` in the CMO chat's box once `focusChat` has focused it. The chat owns its draft; setting the value the
  * way a keystroke would makes React's `onChange` take it, so the founder sees the request and sends it themselves
- * (the chat then shows its price card as usual). Nothing is sent from here.
+ * (the chat then shows its price card as usual). Nothing is sent from here. The chat may still be opening (a drawer
+ * on a phone), so this looks for the focused box for up to two seconds.
  */
-function fillChat(prompt: string): void {
-  window.setTimeout(() => {
+export function fillChat(prompt: string): void {
+  const started = Date.now();
+  const attempt = () => {
     const area = document.activeElement instanceof HTMLTextAreaElement ? document.activeElement : null;
-    if (!area || area.value.trim()) return;
+    if (!area) {
+      if (Date.now() - started < 2_000) window.setTimeout(attempt, 100);
+      return;
+    }
+    if (area.value.trim()) return;
     Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set?.call(area, prompt);
     area.dispatchEvent(new Event("input", { bubbles: true }));
-  }, 80);
+  };
+  window.setTimeout(attempt, 50);
 }
 
 /**

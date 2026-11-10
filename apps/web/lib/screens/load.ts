@@ -186,7 +186,17 @@ async function dashboard({ supabase, userId }: LoadContext): Promise<Partial<Das
     cmo: () => cmoState(supabase, userId, prof),
     queue: () => queue,
     // CMO review 3, 1.1: at most five rows, worked out from the rows above; nothing is stored for it.
-    today: async () => buildToday(await loadTodayInput(supabase, userId, { now, timezone: (await prof).timezone })),
+    // Only cards the queue can show become rows, so a row always opens in place (`waitingCards` leaves out kinds the
+    // app cannot show yet).
+    today: async () => {
+      const [input, cards] = await Promise.all([loadTodayInput(supabase, userId, { now, timezone: (await prof).timezone }), queue]);
+      const shown = new Set(cards.map((card) => card.id));
+      return buildToday({
+        ...input,
+        cards: input.cards.filter((card) => shown.has(card.id)),
+        failedSlots: input.failedSlots.filter((slot) => shown.has(slot.approvalId)),
+      });
+    },
     week: async () => {
       const [{ root, orders }, goal, p] = await Promise.all([tree, weekGoal(supabase), prof]);
       const open = orders.filter((o) => o.status !== "cancelled");

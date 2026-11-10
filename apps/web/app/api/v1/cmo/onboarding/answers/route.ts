@@ -14,7 +14,8 @@ const body = z
   })
   .strict();
 
-export const POST = withApi({ body, rateLimit: { bucket: "onboarding-answers", limit: 30, windowSeconds: 3600 } }, async ({ supabase, body }) => {
+// The onboarding route's bucket (one allowlisted tuple in `rate_limit_hit`): Setup saves the answers once or twice.
+export const POST = withApi({ body, rateLimit: { bucket: "onboarding", limit: 20, windowSeconds: 3600 } }, async ({ supabase, body }) => {
   await rpcOrThrow(supabase, "cmo_onboarding_answers", { p_answers: body });
   return { ok: true };
 });
