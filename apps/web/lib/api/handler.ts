@@ -4,9 +4,10 @@
  * Mỗi route handler lo đúng phần việc của nó; năm thứ dưới đây thì không route
  * nào được tự làm, vì "quên một chỗ" là cách các lỗ hổng đi vào:
  *
- *   1. Đăng nhập — `getUser()`, KHÔNG phải `getSession()`. `getSession` đọc
- *      cookie và tin nó; cookie thì client sửa được. `getUser` hỏi Supabase và
- *      xác minh chữ ký.
+ *   1. Sign-in: `claimsUser()` (`getClaims()`), never `getSession()`. `getSession`
+ *      reads the cookie and trusts it, and the client can edit a cookie;
+ *      `getClaims` verifies the JWT's signature against the project's public key
+ *      without a round trip to Auth (lib/supabase/user.ts).
  *   2. Cross-site cho method GHI — `Origin`/`Sec-Fetch-Site`. Cookie phiên là
  *      SameSite=Lax nên GET từ site khác không mang cookie, nhưng POST bằng form
  *      thì có; đây là rào CSRF cho mọi mutation của web API.
@@ -23,6 +24,7 @@ import type { z } from "zod";
 
 import { errorFields, logEvent } from "../log";
 import { createServerClient } from "../supabase/server";
+import { claimsUser } from "../supabase/user";
 import {
   ApiError,
   GENERIC_ERROR,
@@ -199,9 +201,9 @@ export async function handleApi<Schema extends z.ZodType | undefined = undefined
       }
 
       if (options.auth !== false) {
-        const { data, error } = await supabase.auth.getUser();
-        if (error || !data.user) return errorResponse(401, NOT_SIGNED_IN);
-        user = { id: data.user.id, email: data.user.email ?? undefined };
+        const signedIn = await claimsUser(supabase);
+        if (!signedIn) return errorResponse(401, NOT_SIGNED_IN);
+        user = { id: signedIn.id, email: signedIn.email ?? undefined };
       }
 
       if (options.rateLimit) await hitRateLimit(supabase, options.rateLimit);

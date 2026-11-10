@@ -12,7 +12,7 @@ import { PricingSection } from "@/components/landing/PricingSection";
 import { JsonLd } from "@/components/seo/JsonLd";
 import { offerPrices, plansOnSale, type SellablePlan } from "@/lib/billing-catalog";
 import { SITE_NAME, SITE_URL, absoluteUrl } from "@/lib/site";
-import { createServerClient } from "@/lib/supabase/server";
+import { currentUser } from "@/lib/supabase/user";
 
 const DESCRIPTION = "Your AI marketing team: it reads your website, plans your week, writes the posts and finds the conversations. Led by an AI CMO. You approve everything.";
 
@@ -68,8 +68,7 @@ function landingLd(faq: { q: string; a: string }[], plans: SellablePlan[]) {
 }
 
 export default async function LandingPage() {
-  const supabase = await createServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await currentUser();
   const [prices, plans] = await Promise.all([offerPrices(), plansOnSale()]);
   const faq = faqs(prices);
   // Ô WEBSITE (không phải link video): onboarding đọc nó để dựng chiến lược

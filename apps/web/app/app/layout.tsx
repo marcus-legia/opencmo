@@ -10,6 +10,7 @@ import { UI_V2 } from "@/lib/screens/flag";
 import { isProduction } from "@/lib/production";
 import { THEME_BOOT } from "@/lib/theme-boot";
 import { createServerClient } from "@/lib/supabase/server";
+import { currentUser } from "@/lib/supabase/user";
 
 import "@/styles/ui-v2.css";
 import "@/styles/v2-layer.css";
@@ -52,13 +53,10 @@ const RAIL_BOOT =
   "document.documentElement.dataset.rail='closed'}catch(e){}";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const supabase = await createServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await currentUser();
   if (!user) redirect("/login");
 
-  const account = await shellAccount(supabase, user);
+  const account = await shellAccount(await createServerClient(), user);
 
   // v2: tokens are scoped to `html[data-ui="v2"]`; set it before the first frame like the rail, theme and column widths.
   if (UI_V2) {
