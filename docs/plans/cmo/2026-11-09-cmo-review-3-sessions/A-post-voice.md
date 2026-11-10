@@ -207,7 +207,9 @@ e2e run. Seen and kept: the dialog's focus ring when it opens is the shared `v2-
      and dismiss stay free (deciding not to post costs nothing).
   2. B's two requests below: open the rating sheet from `/app?rate=1`, and update `e2e/ui-v2-dashboard.spec.ts` for
      "Approve for this time".
-  3. A8: rebase, regenerate `supabase/schema/current.sql` on a reset database, run the checks, run `/code-review high`
+  3. CodeQL thread on PR #186 (`jobs.check.ts:632`, "replaces only the first occurrence"): use
+     `r.label.replaceAll("'", "''")`, then resolve the thread.
+  4. A8: rebase, regenerate `supabase/schema/current.sql` on a reset database, run the checks, run `/code-review high`
      on A's whole diff, and write it up under "Reviews".
 
 - **From B (2026-11-10): B0 has landed** on `claude/pr-186-session-b-0hyo3r` (to be merged into this PR's branch).
