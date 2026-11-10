@@ -159,7 +159,15 @@ test("a schedule card is approved; dragging its slot to another day asks again w
   const days = page.locator(".scr-week-day");
   const index = (new Date(slot.publish_at).getUTCDay() + 6) % 7;
   const target = index === 6 ? 5 : index + 1;
-  await page.locator(`[data-slot-id="${slot.id}"] .scr-slot`).dragTo(days.nth(target));
+  // Real mouse steps: `dragTo` moves in one step, and Chromium starts no native drag from this card that way (no
+  // dragstart fires). Pressed, nudged, then moved, the card drags as a founder's mouse drags it.
+  const from = (await page.locator(`[data-slot-id="${slot.id}"] .scr-slot`).boundingBox())!;
+  const to = (await days.nth(target).boundingBox())!;
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(from.x + from.width / 2 + 10, from.y + from.height / 2 + 10, { steps: 5 });
+  await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 10 });
+  await page.mouse.up();
   await expect(page.getByText("New time saved. A new card asks you to approve it.")).toBeVisible();
 
   await expect.poll(async () => (await db.from("schedule_slots").select("status, approval_id").eq("id", slot.id).single()).data?.approval_id).not.toBe(slot.approval_id);
