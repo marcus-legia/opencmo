@@ -186,7 +186,7 @@ export function CalendarView() {
                 >
                   <div className="dh">
                     <span className="meta">{label(key, { weekday: "short" })}</span>
-                    <b style={{ fontSize: "13px", fontWeight: "600" }}>{label(key, { day: "numeric" })}</b>
+                    <b style={{ fontSize: "14px", fontWeight: "600" }}>{label(key, { day: "numeric" })}</b>
                   </div>
                   {items.map((e) => (
                     <button
@@ -234,7 +234,7 @@ export function CalendarView() {
               <div>
                 <span className={ST[sel.status][1]}>{ST[sel.status][0]}</span>
               </div>
-              <h2 style={{ margin: "0", fontSize: "16px", fontWeight: "600", letterSpacing: "-0.2px" }}>{sel.title}</h2>
+              <h2 style={{ margin: "0", fontSize: "17px", fontWeight: "600", letterSpacing: "-0.2px" }}>{sel.title}</h2>
               <div className="meta">
                 {sel.where.handle ? `${chanName(sel)} · ${sel.where.handle}` : chanName(sel)}
                 {sel.note ? ` · ${sel.note}` : ""}

@@ -10,11 +10,33 @@ apps/web/styles/today.css, verbatim except for scope:
 - `.k <descendant>` defaults are wrapped in `:where()` so a class always beats them;
 - `body` rules are dropped (the page root `.k` carries the background) and keyframes get a per-page name.
 
+- every font size under 17 px is one pixel larger, and none is under 12 px (`bump_type`): the owner found the canvas's
+  13 / 11.5 / 10.5 px hard to read in the app (2026-11-10). Headings and display sizes keep the artboard's.
+
 Run from apps/web: python3 scripts/port-today-css.py ../../docs/design/today-canvas > styles/today.css
 """
 import re
 import sys
 from pathlib import Path
+
+def bump_px(px: float) -> float:
+    """The app's type scale against the artboards': +1 px below 17 px, never under 12 px."""
+    return max(12.0, px + 1) if px < 17 else px
+
+
+def fmt_px(px: float) -> str:
+    return f"{px:g}px"
+
+
+def bump_type(css: str) -> str:
+    """Scales `font-size:<n>px` and the size in a `font:` shorthand (`font:500 12px Geist`)."""
+    css = re.sub(r"(font-size:\s*)(\d+(?:\.\d+)?)px", lambda m: m.group(1) + fmt_px(bump_px(float(m.group(2)))), css)
+    return re.sub(
+        r"(font:[^;{}]*?\s)(\d+(?:\.\d+)?)px",
+        lambda m: m.group(1) + fmt_px(bump_px(float(m.group(2)))),
+        css,
+    )
+
 
 PAGES = ["Main", "Calendar", "AgentSales", "Context", "Analytics", "Editor", "AgentWriter", "Logs", "Setup", "Projects", "Settings", "Prompter"]
 
@@ -94,7 +116,7 @@ def main():
     print('@font-face{font-family:"Geist Mono";src:url("/fonts/geist-mono.woff2") format("woff2");font-weight:100 900;font-display:swap}')
     for page in PAGES:
         print(f"\n/* ---- {page}.dc.html ---- */")
-        print(page_css(folder / f"{page}.dc.html", page.lower()))
+        print(bump_type(page_css(folder / f"{page}.dc.html", page.lower())))
 
 
 main()

@@ -22,11 +22,13 @@ import { ShellAccountContext, WebShell, type AccountSummary } from "@/components
 import { ChatPanel, type ChatSource } from "@/components/cmo/workspace/ChatPanel";
 import { studioItemHref } from "@/components/screens/studio/href";
 import { useApplyTheme } from "@/components/theme";
+import { CHAT, useTodayColumns } from "@/components/today/columns";
 import { LogsDrawer } from "@/components/today/LogsDrawer";
 import { TopBar, type TopVariant } from "@/components/today/TopBar";
 import { WorkspaceProvider } from "@/components/today/workspace";
 
 import type { DepartmentName } from "./nav";
+import { Sash } from "./Sash";
 import { ShellStateContext, type ShellState } from "./ShellState";
 
 type Props = {
@@ -160,6 +162,7 @@ function TodayFrame({ credits, plan, email, userId, pending, chatLive, children,
   }, []);
   const closeLogs = useCallback(() => setLogsOpen(false), []);
   const [workVersion, setWorkVersion] = useState(0);
+  const chatWidth = useTodayColumns();
   const [clipAssistantSlot, setClipAssistantSlot] = useState<HTMLElement | null>(null);
 
   // A new screen closes the chat drawer and the logs, unless the chat itself moved there (it opens Writer when a draft
@@ -224,6 +227,19 @@ function TodayFrame({ credits, plan, email, userId, pending, chatLive, children,
             ) : null}
             <div className={screen.chat === "column" ? "cols" : "td-body"}>
               {screen.legacy ? <div className="v2 td-legacy td-cardhost td-v2host">{children}</div> : children}
+              {screen.chat === "column" ? (
+                <Sash
+                  label="Resize the chat"
+                  controls="v2-chat"
+                  value={chatWidth.columns.chat}
+                  min={CHAT.min}
+                  max={CHAT.max}
+                  invert
+                  onLive={(value) => chatWidth.live("chat", value)}
+                  onCommit={(value) => chatWidth.commit("chat", value)}
+                  onReset={() => chatWidth.commit("chat", CHAT.base)}
+                />
+              ) : null}
               <aside className={chatClass} id="v2-chat" aria-label={screen.chat === "assistant" ? "Assistant" : "Chat with your CMO"} data-clip={screen.chat === "assistant" ? "" : undefined} ref={chatColumn}>
                 {screen.chat === "drawer" ? (
                   <button type="button" className="ib td-chat-close" aria-label="Close the chat" onClick={() => setChatOpen(false)}>

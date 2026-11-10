@@ -176,7 +176,7 @@ export function StudioScreen() {
       <div style={{ display: "flex", alignItems: "flex-end", gap: "12px", flexWrap: "wrap", marginBottom: "20px" }}>
         <div style={{ flex: "1 1 320px" }}>
           <h1 style={{ margin: "0", fontSize: "22px", fontWeight: "600", letterSpacing: "-0.4px" }}>Videos</h1>
-          <p style={{ margin: "4px 0 0", color: "var(--muted)", fontSize: "13px" }}>Film from the script, upload the take, fine-tune it here. Cut short clips from a finished video and Post schedules them.</p>
+          <p style={{ margin: "4px 0 0", color: "var(--muted)", fontSize: "14px" }}>Film from the script, upload the take, fine-tune it here. Cut short clips from a finished video and Post schedules them.</p>
         </div>
         <span className="v2 td-newmenu">
           <NewMenu label="Blank edit" onOpen={(href) => router.push(href)} onError={setError} />
@@ -222,7 +222,7 @@ export function StudioScreen() {
                 {p.subtitle.match(/\d+:\d{2}/) ? <span className="dur">{p.subtitle.match(/\d+:\d{2}/)![0]}</span> : null}
               </span>
               <span style={{ padding: "10px 12px", display: "flex", flexDirection: "column", gap: "6px" }}>
-                <span style={{ fontWeight: "500", fontSize: "13px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.title}</span>
+                <span style={{ fontWeight: "500", fontSize: "14px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.title}</span>
                 <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                   <span className={BADGE[p.status][1]}>{p.progress !== null && p.status !== "ready" && p.status !== "finished" ? `${BADGE[p.status][0]} ${Math.round(p.progress)}%` : BADGE[p.status][0]}</span>
                   <span className="meta" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.failure ?? p.subtitle}</span>
@@ -330,7 +330,7 @@ function ScriptsToFilm() {
                 </svg>
               </span>
               <div style={{ flex: "1 1 280px", minWidth: "0" }}>
-                <div style={{ fontWeight: "500", fontSize: "13.5px" }}>{d.title}</div>
+                <div style={{ fontWeight: "500", fontSize: "14.5px" }}>{d.title}</div>
                 <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "4px" }}>
                   <div className="beatbar" aria-hidden="true">
                     {d.beats.map((b, i) => (

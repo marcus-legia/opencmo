@@ -9,7 +9,7 @@
  */
 
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 
@@ -18,6 +18,7 @@ import { ApprovalCard, type DecideHandler } from "@/components/cards/ApprovalCar
 import { RatingSheet } from "@/components/cards/RatingSheet";
 import { fillChat } from "@/components/dashboard/TodayBlock";
 import { useDashboard } from "@/components/dashboard/useDashboard";
+import { Sash } from "@/components/shell-v2/Sash";
 import { useShellState } from "@/components/shell-v2/ShellState";
 import { useScreen } from "@/components/screens/useScreen";
 import { isTodayPrompt } from "@/lib/cmo/today";
@@ -26,6 +27,7 @@ import type { DashboardScreen, TodayRowData } from "@/lib/screens/dashboard";
 
 import { ContextColumn } from "./ContextColumn";
 import { KIND_ICON, PLATFORM_ICON, kindLabel, whenLabel } from "./cards";
+import { LEFT, useTodayColumns } from "./columns";
 
 type Step = "planned" | "waiting" | "making" | "scheduled" | "posted";
 
@@ -269,7 +271,6 @@ function agentLine(data: DashboardScreen, key: (typeof AGENT_ROWS)[number]["key"
 }
 
 export function Feed({ email }: { email?: string | null }) {
-  const router = useRouter();
   const { state, decideCard, reload, planSheet, closePlanSheet } = useDashboard();
   const [week] = useScreen("schedule");
   const { focusChat, workVersion } = useShellState();
@@ -277,6 +278,7 @@ export function Feed({ email }: { email?: string | null }) {
   const [step, setStep] = useState<Step>("waiting");
   const [open, setOpen] = useState<string | null>(null);
   const [later, setLater] = useState<ReadonlySet<string>>(new Set());
+  const sides = useTodayColumns();
 
   // `?ask=1` and Today's `prompt` land in the chat's box; the founder sends it. Only a request Today writes is taken.
   const asking = search.get("ask") === "1";
@@ -370,23 +372,18 @@ export function Feed({ email }: { email?: string | null }) {
       <PlanSheet open={planSheet} onClose={closePlanSheet} />
       <RatingSheet open={rating} onClose={closeRating} />
       <ContextColumn goal={data ? { text: data.week.goal, done: data.week.deliverables.done, total: data.week.deliverables.total } : null} />
+      <Sash
+        label="Resize the context column"
+        controls="td-context"
+        value={sides.columns.left}
+        min={LEFT.min}
+        max={LEFT.max}
+        onLive={(value) => sides.live("left", value)}
+        onCommit={(value) => sides.commit("left", value)}
+        onReset={() => sides.commit("left", LEFT.base)}
+      />
 
       <main className="mid" data-testid="v2-dashboard">
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 20px", borderBottom: "1px solid var(--line)" }}>
-          <div className="seg" role="tablist" aria-label="View">
-            <button type="button" role="tab" aria-selected="true">
-              Feed
-            </button>
-            <button type="button" role="tab" aria-selected="false" onClick={() => router.push("/app/schedule")}>
-              Calendar
-            </button>
-            <button type="button" role="tab" aria-selected="false" onClick={() => router.push("/app/analytics")}>
-              Analytics
-            </button>
-          </div>
-          <span className="meta">{dayLine.format(new Date()).replace(",", "")}</span>
-        </div>
-
         <div style={{ flex: "1 1 auto", overflow: "auto", padding: "18px 24px 40px", maxWidth: "920px", width: "100%", margin: "0 auto" }}>
           <div style={{ display: "flex", alignItems: "flex-start", gap: "14px", marginBottom: "16px" }}>
             <Robot />
@@ -397,7 +394,7 @@ export function Feed({ email }: { email?: string | null }) {
                 </h1>
                 <span className="live" title="Your CMO is working"></span>
               </div>
-              <p style={{ margin: "4px 0 0", color: "var(--muted)", fontSize: "13px", lineHeight: "18px" }}>
+              <p style={{ margin: "4px 0 0", color: "var(--muted)", fontSize: "14px", lineHeight: "18px" }}>
                 {state.status === "loading"
                   ? "Loading your team…"
                   : needs === 0

@@ -118,7 +118,7 @@ export function SetupScreen() {
   return (
     <>
       <header style={{ height: "56px", display: "flex", alignItems: "center", gap: "10px", padding: "0 24px", borderBottom: "1px solid var(--line)" }}>
-        <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: "24px", height: "24px", borderRadius: "6px", background: "var(--text)", color: "var(--bg)", fontWeight: "700", fontSize: "12px" }}>O</span>
+        <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: "24px", height: "24px", borderRadius: "6px", background: "var(--text)", color: "var(--bg)", fontWeight: "700", fontSize: "13px" }}>O</span>
         <span style={{ fontWeight: "600" }}>OpenCMO</span>
         <div style={{ flex: "1 1 auto" }}></div>
         <nav className="stepper" aria-label="Setup steps">
@@ -215,7 +215,7 @@ function WebsiteStep({ initial, error, onStart }: { initial: string; error: stri
         <h1>Start with your website.</h1>
         <p className="lead">Your CMO reads it and writes the four documents every agent works from: Product, Strategy, Competitors and Content plan. You can change any of them later.</p>
         <div style={{ marginTop: "28px", display: "flex", flexDirection: "column", gap: "10px", maxWidth: "520px" }}>
-          <label htmlFor="setup-site" style={{ fontSize: "12.5px", fontWeight: "500" }}>
+          <label htmlFor="setup-site" style={{ fontSize: "13.5px", fontWeight: "500" }}>
             Your website
           </label>
           <div className="field">
@@ -240,21 +240,21 @@ function WebsiteStep({ initial, error, onStart }: { initial: string; error: stri
           <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
             <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" />
           </svg>
-          <span style={{ fontSize: "13px" }}>Nothing is posted. Every draft waits for your approval.</span>
+          <span style={{ fontSize: "14px" }}>Nothing is posted. Every draft waits for your approval.</span>
         </div>
       </form>
       <div className="card" style={{ flex: "1 1 340px", maxWidth: "420px" }}>
         <div style={{ fontWeight: "600", marginBottom: "12px" }}>What happens next</div>
         <div className="task">
-          <span className="dot d-wait mono" style={{ fontSize: "11px" }}>1</span>
+          <span className="dot d-wait mono" style={{ fontSize: "12px" }}>1</span>
           <span style={{ flex: "1" }}>Your CMO reads the site and writes your documents.</span>
         </div>
         <div className="task">
-          <span className="dot d-wait mono" style={{ fontSize: "11px" }}>2</span>
+          <span className="dot d-wait mono" style={{ fontSize: "12px" }}>2</span>
           <span style={{ flex: "1" }}>Writer plans your first week and drafts your first posts. This first run is free.</span>
         </div>
         <div className="task">
-          <span className="dot d-wait mono" style={{ fontSize: "11px" }}>3</span>
+          <span className="dot d-wait mono" style={{ fontSize: "12px" }}>3</span>
           <span style={{ flex: "1" }}>You read them in your feed. To approve and post, you pick a plan.</span>
         </div>
       </div>

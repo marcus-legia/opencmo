@@ -89,7 +89,7 @@ export function AgentWriter() {
                 </span>
               ) : null}
             </div>
-            <p style={{ margin: "4px 0 8px", color: "var(--muted)", fontSize: "13px", maxWidth: "640px" }}>
+            <p style={{ margin: "4px 0 8px", color: "var(--muted)", fontSize: "14px", maxWidth: "640px" }}>
               Writes the week from your strategy: X posts, slideshows, and scripts with storyboards for the videos you film. Nothing is built or posted until you approve the words.
             </p>
             <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
@@ -226,8 +226,8 @@ export function AgentWriter() {
       <aside style={{ flex: "1 1 300px", maxWidth: "360px", display: "flex", flexDirection: "column", gap: "14px" }}>
         <section className="card">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "4px" }}>
-            <h2 style={{ margin: "0", fontSize: "13px", fontWeight: "600" }}>This week</h2>
-            <Link href="/app/schedule" style={{ fontSize: "11.5px", textDecoration: "none" }}>
+            <h2 style={{ margin: "0", fontSize: "14px", fontWeight: "600" }}>This week</h2>
+            <Link href="/app/schedule" style={{ fontSize: "12.5px", textDecoration: "none" }}>
               Calendar
             </Link>
           </div>
@@ -242,8 +242,8 @@ export function AgentWriter() {
           ))}
         </section>
         <section className="card">
-          <h2 style={{ margin: "0 0 4px", fontSize: "13px", fontWeight: "600" }}>Your voice</h2>
-          <p className="meta" style={{ margin: "0 0 10px", fontSize: "12px" }}>
+          <h2 style={{ margin: "0 0 4px", fontSize: "14px", fontWeight: "600" }}>Your voice</h2>
+          <p className="meta" style={{ margin: "0 0 10px", fontSize: "13px" }}>
             Writer learns your voice from what you change in its drafts.
           </p>
           {data?.voice.wordsCut.length ? (
@@ -265,7 +265,7 @@ export function AgentWriter() {
               <div className="meta" style={{ marginBottom: "6px" }}>
                 Rules it keeps
               </div>
-              <ul style={{ margin: "0", paddingLeft: "18px", fontSize: "12.5px", lineHeight: "1.6" }}>
+              <ul style={{ margin: "0", paddingLeft: "18px", fontSize: "13.5px", lineHeight: "1.6" }}>
                 {data.voice.lines.slice(0, 4).map((l) => (
                   <li key={l.text}>{l.text}</li>
                 ))}
@@ -274,7 +274,7 @@ export function AgentWriter() {
           ) : null}
         </section>
         <section className="card">
-          <h2 style={{ margin: "0 0 6px", fontSize: "13px", fontWeight: "600" }}>What it costs</h2>
+          <h2 style={{ margin: "0 0 6px", fontSize: "14px", fontWeight: "600" }}>What it costs</h2>
           <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0" }}>
             <span>Week plan</span>
             <span className="meta">{JOB_PRICES.plan_week ?? 1} credit</span>
