@@ -3,9 +3,13 @@ import { withApi } from "@/lib/api/handler";
 
 export const dynamic = "force-dynamic";
 
-/** The platforms the founder has a connected account on (RLS: their own rows). Post cards read it to offer copy and open. */
+/**
+ * The founder's connected accounts (RLS: their own rows). Post cards read `platforms` to offer copy and open; the top bar
+ * reads `accounts` for the handle it shows.
+ */
 export const GET = withApi({}, async ({ supabase }) => {
-  const { data, error } = await supabase.from("social_accounts").select("platform").eq("status", "connected");
+  const { data, error } = await supabase.from("social_accounts").select("platform, handle").eq("status", "connected").order("connected_at");
   if (error) throw new ApiError(503, "Could not load your accounts.");
-  return { platforms: [...new Set(((data ?? []) as { platform: string }[]).map((row) => row.platform))] };
+  const rows = (data ?? []) as { platform: string; handle: string }[];
+  return { platforms: [...new Set(rows.map((row) => row.platform))], accounts: rows.map((row) => ({ platform: row.platform, handle: row.handle })) };
 });
