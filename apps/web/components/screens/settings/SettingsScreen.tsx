@@ -6,6 +6,7 @@ import { ApiError, api, jsonBody } from "@/components/clipping/api";
 import type { AccountSummary } from "@/components/clipping/web/AccountUsage";
 import { ApiKeys } from "@/components/clipping/web/ApiKeys";
 import { ConnectedApps } from "@/components/clipping/web/ConnectedApps";
+import { ThemeSwitch } from "@/components/theme";
 import { Button, MonoLabel } from "@/components/ui";
 import { formatBytes } from "@/lib/upload";
 import { BUDGET_MAX, BUDGET_MIN, type SettingsScreen as Data } from "@/lib/screens/settings";
@@ -47,6 +48,11 @@ export function SettingsScreen({ mcpEndpoint, paid }: { mcpEndpoint: string | nu
           {state.status === "loading" && <SkeletonBlocks />}
           {state.status === "error" && <ErrorNote>{state.message}</ErrorNote>}
           {state.status === "ready" && <SettingsBody data={state.data} live={state.live} />}
+          <section aria-labelledby="appearance-title" className="v2-panel" data-testid="settings-appearance">
+            <h2 id="appearance-title">Appearance</h2>
+            <p className="scr-tiny scr-muted">System follows your computer&apos;s light or dark mode.</p>
+            <ThemeSwitch />
+          </section>
           {/* Today's account, API keys and connected apps: kept whole so nothing the old page did is lost. */}
           <AccountPanel />
           <div id="api-keys" className="scr-legacy-cards">

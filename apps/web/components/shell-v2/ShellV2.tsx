@@ -21,6 +21,7 @@ import { Toast } from "@/components/clipping/ui";
 import { ShellAccountContext, WebShell, type AccountSummary } from "@/components/clipping/web/WebShell";
 import { ChatPanel, type ChatSource } from "@/components/cmo/workspace/ChatPanel";
 import { studioItemHref } from "@/components/screens/studio/href";
+import { useApplyTheme } from "@/components/theme";
 import { LogsDrawer } from "@/components/today/LogsDrawer";
 import { TopBar, type TopVariant } from "@/components/today/TopBar";
 import { WorkspaceProvider } from "@/components/today/workspace";
@@ -85,6 +86,9 @@ function screenFor(segment: string | null): Screen {
 
 export function ShellV2(props: Props) {
   const segment = useSelectedLayoutSegment();
+  // THEME_BOOT sets `html[data-theme]` only on a full page load; a client navigation into /app (after sign-in, from the
+  // landing page) needs the hook, or every artboard's dark tokens never apply and "System" ignores a dark Mac.
+  useApplyTheme();
   if (segment !== null && CLASSIC.has(segment)) {
     const { hideSample: _hideSample, chatLive: _chatLive, ...account } = props;
     return <WebShell {...account} />;
