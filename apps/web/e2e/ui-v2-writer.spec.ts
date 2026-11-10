@@ -105,6 +105,8 @@ async function founder(db: SupabaseClient): Promise<E2EUser> {
   const created = await db.auth.admin.createUser({ email: user.email, password: user.password, email_confirm: true });
   expect(created.error).toBeNull();
   user.id = created.data.user!.id;
+  // Approving and posting need a plan (cmo-review-3 A3); these founders decide and post.
+  expect((await db.from("profiles").update({ plan: "starter" }).eq("id", user.id)).error).toBeNull();
   const doc = await db
     .from("marketing_documents")
     .insert({ user_id: user.id, kind: "product", version: 1, created_by: "user", body: { name: "OpenCMO", one_liner: "An AI CMO for solo founders." } });
@@ -235,7 +237,7 @@ async function postCard(db: SupabaseClient, userId: string, platform: string, te
   return { itemId: id, cardId: (data as { id: string }).id };
 }
 
-test("an approved Threads draft opens nothing: it gets a slot and a schedule card (copy and open at its time)", async ({ page }) => {
+test("an approved Threads draft opens nothing: its card's time is approved, a slot waits, no schedule card (copy and open then)", async ({ page }) => {
   const db = admin();
   const user = await founder(db);
   const threadsText = "I spent more time cutting my demo than building the feature. So the editor came first: delete a word and the cut follows. ".repeat(3).trim();
@@ -260,16 +262,18 @@ test("an approved Threads draft opens nothing: it gets a slot and a schedule car
   await page.goto(`/app/inbox/${threads.cardId}`);
   const card = page.getByTestId("inbox-card-page").getByTestId("approval-card");
   await expect(card).toContainText(`${threadsText.length}/500`);
-  await card.getByRole("button", { name: "Approve", exact: true }).click();
-  await expect(page.getByText("Approved. A schedule card asks you for its time.")).toBeVisible();
+  // With its accounts read (a founder with a plan), a post you post yourself reads "Approve for this time" (1.2).
+  await card.getByRole("button", { name: /^Approve( for this time)?$/ }).click();
+  await expect(page.getByText(/Approved for .*, your time: then a card gives you the post to copy and open\./)).toBeVisible();
   expect(popups).toHaveLength(0);
   await expect.poll(async () => (await db.from("content_items").select("status, final_text").eq("id", threads.itemId).single()).data).toEqual({ status: "approved", final_text: threadsText });
   await expect.poll(async () => (await db.from("cmo_draft_outcomes").select("platform").eq("item_id", threads.itemId).single()).data?.platform).toBe("threads");
-  // P4 A3: the approved post gets a proposed slot (no Threads account connected: copy and open) and its card.
+  // cmo-review-3 1.2: the card showed its time, so the slot waits at it (no Threads account: copy and open) and no
+  // schedule card asks again.
   await expect
     .poll(async () => (await db.from("schedule_slots").select("platform, mode, status").eq("user_id", user.id)).data)
-    .toEqual([{ platform: "threads", mode: "intent", status: "proposed" }]);
-  await expect.poll(async () => (await db.from("approvals").select("kind").eq("user_id", user.id).eq("status", "waiting").eq("kind", "schedule")).data?.length).toBe(1);
+    .toEqual([{ platform: "threads", mode: "intent", status: "waiting" }]);
+  expect((await db.from("approvals").select("kind").eq("user_id", user.id).eq("status", "waiting").eq("kind", "schedule")).data).toEqual([]);
 });
 
 test("a caption is edited on a live shorts card: same card, new hash, a stale hash refused, delivered under its short", async ({ page }) => {

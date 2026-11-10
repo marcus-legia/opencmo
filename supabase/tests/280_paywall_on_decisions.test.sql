@@ -1,0 +1,96 @@
+-- cmo-review-3 A3 (20270114050000): the paywall on decisions. A founder without a plan cannot approve or post a post,
+-- or approve or retry a slot, through the app's RPC or any write of the rows, and is refused with P0402 (the plan
+-- sheet). Skipping stays free, as do a script's (video) approval and a cron's write. What already went out stays
+-- bookable after a plan lapses. A paid founder is unchanged.
+create extension if not exists pgtap with schema extensions;
+
+begin;
+set search_path to public, extensions;
+
+select plan(16);
+
+select ok(not has_function_privilege('authenticated', 'public.paywall_on_send()', 'execute'), 'the rule is internal');
+
+insert into auth.users (id, email) values
+  ('e2800000-0000-4000-8000-00000000000a', 'pay-a@test.local'),
+  ('e2800000-0000-4000-8000-00000000000b', 'pay-b@test.local');
+update public.profiles set plan = 'starter' where id = 'e2800000-0000-4000-8000-00000000000b';
+
+insert into public.work_orders (id, user_id, week, kind, title, brief, department, status) values
+  ('e2801000-0000-4000-8000-00000000000a', 'e2800000-0000-4000-8000-00000000000a', date_trunc('week', current_date)::date,
+   'post_draft', 'Posts', '{}', 'writer', 'done');
+-- e: approved while the founder was paid (the plan lapsed since); its slot was reminded and posted by hand.
+insert into public.content_items (id, user_id, department, platform, day, idea, status, body) values
+  ('e2802000-0000-4000-8000-00000000000a', 'e2800000-0000-4000-8000-00000000000a', 'post', 'X', current_date, 'Free', 'in_review',
+   '{"text":"The free first draft."}'),
+  ('e2802000-0000-4000-8000-00000000000b', 'e2800000-0000-4000-8000-00000000000a', 'post', 'X', current_date, 'Skip', 'in_review',
+   '{"text":"One to skip."}'),
+  ('e2802000-0000-4000-8000-00000000000c', 'e2800000-0000-4000-8000-00000000000a', 'video', 'Video', current_date, 'Script', 'in_review',
+   '{}'),
+  ('e2802000-0000-4000-8000-00000000000d', 'e2800000-0000-4000-8000-00000000000b', 'post', 'X', current_date, 'Paid', 'in_review',
+   '{"text":"A paid founder posts."}'),
+  ('e2802000-0000-4000-8000-00000000000e', 'e2800000-0000-4000-8000-00000000000a', 'post', 'X', current_date, 'Lapsed', 'approved',
+   '{"text":"Approved while paid."}');
+insert into public.deliverables (id, user_id, order_id, kind, ref_kind, ref_id, status) values
+  ('e2803000-0000-4000-8000-00000000000a', 'e2800000-0000-4000-8000-00000000000a', 'e2801000-0000-4000-8000-00000000000a', 'post',
+   'content_item', 'e2802000-0000-4000-8000-00000000000a', 'waiting_founder'),
+  ('e2803000-0000-4000-8000-00000000000e', 'e2800000-0000-4000-8000-00000000000a', 'e2801000-0000-4000-8000-00000000000a', 'post',
+   'content_item', 'e2802000-0000-4000-8000-00000000000e', 'decided'),
+  ('e2803000-0000-4000-8000-00000000000f', 'e2800000-0000-4000-8000-00000000000a', 'e2801000-0000-4000-8000-00000000000a', 'post',
+   'content_item', 'e2802000-0000-4000-8000-00000000000b', 'waiting_founder');
+-- A decided deliverable proposes its own slot (schedule_follow_deliverable); this test sets the slots itself.
+delete from public.schedule_slots where user_id = 'e2800000-0000-4000-8000-00000000000a';
+insert into public.schedule_slots (id, user_id, deliverable_id, platform, mode, publish_at, window_ends_at, status) values
+  ('e2804000-0000-4000-8000-00000000000a', 'e2800000-0000-4000-8000-00000000000a', 'e2803000-0000-4000-8000-00000000000a', 'x', 'intent',
+   now() + interval '1 day', now() + interval '1 day 15 minutes', 'proposed'),
+  ('e2804000-0000-4000-8000-00000000000f', 'e2800000-0000-4000-8000-00000000000a', 'e2803000-0000-4000-8000-00000000000f', 'threads', 'intent',
+   now() - interval '1 hour', now() + interval '1 hour', 'failed'),
+  ('e2804000-0000-4000-8000-00000000000e', 'e2800000-0000-4000-8000-00000000000a', 'e2803000-0000-4000-8000-00000000000e', 'x', 'intent',
+   now() - interval '5 minutes', now() + interval '10 minutes', 'reminded');
+
+-- The app's own path, as the unpaid founder.
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"e2800000-0000-4000-8000-00000000000a","role":"authenticated"}';
+select throws_ok($$ select public.cmo_decide_post('e2802000-0000-4000-8000-00000000000a', 'approve') $$, 'P0402', null,
+  'unpaid: approving a post asks for a plan');
+select lives_ok($$ select public.cmo_decide_post('e2802000-0000-4000-8000-00000000000b', 'skip', null, 'Too salesy') $$,
+  'unpaid: skipping stays free');
+reset role;
+select is((select status from public.content_items where id = 'e2802000-0000-4000-8000-00000000000a'), 'in_review', 'the draft still waits');
+
+-- Any other write of the rows, still as that founder (the RPCs run as definer; the rule reads who asks).
+set local request.jwt.claims = '{"sub":"e2800000-0000-4000-8000-00000000000a","role":"authenticated"}';
+select throws_ok($$ update public.content_items set status = 'published' where id = 'e2802000-0000-4000-8000-00000000000a' $$, 'P0402', null,
+  'unpaid: "I posted it" on a waiting post asks for a plan');
+select throws_ok($$ insert into public.content_items (user_id, department, platform, day, idea, status, body)
+  values ('e2800000-0000-4000-8000-00000000000a', 'post', 'X', current_date, 'New', 'approved', '{"text":"x"}') $$, 'P0402', null,
+  'unpaid: a post written as approved asks for a plan');
+select throws_ok($$ update public.schedule_slots set status = 'waiting' where id = 'e2804000-0000-4000-8000-00000000000a' $$, 'P0402', null,
+  'unpaid: approving a slot asks for a plan');
+select throws_ok($$ update public.schedule_slots set status = 'due' where id = 'e2804000-0000-4000-8000-00000000000a' $$, 'P0402', null,
+  'unpaid: a slot sent straight to due asks for a plan');
+select throws_ok($$ update public.schedule_slots set status = 'waiting' where id = 'e2804000-0000-4000-8000-00000000000f' $$, 'P0402', null,
+  'unpaid: Retry on a failed slot asks for a plan');
+select lives_ok($$ update public.schedule_slots set status = 'published' where id = 'e2804000-0000-4000-8000-00000000000e' $$,
+  'lapsed: a reminded slot posted by hand is still recorded');
+select lives_ok($$ update public.content_items set status = 'published' where id = 'e2802000-0000-4000-8000-00000000000e' $$,
+  'lapsed: a post approved while paid can still be marked posted');
+select lives_ok($$ update public.content_items set status = 'approved' where id = 'e2802000-0000-4000-8000-00000000000c' $$,
+  'unpaid: approving a script to film stays free');
+select lives_ok($$ update public.content_items set body = '{"text":"Edited words."}' where id = 'e2802000-0000-4000-8000-00000000000a' $$,
+  'unpaid: editing words stays free');
+
+-- A paid founder approves as before.
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"e2800000-0000-4000-8000-00000000000b","role":"authenticated"}';
+select lives_ok($$ select public.cmo_decide_post('e2802000-0000-4000-8000-00000000000d', 'approve') $$, 'paid: approving works');
+reset role;
+select is((select status from public.content_items where id = 'e2802000-0000-4000-8000-00000000000d'), 'approved', 'and the post is approved');
+
+-- A cron or the worker (no user) is never stopped here.
+set local request.jwt.claims = '';
+select lives_ok($$ update public.schedule_slots set status = 'waiting' where id = 'e2804000-0000-4000-8000-00000000000a' $$,
+  'no user (cron, worker): not checked');
+
+select * from finish();
+rollback;

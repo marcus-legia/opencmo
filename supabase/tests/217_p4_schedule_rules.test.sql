@@ -17,6 +17,8 @@ values ('e2171000-0000-4000-8000-00000000000a', 'e2170000-0000-4000-8000-0000000
 insert into public.content_items (id, user_id, department, platform, day, idea, status, body) values
   ('e2172000-0000-4000-8000-00000000000a', 'e2170000-0000-4000-8000-00000000000a', 'post', 'linkedin', current_date, 'Why',
    'in_review', '{"text":"Why we built the editor first."}');
+-- A card without a time (cmo-review-3 1.2 gives new cards one, 276 tests it): its time comes on a schedule card.
+update public.content_items set body = body || '{"proposed":null}' where id = 'e2172000-0000-4000-8000-00000000000a';
 insert into public.deliverables (id, user_id, order_id, kind, ref_kind, ref_id, status) values
   ('e2173000-0000-4000-8000-00000000000a', 'e2170000-0000-4000-8000-00000000000a', 'e2171000-0000-4000-8000-00000000000a',
    'post', 'content_item', 'e2172000-0000-4000-8000-00000000000a', 'waiting_founder');

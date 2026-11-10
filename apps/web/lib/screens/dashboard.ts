@@ -5,8 +5,37 @@
 
 import { z } from "zod";
 
+import { TODAY_MAX_ROWS, TODAY_PLATFORMS, TODAY_REASONS } from "../cmo/today";
+
 import { ApprovalCardSchema } from "./approval-card";
 import { CmoStateSchema, CreditsSchema, DepartmentSchema, LogLineSchema, SlotStatusSchema, WhereSchema, iso } from "./common";
+
+/** One row of Today (CMO review 3, 1.1); built by `buildToday` in `lib/cmo/today.ts`. */
+export const TodayRowSchema = z.object({
+  id: z.string().max(80),
+  reason: z.enum(TODAY_REASONS),
+  level: z.enum(["critical", "high", "normal"]),
+  title: z.string().max(300),
+  detail: z.string().max(400).nullable(),
+  department: DepartmentSchema,
+  platform: z.enum(TODAY_PLATFORMS).nullable(),
+  action: z.discriminatedUnion("type", [
+    z.object({ type: z.literal("card"), approvalId: z.string(), label: z.string().max(60) }),
+    z.object({ type: z.literal("chat"), prompt: z.string().max(300), label: z.string().max(60) }),
+    // Only pages of the app: a row never sends the founder off-site.
+    z.object({ type: z.literal("link"), href: z.string().regex(/^\/app(?:[/?#]|$)/).max(200), label: z.string().max(60) }),
+  ]),
+});
+export type TodayRowData = z.infer<typeof TodayRowSchema>;
+
+/** Today: at most five rows, "N of M done today" and "N more waiting". */
+export const TodaySchema = z.object({
+  rows: z.array(TodayRowSchema).max(TODAY_MAX_ROWS),
+  done: z.number().int().min(0),
+  total: z.number().int().min(0),
+  more: z.number().int().min(0),
+});
+export type TodayData = z.infer<typeof TodaySchema>;
 
 export const WeekStripSchema = z.object({
   /** The approved goal of this week; null before the founder approves one. */
@@ -72,6 +101,8 @@ export const DigestSchema = z.object({
 
 export const DashboardScreenSchema = z.object({
   cmo: CmoStateSchema,
+  /** The short list at the top; the full queue stays below it as "Everything waiting". */
+  today: TodaySchema,
   week: WeekStripSchema,
   team: TeamSchema,
   /** Newest first; the Dashboard shows five. */

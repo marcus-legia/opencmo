@@ -11,6 +11,8 @@ select plan(13);
 insert into auth.users (id, email) values
   ('e2190000-0000-4000-8000-00000000000a', 'p4fin@test.local'),
   ('e2190000-0000-4000-8000-00000000000b', 'p4fin-other@test.local');
+-- Posting needs a plan since cmo-review-3 A3 (20270114050000); these founders decide and post, so they have one.
+update public.profiles set plan = 'starter' where id in ('e2190000-0000-4000-8000-00000000000a', 'e2190000-0000-4000-8000-00000000000b');
 update public.profiles set timezone = 'UTC' where id in ('e2190000-0000-4000-8000-00000000000a', 'e2190000-0000-4000-8000-00000000000b');
 select public.zernio_profile_save('e2190000-0000-4000-8000-00000000000a', 'prof-fin');
 select public.social_account_save('e2190000-0000-4000-8000-00000000000a', 'x', '@founder', null, 'acc-fin-x');
@@ -67,6 +69,8 @@ select is((select status from public.schedule_slots where id = 'e2194000-0000-40
 -- A post stored the way Writer stores it (the calendar's label), approved: Schedule proposes it on its platform.
 insert into public.content_items (id, user_id, department, platform, day, idea, status, body) values
   ('e2192000-0000-4000-8000-00000000000c', 'e2190000-0000-4000-8000-00000000000a', 'post', 'Threads', current_date, 'Post c', 'in_review', '{"text":"Post c."}');
+-- A card without a time (cmo-review-3 1.2 gives new cards one, 276 tests it): its time comes on a schedule card.
+update public.content_items set body = body || '{"proposed":null}' where id = 'e2192000-0000-4000-8000-00000000000c';
 insert into public.deliverables (id, user_id, order_id, kind, ref_kind, ref_id, status) values
   ('e2193000-0000-4000-8000-00000000000c', 'e2190000-0000-4000-8000-00000000000a', 'e2191000-0000-4000-8000-00000000000a', 'post', 'content_item', 'e2192000-0000-4000-8000-00000000000c', 'waiting_founder');
 update public.content_items set status = 'approved' where id = 'e2192000-0000-4000-8000-00000000000c';

@@ -10,7 +10,10 @@ process.env.OPENCMO_AGENT_FAKE = "1";
 
 import { checkPost } from "./check-post";
 import { classifyEdits } from "./classify-edits";
+import { fakeRules, groundedRules } from "./distill-ratings";
+import { eventLine, sheetDrafts } from "../voice";
 import { EDIT_MODES } from "./edit-taxonomy";
+import { DRAFT_REASONS } from "../../../components/cards/labels";
 import { mondayOf } from "./summarize-memory";
 import { goalBlock, knownNumbers, recall } from "./context";
 import { goalLine, nextGoalFallback } from "./review-week";
@@ -422,6 +425,8 @@ async function main() {
   const base = { weekday: 3, duePost: null, dueSales: null, competitorHandles: 0, publishedRecently: 0, socialReader: true };
   assert.deepEqual(dueLoops(base), []);
   assert.deepEqual(dueLoops({ ...base, weekday: 1 }).map((r) => r.kind), ["plan_week", "post_draft"]);
+  // CMO review 3, 3.1: an unpaid account gets no loop at all.
+  assert.deepEqual(dueLoops({ ...base, weekday: 1, paid: false }), []);
   assert.deepEqual(
     dueLoops({ ...base, weekday: 0, competitorHandles: 2, publishedRecently: 3 }).map((r) => r.kind),
     ["competitor_research", "summarize_memory", "review_week", "pull_metrics"],
@@ -574,6 +579,57 @@ async function main() {
   const migration = readFileSync(new URL("../../../../../supabase/migrations/20261201100000_cmo_draft_outcomes.sql", import.meta.url), "utf8");
   const sqlModes = [...(migration.match(/edit_mode in \(([^)]*)\)/)?.[1] ?? "").matchAll(/'([A-Z_]+)'/g)].map((m) => m[1]);
   assert.deepEqual(sqlModes, [...EDIT_MODES], "EDIT_MODES matches the SQL constraint");
+
+  // cmo-review-3 2.1: a founder's chip is a label the classifier never takes over. SQL hands it no founder rows
+  // (`classified_at` is set) and refuses to relabel one (`cmo_set_edit_mode` answers false): neither counts.
+  const founderLabelled = new Set(["f1"]);
+  const mixed = {
+    unclassified: async () => [{ id: "f1", draft: "We built reminders.", final_text: "I made reminders." }, { id: "m1", draft: "We built reminders.", final_text: "I made them." }],
+    setEditMode: async (id: string) => !founderLabelled.has(id),
+  };
+  assert.deepEqual(await classifyEdits(mixed, { limit: 10 }), { classified: 1, failed: 0 }, "a founder-labelled row is not counted as classified");
+  // cmo-review-3 2.2: a rule from ratings stays only when a thumbs down or a note of the round supports it.
+  const rated = [
+    { id: "a", item_id: "i", version: 0, verdict: "down" as const, reason_code: "TOO_SALESY", note: null, words: "Buy now." },
+    { id: "b", item_id: "i", version: 1, verdict: "up" as const, reason_code: null, note: null, words: "A reminder on day 3." },
+    { id: "c", item_id: "j", version: 0, verdict: "up" as const, reason_code: null, note: "Specific, I like it.", words: "Day 3, 7, 14." },
+  ];
+  assert.deepEqual(
+    groundedRules(
+      [
+        { rule: "Help first: drop the pitch.", from: [1] },
+        { rule: "Use more emoji.", from: [2] },
+        { rule: "Name the exact day to act.", from: [3] },
+        { rule: "help first:  drop the pitch.", from: [1] },
+        { rule: "x".repeat(250), from: [1] },
+        { rule: "From a rating that is not there.", from: [5] },
+      ],
+      rated,
+    ),
+    ["Help first: drop the pitch.", "Name the exact day to act."],
+    "unsupported, repeated and too long rules are dropped",
+  );
+  assert.deepEqual(fakeRules(rated.filter((r) => r.verdict === "up")), [], "thumbs up only: no rule");
+
+  // cmo-review-3 2.2–2.3: the sheet takes the first post's versions, then the next posts' first, five at most; the
+  // history says each change in plain words.
+  const draftRow = (id: string, alternates: string[]) => ({ id, platform: "X", idea: id, body: { text: `${id} text`, alternates }, created_at: "" });
+  assert.deepEqual(
+    sheetDrafts([draftRow("a", ["a1", "a2"]), draftRow("b", ["b1"]), draftRow("c", []), draftRow("d", [])]).map((d) => `${d.itemId}:${d.version}`),
+    ["a:0", "a:1", "a:2", "b:0", "c:0"],
+    "the sheet's five versions",
+  );
+  const rule = { correction_id: "r", field: null, before_status: null as string | null, after_status: "active" as string | null, before: null as unknown, after: "Help first." as unknown };
+  assert.equal(eventLine(rule), "Rule added: “Help first.”");
+  assert.equal(eventLine({ ...rule, before_status: "active", before: "Old words." }), "Rule changed: “Old words.” → “Help first.”");
+  assert.equal(eventLine({ ...rule, before_status: "active", after_status: "rejected", before: "Help first." }), "Rule turned off: “Help first.”");
+  assert.equal(eventLine({ correction_id: null, field: "avoid", before_status: null, after_status: null, before: null, after: ["hype", "synergy"] }), "Words to avoid: hype, synergy");
+
+  // The chips are the same list in the card, the route and SQL.
+  const reasons = readFileSync(new URL("../../../../../supabase/migrations/20270113020000_draft_reasons.sql", import.meta.url), "utf8");
+  const sqlReasons = [...(reasons.match(/reason_code in \(([^)]*)\)/)?.[1] ?? "").matchAll(/'([A-Z_]+)'/g)].map((m) => m[1]);
+  assert.deepEqual(sqlReasons, DRAFT_REASONS.map((r) => r.code), "DRAFT_REASONS matches the SQL constraint");
+  for (const r of DRAFT_REASONS) assert.ok(reasons.includes(`when '${r.code}' then '${r.label.replaceAll("'", "''")}'`), `SQL names ${r.code} as the card does`);
 
   console.log("jobs.check — hàng đợi CMO: W1, W2, W4, W6-lite, W7, W8 memory, W9 review, inbox, vòng lặp, kiểm bài, lease, hoãn, classify_edits đều đúng.");
 }

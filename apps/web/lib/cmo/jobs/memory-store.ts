@@ -5,7 +5,7 @@
 
 import type { VideoSource } from "../writer/types";
 import { latestPerTopic } from "./context";
-import { isoDay, type CmoStore, type CompetitorInsight, type ConnectedAccountRow, type ReplyOutcomeDue, type MetricRow, type ZernioPostRow, type NicheVideoInsight, type SalesSettings, type SubredditRule, type Documents, type Goal, type InboxRequest, type ItemRow, type Lesson, type MemoryEvent, type Opportunity, type QueuedRun, type Step, type VoiceNoteRow, type WeekResults } from "./types";
+import { isoDay, type CmoStore, type DraftRating, type CompetitorInsight, type ConnectedAccountRow, type ReplyOutcomeDue, type MetricRow, type ZernioPostRow, type NicheVideoInsight, type SalesSettings, type SubredditRule, type Documents, type Goal, type InboxRequest, type ItemRow, type Lesson, type MemoryEvent, type Opportunity, type QueuedRun, type Step, type VoiceNoteRow, type WeekResults } from "./types";
 import type { AccountMetricRow } from "./metrics-source";
 
 export type InboxItem = {
@@ -48,6 +48,9 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
     days: [],
   };
   const inbox: InboxItem[] = [];
+  /** cmo-review-3 2.2: rating rounds by id, and the rules each one proposed. */
+  const ratings = new Map<string, DraftRating[]>();
+  const ratingRules = new Map<string, string[]>();
   const replies: (ReplyOutcomeDue & { check?: { status: string; votes: number | null; replies: number | null } })[] = [];
   let seq = 0;
   const id = () => `id-${++seq}`;
@@ -85,6 +88,14 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
     },
     memoryEvents: async () => events,
     corrections: async () => corrections,
+    ratingRound: async (_u, round) => ratings.get(round) ?? [],
+    async proposeRatingRules(_u, round, rules) {
+      if (!ratings.has(round)) throw new Error("No ratings in this round.");
+      if (ratingRules.has(round)) return 0;
+      const kept = rules.slice(0, 5).map((r) => r.trim()).filter((r) => r.length >= 3 && r.length <= 200);
+      ratingRules.set(round, kept);
+      return kept.length;
+    },
     lessons: async () => latestPerTopic([...lessons].sort((a, b) => b.week.localeCompare(a.week))),
     goal: async (_u, week) => goals.find((g) => g.week === week) ?? null,
     weekResults: async () => ({ ...results }),
@@ -226,5 +237,5 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
     runs.push(run);
     return run;
   };
-  return { store, runs, items, opps, rules, salesSettings, mentions, insights, niche, metrics, zernio, replies, lessons, goals, results, enqueue, inbox, submit, voice, videos, captions };
+  return { store, runs, items, opps, rules, salesSettings, mentions, insights, niche, metrics, zernio, replies, lessons, goals, results, enqueue, inbox, submit, voice, videos, captions, ratings, ratingRules };
 }

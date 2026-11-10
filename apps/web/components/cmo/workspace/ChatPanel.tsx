@@ -14,6 +14,7 @@ import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 
 import { ApiError, api, jsonBody } from "@/components/clipping/api";
 import { readStream } from "@/components/clipping/agent-stream";
+import { PlanSheet, isPlanRequired } from "@/components/billing/PlanSheet";
 import { useLive } from "@/components/clipping/useLive";
 import { ContinueInClaude } from "@/components/editor/assistant/ContinueInClaude";
 import { Markdown } from "@/components/editor/assistant/Markdown";
@@ -133,6 +134,7 @@ export function ChatPanel({
   pathRef.current = pathname;
   // The rows the last `view.open` put on screen; sent back with the next turn while that screen is still open.
   const shown = useRef<{ path: string; ids: string[] } | null>(null);
+  const [planSheet, setPlanSheet] = useState(false);
   const [messages, setMessages] = useState<Msg[]>(ws.chat);
   const [title, setTitle] = useState(ws.chatTitle);
   const [session, setSession] = useState<SessionView | null>(null);
@@ -310,7 +312,11 @@ export function ChatPanel({
           if (event === "done") done = data as Done;
         });
       } catch (error) {
-        append(error instanceof ApiError ? error.message : "Connection lost. Check your internet and try again.");
+        // The free first run is over (CMO review 3, 3.1): the chat answers with the plan sheet, not an error.
+        if (isPlanRequired(error)) {
+          append("Your first plan and drafts were free. Pick a plan to keep talking to your CMO.");
+          setPlanSheet(true);
+        } else append(error instanceof ApiError ? error.message : "Connection lost. Check your internet and try again.");
       } finally {
         setWorking(null);
         setBusy(false);
@@ -413,6 +419,7 @@ export function ChatPanel({
 
   return (
     <section className="cmo-panel cmo-chat" aria-labelledby="cmo-chat-title">
+      <PlanSheet open={planSheet} onClose={() => setPlanSheet(false)} action="keep talking to your CMO" />
       <header className="cmo-chat-head">
         <span className="cmo-chat-tab">
           <Icon name="message-circle" size={15} />

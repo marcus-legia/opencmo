@@ -47,11 +47,11 @@ export const PLANS: Plan[] = [
     maxExportResolution: 720,
     watermark: true,
     quota: { previews: 20, exports: 5, storageBytes: 2 * 1024 ** 3, storageObjects: 200 },
-    // Gói `free` KHÔNG còn là một bậc dùng được: nó là trạng thái "chưa mua".
-    // Quà đăng ký đã bỏ (migration 20260921150000), nên nói đúng như vậy thay
-    // vì liệt kê tính năng của một thứ không chạy được.
+    // `free` is not a tier to use: it is the state before buying. There is no signup gift (20260921150000); what it
+    // gets is the free first run (CMO review 3, 3.1), so the list says exactly that.
     features: [
-      "No monthly credits — pick a plan to add more",
+      "Your first plan and drafts, free",
+      "No monthly credits: pick a plan to approve, post and keep going",
       "Auto captions",
       "Watermarked exports",
       "Account deleted 30 days after sign-up unless you buy a plan",

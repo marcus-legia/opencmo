@@ -7,11 +7,14 @@
  */
 
 import Link from "next/link";
-import { useEffect } from "react";
+import { useCallback, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 
+import { PlanSheet } from "@/components/billing/PlanSheet";
+import { RatingSheet } from "@/components/cards/RatingSheet";
 import { Icon } from "@/components/icons";
 import { useShellState } from "@/components/shell-v2/ShellState";
+import { isTodayPrompt } from "@/lib/cmo/today";
 import { Button, Panel } from "@/components/ui";
 
 import { ApprovalQueue } from "./ApprovalQueue";
@@ -19,21 +22,39 @@ import { DashboardHeader } from "./Header";
 import { LiveLog } from "./LiveLog";
 import { ResultsPanel, TodayPanel } from "./Tables";
 import { TeamGrid } from "./TeamGraph";
+import { fillChat, TodayBlock } from "./TodayBlock";
 import { useDashboard } from "./useDashboard";
 
 export function Dashboard() {
-  const { state, decideCard, waiting, setPausedAt, reload } = useDashboard();
+  const { state, decideCard, waiting, setPausedAt, reload, planSheet, closePlanSheet } = useDashboard();
   const { focusChat, workVersion } = useShellState();
   // `?ask=1` (the Brain and Writer pages link to it) lands in the shell's chat. The History API drops the flag, not the
   // router: a router change would render this dynamic page again on the server.
-  const asking = useSearchParams().get("ask") === "1";
+  const search = useSearchParams();
+  const asking = search.get("ask") === "1";
+  // `prompt` (the email's Today rows): the request goes into the chat's box and the founder sends it. Only a request
+  // Today itself writes is taken, so a link cannot type someone else's instructions into the chat.
+  const asked = search.get("prompt") ?? "";
+  const prompt = isTodayPrompt(asked) ? asked : "";
   useEffect(() => {
     if (!asking) return;
     focusChat();
+    if (prompt) fillChat(prompt);
     const url = new URL(window.location.href);
     url.searchParams.delete("ask");
+    url.searchParams.delete("prompt");
     window.history.replaceState(null, "", url.pathname + url.search);
-  }, [asking, focusChat]);
+  }, [asking, prompt, focusChat]);
+  // `?rate=1` is Today's "Rate your first drafts" row (cmo-review-3 2.2): the sheet opens over the feed while the flag is
+  // there. Closing drops it (Next keeps `useSearchParams` in step with `replaceState`) and reads the feed again, so the
+  // row reflects the round.
+  const rating = search.get("rate") === "1";
+  const closeRating = useCallback(() => {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("rate");
+    window.history.replaceState(null, "", url.pathname + url.search);
+    void reload();
+  }, [reload]);
   // Work the chat starts (a task, a draft) shows up in the queue and the graph.
   useEffect(() => {
     if (workVersion > 0) void reload();
@@ -72,6 +93,8 @@ export function Dashboard() {
 
   return (
     <div className="v2-dash td-feed" data-testid="v2-dashboard">
+      <PlanSheet open={planSheet} onClose={closePlanSheet} />
+      <RatingSheet open={rating} onClose={closeRating} />
       <DashboardHeader count={count} goal={week.deliverables} pausedAt={data.cmo.pausedAt} pauseLive={live.cmo} onPaused={setPausedAt} onAsk={focusChat} />
 
       {/* The week's loop in one line (canvas "flow"): what waits, what goes out, what is done. Numbers only from the screen. */}
@@ -96,6 +119,7 @@ export function Dashboard() {
 
       <div className="v2-dash-cols">
         <div className="v2-dash-main">
+          <TodayBlock today={data.today} cards={data.queue} live={live.today} onDecide={decideCard} onAsk={focusChat} />
           <div id="approval-queue">
             <ApprovalQueue cards={data.queue} live={live.queue} digest={data.digest} onDecide={decideCard} />
           </div>

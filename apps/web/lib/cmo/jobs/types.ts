@@ -19,8 +19,10 @@ export type CmoJobKind =
   | "write_caption"
   | "write_slides"
   | "publish_post"
-  | "niche_video_research";
-export const CMO_JOB_KINDS: CmoJobKind[] = ["plan_week", "post_draft", "sales_scan", "competitor_research", "pull_metrics", "summarize_memory", "review_week", "write_video_brief", "write_caption", "write_slides", "publish_post", "niche_video_research"];
+  | "niche_video_research"
+  /** cmo-review-3 2.2: the founder's draft ratings → up to five rules, free (`cmo_rate_drafts` queues it). */
+  | "distill_ratings";
+export const CMO_JOB_KINDS: CmoJobKind[] = ["plan_week", "post_draft", "sales_scan", "competitor_research", "pull_metrics", "summarize_memory", "review_week", "write_video_brief", "write_caption", "write_slides", "publish_post", "niche_video_research", "distill_ratings"];
 
 /** What a weekly goal counts. Only things the product can measure itself. */
 export type GoalMetric = "posts" | "replies" | "views";
@@ -39,6 +41,17 @@ export type MemoryEvent = { kind: "preference" | "fact" | "feedback" | "result";
 /** Tier 3: a weekly lesson for one topic; `week` is the Monday it covers. */
 /** A voice note as `voice_notes_for` returns it: the founder's own words from one decision, and its platform. */
 export type VoiceNoteRow = { body: string; platform: string | null; created_at: string; weight: number };
+
+/** One rated version of a draft (cmo-review-3 2.2), with the words as they were rated. */
+export type DraftRating = {
+  id: string;
+  item_id: string;
+  version: number;
+  verdict: "up" | "down";
+  reason_code: string | null;
+  note: string | null;
+  words: string;
+};
 
 export type Lesson = { week: string; topic: MemoryTopic; body: string };
 
@@ -222,6 +235,9 @@ export interface CmoStore {
   saveCaption(userId: string, runId: string, clipId: string, profile: string, text: string, title: string | null, gen: Record<string, unknown>): Promise<void>;
   /** Memory tier 0: the founder's active rules (`cmo_corrections`), newest first. */
   corrections(userId: string): Promise<string[]>;
+  /** cmo-review-3 2.2: a rating round, and the rules the job proposes from it (no card each; the sheet accepts them). */
+  ratingRound(userId: string, round: string): Promise<DraftRating[]>;
+  proposeRatingRules(userId: string, round: string, rules: string[]): Promise<number>;
   /** The latest lesson for each topic. */
   lessons(userId: string): Promise<Lesson[]>;
   saveLessons(userId: string, runId: string, week: string, lessons: { topic: MemoryTopic; body: string }[]): Promise<number>;

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, api } from "@/components/clipping/api";
 import { useLive } from "@/components/clipping/useLive";
 import { useShellAccount } from "@/components/clipping/web/WebShell";
+import { isPlanRequired } from "@/lib/plan-offer";
 import { decide, decidedMessage, type Decision } from "@/components/cards/decide";
 import { approvedLine } from "@/components/cards/labels";
 import { useShellState } from "@/components/shell-v2/ShellState";
@@ -30,6 +31,8 @@ export function useDashboard() {
   const { reportQueue, toast } = useShellState();
   const { userId } = useShellAccount();
   const [state, setState] = useState<DashboardState>({ status: "loading" });
+  // Approving or posting without a plan (cmo-review-3 A3): the card goes back and the plan sheet answers instead of a toast.
+  const [planSheet, setPlanSheet] = useState(false);
   // Bumped by every decision: a read that started before it carries the old queue and must not overwrite it.
   const epoch = useRef(0);
 
@@ -79,7 +82,13 @@ export function useDashboard() {
         text: decision.action === "approve" || decision.action === "edit" || decision.action === "replied" || decision.action === "posted_self" ? approvedLine(card) : `You set aside: ${card.title}`.slice(0, 200),
       };
       epoch.current += 1;
-      setState({ ...before, data: { ...before.data, queue: before.data.queue.filter((c) => c.id !== card.id), log: [line, ...before.data.log].slice(0, 50) } });
+      // Today counts the decision at once: the row leaves and "N of M done" moves; the reload brings the server's rows.
+      const today = before.data.today;
+      const decidedRow = today.rows.some((row) => row.action.type === "card" && row.action.approvalId === card.id);
+      const nextToday = decidedRow
+        ? { ...today, rows: today.rows.filter((row) => !(row.action.type === "card" && row.action.approvalId === card.id)), done: today.done + 1 }
+        : today;
+      setState({ ...before, data: { ...before.data, today: nextToday, queue: before.data.queue.filter((c) => c.id !== card.id), log: [line, ...before.data.log].slice(0, 50) } });
       try {
         await decide(card, decision, sample);
         toast(decidedMessage(card, decision, sample));
@@ -95,8 +104,20 @@ export function useDashboard() {
             const index = before.data.queue.findIndex((c) => c.id === card.id);
             queue.splice(Math.min(Math.max(0, index), queue.length), 0, card);
           }
-          return { ...current, data: { ...current.data, queue, log: current.data.log.filter((event) => event.id !== line.id) } };
+          // Today: put back only the row this decision took out, into what is on screen now (a reload may have
+          // brought new rows meanwhile).
+          const removed = before.data.today.rows.find((row) => row.action.type === "card" && row.action.approvalId === card.id);
+          const shown = current.data.today;
+          const today =
+            removed && !shown.rows.some((row) => row.id === removed.id)
+              ? { ...shown, rows: [removed, ...shown.rows].slice(0, 5), done: Math.max(0, shown.done - 1) }
+              : shown;
+          return { ...current, data: { ...current.data, today, queue, log: current.data.log.filter((event) => event.id !== line.id) } };
         });
+        if (isPlanRequired(error)) {
+          setPlanSheet(true);
+          return false;
+        }
         toast(error instanceof ApiError ? error.message : "Something went wrong. Please try again.");
         // A changed or already decided card: read the queue again so the founder sees what is true now.
         if (error instanceof ApiError && error.status !== 0) void load();
@@ -116,5 +137,7 @@ export function useDashboard() {
     [queue],
   );
 
-  return { state, decideCard, waiting, setPausedAt, reload: load };
+  const closePlanSheet = useCallback(() => setPlanSheet(false), []);
+
+  return { state, decideCard, waiting, setPausedAt, reload: load, planSheet, closePlanSheet };
 }

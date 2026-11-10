@@ -3,11 +3,13 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
+import { PlanSheet } from "@/components/billing/PlanSheet";
 import { ApprovalCard } from "@/components/cards/ApprovalCard";
 import { decide, decidedMessage, type Decision } from "@/components/cards/decide";
 import { ApiError, api } from "@/components/clipping/api";
 import { useShellState } from "@/components/shell-v2/ShellState";
 import { Button, EmptyState, MonoLabel } from "@/components/ui";
+import { isPlanRequired } from "@/lib/plan-offer";
 import type { ApprovalCard as Card } from "@/lib/screens/approval-card";
 
 import { ApprovalQueue } from "./ApprovalQueue";
@@ -29,9 +31,10 @@ function Failed({ message, reload }: { message: string; reload: () => void }) {
 
 /** The phone's Approve tab: the Dashboard queue on its own. */
 export function InboxQueue() {
-  const { state, decideCard, reload } = useDashboard();
+  const { state, decideCard, reload, planSheet, closePlanSheet } = useDashboard();
   return (
     <div className="v2-page v2-inbox">
+      <PlanSheet open={planSheet} onClose={closePlanSheet} />
       {state.status === "ready" ? (
         <ApprovalQueue cards={state.data.queue} live={state.live.queue} digest={null} onDecide={decideCard} />
       ) : state.status === "error" ? (
@@ -54,6 +57,7 @@ type One = { status: "loading" } | { status: "missing" } | { status: "error"; me
 export function InboxCardPage({ id, sampleCard }: { id: string; sampleCard: Card | null }) {
   const { toast } = useShellState();
   const [state, setState] = useState<One>({ status: "loading" });
+  const [planSheet, setPlanSheet] = useState(false);
 
   const load = useCallback(async () => {
     if (sampleCard) return setState({ status: "ready", card: sampleCard, sample: true });
@@ -79,6 +83,11 @@ export function InboxCardPage({ id, sampleCard }: { id: string; sampleCard: Card
         setState({ status: "ready", card: next ?? { ...card, status: decision.action === "approve" || decision.action === "edit" || decision.action === "replied" || decision.action === "posted_self" ? "approved" : "skipped" }, sample });
         return true;
       } catch (error) {
+        // Approving or posting without a plan (cmo-review-3 A3): the card stays as it was, the plan sheet answers.
+        if (isPlanRequired(error)) {
+          setPlanSheet(true);
+          return false;
+        }
         toast(error instanceof ApiError ? error.message : "Something went wrong. Please try again.");
         void load();
         return false;
@@ -89,6 +98,7 @@ export function InboxCardPage({ id, sampleCard }: { id: string; sampleCard: Card
 
   return (
     <div className="v2-page v2-inbox" data-testid="inbox-card-page">
+      <PlanSheet open={planSheet} onClose={() => setPlanSheet(false)} />
       <Link href="/app" className="v2-back">
         ← Dashboard
       </Link>

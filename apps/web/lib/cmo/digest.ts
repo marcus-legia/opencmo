@@ -8,6 +8,11 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { buildToday, type TodayRow } from "./today";
+
+/** How many Today rows the email carries; the rest are "N more waiting" (CMO review 3, 1.3). */
+export const DIGEST_TODAY_ROWS = 3;
+
 export type DigestInput = {
   /** Absolute origin of the app, for links in the email (`https://opencmo.io`). */
   appUrl: string;
@@ -16,6 +21,11 @@ export type DigestInput = {
   waiting: { id: string; title: string; department: string }[];
   wentOut: { title: string; where: string }[];
   stuck: { title: string; department: string; reason: string }[];
+  /**
+   * The Dashboard's Today rows (`buildToday`), most urgent first, and how many rows are open in all. When there are
+   * rows, the email starts with the top three and "N more waiting" instead of the whole waiting list.
+   */
+  today?: { rows: TodayRow[]; open: number };
 };
 
 export type Digest = { subject: string; text: string; html: string; empty: boolean };
@@ -28,19 +38,43 @@ export function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 }
 
+/**
+ * Where a Today row's link goes in the email. Links only open things (mail scanners open links): a card opens in the
+ * inbox, a page opens as it is, and a chat request opens the Dashboard's chat, where the founder sends it themselves.
+ */
+function todayHref(row: TodayRow): string {
+  if (row.action.type === "card") return `/app/inbox/${encodeURIComponent(row.action.approvalId)}`;
+  if (row.action.type === "link") return row.action.href;
+  return `/app?ask=1&prompt=${encodeURIComponent(row.action.prompt)}`;
+}
+
 export function buildDigest(input: DigestInput): Digest {
   const { waiting, wentOut, stuck } = input;
-  const empty = waiting.length === 0 && wentOut.length === 0 && stuck.length === 0;
+  const base = input.appUrl.replace(/\/$/, "");
+  // A card row is shown only if its card is still in `waiting` (the email's claim may have dropped it since the read).
+  const stillWaiting = new Set(waiting.map((w) => w.id));
+  const allRows = input.today?.rows ?? [];
+  const keptRows = allRows.filter((row) => row.action.type !== "card" || stillWaiting.has(row.action.approvalId));
+  const todayRows = keptRows.slice(0, DIGEST_TODAY_ROWS);
+  const more = Math.max(0, (input.today?.open ?? 0) - (allRows.length - keptRows.length) - todayRows.length);
+  const empty = waiting.length === 0 && wentOut.length === 0 && stuck.length === 0 && todayRows.length === 0;
   const subject = waiting.length
     ? `${plural(waiting.length, "thing waits", "things wait")} on you · ${input.dateLabel}`
     : `Your CMO this morning · ${input.dateLabel}`;
-  const link = (id: string) => `${input.appUrl.replace(/\/$/, "")}/app/inbox/${encodeURIComponent(id)}`;
+  const link = (id: string) => `${base}/app/inbox/${encodeURIComponent(id)}`;
+  const rowLink = (row: TodayRow) => `${base}${todayHref(row)}`;
+  const moreLine = more > 0 ? `${more} more waiting` : null;
 
   const text = [
     subject,
     "",
-    waiting.length ? "Waiting on you:" : "Nothing waits on you.",
-    ...waiting.map((w) => `- ${cap(w.department)}: ${w.title}\n  ${link(w.id)}`),
+    ...(todayRows.length
+      ? [
+          "Today:",
+          ...todayRows.map((row) => `- ${row.title}\n  ${rowLink(row)}`),
+          ...(moreLine ? [`${moreLine}: ${base}/app`] : []),
+        ]
+      : [waiting.length ? "Waiting on you:" : "Nothing waits on you.", ...waiting.map((w) => `- ${cap(w.department)}: ${w.title}\n  ${link(w.id)}`)]),
     ...(wentOut.length ? ["", "Went out:", ...wentOut.map((o) => `- ${o.where}: ${o.title}`)] : []),
     ...(stuck.length ? ["", "Stuck:", ...stuck.map((s) => `- ${cap(s.department)}: ${s.title}. ${s.reason}`)] : []),
     "",
@@ -52,11 +86,14 @@ export function buildDigest(input: DigestInput): Digest {
   const html = [
     `<div style="font:14px/1.5 Inter,sans-serif;color:#2b2723;max-width:560px">`,
     `<h1 style="font:600 18px Inter,sans-serif;margin:0 0 8px">${escapeHtml(subject)}</h1>`,
-    waiting.length ? "" : `<p>Nothing waits on you.</p>`,
-    section(
-      "Waiting on you",
-      waiting.map((w) => `<li><a href="${escapeHtml(link(w.id))}" style="color:#c93a0f">${escapeHtml(cap(w.department))}: ${escapeHtml(w.title)}</a></li>`),
-    ),
+    todayRows.length
+      ? section("Today", todayRows.map((row) => `<li><a href="${escapeHtml(rowLink(row))}" style="color:#c93a0f">${escapeHtml(row.title)}</a></li>`)) +
+        (moreLine ? `<p style="margin:8px 0 0"><a href="${escapeHtml(`${base}/app`)}" style="color:#69695d">${escapeHtml(moreLine)}</a></p>` : "")
+      : (waiting.length ? "" : `<p>Nothing waits on you.</p>`) +
+        section(
+          "Waiting on you",
+          waiting.map((w) => `<li><a href="${escapeHtml(link(w.id))}" style="color:#c93a0f">${escapeHtml(cap(w.department))}: ${escapeHtml(w.title)}</a></li>`),
+        ),
     section("Went out", wentOut.map((o) => `<li>${escapeHtml(o.where)}: ${escapeHtml(o.title)}</li>`)),
     section("Stuck", stuck.map((s) => `<li>${escapeHtml(cap(s.department))}: ${escapeHtml(s.title)}. ${escapeHtml(s.reason)}</li>`)),
     `<p style="color:#69695d;margin-top:20px">Open a card to decide it in the app. Nothing goes out until you approve it.</p>`,
@@ -84,19 +121,27 @@ export function cardTitle(snapshot: Record<string, unknown>): string {
   return (pick ?? "A card waits for you").replace(/\s+/g, " ").trim().slice(0, 120);
 }
 
+/**
+ * `today: false` skips the Today rows (the Dashboard has its own block). The rows read published posts through
+ * `my_published_items` under the founder's session and `published_items` under the service role: the email cron
+ * passes `asService: true` and the founder's zone.
+ */
 export async function loadDigestInput(
   db: SupabaseClient,
   userId: string,
-  opts: { appUrl: string; dateLabel: string; now?: Date },
+  opts: { appUrl: string; dateLabel: string; now?: Date; today?: boolean; timezone?: string; asService?: boolean },
 ): Promise<DigestInput> {
   const since = new Date((opts.now ?? new Date()).getTime() - 24 * 3_600_000).toISOString();
   const [waiting, out, stuck] = await Promise.all([
-    db.from("approvals").select("id, kind, department, snapshot").eq("user_id", userId).eq("status", "waiting").order("created_at").limit(20),
+    // As many as Today reads (100), so a recent urgent card Today ranks first is in the email's list and its claim.
+    db.from("approvals").select("id, kind, department, snapshot").eq("user_id", userId).eq("status", "waiting").order("created_at").limit(100),
     db.from("content_items").select("idea, platform, final_text").eq("user_id", userId).eq("status", "published").gte("published_at", since).limit(20),
     db.from("work_orders").select("title, department, error").eq("user_id", userId).eq("status", "failed").gte("updated_at", since).limit(20),
   ]);
   for (const r of [waiting, out, stuck]) if (r.error) throw new Error(`digest: ${r.error.message}`);
+  const today = opts.today === false ? undefined : await digestToday(db, userId, opts);
   return {
+    ...(today ? { today } : {}),
     appUrl: opts.appUrl,
     dateLabel: opts.dateLabel,
     waiting: ((waiting.data ?? []) as { id: string; kind: string; department: string; snapshot: Record<string, unknown> }[]).map((r) => ({
@@ -114,6 +159,30 @@ export async function loadDigestInput(
       reason: r.error?.message ?? "It failed.",
     })),
   };
+}
+
+/** Today's rows for the email: the same `buildToday` the Dashboard runs. A failure leaves the email as it was. */
+async function digestToday(
+  db: SupabaseClient,
+  userId: string,
+  opts: { now?: Date; timezone?: string; asService?: boolean },
+): Promise<DigestInput["today"]> {
+  try {
+    // Loaded here, not at the top: the reader is server-only, and this module is also used by pure checks.
+    const { loadTodayInput } = await import("./today-input");
+    const now = opts.now ?? new Date();
+    let timezone = opts.timezone;
+    if (!timezone) {
+      const { data } = await db.from("profiles").select("timezone").eq("id", userId).maybeSingle<{ timezone: string | null }>();
+      timezone = data?.timezone || "UTC";
+    }
+    const input = await loadTodayInput(db, userId, { now, timezone, asService: opts.asService === true });
+    const today = buildToday(input);
+    return { rows: today.rows, open: today.total - today.done };
+  } catch (error) {
+    console.warn("[digest] Today rows not read", error instanceof Error ? error.message : error);
+    return undefined;
+  }
 }
 
 /** The founder's local hour and date label in their time zone (an unknown zone falls back to UTC). */

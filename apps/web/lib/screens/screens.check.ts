@@ -282,6 +282,21 @@ check("cards: a look check's note reaches the video card (P6 S4), and only when 
   assert.ok(clean && clean.body.kind === "finished_video" && clean.body.lookNote === undefined, "no note on a pass");
 });
 
+check("cards: a post card carries its time and account (cmo-review-3 1.2)", () => {
+  const base = { kind: "post", platform: "Threads", day: "2026-10-29", idea: "Idea", text: "One.", alternates: [], rationale: "" };
+  const timed = approvalToCard(row("post", { ...base, proposed: { platform: "threads", at: "2026-11-11T09:00:00Z", mode: "publish", account_id: "acc-1", handle: "@founder" } }));
+  assert.ok(timed && timed.body.kind === "post" && timed.body.proposed);
+  ApprovalCardSchema.parse(timed);
+  assert.deepEqual(timed.body.proposed, { platform: "threads", at: "2026-11-11T09:00:00.000Z", mode: "publish", accountId: "acc-1", handle: "@founder", timezone: "UTC" });
+  assert.match(timed.meta, /goes out from your account/);
+  const intent = approvalToCard(row("post", { ...base, proposed: { platform: "threads", at: "2026-11-11T09:00:00Z", mode: "intent", account_id: "acc-1", handle: null } }));
+  assert.ok(intent && intent.body.kind === "post" && intent.body.proposed?.accountId === null, "copy and open never names an account");
+  for (const bad of [{ platform: "tiktok", at: "2026-11-11T09:00:00Z", mode: "publish" }, { platform: "x", at: "tomorrow", mode: "intent" }, "09:00", null]) {
+    const card = approvalToCard(row("post", { ...base, proposed: bad }));
+    assert.ok(card && card.body.kind === "post" && card.body.proposed === undefined, `no time from ${JSON.stringify(bad)}`);
+  }
+});
+
 check("cards: an X thread reaches the post card, and an HN reply says where it is (P6 W4, R4)", () => {
   const thread = ["Hook: 5 ways to cut a demo.", "1. Cut the silences.", "2. Captions.", "3. B-roll.", "4. A hook."];
   const post = approvalToCard(row("post", { kind: "post", platform: "X", day: "2026-10-29", idea: "Idea", text: thread[0], alternates: [], rationale: "", thread }));

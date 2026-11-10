@@ -15,6 +15,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
+import { PlanSheet, isPlanRequired } from "@/components/billing/PlanSheet";
 import { ApiError, api, jsonBody } from "@/components/clipping/api";
 import { Icon, type IconName } from "@/components/icons";
 import { Toast } from "@/components/clipping/ui";
@@ -170,7 +171,12 @@ export function CmoWorkspace({ initial }: { initial: Workspace }) {
     return () => window.clearInterval(timer);
   }, [busy, refresh]);
 
-  const fail = (error: unknown) => setToast(error instanceof ApiError ? error.message : "Something went wrong. Please try again.");
+  // Approving or posting without a plan (cmo-review-3 A3) answers with the plan sheet, as v2 does, not a toast.
+  const [planSheet, setPlanSheet] = useState(false);
+  const fail = (error: unknown) => {
+    if (isPlanRequired(error)) setPlanSheet(true);
+    else setToast(error instanceof ApiError ? error.message : "Something went wrong. Please try again.");
+  };
 
   const actions: Actions = {
     toast: setToast,
@@ -302,6 +308,7 @@ export function CmoWorkspace({ initial }: { initial: Workspace }) {
 
       <DocumentSheet view={doc} ws={ws} actions={actions} onOpen={openDoc} onClose={closeDoc} onSaved={docSaved} />
       <Toast message={toast} onDone={() => setToast(null)} />
+      <PlanSheet open={planSheet} onClose={() => setPlanSheet(false)} />
     </div>
   );
 }

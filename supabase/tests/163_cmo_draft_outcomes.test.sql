@@ -10,6 +10,8 @@ select plan(25);
 insert into auth.users (id, email) values
   ('e1630000-0000-4000-8000-00000000000a', 'outcome-a@test.local'),
   ('e1630000-0000-4000-8000-00000000000b', 'outcome-b@test.local');
+-- Posting needs a plan since cmo-review-3 A3 (20270114050000); these founders decide and post, so they have one.
+update public.profiles set plan = 'starter' where id in ('e1630000-0000-4000-8000-00000000000a', 'e1630000-0000-4000-8000-00000000000b');
 
 -- Four drafts for A: approved as written, approved after an edit to an alternate, skipped, and
 -- one without provenance (drafted before `gen` existed).

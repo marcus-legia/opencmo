@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { DRAFT_REASON_CODES } from "@/components/cards/labels";
 import { ApiError } from "@/lib/api/errors";
 import { firstRow, rpcOrThrow, withApi } from "@/lib/api/handler";
 import { kickStudioOrders } from "@/lib/cmo/jobs/studio-orders";
@@ -43,6 +44,8 @@ const body = z.object({
   /** Price card: the keyframe (0-based) to make again. */
   index: z.number().int().min(0).max(100).optional(),
   reason: z.string().trim().max(400).optional(),
+  /** Post card, `skip` or an edited `approve`: the chip the founder picked (cmo-review-3 2.1); SQL checks the list too. */
+  reasonCode: z.enum(DRAFT_REASON_CODES).optional(),
   goal: z.string().trim().max(300).optional(),
   target: z.number().int().min(1).max(1_000_000).optional(),
   /** Schedule card, `change_time`: the new time, with its offset. */
@@ -59,16 +62,17 @@ const body = z.object({
  * Decides one card through `approval_decide`: owner, "already decided" and the snapshot hash are checked there,
  * then the kind's own RPC runs with its caps and outcomes. A Studio decision is carried out by the brain's order
  * runner (`studio-orders.ts`), kicked here so it starts as soon as the answer is sent.
- * Answers the card as it is now; a schedule card's change (time, account, platform fields) answers with the new card
- * that supersedes it.
+ * Answers the card as it is now; a schedule card's change (time, account, platform fields), or a post card's time or
+ * account, answers with the new card that supersedes it.
  */
 export const POST = withApi(
   { body, rateLimit: { bucket: "presets", limit: 60, windowSeconds: 3600 } },
   async ({ supabase, user, body, params }) => {
     if (!UUID.test(params.id ?? "")) throw new ApiError(404, "Card not found.");
-    const { action, contentHash, publishAt, accountId, options, ...rest } = body;
-    // SQL reads the schedule fields by their column names.
+    const { action, contentHash, publishAt, accountId, options, reasonCode, ...rest } = body;
+    // SQL reads the schedule fields and the chip by their column names.
     const schedule = {
+      ...(reasonCode !== undefined && { reason_code: reasonCode }),
       ...(publishAt !== undefined && { publish_at: publishAt }),
       ...(accountId !== undefined && { account_id: accountId }),
       ...(options !== undefined && { options }),
@@ -86,6 +90,6 @@ export const POST = withApi(
     // A caption edit keeps the card open on screen: answer it signed, so its previews stay. A schedule change answers
     // the new card, which the founder decides next: in their time, with its video and TikTok's fields.
     if (action === "edit_caption") return (await signStudioCards(supabase, [card], [row]))[0]!;
-    return card.kind === "schedule" ? (await enrichScheduleCards(supabase, user.id, [card]))[0]! : card;
+    return card.kind === "schedule" || card.kind === "post" ? (await enrichScheduleCards(supabase, user.id, [card]))[0]! : card;
   },
 );

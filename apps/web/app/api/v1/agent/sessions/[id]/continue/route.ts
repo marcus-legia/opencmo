@@ -3,6 +3,7 @@ import { z } from "zod";
 import { ApiError } from "@/lib/api/errors";
 import { withApi } from "@/lib/api/handler";
 import { continueTurn } from "@/lib/agent/session";
+import { requirePaidForCmoSession } from "@/lib/paid-first";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -19,6 +20,8 @@ const body = z.object({ extend: z.boolean().optional() });
  */
 // Each continue gets fresh per-request caps, so continues are counted too (agent_resume_turn counts nothing).
 export const POST = withApi({ body, rateLimit: { bucket: "agent-continue", limit: 300, windowSeconds: 3600 } }, async ({ supabase, user, body, params }) => {
+  // A CMO turn continues only on a paid account, as it starts (CMO review 3, 3.1).
+  await requirePaidForCmoSession(supabase, user.id, params.id);
   if (body.extend !== true) {
     // Only a turn paused at a request limit continues without anyone: a turn waiting for an answer
     // or an approval card would get here with the question skipped and the card cancelled.
