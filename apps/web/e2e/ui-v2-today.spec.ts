@@ -68,8 +68,11 @@ for (const width of [1280, 390]) {
     const db = admin();
     // A paid founder: approving needs a plan once the paywall is on (plan §3.1).
     await db.from("profiles").update({ plan: "starter" }).eq("id", user.id);
-    // Nothing else waits, so the two seeded posts are the day.
+    // Nothing else waits, so the two seeded posts are the day; cards other specs decided today for this shared user
+    // move to yesterday, so "done today" counts only this test's decision.
     await db.from("approvals").update({ status: "cancelled" }).eq("user_id", user.id).eq("status", "waiting");
+    const yesterday = new Date(Date.now() - 2 * 86_400_000).toISOString();
+    await db.from("approvals").update({ decided_at: yesterday }).eq("user_id", user.id).gte("decided_at", new Date(Date.now() - 86_400_000).toISOString());
     const ids = await seed(user.id, [`Today one at ${width}: cut a video by deleting words.`, `Today two at ${width}: B-roll on the line.`]);
     try {
       await signIn(page, user);

@@ -262,7 +262,8 @@ test("an approved Threads draft opens nothing: its card's time is approved, a sl
   await page.goto(`/app/inbox/${threads.cardId}`);
   const card = page.getByTestId("inbox-card-page").getByTestId("approval-card");
   await expect(card).toContainText(`${threadsText.length}/500`);
-  await card.getByRole("button", { name: "Approve", exact: true }).click();
+  // With its accounts read (a founder with a plan), a post you post yourself reads "Approve for this time" (1.2).
+  await card.getByRole("button", { name: /^Approve( for this time)?$/ }).click();
   await expect(page.getByText(/Approved for .*, your time: then a card gives you the post to copy and open\./)).toBeVisible();
   expect(popups).toHaveLength(0);
   await expect.poll(async () => (await db.from("content_items").select("status, final_text").eq("id", threads.itemId).single()).data).toEqual({ status: "approved", final_text: threadsText });
