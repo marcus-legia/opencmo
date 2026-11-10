@@ -21,6 +21,7 @@ import { DOCUMENT_KINDS } from "./documents";
 import { draftDocuments, GenerateError } from "./generate";
 import { kickFirstWeek, startCmoRun, type StartedRun } from "./jobs/start";
 import { readSite, SiteError } from "./site";
+import { isPaidPlan } from "../pricing";
 
 type RunRow = { id: string };
 
@@ -119,8 +120,14 @@ const ROUTE_MS = 280_000;
  */
 async function startFirstWeek(supabase: SupabaseClient, userId: string, started: number): Promise<boolean> {
   const input: Record<string, unknown> = { source: "onboarding" };
-  // Mode B: the plan waits in the founder's Claude inbox (`/api/v1/cmo/runs` does the same); the sweep opens it.
-  if ((await brainMode(supabase, userId).catch(() => null))?.brain === "claude") input.brain = "claude";
+  // Mode B: the plan waits in the founder's Claude inbox (`/api/v1/cmo/runs` does the same); the sweep opens it. Only on
+  // a plan: Mode B runs over MCP, which is paid only, and an account with no credits reads as Mode B ("credits"). The
+  // free first week (CMO review 3, 3.1) thinks with OpenCMO and runs at once; SQL drops `brain` for it anyway.
+  const [mode, { data: profile }] = await Promise.all([
+    brainMode(supabase, userId).catch(() => null),
+    supabase.from("profiles").select("plan").eq("id", userId).maybeSingle<{ plan: string | null }>(),
+  ]);
+  if (mode?.brain === "claude" && isPaidPlan(profile?.plan)) input.brain = "claude";
   let plan: StartedRun;
   try {
     plan = await startCmoRun(supabase, "plan_week", input, { kick: false });

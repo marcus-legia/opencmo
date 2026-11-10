@@ -44,9 +44,19 @@ async function approveTopRow(page: Page, width: number): Promise<void> {
   await expect(today.getByTestId("today-row")).toHaveCount(2);
   await expect(today.getByTestId("today-count")).toHaveText("0 of 2 done today");
   await page.screenshot({ path: `test-results/today-${width}.png`, fullPage: false });
+  // The theme follows the system by default and is read when the page loads: the same view in dark.
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.reload();
+  await expect(today.getByTestId("today-count")).toHaveText("0 of 2 done today");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await page.screenshot({ path: `test-results/today-${width}-dark.png`, fullPage: false });
+  await page.emulateMedia({ colorScheme: "light" });
+  await page.reload();
+  await expect(today.getByTestId("today-row")).toHaveCount(2);
 
   await today.getByTestId("today-row").first().getByRole("button", { name: "Open" }).click();
-  await today.getByRole("button", { name: "Approve", exact: true }).click();
+  // A post card approves its words and its time at once (A's 1.2): "Approve for this time", or "Approve" without one.
+  await today.getByRole("button", { name: /^Approve( for this time)?$/ }).click();
   await expect(today.getByTestId("today-count")).toHaveText("1 of 2 done today");
   await expect(today.getByTestId("today-row")).toHaveCount(1);
   await page.screenshot({ path: `test-results/today-${width}-after.png`, fullPage: false });

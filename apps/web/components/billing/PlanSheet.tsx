@@ -55,6 +55,8 @@ export function PlanSheet({ open, onClose, action = "approve and post" }: { open
     };
   }, [open, plans]);
 
+  // Not in the page while closed: a closed dialog still lends its title to label lookups (screen readers, tests).
+  if (!open) return null;
   return (
     <dialog
       ref={ref}

@@ -64,7 +64,7 @@ test("the free first run: website → documents, plan and drafts with no payment
   await page.reload();
   const card = page.getByTestId("approval-queue").getByRole("article", { name: /^Writer · Post · X:/ }).first();
   await card.getByRole("button", { name: /Writer · Post · X/ }).click();
-  await card.getByRole("button", { name: "Approve", exact: true }).click();
+  await card.getByRole("button", { name: /^Approve( for this time)?$/ }).click();
   await expect(page.getByTestId("plan-sheet")).toBeVisible();
   await expect(page.getByTestId("plan-sheet")).toContainText("Your first plan and drafts were free");
   const { count: waiting } = await db.from("approvals").select("id", { count: "exact", head: true }).eq("user_id", user.id).eq("kind", "post").eq("status", "waiting");
@@ -75,9 +75,10 @@ test("unpaid onboarding: two runs ever, then the plan code", async ({ page }) =>
   const user = await founder(0);
   await signIn(page, user);
   await page.goto("/app/setup");
-  // Two earlier runs (a typo, then the real site): the third is refused before any website is read.
+  // Two earlier runs that did not fail (a typo's site, then the real one): the third is refused before any website is
+  // read. Runs that failed on our side would not count.
   await admin().from("cmo_runs").insert([
-    { user_id: user.id, kind: "onboard", status: "failed", input: { site: "paylane.tset" } },
+    { user_id: user.id, kind: "onboard", status: "done", input: { site: "paylane.tset" } },
     { user_id: user.id, kind: "onboard", status: "done", input: { site: "paylane.test" } },
   ]);
   const refused = await post(page, "/api/v1/cmo/onboarding", { site: "paylane.test" });
