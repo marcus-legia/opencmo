@@ -4,7 +4,7 @@ import type { SupabaseClient as BaseClient } from "@supabase/supabase-js";
 
 import { DOCUMENT_KINDS, type DocumentKind } from "../documents";
 import { latestPerTopic } from "./context";
-import type { CmoStore, CompetitorInsight, ConnectedAccountRow, ReplyOutcomeDue, ZernioPostRow, Documents, NicheVideoInsight, SubredditRule, Goal, InboxState, ItemRow, Lesson, MemoryEvent, QueuedRun } from "./types";
+import type { CmoStore, DraftRating, CompetitorInsight, ConnectedAccountRow, ReplyOutcomeDue, ZernioPostRow, Documents, NicheVideoInsight, SubredditRule, Goal, InboxState, ItemRow, Lesson, MemoryEvent, QueuedRun } from "./types";
 
 const ITEM_COLUMNS =
   "id, run_id, department, platform, day, idea, reason, status, priority, body, final_text, external_url, decided_at, published_at, created_at";
@@ -71,6 +71,16 @@ export function supabaseStore(admin: BaseClient): CmoStore {
     videoSource: async (userId, clipId) => (await import("../writer/video-source")).readVideoSource(userId, clipId),
     async saveCaption(userId, runId, clipId, profile, text, title, gen) {
       await rpc("cmo_save_caption", { p_user: userId, p_run: runId, p_clip: clipId, p_profile: profile, p_text: text, p_title: title, p_gen: gen });
+    },
+    async ratingRound(userId, round) {
+      const { data, error } = await admin.rpc("cmo_rating_round", { p_user: userId, p_round: round });
+      if (error) throw new Error(`cmo_rating_round: ${error.message}`);
+      return (data ?? []) as DraftRating[];
+    },
+    async proposeRatingRules(userId, round, rules) {
+      const { data, error } = await admin.rpc("cmo_propose_rating_rules", { p_user: userId, p_round: round, p_rules: rules });
+      if (error) throw new Error(`cmo_propose_rating_rules: ${error.message}`);
+      return Number(data ?? 0);
     },
     async corrections(userId) {
       const { data, error } = await admin

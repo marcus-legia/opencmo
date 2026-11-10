@@ -9,6 +9,7 @@
 import type { z } from "zod";
 
 import { competitorResearch } from "./competitor-research";
+import { distillRatings } from "./distill-ratings";
 import { nicheVideoResearch } from "./niche-video-research";
 import { draftPost } from "./draft-post";
 import { LlmError } from "./llm-error";
@@ -107,6 +108,8 @@ export const JOBS: Record<CmoJobKind, Job> = {
   // P4: only Schedule's sweep queues it (enqueue_cmo_run refuses it), for one approved slot.
   publish_post: publishPost,
   niche_video_research: nicheVideoResearch,
+  // cmo-review-3 2.2: only `cmo_rate_drafts` queues it, for one round of the founder's ratings.
+  distill_ratings: distillRatings,
 };
 
 /** The run was claimed again by another worker (its lease ran out): stop quietly and write nothing more. */

@@ -10,6 +10,7 @@ process.env.OPENCMO_AGENT_FAKE = "1";
 
 import { checkPost } from "./check-post";
 import { classifyEdits } from "./classify-edits";
+import { fakeRules, groundedRules } from "./distill-ratings";
 import { EDIT_MODES } from "./edit-taxonomy";
 import { DRAFT_REASONS } from "../../../components/cards/labels";
 import { mondayOf } from "./summarize-memory";
@@ -584,6 +585,29 @@ async function main() {
     setEditMode: async (id: string) => !founderLabelled.has(id),
   };
   assert.deepEqual(await classifyEdits(mixed, { limit: 10 }), { classified: 1, failed: 0 }, "a founder-labelled row is not counted as classified");
+  // cmo-review-3 2.2: a rule from ratings stays only when a thumbs down or a note of the round supports it.
+  const rated = [
+    { id: "a", item_id: "i", version: 0, verdict: "down" as const, reason_code: "TOO_SALESY", note: null, words: "Buy now." },
+    { id: "b", item_id: "i", version: 1, verdict: "up" as const, reason_code: null, note: null, words: "A reminder on day 3." },
+    { id: "c", item_id: "j", version: 0, verdict: "up" as const, reason_code: null, note: "Specific, I like it.", words: "Day 3, 7, 14." },
+  ];
+  assert.deepEqual(
+    groundedRules(
+      [
+        { rule: "Help first: drop the pitch.", from: [1] },
+        { rule: "Use more emoji.", from: [2] },
+        { rule: "Name the exact day to act.", from: [3] },
+        { rule: "help first:  drop the pitch.", from: [1] },
+        { rule: "x".repeat(250), from: [1] },
+        { rule: "From a rating that is not there.", from: [5] },
+      ],
+      rated,
+    ),
+    ["Help first: drop the pitch.", "Name the exact day to act."],
+    "unsupported, repeated and too long rules are dropped",
+  );
+  assert.deepEqual(fakeRules(rated.filter((r) => r.verdict === "up")), [], "thumbs up only: no rule");
+
   // The chips are the same list in the card, the route and SQL.
   const reasons = readFileSync(new URL("../../../../../supabase/migrations/20270113020000_draft_reasons.sql", import.meta.url), "utf8");
   const sqlReasons = [...(reasons.match(/reason_code in \(([^)]*)\)/)?.[1] ?? "").matchAll(/'([A-Z_]+)'/g)].map((m) => m[1]);

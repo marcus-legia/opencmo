@@ -47,6 +47,7 @@ const KIND_LABEL: Record<CmoJobKind, string> = {
   niche_video_research: "Niche video research",
   pull_metrics: "Post metrics",
   publish_post: "Scheduled post",
+  distill_ratings: "Rules from your ratings",
 };
 
 /** Longest a poll waits inside one request: Modal cuts web requests at 150 s. */

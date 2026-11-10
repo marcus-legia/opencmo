@@ -2455,8 +2455,15 @@ begin
       when tg_op = 'UPDATE' and (new.goal is distinct from old.goal or new.target is distinct from old.target) then 'edited'
       else 'approved' end;
   else
+    -- Rules from the founder's ratings (cmo-review-3 2.2) are accepted together on the rating sheet: no card each.
+    if new.status = 'proposed' and new.source = 'ratings' then
+      return new;
+    end if;
     if new.status = 'proposed' then
       perform public.approval_raise(new.user_id, v_ref_kind, new.id);
+      return new;
+    end if;
+    if new.source = 'ratings' and tg_op = 'UPDATE' and old.status = 'proposed' then
       return new;
     end if;
     if tg_op = 'UPDATE' and old.status = new.status then
@@ -3250,7 +3257,7 @@ CREATE TABLE public.cmo_runs (
     CONSTRAINT cmo_runs_credits_check CHECK ((credits >= 0)),
     CONSTRAINT cmo_runs_error_check CHECK ((char_length(error) <= 500)),
     CONSTRAINT cmo_runs_input_check CHECK (((jsonb_typeof(input) = 'object'::text) AND (octet_length((input)::text) <= 4096))),
-    CONSTRAINT cmo_runs_kind_check CHECK ((kind = ANY (ARRAY['onboard'::text, 'plan_week'::text, 'post_draft'::text, 'sales_scan'::text, 'competitor_research'::text, 'pull_metrics'::text, 'summarize_memory'::text, 'review_week'::text, 'write_caption'::text, 'write_video_brief'::text, 'write_slides'::text, 'publish_post'::text, 'niche_video_research'::text]))),
+    CONSTRAINT cmo_runs_kind_check CHECK ((kind = ANY (ARRAY['onboard'::text, 'plan_week'::text, 'post_draft'::text, 'sales_scan'::text, 'competitor_research'::text, 'pull_metrics'::text, 'summarize_memory'::text, 'review_week'::text, 'write_caption'::text, 'write_video_brief'::text, 'write_slides'::text, 'publish_post'::text, 'niche_video_research'::text, 'distill_ratings'::text]))),
     CONSTRAINT cmo_runs_output_check CHECK (((output IS NULL) OR ((jsonb_typeof(output) = 'object'::text) AND (octet_length((output)::text) <= 16384)))),
     CONSTRAINT cmo_runs_status_check CHECK ((status = ANY (ARRAY['queued'::text, 'running'::text, 'done'::text, 'failed'::text]))),
     CONSTRAINT cmo_runs_steps_check CHECK (((jsonb_typeof(steps) = 'array'::text) AND (octet_length((steps)::text) <= 16384)))
@@ -3420,6 +3427,45 @@ CREATE FUNCTION public.cleanup_started_at() RETURNS timestamp with time zone
 
 
 --
+-- Name: cmo_accept_corrections(uuid, uuid[], text[]); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_accept_corrections(p_round uuid, p_ids uuid[], p_texts text[]) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_n integer := coalesce(cardinality(p_ids), 0);
+  v_text text;
+  v_done integer := 0;
+begin
+  if v_n > 5 or v_n <> coalesce(cardinality(p_texts), 0) then
+    raise exception 'Send each ticked rule with its words.' using errcode = '22023';
+  end if;
+  if not exists (select 1 from public.cmo_corrections where user_id = v_user and round_id = p_round and source = 'ratings') then
+    raise exception 'These rules were not found.' using errcode = 'P0002';
+  end if;
+  for i in 1 .. v_n loop
+    v_text := trim(coalesce(p_texts[i], ''));
+    if char_length(v_text) not between 3 and 200 then
+      raise exception 'Write each rule in 3 to 200 characters.' using errcode = '22023';
+    end if;
+    update public.cmo_corrections set status = 'active', rule = v_text, decided_at = now()
+    where id = p_ids[i] and user_id = v_user and round_id = p_round and source = 'ratings' and status = 'proposed';
+    if not found then
+      raise exception 'This rule was already decided.' using errcode = 'P0001';
+    end if;
+    v_done := v_done + 1;
+  end loop;
+  update public.cmo_corrections set status = 'rejected', decided_at = now()
+  where user_id = v_user and round_id = p_round and source = 'ratings' and status = 'proposed';
+  return v_done;
+end;
+$$;
+
+
+--
 -- Name: cmo_add_item(text, text, date, text, jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -3529,9 +3575,12 @@ CREATE TABLE public.cmo_corrections (
     decided_at timestamp with time zone,
     edit_mode text,
     times integer,
+    source text DEFAULT 'edits'::text NOT NULL,
+    round_id uuid,
     CONSTRAINT cmo_corrections_edit_mode_check CHECK ((edit_mode = ANY (ARRAY['TOO_SALESY'::text, 'WRONG_VOICE'::text, 'INVENTED_CLAIM'::text, 'TOO_LONG'::text, 'HOOK_REWRITTEN'::text, 'CTA_REMOVED'::text]))),
     CONSTRAINT cmo_corrections_mode_times_check CHECK (((edit_mode IS NULL) = (times IS NULL))),
     CONSTRAINT cmo_corrections_rule_check CHECK (((char_length(rule) >= 3) AND (char_length(rule) <= 200))),
+    CONSTRAINT cmo_corrections_source_check CHECK ((source = ANY (ARRAY['edits'::text, 'ratings'::text, 'founder'::text]))),
     CONSTRAINT cmo_corrections_source_edits_check CHECK (((jsonb_typeof(source_edits) = 'array'::text) AND (octet_length((source_edits)::text) <= 8192))),
     CONSTRAINT cmo_corrections_status_check CHECK ((status = ANY (ARRAY['proposed'::text, 'active'::text, 'rejected'::text]))),
     CONSTRAINT cmo_corrections_times_check CHECK (((times >= 1) AND (times <= 100)))
@@ -4174,6 +4223,8 @@ CREATE FUNCTION public.cmo_job_daily_limit(p_kind text) RETURNS integer
   select case p_kind when 'plan_week' then 5 when 'post_draft' then 10 when 'sales_scan' then 3
     when 'competitor_research' then 2 when 'pull_metrics' then 2 when 'summarize_memory' then 1 when 'review_week' then 1
     when 'write_caption' then 20 when 'write_video_brief' then 5 when 'write_slides' then 10 when 'publish_post' then 100 when 'niche_video_research' then 2
+    -- cmo-review-3 2.2: one rating round a day (`cmo_rate_drafts`), with room for a retry.
+    when 'distill_ratings' then 2
     else 0 end
 $$;
 
@@ -4454,6 +4505,39 @@ $$;
 
 
 --
+-- Name: cmo_propose_rating_rules(uuid, uuid, text[]); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_propose_rating_rules(p_user uuid, p_round uuid, p_rules text[]) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_rule text;
+  v_n integer := 0;
+begin
+  if not exists (select 1 from public.cmo_draft_ratings where user_id = p_user and round = p_round) then
+    raise exception 'No ratings in this round.' using errcode = 'P0002';
+  end if;
+  perform pg_advisory_xact_lock(hashtextextended('cmo_corrections:' || p_user::text, 0));
+  -- A retried run writes its rules once.
+  if exists (select 1 from public.cmo_corrections where user_id = p_user and round_id = p_round) then
+    return 0;
+  end if;
+  foreach v_rule in array coalesce(p_rules[1:5], '{}') loop
+    v_rule := trim(coalesce(v_rule, ''));
+    continue when char_length(v_rule) not between 3 and 200;
+    continue when exists (select 1 from public.cmo_corrections where user_id = p_user and status in ('proposed', 'active')
+      and lower(rule) = lower(v_rule));
+    insert into public.cmo_corrections (user_id, rule, source, round_id) values (p_user, v_rule, 'ratings', p_round);
+    v_n := v_n + 1;
+  end loop;
+  return v_n;
+end;
+$$;
+
+
+--
 -- Name: cmo_put_goal(uuid, uuid, date, text, text, integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -4491,6 +4575,83 @@ begin
   returning * into v_row;
   return v_row;
 end;
+$$;
+
+
+--
+-- Name: cmo_rate_drafts(jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_rate_drafts(p_ratings jsonb) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $_$
+declare
+  v_user uuid := public.require_user();
+  v_round uuid := gen_random_uuid();
+  v_r jsonb;
+  v_item public.content_items;
+  v_version integer;
+  v_words text;
+  v_code text;
+  v_note text;
+  v_run public.cmo_runs;
+begin
+  if p_ratings is null or jsonb_typeof(p_ratings) <> 'array' or jsonb_array_length(p_ratings) not between 1 and 5 then
+    raise exception 'Rate one to five drafts.' using errcode = '22023';
+  end if;
+  perform pg_advisory_xact_lock(hashtextextended(v_user::text || ':cmo_ratings', 1713));
+  if exists (select 1 from public.cmo_draft_ratings where user_id = v_user and created_at > now() - interval '1 day') then
+    raise exception 'You rated drafts today. Rate again tomorrow.' using errcode = 'P0001';
+  end if;
+  for v_r in select value from jsonb_array_elements(p_ratings) loop
+    if jsonb_typeof(v_r) <> 'object' or coalesce(v_r->>'item_id', '') !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+       or jsonb_typeof(v_r->'version') is distinct from 'number' or v_r->>'verdict' not in ('up', 'down') then
+      raise exception 'A rating is malformed.' using errcode = '22023';
+    end if;
+    select * into v_item from public.content_items
+    where id = (v_r->>'item_id')::uuid and user_id = v_user and department = 'post' and status = 'in_review';
+    if not found then
+      raise exception 'Only drafts that wait for you can be rated.' using errcode = 'P0002';
+    end if;
+    v_version := (v_r->>'version')::numeric::integer;
+    v_words := case when v_version = 0 then v_item.body->>'text'
+      when v_version in (1, 2) and jsonb_typeof(v_item.body->'alternates') = 'array' then v_item.body->'alternates'->>(v_version - 1) end;
+    if (v_r->>'version')::numeric <> v_version or coalesce(v_words, '') = '' then
+      raise exception 'That version is not on the draft.' using errcode = '22023';
+    end if;
+    v_code := nullif(v_r->>'reason_code', '');
+    if v_code is not null and (public.cmo_reason_label(v_code) is null or v_r->>'verdict' <> 'down') then
+      raise exception 'Pick a reason from the list, on a draft you rated down.' using errcode = '22023';
+    end if;
+    v_note := nullif(trim(coalesce(v_r->>'note', '')), '');
+    if char_length(v_note) > 200 then
+      raise exception 'A note is up to 200 characters.' using errcode = '22023';
+    end if;
+    begin
+      insert into public.cmo_draft_ratings (user_id, item_id, version, verdict, reason_code, note, words, round)
+      values (v_user, v_item.id, v_version, v_r->>'verdict', v_code, v_note, left(v_words, 3000), v_round);
+    exception when unique_violation then
+      raise exception 'Each version is rated once.' using errcode = '22023';
+    end;
+  end loop;
+  v_run := public.cmo_enqueue(v_user, 'distill_ratings', jsonb_build_object('round', v_round));
+  return jsonb_build_object('round', v_round, 'run_id', v_run.id);
+end;
+$_$;
+
+
+--
+-- Name: cmo_rating_round(uuid, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_rating_round(p_user uuid, p_round uuid) RETURNS TABLE(id uuid, item_id uuid, version smallint, verdict text, reason_code text, note text, words text)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select r.id, r.item_id, r.version, r.verdict, r.reason_code, r.note, r.words
+  from public.cmo_draft_ratings r where r.user_id = p_user and r.round = p_round
+  order by r.created_at, r.id
 $$;
 
 
@@ -6026,7 +6187,8 @@ begin
   end if;
   -- The same lock as `cmo_propose_correction`: one proposal at a time per founder.
   perform pg_advisory_xact_lock(hashtextextended('cmo_corrections:' || v_o.user_id::text, 0));
-  if exists (select 1 from public.cmo_corrections where user_id = v_o.user_id and edit_mode = v_o.edit_mode and status = 'proposed') then
+  if exists (select 1 from public.cmo_corrections where user_id = v_o.user_id and edit_mode = v_o.edit_mode and status = 'proposed'
+             and source <> 'ratings') then
     return null;
   end if;
   v_since := greatest(now() - interval '14 days', coalesce((
@@ -6040,7 +6202,7 @@ begin
   end if;
   -- An approved rule with the same words already holds; five waiting rules are enough for one founder.
   if exists (select 1 from public.cmo_corrections where user_id = v_o.user_id and status = 'active' and lower(rule) = lower(v_rule))
-     or (select count(*) from public.cmo_corrections where user_id = v_o.user_id and status = 'proposed') >= 5 then
+     or (select count(*) from public.cmo_corrections where user_id = v_o.user_id and status = 'proposed' and source <> 'ratings') >= 5 then
     return null;
   end if;
   select coalesce(jsonb_agg(jsonb_build_object('before', left(e.draft, 300), 'after', left(e.final_text, 300), 'at', e.at)
@@ -16052,6 +16214,30 @@ CREATE VIEW public.cmo_draft_quality_weekly WITH (security_invoker='true') AS
 
 
 --
+-- Name: cmo_draft_ratings; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.cmo_draft_ratings (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    item_id uuid NOT NULL,
+    version smallint NOT NULL,
+    verdict text NOT NULL,
+    reason_code text,
+    note text,
+    words text NOT NULL,
+    round uuid NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT cmo_draft_ratings_note_check CHECK ((char_length(note) <= 200)),
+    CONSTRAINT cmo_draft_ratings_reason_code_check CHECK ((reason_code = ANY (ARRAY['TOO_SALESY'::text, 'WRONG_VOICE'::text, 'INVENTED_CLAIM'::text, 'TOO_LONG'::text, 'HOOK_REWRITTEN'::text, 'OFF_TOPIC'::text, 'OTHER'::text]))),
+    CONSTRAINT cmo_draft_ratings_reason_on_down CHECK (((reason_code IS NULL) OR (verdict = 'down'::text))),
+    CONSTRAINT cmo_draft_ratings_verdict_check CHECK ((verdict = ANY (ARRAY['up'::text, 'down'::text]))),
+    CONSTRAINT cmo_draft_ratings_version_check CHECK (((version >= 0) AND (version <= 2))),
+    CONSTRAINT cmo_draft_ratings_words_check CHECK (((char_length(words) >= 1) AND (char_length(words) <= 3000)))
+);
+
+
+--
 -- Name: cmo_lessons; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -16998,6 +17184,22 @@ ALTER TABLE ONLY public.cmo_draft_outcomes
 
 
 --
+-- Name: cmo_draft_ratings cmo_draft_ratings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cmo_draft_ratings
+    ADD CONSTRAINT cmo_draft_ratings_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: cmo_draft_ratings cmo_draft_ratings_round_item_id_version_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cmo_draft_ratings
+    ADD CONSTRAINT cmo_draft_ratings_round_item_id_version_key UNIQUE (round, item_id, version);
+
+
+--
 -- Name: cmo_goals cmo_goals_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -17768,6 +17970,20 @@ CREATE INDEX cmo_draft_outcomes_unclassified_idx ON public.cmo_draft_outcomes US
 --
 
 CREATE INDEX cmo_draft_outcomes_user_idx ON public.cmo_draft_outcomes USING btree (user_id, decided_at DESC);
+
+
+--
+-- Name: cmo_draft_ratings_item_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX cmo_draft_ratings_item_idx ON public.cmo_draft_ratings USING btree (item_id);
+
+
+--
+-- Name: cmo_draft_ratings_user_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX cmo_draft_ratings_user_idx ON public.cmo_draft_ratings USING btree (user_id, created_at DESC);
 
 
 --
@@ -18916,6 +19132,22 @@ ALTER TABLE ONLY public.cmo_draft_outcomes
 
 
 --
+-- Name: cmo_draft_ratings cmo_draft_ratings_item_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cmo_draft_ratings
+    ADD CONSTRAINT cmo_draft_ratings_item_id_fkey FOREIGN KEY (item_id) REFERENCES public.content_items(id) ON DELETE CASCADE;
+
+
+--
+-- Name: cmo_draft_ratings cmo_draft_ratings_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cmo_draft_ratings
+    ADD CONSTRAINT cmo_draft_ratings_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
 -- Name: cmo_goals cmo_goals_run_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -19873,6 +20105,12 @@ ALTER TABLE public.cmo_corrections ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.cmo_draft_outcomes ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: cmo_draft_ratings; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.cmo_draft_ratings ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: cmo_goals; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -20193,6 +20431,13 @@ CREATE POLICY "read own deliverables" ON public.deliverables FOR SELECT TO authe
 --
 
 CREATE POLICY "read own draft outcomes" ON public.cmo_draft_outcomes FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
+
+
+--
+-- Name: cmo_draft_ratings read own draft ratings; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "read own draft ratings" ON public.cmo_draft_ratings FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
 
 
 --

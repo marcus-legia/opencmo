@@ -43,6 +43,7 @@ const sources = [
   "lib/cmo/jobs/draft-thread.ts",
   "lib/cmo/jobs/sales-scan.ts",
   "lib/cmo/jobs/judge.ts",
+  "lib/cmo/jobs/distill-ratings.ts", // rules from the founder's ratings (cmo-review-3 2.2)
 ];
 for (const file of sources) {
   const text = readFileSync(join(root, file), "utf8");
