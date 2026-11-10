@@ -56,11 +56,24 @@ Branch `claude/today-inline-edit`, cut from #188 (which carries #189's Today fra
 ### 3.5 Bundle
 - [x] Sentry: `bundleSizeOptimizations` (no tracing, no debug logger). First Load JS shared by all 171 → 141 kB,
   `/app` 434 → 406 kB, `/login` → 219 kB.
-- [ ] The two ~80 kB gz chunks on `/app` (`3727-*`, `3040-*`): find what they hold and split what the first paint
-  does not need (`next/dynamic`).
+- [x] The two ~80 kB gz chunks on `/app`: `3727-*` is Next's own runtime; `3040-*` was all of `editor-core`, pulled in
+  by the approval cards for one constant (`SLIDE_TEXT_MAX`). It now has its own subpath
+  (`@opencmo/editor-core/slide-limits`). `/app` 406 → 320 kB; Calendar, Analytics, Writer 286 → ~200 kB.
 - [ ] `marked` (18 kB gz) and zod (28 kB gz) in the feed's client bundle: load them only where used.
-- [ ] `ShellV2` imports the classic `WebShell` statically for `/video` only: make it dynamic.
-- [ ] Record the before / after table in this file and the PR.
+- [ ] ~~`ShellV2` imports the classic `WebShell` statically~~: 11 kB gz, and the server layout imports it for the v1
+  shell too, so a split moves the account context for little gain. Left as is.
+- [x] Before / after (First Load JS, `next build`):
+
+  | Route | before | after |
+  |---|---|---|
+  | shared by all | 171 kB | 141 kB |
+  | `/app` | 434 kB | 320 kB |
+  | `/app/schedule` | 316 kB | 199 kB |
+  | `/app/analytics` | 316 kB | 200 kB |
+  | `/app/writer` | 318 kB | 201 kB |
+  | `/app/sales` | 184 kB | 153 kB |
+  | `/app/editor/[clipId]` | 554 kB | 524 kB |
+  | `/login` | ~250 kB | 219 kB |
 
 ### 3.6 Checks
 - [x] `tsc --noEmit`, `next build`.

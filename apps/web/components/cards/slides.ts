@@ -6,7 +6,7 @@
  */
 
 import { slideSpans, type ClipDocument } from "@opencmo/clip-doc";
-import { SLIDE_TEXT_MAX } from "@opencmo/editor-core";
+import { SLIDE_TEXT_MAX } from "@opencmo/editor-core/slide-limits";
 
 import { ApiError, api, jsonBody } from "@/components/clipping/api";
 import type { ApprovalCard } from "@/lib/screens/approval-card";
