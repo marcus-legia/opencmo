@@ -1,6 +1,7 @@
 {
-  "$comment": "Founder rules that would get a Reddit account banned (groups 4-5 plan, 5.3). One list for the SQL triggers (migration 20270115040000, `~*`) and the zod at the routes (`apps/web/lib/cmo/sales/ban-risk.ts`, RegExp with the i flag). Patterns use only syntax both engines read the same way: no \\b, no lookarounds. `ban-risk.check.ts` checks the SQL copy matches this file. A rule is refused when it matches a pattern and is about Sales: a memory with topic sales, or words in `scope`.",
-  "scope": "(reddit|subreddit|hacker news|repl(y|ies)|comments?|threads?|sales)",
+  "$comment": "Founder rules that would get a Reddit account banned (groups 4-5 plan, 5.3). One list for the SQL triggers (migration 20270115040000, `~*`) and the zod at the routes (`apps/web/lib/cmo/sales/ban-risk.ts`, RegExp with the i flag). Patterns use only syntax both engines read the same way: no \\b, no lookarounds. `ban-risk.check.ts` checks the SQL copy matches this file. A rule is refused when it matches a pattern and is about Sales: a memory with topic sales, or words in `scope`. `scope` names Reddit, HN and replies, not bare threads: an X thread is the Writer's. A clause that forbids the thing (`negated`: \"never add links\", \"don't reply as the company account\") is taken out before the patterns run, so the safe rule a founder writes is not refused; the SQL copy is in migration 20270116010000.",
+  "scope": "(reddit|subreddit|hacker news|repl(y|ies)|comments?|sales)",
+  "negated": "(never|n['’]t|not|avoid|stop|no)\\s+(add|include|put|drop|share|paste|insert|post|reply|answer|write|use|promote|pitch|sell|advertise|copy|reuse|repeat|comment)[^.!?,;]*",
   "rules": [
     {
       "id": "link",

@@ -43,16 +43,28 @@ const MOVABLE: ReadonlySet<SlotStatus> = new Set(["proposed", "waiting_founder",
 function inZone(timezone: string) {
   const dayFmt = new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" });
   const timeFmt = new Intl.DateTimeFormat("en-GB", { timeZone: timezone, hour: "2-digit", minute: "2-digit" });
-  return { dayKey: (t: string | number | Date) => dayFmt.format(new Date(t)), time: (t: string) => timeFmt.format(new Date(t)) };
+  const clockFmt = new Intl.DateTimeFormat("en-GB", { timeZone: timezone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+  /** Minutes since local midnight. */
+  const minutes = (t: number) => {
+    const parts = Object.fromEntries(clockFmt.formatToParts(new Date(t)).map((p) => [p.type, p.value]));
+    return Number(parts.hour) * 60 + Number(parts.minute);
+  };
+  return { dayKey: (t: string | number | Date) => dayFmt.format(new Date(t)), time: (t: string) => timeFmt.format(new Date(t)), minutes };
 }
 const keyDate = (key: string) => new Date(`${key}T12:00:00Z`);
 const addDays = (key: string, n: number) => new Date(keyDate(key).getTime() + n * DAY_MS).toISOString().slice(0, 10);
 const label = (key: string, opts: Intl.DateTimeFormatOptions) => keyDate(key).toLocaleDateString("en-GB", { timeZone: "UTC", ...opts });
 
 /** Moves an instant to another calendar day in the founder's zone, keeping its time of day. */
-function sameTimeOn(at: string, fromKey: string, toKey: string): string {
+function sameTimeOn(at: string, fromKey: string, toKey: string, minutesOf: (t: number) => number): string {
+  const was = Date.parse(at);
+  const moved = was + (keyDate(toKey).getTime() - keyDate(fromKey).getTime());
+  // Whole days of 24 hours land an hour off across a daylight-saving change: put the local clock back where it was.
+  let drift = minutesOf(was) - minutesOf(moved);
+  if (drift > 720) drift -= 1440;
+  if (drift < -720) drift += 1440;
   // To the minute, as the route asks (`approval-card.ts` refuses fractions of a second): `toISOString` writes ".000".
-  return new Date(Date.parse(at) + (keyDate(toKey).getTime() - keyDate(fromKey).getTime())).toISOString().replace(/\.\d{3}Z$/, "Z");
+  return new Date(moved + drift * 60_000).toISOString().replace(/\.\d{3}Z$/, "Z");
 }
 
 /**
@@ -70,7 +82,7 @@ export function CalendarView() {
     if (askedWeek) setFrom(askedWeek);
   }, [askedWeek]);
   const [range, setRange] = useState<"week" | "month">("week");
-  const [state, reload] = useScreen("schedule", from ? { from } : {});
+  const [state, reload] = useScreen("schedule", { ...(from ? { from } : {}), ...(range === "month" ? { range: "month" } : {}) });
   // The cards that wait, so a picked slot shows its post, versions and actions in the drawer (Calendar.dc.html).
   const [dash, reloadCards] = useScreen("dashboard");
   const { toast } = useShellState();
@@ -121,7 +133,7 @@ export function CalendarView() {
     const slot = slots.find((s) => s.id === id);
     if (!slot || !MOVABLE.has(slot.status)) return;
     const fromKey = zone.dayKey(slot.at);
-    if (fromKey !== key) void move(slot, sameTimeOn(slot.at, fromKey, key));
+    if (fromKey !== key) void move(slot, sameTimeOn(slot.at, fromKey, key, zone.minutes));
   }
 
   const title = start && end ? (range === "month" ? label(start, { month: "long", year: "numeric" }) : `${label(start, { day: "numeric" })} – ${label(end, { day: "numeric", month: "long" })}`) : "Calendar";
