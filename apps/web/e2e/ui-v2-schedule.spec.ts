@@ -167,10 +167,19 @@ test("a schedule card is approved; dragging its slot to another day asks again w
   const toDay = page.getByTestId("v2-schedule").locator(`[data-day="${keys[at === keys.length - 1 ? at - 1 : at + 1]}"]`);
   // The card's own drag events, carrying one DataTransfer from the card to the day: the page's handlers run as they do
   // under a founder's mouse, without depending on how Chromium starts a native drag from synthetic mouse steps.
+  await page.evaluate(() => {
+    const w = window as unknown as { __dnd: string[] };
+    w.__dnd = [];
+    for (const type of ["dragstart", "dragover", "drop"]) document.addEventListener(type, (e) => w.__dnd.push(`${type}:${(e as DragEvent).dataTransfer?.getData("text/plain") ?? "-"}:${(e.target as HTMLElement).closest("[data-day]")?.getAttribute("data-day")}`), true);
+  });
+  const requests: string[] = [];
+  page.on("request", (r) => r.url().includes("/schedule/slots") && requests.push(`${r.method()} ${r.url()}`));
   const dataTransfer = await page.evaluateHandle(() => new DataTransfer());
   await slotCard.dispatchEvent("dragstart", { dataTransfer });
   await toDay.dispatchEvent("dragover", { dataTransfer });
   await toDay.dispatchEvent("drop", { dataTransfer });
+  await page.waitForTimeout(1500);
+  console.log("[dnd-debug]", JSON.stringify({ fromKey, keys, events: await page.evaluate(() => (window as unknown as { __dnd: string[] }).__dnd), requests }));
   await expect(page.getByText("New time saved. A new card asks you to approve it.")).toBeVisible();
 
   await expect.poll(async () => (await db.from("schedule_slots").select("status, approval_id").eq("id", slot.id).single()).data?.approval_id).not.toBe(slot.approval_id);

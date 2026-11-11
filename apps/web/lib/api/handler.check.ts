@@ -30,6 +30,10 @@ function fakeClient(
         data: user ? { claims: { sub: user.id, email: user.email } } : null,
         error: user ? null : { message: "no session" },
       }),
+      getUser: async () => ({
+        data: { user },
+        error: user ? null : { message: "no session" },
+      }),
     },
     rpc: async (name: string) =>
       name === "rate_limit_hit"

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { DragEvent } from "react";
 
 import { ApprovalCard } from "@/components/cards/ApprovalCard";
@@ -62,7 +62,12 @@ function sameTimeOn(at: string, fromKey: string, toKey: string): string {
 export function CalendarView() {
   // `?from=YYYY-MM-DD` opens that week (a card's "See it in the calendar", the old Schedule screen's links).
   const asked = useSearchParams().get("from");
-  const [from, setFrom] = useState<string | null>(asked && /^\d{4}-\d{2}-\d{2}$/.test(asked) ? asked : null);
+  const askedWeek = asked && /^\d{4}-\d{2}-\d{2}$/.test(asked) ? asked : null;
+  const [from, setFrom] = useState<string | null>(askedWeek);
+  // A link to another week while the Calendar is open (the component stays mounted) moves it there too.
+  useEffect(() => {
+    if (askedWeek) setFrom(askedWeek);
+  }, [askedWeek]);
   const [range, setRange] = useState<"week" | "month">("week");
   const [state, reload] = useScreen("schedule", from ? { from } : {});
   // The cards that wait, so a picked slot shows its post, versions and actions in the drawer (Calendar.dc.html).

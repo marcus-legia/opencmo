@@ -12,13 +12,13 @@ import { BrainBody } from "@/components/screens/brain/BrainScreen";
 import { PauseButton } from "@/components/screens/brain/PauseButton";
 import { Gate, SkillsTab, VoicePageView, VoiceTab } from "@/components/screens/library/LibraryScreen";
 import { ErrorNote, SkeletonBlocks } from "@/components/screens/parts";
-import { useScreen } from "@/components/screens/useScreen";
+import { useScreen, type ScreenState } from "@/components/screens/useScreen";
 
 export type BrainPaneId = "plan" | "learned" | "past";
 const BRAIN_TAB = { plan: "week", learned: "memory", past: "past" } as const;
 
-export function BrainPane({ pane }: { pane: BrainPaneId }) {
-  const [state] = useScreen("brain");
+/** `state`: the drawer already reads the brain screen (its "What your CMO learned" list); the pane shows that read. */
+export function BrainPane({ pane, state }: { pane: BrainPaneId; state: ScreenState<"brain"> }) {
   const [pausedOverride, setPausedOverride] = useState<string | null | undefined>(undefined);
   if (state.status === "loading") return <SkeletonBlocks />;
   if (state.status === "error") return <ErrorNote>{state.message}</ErrorNote>;

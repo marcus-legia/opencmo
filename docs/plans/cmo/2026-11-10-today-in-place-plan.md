@@ -92,5 +92,27 @@ Branch `claude/today-inline-edit`, cut from #188 (which carries #189's Today fra
   skipped-thread line and the settings focus; the Studio price card's stale "redo any keyframe" line.
 - [x] Specs: dashboard, shell, today, activation, setup, live, decisions, reach, pages, schedule, slides, studio,
   writer, voice; new: context, theme.
-- [ ] One full v2 run, every spec (result below when it lands).
+- [x] Full v2 runs: 46 failed right after the #189 merge → 13 → 3 (95 passed). The last three: Setup's axe title
+  check (a poll between two renders; axe now retries for a few seconds), Studio's third card (the P6 look check needs
+  an export this stack does not have: the spec records a passed check), and the Calendar drag (below).
+- [ ] Calendar drag-to-move: no move and no toast in e2e, with real mouse steps or dispatched drag events. The spec
+  logs what the page receives (`[dnd-debug]`); find the cause from that run, fix it, remove the log.
+
+## 4. Code review (`/code-review high` on #190, 2026-11-11)
+
+Ten findings; nine fixed in the commit after this note, one open:
+1. A failed documents read showed every document as unwritten, and Save would write an empty version over the real
+   one: the drawer now says the read failed and offers Try again.
+2. Column widths were not clamped to the window: the side columns now give way to their minimums and the feed keeps
+   420 px.
+3. Switching documents with unsaved changes dropped them: the drawer asks first.
+4. The Calendar drag (open, §3.7).
+5. The chat kept its drawer open by a 5 s timer: it now records the path it opened and the shell compares it.
+6. The brain screen was read twice when a pane opened: the drawer passes its read to the pane.
+7. The Calendar read `?from=` only on mount: a later link to another week moves it too.
+8. Projects' empty state showed before the generated items arrived: it waits for both reads.
+9. Writer's platform filter could stay on with its chips gone: a filter without chips no longer applies.
+10. `getClaims` cannot notice a banned or deleted account for up to an hour: writes through `withApi` also call
+    `getUser` (one round trip, beside the database); reads keep the local check.
+
 

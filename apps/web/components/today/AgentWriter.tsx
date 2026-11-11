@@ -63,7 +63,9 @@ export function AgentWriter() {
   const approved = drafts.filter((d) => d.column === "scheduled" || d.column === "posted").length;
   const platforms = [...new Set(drafts.map((d) => d.platform))];
   const listed = tab === "week" ? [...waiting, ...drafts.filter((d) => d.column !== "waiting")] : tab === "drafts" ? drafts.filter((d) => d.column === "drafting") : [];
-  const shown = platform ? listed.filter((d) => d.platform === platform) : listed;
+  // A filter whose chips are gone (one platform left, or the chosen one no longer has drafts) no longer applies.
+  const active = platform && platforms.length > 1 && platforms.includes(platform as Draft["platform"]) ? platform : null;
+  const shown = active ? listed.filter((d) => d.platform === active) : listed;
   const firstOpen = open ?? waiting[0]?.id ?? null;
   const askPrompt = ASK_KINDS.find((k) => k.id === askKind)!;
 
@@ -163,7 +165,7 @@ export function AgentWriter() {
               {platforms.length > 1 ? (
                 <div role="group" aria-label="Platform" style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
                   {[null, ...platforms].map((p) => (
-                    <button key={p ?? "all"} type="button" className="chip" aria-pressed={platform === p} onClick={() => setPlatform(p)} style={{ cursor: "pointer" }}>
+                    <button key={p ?? "all"} type="button" className="chip" aria-pressed={active === p} onClick={() => setPlatform(p)} style={{ cursor: "pointer" }}>
                       {p ? PLATFORM_LABEL[p] : "All"}
                     </button>
                   ))}

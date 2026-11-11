@@ -50,11 +50,14 @@ for (const screen of SCREENS) {
       expect(overflow.width, `sideways scroll from: ${overflow.culprits.join("; ")}`).toBeLessThanOrEqual(width);
       await page.screenshot({ path: join(OUT, `${screen.name}-${width}.png`), fullPage: true });
 
-      // Next streams the page's metadata after its body: let the title land before axe reads it.
+      // Next streams the page's metadata after its body, and a screen that polls (Setup) can catch axe between two
+      // renders: a few tries over a few seconds. A real violation is there every time and still fails.
       await expect(page).toHaveTitle(/.+/);
-      const { violations } = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze();
-      const serious = violations.filter((v) => v.impact === "serious" || v.impact === "critical");
-      expect(serious.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`)).toEqual([]);
+      await expect(async () => {
+        const { violations } = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze();
+        const serious = violations.filter((v) => v.impact === "serious" || v.impact === "critical");
+        expect(serious.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`)).toEqual([]);
+      }).toPass({ timeout: 10_000 });
     }
   });
 }

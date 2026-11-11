@@ -279,9 +279,11 @@ html:not([data-theme="dark"]) .k { --ok: #16744c; --warn: #8f5a0e; }
    feed takes the rest. Below 900 px the columns stack and the sashes go. */
 @media (min-width: 901px) {
   .pg-main .cols { flex-wrap: nowrap; }
-  .pg-main .cols > .left { flex: 0 0 var(--td-col-left, 288px); max-width: none; }
-  .pg-main .cols > .chat { flex: 0 0 var(--td-col-chat, 380px); max-width: none; }
-  .pg-main .cols > .mid { flex: 1 1 0; }
+  /* The chosen widths are a basis, not a fixed size: on a narrower window the side columns give way down to their
+     minimums, and the feed always keeps 420 px (200 + 280 + 420 fits the 901 px this layout starts at). */
+  .pg-main .cols > .left { flex: 0 1 var(--td-col-left, 288px); min-width: 200px; max-width: none; }
+  .pg-main .cols > .chat { flex: 0 1 var(--td-col-chat, 380px); min-width: 280px; max-width: none; }
+  .pg-main .cols > .mid { flex: 1 1 0; min-width: 420px; }
   .pg-main .cols > .v2-sash { flex: 0 0 6px; margin: 0 -3px; position: relative; z-index: 5; cursor: col-resize; touch-action: none; background: transparent; }
   .pg-main .cols > .v2-sash:hover, .pg-main .cols > .v2-sash:focus-visible, :root[data-v2-resizing] .pg-main .cols > .v2-sash:active { background: var(--accent); outline: none; }
 }

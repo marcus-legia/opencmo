@@ -126,8 +126,8 @@ export function ChatPanel({
   onToast: (message: string) => void;
   onWorkStarted: () => void | Promise<void>;
   drivesPanel?: boolean;
-  /** Called when the chat itself moves the founder to another screen: the shell keeps the chat open there. */
-  onOpenPanel?: () => void;
+  /** Called with the path when the chat itself moves the founder to another screen: the shell keeps the chat open there. */
+  onOpenPanel?: (path: string) => void;
 }) {
   const live = ws.live.chat;
   const router = useRouter();
@@ -222,7 +222,7 @@ export function ChatPanel({
       shown.current = { path, ids: targetIds(open) };
       // The editor with a request always opens, even on the same clip: the request is new.
       if (pathRef.current !== path || href.includes("?ask=")) {
-        onOpenPanel?.();
+        onOpenPanel?.(path);
         router.push(href);
       }
       return true;

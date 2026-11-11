@@ -127,13 +127,17 @@ export function ContextDrawer({ doc, edit = false, onClose, onOpen }: { doc: Doc
   const [error, setError] = useState<string | null>(null);
   const [brain] = useScreen("brain");
   const [mounted, setMounted] = useState(false);
+  // A failed read is not "nothing written": the form would then save an empty version over the real document.
+  const [loadError, setLoadError] = useState(false);
+  const [loads, setLoads] = useState(0);
 
   useEffect(() => {
     setMounted(true);
+    setLoadError(false);
     void api<CmoState>("/cmo/documents")
       .then(setState)
-      .catch(() => setState({ documents: {}, lastRun: null }));
-  }, []);
+      .catch(() => setLoadError(true));
+  }, [loads]);
 
   // Escape leaves the form first (the draft is dropped, nothing saved), then the drawer.
   const editing = draft !== null;
@@ -152,6 +156,12 @@ export function ContextDrawer({ doc, edit = false, onClose, onOpen }: { doc: Doc
   const kind = doc === "brand" || pane ? null : (doc as DocumentKind);
   const written = kind ? state?.documents[kind] : undefined;
   const missing = state ? missingDocument(state.documents) : null;
+  // Another document or pane while the form holds changes: ask before they are dropped.
+  const changed = editing && kind !== null && JSON.stringify(draft) !== JSON.stringify(state?.documents[kind]?.body ?? {});
+  const open = (id: DocId, withForm?: boolean) => {
+    if (id !== doc && changed && !window.confirm("Leave without saving your changes?")) return;
+    onOpen(id, withForm);
+  };
 
   // `?edit=1` (a link from the CMO, "+", Research's "Add a competitor") opens the form; another document drops a draft.
   useEffect(() => {
@@ -189,7 +199,7 @@ export function ContextDrawer({ doc, edit = false, onClose, onOpen }: { doc: Doc
                 {DOC_ROWS.length}
               </span>
             </h2>
-            <button type="button" className="ib" aria-label="Write a missing document" hidden={!missing} onClick={() => missing && onOpen(missing, true)}>
+            <button type="button" className="ib" aria-label="Write a missing document" hidden={!missing} onClick={() => missing && open(missing, true)}>
               <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M5 12h14" />
                 <path d="M12 5v14" />
@@ -197,7 +207,7 @@ export function ContextDrawer({ doc, edit = false, onClose, onOpen }: { doc: Doc
             </button>
           </div>
           {DOC_ROWS.map((r) => (
-            <button key={r.id} type="button" className="doc" aria-current={r.id === doc} onClick={() => onOpen(r.id)}>
+            <button key={r.id} type="button" className="doc" aria-current={r.id === doc} onClick={() => open(r.id)}>
               <DocIcon current={r.id === doc} />
               <span>
                 <span style={{ fontSize: "13.5px", fontWeight: r.id === doc ? "500" : undefined }}>{r.title}</span>
@@ -212,7 +222,7 @@ export function ContextDrawer({ doc, edit = false, onClose, onOpen }: { doc: Doc
                 <h2>{group.title}</h2>
               </div>
               {group.rows.map((r) => (
-                <button key={r.id} type="button" className="doc" aria-current={r.id === doc} onClick={() => onOpen(r.id)}>
+                <button key={r.id} type="button" className="doc" aria-current={r.id === doc} onClick={() => open(r.id)}>
                   <DocIcon current={r.id === doc} />
                   <span>
                     <span style={{ fontSize: "13.5px", fontWeight: r.id === doc ? "500" : undefined }}>{r.title}</span>
@@ -284,10 +294,17 @@ export function ContextDrawer({ doc, edit = false, onClose, onOpen }: { doc: Doc
             ) : null}
             {pane ? (
               <div className="v2 td-cardhost td-v2host td-pane">
-                {pane === "voice" || pane === "skills" ? <LibraryPane pane={pane} /> : <BrainPane pane={pane} />}
+                {pane === "voice" || pane === "skills" ? <LibraryPane pane={pane} /> : <BrainPane pane={pane} state={brain} />}
               </div>
             ) : kind ? (
-              !state ? (
+              loadError ? (
+                <p role="alert" style={{ marginTop: "16px" }}>
+                  Your documents could not be read.{" "}
+                  <button type="button" className="ghost" onClick={() => setLoads((n) => n + 1)}>
+                    Try again
+                  </button>
+                </p>
+              ) : !state ? (
                 <p className="meta" style={{ marginTop: "16px" }}>Loading…</p>
               ) : draft ? (
                 <div className="td-docform">

@@ -212,7 +212,8 @@ export function StudioScreen() {
           ))}
         </div>
       </div>
-      {shownCards.length === 0 && projects.loaded ? (
+      {/* Only once both reads are in: uploads come first, generated items with the screen. */}
+      {shownCards.length === 0 && projects.loaded && screen.status !== "loading" ? (
         <p className="meta" role="status">
           {query.trim() ? "Nothing matches." : "Nothing here yet. Upload a video, or start a blank edit."}
         </p>

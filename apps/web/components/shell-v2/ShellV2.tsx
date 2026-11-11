@@ -169,19 +169,16 @@ function TodayFrame({ credits, plan, email, userId, pending, chatLive, children,
   // is ready, or the screen a request is about): the founder is mid-conversation, and on that screen the chat is a
   // drawer, so it stays open instead of vanishing with the answer.
   const shown = useRef(segment);
-  const chatMoved = useRef(false);
-  const onChatOpensPanel = useCallback(() => {
-    chatMoved.current = true;
-    // Only the navigation it starts: a later one the founder makes closes the drawer as usual.
-    window.setTimeout(() => {
-      chatMoved.current = false;
-    }, 5_000);
+  // The path the chat itself last opened: landing there keeps the drawer open; any other screen closes it as usual.
+  const chatTarget = useRef<string | null>(null);
+  const onChatOpensPanel = useCallback((path: string) => {
+    chatTarget.current = path;
   }, []);
   useEffect(() => {
     if (shown.current === segment) return;
     shown.current = segment;
-    setChatOpen(chatMoved.current && screen.chat === "drawer");
-    chatMoved.current = false;
+    setChatOpen(chatTarget.current === window.location.pathname && screen.chat === "drawer");
+    chatTarget.current = null;
     setLogsOpen(false);
   }, [segment, screen.chat]);
 

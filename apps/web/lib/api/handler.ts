@@ -7,7 +7,8 @@
  *   1. Sign-in: `claimsUser()` (`getClaims()`), never `getSession()`. `getSession`
  *      reads the cookie and trusts it, and the client can edit a cookie;
  *      `getClaims` verifies the JWT's signature against the project's public key
- *      without a round trip to Auth (lib/supabase/user.ts).
+ *      without a round trip to Auth (lib/supabase/user.ts). Writes also call
+ *      `getUser()`, which notices a banned or deleted account.
  *   2. Cross-site cho method GHI — `Origin`/`Sec-Fetch-Site`. Cookie phiên là
  *      SameSite=Lax nên GET từ site khác không mang cookie, nhưng POST bằng form
  *      thì có; đây là rào CSRF cho mọi mutation của web API.
@@ -201,7 +202,13 @@ export async function handleApi<Schema extends z.ZodType | undefined = undefined
       }
 
       if (options.auth !== false) {
-        const signedIn = await claimsUser(supabase);
+        // Reads trust the verified JWT; a write also asks Auth, so a banned or deleted account cannot spend credits or
+        // change anything while its last access token lives (up to an hour). One round trip, beside the database.
+        let signedIn = await claimsUser(supabase);
+        if (signedIn && WRITE_METHODS.has(request.method)) {
+          const { data, error } = await supabase.auth.getUser();
+          signedIn = error || !data.user ? null : { id: data.user.id, email: data.user.email ?? null };
+        }
         if (!signedIn) return errorResponse(401, NOT_SIGNED_IN);
         user = { id: signedIn.id, email: signedIn.email ?? undefined };
       }
