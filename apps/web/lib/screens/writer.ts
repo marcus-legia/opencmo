@@ -19,6 +19,8 @@ export const DraftSchema = z.object({
   at: iso.nullable(),
   /** Day label when there is no exact time yet ("Fri"). */
   dayText: z.string().max(20).nullable(),
+  /** The calendar day it is planned for ("2026-11-12"): what places it in a week; the label alone does not. */
+  day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   title: z.string().max(300),
   column: z.enum(WRITER_COLUMNS),
   versions: z.number().int().min(1).max(3),

@@ -16,7 +16,7 @@ import type { WriterScreen } from "@/lib/screens/writer";
 
 import { KIND_ICON, PLATFORM_ICON } from "./cards";
 import { useDecide } from "./useDecide";
-import { thisMonday, weekOrder } from "./week";
+import { dayLabel, draftsLeftOver, draftsThisWeek } from "./week";
 
 type Draft = WriterScreen["drafts"][number];
 type Tab = "week" | "drafts" | "voice";
@@ -30,7 +30,7 @@ const ASK_KINDS = [
 ] as const;
 
 const when = (d: Draft) => {
-  if (!d.at) return d.dayText ?? "";
+  if (!d.at) return dayLabel(d) ?? "";
   const t = new Date(d.at);
   return `${t.toLocaleDateString("en-GB", { weekday: "short" })} ${t.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`;
 };
@@ -70,17 +70,18 @@ export function AgentWriter() {
   const held = waiting.filter((d) => d.cardState === "held").length;
   // In review with no live card (cancelled, never raised again): not on Today until the founder asks for it.
   const lost = waiting.filter((d) => d.cardState === "missing").length;
-  const approved = drafts.filter((d) => d.column === "scheduled" || d.column === "posted").length;
+  const approved = draftsThisWeek(drafts).filter((d) => d.column === "scheduled" || d.column === "posted").length;
   const platforms = [...new Set(drafts.map((d) => d.platform))];
-  const listed = tab === "week" ? [...waiting, ...drafts.filter((d) => d.column !== "waiting")] : tab === "drafts" ? drafts.filter((d) => d.column === "drafting" || d.column === "planned") : [];
+  // "This week" is this week's drafts by their day; older ones still open show apart, under "From last week".
+  const thisWeek = draftsThisWeek(drafts);
+  const leftOver = draftsLeftOver(drafts);
+  const listed = tab === "week" ? [...thisWeek.filter((d) => d.column === "waiting"), ...thisWeek.filter((d) => d.column !== "waiting")] : tab === "drafts" ? drafts.filter((d) => d.column === "drafting" || d.column === "planned") : [];
   // A filter whose chips are gone (one platform left, or the chosen one no longer has drafts) no longer applies.
   const active = platform && platforms.length > 1 && platforms.includes(platform as Draft["platform"]) ? platform : null;
   const shown = active ? listed.filter((d) => d.platform === active) : listed;
   const firstOpen = open ?? waiting.find((d) => d.approvalId)?.id ?? waiting[0]?.id ?? null;
-  // The side card reads in the order the drafts go out (weekOrder).
-  const monday = thisMonday();
-  // "This week" means this week: the screen also carries last week's drafts, which would push this week's out of seven.
-  const week = drafts.filter((d) => !d.at || Date.parse(d.at) >= monday).sort((a, b) => weekOrder(a, monday) - weekOrder(b, monday)).slice(0, 7);
+  // The side card: this week's first seven, in the order they go out.
+  const week = thisWeek.slice(0, 7);
   const askPrompt = ASK_KINDS.find((k) => k.id === askKind)!;
 
   /** Brings a held or lost card into the queue (`approval_show_now`), then reloads so it opens in place. */
@@ -105,6 +106,73 @@ export function AgentWriter() {
     setAsk("");
   }
 
+  const renderRow = (d: Draft) => {
+    const card = d.approvalId ? queue.find((c) => c.id === d.approvalId) : undefined;
+    // A waiting draft always opens: its card, or (held, lost, or not loaded yet) its words and "Show it now".
+    const opens = Boolean(card) || Boolean(d.scriptId) || d.column === "waiting";
+    const badge = badgeOf(d);
+    const isOpen = opens && firstOpen === d.id;
+    return (
+      <div key={d.id} className="th" data-open={isOpen} data-testid="writer-row" data-platform={d.platform}>
+        <button type="button" className="row" onClick={opens ? () => setOpen(isOpen ? "" : d.id) : undefined} aria-expanded={opens ? isOpen : undefined} style={opens ? undefined : { cursor: "default" }}>
+          <span className="st">{iconOf(d)}</span>
+          <span className="ttl">
+            <span className="kind">{kindOf(d)} · </span>
+            {d.title}
+          </span>
+          <span className={badge[1]}>{badge[0]}</span>
+          <span className="meta" style={{ minWidth: "64px", textAlign: "right", whiteSpace: "nowrap" }}>
+            {when(d)}
+          </span>
+        </button>
+        {isOpen && card ? (
+          <div className="detail td-cardhost">
+            <ApprovalCard card={card} sample={sample} onDecide={onDecide} open />
+          </div>
+        ) : null}
+        {isOpen && !card && !d.scriptId && d.column === "waiting" ? (
+          <div className="detail" data-testid="writer-show-now">
+            {d.text ? <p className="post">{d.text}</p> : null}
+            <div className="meta">
+              {d.cardState === "held"
+                ? `Held until ${d.heldUntil ? new Date(d.heldUntil).toLocaleString("en-GB", { weekday: "short", hour: "2-digit", minute: "2-digit" }) : "tomorrow"}: you get about ten new cards a day, so the rest wait for the next one.`
+                : d.cardState === "missing"
+                  ? "Its card is gone, so it is not on Today. Ask for the card again to approve or skip it."
+                  : dash.status === "loading"
+                    ? "Loading its card…"
+                    : "Its card is not on Today yet."}
+            </div>
+            {d.ref && (d.cardState === "held" || d.cardState === "missing") ? (
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                <button type="button" className="primary" disabled={showing === d.id} onClick={() => void showNow(d)}>
+                  {showing === d.id ? "Bringing it in…" : d.cardState === "held" ? "Show it now" : "Ask for the card again"}
+                </button>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+        {isOpen && !card && d.scriptId ? (
+          <div className="detail">
+            <div className="meta">{d.note ?? "Approved: you record it."} Film it, then upload the take in the editor.</div>
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
+              <Link href={`/app/script/${encodeURIComponent(d.scriptId)}/prompter`} className="ghost" style={{ textDecoration: "none" }}>
+                <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
+                  <rect width="14" height="20" x="5" y="2" rx="2" ry="2" />
+                  <path d="M12 18h.01" />
+                </svg>
+                Read on your phone
+              </Link>
+              <div style={{ flex: "1 1 auto" }}></div>
+              <button type="button" className="primary" onClick={() => void openScript(d.scriptId!)}>
+                Open in editor
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </div>
+    );
+  };
+
   return (
     <div style={{ display: "flex", flexWrap: "wrap", maxWidth: "1320px", margin: "0 auto", padding: "22px 24px 40px", gap: "24px" }} data-testid="v2-writer">
       <main style={{ flex: "999 1 600px", minWidth: "0" }}>
@@ -118,10 +186,10 @@ export function AgentWriter() {
           <div style={{ flex: "1 1 300px", minWidth: "0" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
               <h1 style={{ margin: "0", fontSize: "22px", fontWeight: "600", letterSpacing: "-0.4px" }}>Writer</h1>
-              {drafts.length ? (
+              {thisWeek.length ? (
                 <span className="chip">
                   <span className="live"></span>
-                  {drafts.length} drafts this week
+                  {thisWeek.length} drafts this week
                 </span>
               ) : null}
             </div>
@@ -205,73 +273,17 @@ export function AgentWriter() {
               ) : null}
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-              {shown.length === 0 ? <div className="meta">Nothing here yet. Writer drafts the week from your strategy every Sunday.</div> : null}
-              {shown.map((d) => {
-                const card = d.approvalId ? queue.find((c) => c.id === d.approvalId) : undefined;
-                // A waiting draft always opens: its card, or (held, lost, or not loaded yet) its words and "Show it now".
-                const opens = Boolean(card) || Boolean(d.scriptId) || d.column === "waiting";
-                const badge = badgeOf(d);
-                const isOpen = opens && firstOpen === d.id;
-                return (
-                  <div key={d.id} className="th" data-open={isOpen} data-testid="writer-row" data-platform={d.platform}>
-                    <button type="button" className="row" onClick={opens ? () => setOpen(isOpen ? "" : d.id) : undefined} aria-expanded={opens ? isOpen : undefined} style={opens ? undefined : { cursor: "default" }}>
-                      <span className="st">{iconOf(d)}</span>
-                      <span className="ttl">
-                        <span className="kind">{kindOf(d)} · </span>
-                        {d.title}
-                      </span>
-                      <span className={badge[1]}>{badge[0]}</span>
-                      <span className="meta" style={{ width: "64px", textAlign: "right" }}>
-                        {when(d)}
-                      </span>
-                    </button>
-                    {isOpen && card ? (
-                      <div className="detail td-cardhost">
-                        <ApprovalCard card={card} sample={sample} onDecide={onDecide} open />
-                      </div>
-                    ) : null}
-                    {isOpen && !card && !d.scriptId && d.column === "waiting" ? (
-                      <div className="detail" data-testid="writer-show-now">
-                        {d.text ? <p className="post">{d.text}</p> : null}
-                        <div className="meta">
-                          {d.cardState === "held"
-                            ? `Held until ${d.heldUntil ? new Date(d.heldUntil).toLocaleString("en-GB", { weekday: "short", hour: "2-digit", minute: "2-digit" }) : "tomorrow"}: you get about ten new cards a day, so the rest wait for the next one.`
-                            : d.cardState === "missing"
-                              ? "Its card is gone, so it is not on Today. Ask for the card again to approve or skip it."
-                              : dash.status === "loading"
-                                ? "Loading its card…"
-                                : "Its card is not on Today yet."}
-                        </div>
-                        {d.ref && (d.cardState === "held" || d.cardState === "missing") ? (
-                          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                            <button type="button" className="primary" disabled={showing === d.id} onClick={() => void showNow(d)}>
-                              {showing === d.id ? "Bringing it in…" : d.cardState === "held" ? "Show it now" : "Ask for the card again"}
-                            </button>
-                          </div>
-                        ) : null}
-                      </div>
-                    ) : null}
-                    {isOpen && !card && d.scriptId ? (
-                      <div className="detail">
-                        <div className="meta">{d.note ?? "Approved: you record it."} Film it, then upload the take in the editor.</div>
-                        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
-                          <Link href={`/app/script/${encodeURIComponent(d.scriptId)}/prompter`} className="ghost" style={{ textDecoration: "none" }}>
-                            <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
-                              <rect width="14" height="20" x="5" y="2" rx="2" ry="2" />
-                              <path d="M12 18h.01" />
-                            </svg>
-                            Read on your phone
-                          </Link>
-                          <div style={{ flex: "1 1 auto" }}></div>
-                          <button type="button" className="primary" onClick={() => void openScript(d.scriptId!)}>
-                            Open in editor
-                          </button>
-                        </div>
-                      </div>
-                    ) : null}
+              {shown.length === 0 && !(tab === "week" && leftOver.length) ? <div className="meta">Nothing here yet. Writer drafts the week from your strategy every Sunday.</div> : null}
+              {shown.map(renderRow)}
+              {tab === "week" && leftOver.length ? (
+                <>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: "8px", margin: "14px 0 2px" }} data-testid="writer-left-over">
+                    <span style={{ fontWeight: "600" }}>From last week</span>
+                    <span className="meta">· {leftOver.length} not approved yet: approve or skip them</span>
                   </div>
-                );
-              })}
+                  {leftOver.map(renderRow)}
+                </>
+              ) : null}
             </div>
           </>
         ) : null}
