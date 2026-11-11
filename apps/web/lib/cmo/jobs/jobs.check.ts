@@ -452,7 +452,28 @@ async function main() {
   const { dueLoops } = await import("../loops");
   const base = { weekday: 3, duePost: null, dueSales: null, competitorHandles: 0, publishedRecently: 0, socialReader: true };
   assert.deepEqual(dueLoops(base), []);
-  assert.deepEqual(dueLoops({ ...base, weekday: 1 }).map((r) => r.kind), ["plan_week", "post_draft"]);
+  // Monday queues the plan alone: the plan queues the drafts of its own posts due that day (below).
+  assert.deepEqual(dueLoops({ ...base, weekday: 1 }).map((r) => r.kind), ["plan_week"]);
+  assert.deepEqual(dueLoops({ ...base, weekday: 1, duePost: { idea: "left from last week" } }).map((r) => r.kind), ["plan_week", "post_draft"]);
+  {
+    const monday = memoryStore(docs);
+    const plan = monday.enqueue("plan_week", { source: "schedule", loop: "weekly-plan" });
+    await drainCmoQueue(monday.store);
+    assert.equal(plan.status, "done", `the scheduled plan is done (${plan.error})`);
+    assert.equal(plan.steps.at(-1)!.tool, "queue_drafts", "the scheduled plan ends by queueing today's drafts");
+    const drafts = monday.runs.filter((r) => r.kind === "post_draft");
+    assert.equal(drafts.length, 1, "one draft for today's X post");
+    assert.equal(drafts[0]!.status, "done", `the draft ran in the same drain (${drafts[0]!.error})`);
+    const card = monday.items.find((i) => i.status === "in_review");
+    assert.equal(card?.id, drafts[0]!.input.item_id, "the card is the plan's own item for today");
+    assert.equal(card?.day, isoDay(), "dated today");
+    assert.equal(monday.items.filter((i) => i.department === "post" && i.day === isoDay()).length, 1, "no second post made up beside the plan");
+    // A plan the founder asked for writes the calendar and queues nothing.
+    const asked = memoryStore(docs);
+    asked.enqueue("plan_week", { brief: "a calmer week" });
+    await drainCmoQueue(asked.store);
+    assert.equal(asked.runs.filter((r) => r.kind === "post_draft").length, 0, "a plan asked for in the chat drafts nothing by itself");
+  }
   // CMO review 3, 3.1: an unpaid account gets no loop at all.
   assert.deepEqual(dueLoops({ ...base, weekday: 1, paid: false }), []);
   assert.deepEqual(

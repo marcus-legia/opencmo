@@ -5,7 +5,8 @@ import type { SupabaseClient as BaseClient } from "@supabase/supabase-js";
 import { DOCUMENT_KINDS, type DocumentKind } from "../documents";
 import { latestPerTopic } from "./context";
 import type { CmoStore, DraftRating, CompetitorInsight, ConnectedAccountRow, ReplyOutcomeDue, ZernioPostRow, Documents, NicheVideoInsight, SubredditRule, Goal, InboxState, ItemRow, Lesson, MemoryEvent, QueuedRun } from "./types";
-import { toVerdict } from "./types";
+import { isoDay, toVerdict } from "./types";
+import { enqueueDueDrafts } from "../schedule";
 
 const ITEM_COLUMNS =
   "id, run_id, department, platform, day, idea, reason, status, priority, body, final_text, external_url, decided_at, published_at, created_at";
@@ -165,6 +166,13 @@ export function supabaseStore(admin: BaseClient): CmoStore {
       return ((data ?? []) as ItemRow[]).reverse();
     },
     planWeek: (userId, runId, items) => rpc<number>("cmo_plan_week", { p_user: userId, p_run: runId, p_items: items }),
+    async queueDueDrafts(run) {
+      const { data, error } = await admin.from("content_items").select("id, platform").eq("user_id", run.user_id).eq("run_id", run.id)
+        .eq("department", "post").eq("status", "planned").lte("day", isoDay()).order("day").order("id");
+      if (error) throw new Error(`queueDueDrafts: ${error.message}`);
+      const [queued] = await enqueueDueDrafts(admin, run.user_id, (data ?? []) as { id: string; platform: string | null }[], { claude: run.input.brain === "claude" });
+      return queued;
+    },
     async saveDraft(userId, runId, itemId, idea, body, priority) {
       const row = one<ItemRow>(
         await rpc("cmo_save_draft", { p_user: userId, p_run: runId, p_item: itemId, p_idea: idea, p_body: body, p_priority: priority }),

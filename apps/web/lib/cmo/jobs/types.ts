@@ -26,7 +26,6 @@ export const CMO_JOB_KINDS: CmoJobKind[] = ["plan_week", "post_draft", "sales_sc
 
 /** What a weekly goal counts. Only things the product can measure itself. */
 export type GoalMetric = "posts" | "replies" | "views";
-export const GOAL_METRICS: GoalMetric[] = ["posts", "replies", "views"];
 export type Goal = { id: string; week: string; goal: string; metric: GoalMetric; target: number; status: "proposed" | "approved" | "rejected"; result: number | null };
 /** What a week reached: posts approved, Reddit replies the founder marked, views on posts. */
 export type WeekResults = Record<GoalMetric, number>;
@@ -280,6 +279,8 @@ export interface CmoStore {
   recordGoalResult(userId: string, week: string, result: number): Promise<boolean>;
   items(userId: string, filter: { statuses?: ItemStatus[]; since?: string; department?: ItemRow["department"]; limit?: number }): Promise<ItemRow[]>;
   planWeek(userId: string, runId: string, items: PlanItem[]): Promise<number>;
+  /** Queues the drafts of this plan's posts due today, one per platform (`schedule.ts`); returns how many. */
+  queueDueDrafts(run: QueuedRun): Promise<number>;
   saveDraft(userId: string, runId: string, itemId: string | null, idea: string, body: Record<string, unknown>, priority: ItemRow["priority"]): Promise<ItemRow>;
   /** Thread links that already became cards (dismissed ones too): W4 never offers them again. */
   seenUrls(userId: string): Promise<Set<string>>;

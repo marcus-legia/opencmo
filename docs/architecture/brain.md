@@ -133,9 +133,9 @@ when a row is waiting: idle costs nothing, a crash resumes from the last logged 
 | When | What runs | Model | Credits | Built in |
 |---|---|---|---|---|
 | Sunday | `summarize_memory`, `review_week`, `competitor_research` when handles exist | yes | free, free, 2 | `loops.ts` |
-| Monday | `plan_week` → the plan card + the work order tree (one order per calendar item, children per department: brief → Studio order → shorts → captions); `niche_video_research` once a week when the plan has a new video item, and the briefs wait on it | once | as priced; research 2 | `work_orders_plan_week`, `20261231110000_p5_niche_research.sql` |
+| Monday | `plan_week` → the plan card + the work order tree (one order per calendar item, children per department: brief → Studio order → shorts → captions); `niche_video_research` once a week when the plan has a new video item, and the briefs wait on it; the drafts of the plan's posts due that day are queued when the calendar is written (`queueDueDrafts`) | once | as priced; research 2 | `work_orders_plan_week`, `20261231110000_p5_niche_research.sql` |
 | Every day | progress check over the tree; only a stuck order costs a model call (one replan) | rarely | free | `jobs/progress.ts` |
-| Every day, when due | `post_draft`, `sales_scan`, `pull_metrics` (loops); `write_caption`, `write_video_brief`, `write_slides` and Studio orders (from the work order tree and event rules) | yes | per kind | `loops.ts`, `work_orders`, `studio-orders.ts` |
+| Every day, when due | `post_draft`, `sales_scan`, `pull_metrics` (loops), one run per loop a day however often the cron is called (`schedule.ts`); `write_caption`, `write_video_brief`, `write_slides` and Studio orders (from the work order tree and event rules) | yes | per kind | `loops.ts`, `work_orders`, `studio-orders.ts` |
 | Any time | event rules; founder orders from chat or MCP land under the week's root | no | free | SQL triggers |
 | Every morning, founder's time | digest: what waits on you, what the brain did, today's plan | no (template) | free | `lib/cmo/digest.ts` |
 
