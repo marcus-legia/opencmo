@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { ApprovalCard } from "@/components/cards/ApprovalCard";
+import { ApiError, api, jsonBody } from "@/components/clipping/api";
 import { openScript } from "@/components/cards/open-script";
 import { fillChat } from "@/components/dashboard/TodayBlock";
 import { useShellState } from "@/components/shell-v2/ShellState";
@@ -20,7 +21,7 @@ type Draft = WriterScreen["drafts"][number];
 type Tab = "week" | "drafts" | "voice";
 
 const KIND_LABEL: Record<Draft["kind"], string> = { post: "post", caption: "Caption", video_brief: "Script · you film", slide_text: "Slideshow" };
-const BADGE: Record<Draft["column"], [string, string]> = { waiting: ["Waiting", "badge b-wait"], drafting: ["Drafting", "badge b-new"], scheduled: ["Scheduled", "badge b-ok"], posted: ["Posted", "badge b-ok"] };
+const BADGE: Record<Draft["column"], [string, string]> = { planned: ["Planned", "badge b-plan"], waiting: ["Waiting", "badge b-wait"], drafting: ["Drafting", "badge b-new"], scheduled: ["Scheduled", "badge b-ok"], posted: ["Posted", "badge b-ok"] };
 const ASK_KINDS = [
   { id: "post", label: "X post", prompt: "Write an X post" },
   { id: "slides", label: "Slideshow", prompt: "Write a slideshow" },
@@ -32,6 +33,9 @@ const when = (d: Draft) => {
   const t = new Date(d.at);
   return `${t.toLocaleDateString("en-GB", { weekday: "short" })} ${t.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`;
 };
+/** A waiting draft whose card is not in the queue says why: held past the day's budget, or no card at all. */
+const badgeOf = (d: Draft): [string, string] =>
+  d.column === "waiting" && d.cardState === "held" ? ["Held", "badge b-plan"] : d.column === "waiting" && d.cardState === "missing" ? ["No card", "badge b-plan"] : BADGE[d.column];
 const kindOf = (d: Draft) => (d.kind === "post" ? `${PLATFORM_LABEL[d.platform]} post` : KIND_LABEL[d.kind]);
 const iconOf = (d: Draft) => (d.kind === "video_brief" ? KIND_ICON.script : d.kind === "slide_text" ? KIND_ICON.slideshow : d.kind === "caption" ? KIND_ICON.price : (PLATFORM_ICON[d.platform] ?? KIND_ICON.post));
 
@@ -63,7 +67,8 @@ function thisMonday(): number {
 export function AgentWriter() {
   const [state, reload] = useScreen("writer");
   const [dash, reloadCards] = useScreen("dashboard");
-  const { focusChat } = useShellState();
+  const { focusChat, toast } = useShellState();
+  const [showing, setShowing] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("week");
   const [open, setOpen] = useState<string | null>(null);
   const [ask, setAsk] = useState("");
@@ -80,18 +85,38 @@ export function AgentWriter() {
 
   const drafts = data?.drafts ?? [];
   const waiting = drafts.filter((d) => d.column === "waiting");
+  // Held past the day's ten new cards: the founder's turn tomorrow unless they show it now.
+  const held = waiting.filter((d) => d.cardState === "held").length;
+  // In review with no live card (cancelled, never raised again): not on Today until the founder asks for it.
+  const lost = waiting.filter((d) => d.cardState === "missing").length;
   const approved = drafts.filter((d) => d.column === "scheduled" || d.column === "posted").length;
   const platforms = [...new Set(drafts.map((d) => d.platform))];
-  const listed = tab === "week" ? [...waiting, ...drafts.filter((d) => d.column !== "waiting")] : tab === "drafts" ? drafts.filter((d) => d.column === "drafting") : [];
+  const listed = tab === "week" ? [...waiting, ...drafts.filter((d) => d.column !== "waiting")] : tab === "drafts" ? drafts.filter((d) => d.column === "drafting" || d.column === "planned") : [];
   // A filter whose chips are gone (one platform left, or the chosen one no longer has drafts) no longer applies.
   const active = platform && platforms.length > 1 && platforms.includes(platform as Draft["platform"]) ? platform : null;
   const shown = active ? listed.filter((d) => d.platform === active) : listed;
-  const firstOpen = open ?? waiting[0]?.id ?? null;
+  const firstOpen = open ?? waiting.find((d) => d.approvalId)?.id ?? waiting[0]?.id ?? null;
   // The side card reads in the order the drafts go out (weekOrder).
   const monday = thisMonday();
   // "This week" means this week: the screen also carries last week's drafts, which would push this week's out of seven.
   const week = drafts.filter((d) => !d.at || Date.parse(d.at) >= monday).sort((a, b) => weekOrder(a, monday) - weekOrder(b, monday)).slice(0, 7);
   const askPrompt = ASK_KINDS.find((k) => k.id === askKind)!;
+
+  /** Brings a held or lost card into the queue (`approval_show_now`), then reloads so it opens in place. */
+  async function showNow(d: Draft) {
+    if (!d.ref || showing) return;
+    setShowing(d.id);
+    try {
+      await api("/approvals/show-now", jsonBody({ refKind: d.ref.kind, refId: d.ref.id }));
+      setOpen(d.id);
+      reload();
+      reloadCards();
+    } catch (error) {
+      toast(error instanceof ApiError ? error.message : "That did not go through. Please try again.");
+    } finally {
+      setShowing(null);
+    }
+  }
 
   function write() {
     focusChat();
@@ -183,7 +208,9 @@ export function AgentWriter() {
         {tab !== "voice" && data ? (
           <>
             <div style={{ display: "flex", alignItems: "center", gap: "8px", margin: "14px 0 10px", flexWrap: "wrap" }}>
-              <span style={{ fontWeight: "600" }}>{waiting.length} waiting for your OK</span>
+              <span style={{ fontWeight: "600" }}>{waiting.length - held - lost} waiting for your OK</span>
+              {held ? <span className="meta">· {held} held until tomorrow</span> : null}
+              {lost ? <span className="meta">· {lost} without a card</span> : null}
               <span className="meta">· {approved} approved this week</span>
               <div style={{ flex: "1 1 auto" }}></div>
               {platforms.length > 1 ? (
@@ -200,7 +227,9 @@ export function AgentWriter() {
               {shown.length === 0 ? <div className="meta">Nothing here yet. Writer drafts the week from your strategy every Sunday.</div> : null}
               {shown.map((d) => {
                 const card = d.approvalId ? queue.find((c) => c.id === d.approvalId) : undefined;
-                const opens = Boolean(card) || Boolean(d.scriptId);
+                // A waiting draft always opens: its card, or (held, lost, or not loaded yet) its words and "Show it now".
+                const opens = Boolean(card) || Boolean(d.scriptId) || d.column === "waiting";
+                const badge = badgeOf(d);
                 const isOpen = opens && firstOpen === d.id;
                 return (
                   <div key={d.id} className="th" data-open={isOpen} data-testid="writer-row" data-platform={d.platform}>
@@ -210,7 +239,7 @@ export function AgentWriter() {
                         <span className="kind">{kindOf(d)} · </span>
                         {d.title}
                       </span>
-                      <span className={BADGE[d.column][1]}>{BADGE[d.column][0]}</span>
+                      <span className={badge[1]}>{badge[0]}</span>
                       <span className="meta" style={{ width: "64px", textAlign: "right" }}>
                         {when(d)}
                       </span>
@@ -218,6 +247,27 @@ export function AgentWriter() {
                     {isOpen && card ? (
                       <div className="detail td-cardhost">
                         <ApprovalCard card={card} sample={sample} onDecide={onDecide} open />
+                      </div>
+                    ) : null}
+                    {isOpen && !card && !d.scriptId && d.column === "waiting" ? (
+                      <div className="detail" data-testid="writer-show-now">
+                        {d.text ? <p className="post">{d.text}</p> : null}
+                        <div className="meta">
+                          {d.cardState === "held"
+                            ? `Held until ${d.heldUntil ? new Date(d.heldUntil).toLocaleString("en-GB", { weekday: "short", hour: "2-digit", minute: "2-digit" }) : "tomorrow"}: you get about ten new cards a day, so the rest wait for the next one.`
+                            : d.cardState === "missing"
+                              ? "Its card is gone, so it is not on Today. Ask for the card again to approve or skip it."
+                              : dash.status === "loading"
+                                ? "Loading its card…"
+                                : "Its card is not on Today yet."}
+                        </div>
+                        {d.ref && (d.cardState === "held" || d.cardState === "missing") ? (
+                          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                            <button type="button" className="primary" disabled={showing === d.id} onClick={() => void showNow(d)}>
+                              {showing === d.id ? "Bringing it in…" : d.cardState === "held" ? "Show it now" : "Ask for the card again"}
+                            </button>
+                          </div>
+                        ) : null}
                       </div>
                     ) : null}
                     {isOpen && !card && d.scriptId ? (
@@ -277,7 +327,7 @@ export function AgentWriter() {
               <span className="d">{(d.at ? new Date(d.at).toLocaleDateString("en-GB", { weekday: "short" }) : (d.dayText ?? "").slice(0, 3)).toUpperCase()}</span>
               <span className="dot" style={{ background: d.column === "posted" || d.column === "scheduled" ? "var(--ok)" : "var(--warn)" }}></span>
               <span style={{ flex: "1", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{kindOf(d)}</span>
-              <span className="meta">{BADGE[d.column][0].toLowerCase()}</span>
+              <span className="meta">{badgeOf(d)[0].toLowerCase()}</span>
             </div>
           ))}
         </section>

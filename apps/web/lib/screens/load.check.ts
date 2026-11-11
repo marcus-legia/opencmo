@@ -57,6 +57,8 @@ const tables: Record<string, Row[]> = {
     { id: "p-x", department: "post", platform: "X", day: today, idea: "Week one", status: "in_review", body: { text: "Week one.", alternates: ["Alt."] }, final_text: null, published_at: null, clip_id: null },
     { id: "p-li", department: "post", platform: "LinkedIn", day: today, idea: "Week one", status: "approved", body: { text: "Week one, longer." }, final_text: "Week one, mine.", published_at: null, clip_id: null },
     { id: "p-th", department: "post", platform: "Threads", day: today, idea: "Week one", status: "planned", body: {}, final_text: null, published_at: null, clip_id: null },
+    { id: "p-held", department: "post", platform: "X", day: today, idea: "Held", status: "in_review", body: { text: "Held post." }, final_text: null, published_at: null, clip_id: null },
+    { id: "p-lost", department: "post", platform: "X", day: today, idea: "Lost", status: "in_review", body: { text: "Lost post." }, final_text: null, published_at: null, clip_id: null },
     { id: "p-old", department: "post", platform: "X", day: old, idea: "Long ago", status: "published", body: { text: "Old." }, final_text: "Old.", published_at: null, clip_id: null },
     // The plan's video item is not a caption.
     { id: "v-item", department: "video", platform: "TikTok", day: today, idea: "Cut by words", status: "planned", body: {}, final_text: null, published_at: null, clip_id: null },
@@ -70,6 +72,7 @@ const tables: Record<string, Row[]> = {
   ],
   approvals: [
     { id: "card-post", ref_kind: "content_item", ref_id: "p-x", status: "waiting" },
+    { id: "card-held", ref_kind: "content_item", ref_id: "p-held", status: "held", held_until: "2099-01-02T00:00:00Z" },
     { id: "card-video", ref_kind: "editor_project", ref_id: "clip-video", status: "waiting" },
     { id: "card-batch", ref_kind: "short_batch", ref_id: "batch-1", status: "waiting" },
     { id: "card-time", ref_kind: "schedule_slot", ref_id: "sl-wait", status: "waiting" },
@@ -117,15 +120,21 @@ async function main(): Promise<void> {
   const writer = compose("writer", (await LOADERS.writer!(ctx)) as never, { production: true, sample: false });
   assert.ok(writer.live.drafts && writer.live.voice, "Writer's drafts and voice are live");
   const drafts = new Map(writer.data.drafts.map((d) => [d.id, d]));
-  assert.deepEqual([...drafts.keys()].sort(), ["b-1", "b-3", "c-tt", "c-yt", "p-li", "p-th", "p-x"], "posts, captions and briefs of the last two weeks");
+  assert.deepEqual([...drafts.keys()].sort(), ["b-1", "b-3", "c-tt", "c-yt", "p-held", "p-li", "p-lost", "p-th", "p-x"], "posts, captions and briefs of the last two weeks");
   assert.deepEqual([drafts.get("b-3")!.scriptId, drafts.get("b-3")!.note, drafts.get("b-3")!.column, drafts.get("b-1")!.scriptId ?? null], ["b-3", "Approved: you record it", "scheduled", null],
     "an approved script opens in the editor; a brief without a storyboard does not");
   assert.deepEqual(
     ["p-x", "p-li", "p-th"].map((id) => [drafts.get(id)!.platform, drafts.get(id)!.column]),
-    [["x", "waiting"], ["linkedin", "scheduled"], ["threads", "drafting"]],
+    [["x", "waiting"], ["linkedin", "scheduled"], ["threads", "planned"]],
     "each post on its own platform",
   );
   assert.equal(drafts.get("p-x")!.approvalId, "card-post");
+  assert.deepEqual(
+    ["p-x", "p-held", "p-lost", "p-li"].map((id) => [drafts.get(id)!.column, drafts.get(id)!.cardState ?? null, drafts.get(id)!.approvalId]),
+    [["waiting", "waiting", "card-post"], ["waiting", "held", null], ["waiting", "missing", null], ["scheduled", null, null]],
+    "a post in review says where its card is: in the queue, held past the day's budget, or gone",
+  );
+  assert.deepEqual([drafts.get("p-held")!.heldUntil, drafts.get("p-held")!.ref, drafts.get("p-held")!.text], ["2099-01-02T00:00:00.000Z", { kind: "content_item", id: "p-held" }, "Held post."]);
   assert.equal(drafts.get("p-li")!.note, "You edited it before approving");
   assert.deepEqual([drafts.get("c-tt")!.kind, drafts.get("c-tt")!.platform, drafts.get("c-tt")!.approvalId], ["caption", "tiktok", "card-batch"], "a short's caption opens its batch card");
   assert.deepEqual([drafts.get("c-yt")!.platform, drafts.get("c-yt")!.title, drafts.get("c-yt")!.approvalId, drafts.get("c-yt")!.note], ["youtube", "Cut a demo by words", "card-video", "You edited it on the card"]);
