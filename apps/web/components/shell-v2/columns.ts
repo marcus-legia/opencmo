@@ -64,14 +64,6 @@ export function readPref(): ColumnsPref {
   }
 }
 
-export function writePref(pref: ColumnsPref): void {
-  try {
-    localStorage.setItem(KEY, JSON.stringify(pref));
-  } catch {
-    // Private mode or storage off: the widths last for this page only.
-  }
-}
-
 /** Writes the widths where CSS reads them. During a drag this is the only thing that runs: no React render per move. */
 export function applyColumns(columns: Pick<Columns, "rail" | "chat" | "railCollapsed">): void {
   const root = document.documentElement;

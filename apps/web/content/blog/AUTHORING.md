@@ -134,8 +134,8 @@ code pre hr br sup sub mark small`
   Post, Sales) where the user approves everything that goes out — see "Product rules" in
   `CLAUDE.md`. Video today: **upload** a video the user owns (do NOT write "paste a YouTube
   link"), automatic or manual moment picking, 9:16 framing that follows the speaker, branded
-  burned-in captions, editing a clip by asking, Brand Kit. Prices: `lib/pricing.ts`,
-  `lib/usage.ts`. If a department isn't live, don't write as if it is.
+  burned-in captions, editing a clip by asking, Brand Kit. Prices: `lib/pricing.ts` (the billing
+  catalogue; never write a price by hand). If a department isn't live, don't write as if it is.
 - Avoid words payment providers flag: "lead generation", "leads", "outreach", "growth hack",
   "get rich", income figures.
 - Don't name competitors to put them down.
