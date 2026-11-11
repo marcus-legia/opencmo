@@ -43,7 +43,7 @@ ${skillText("no-ai-slop")}`;
 
 /**
  * Chỉ mục skill một agent dùng được: tên + một câu mô tả. Playbook riêng đứng trước thư viện để
- * model chọn playbook khi hai bên cùng chủ đề (vd. x-writing trước social).
+ * model chọn playbook khi hai bên cùng chủ đề (vd. post trước social).
  */
 export function skillIndex(agent: AgentId): string {
   const line = (name: SkillName) => `- ${name}: ${CMO_SKILLS[name].description}`;

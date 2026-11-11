@@ -11,6 +11,7 @@
 import { z } from "zod";
 
 import { skillText } from "../skills";
+import type { CheckRules } from "./check-post";
 import type { PlatformProfile } from "../platforms";
 import { checkPostFor } from "../writer/checks";
 import { profileBlock } from "../writer/context";
@@ -23,13 +24,13 @@ import type { Documents } from "./types";
 
 export const THREAD_SYSTEM = `You write X threads for a solo founder, in their voice, from their marketing documents.
 
-${skillText("x-writing")}
+${skillText("post")}
 
 ${skillText("no-ai-slop")}
 
 A thread:
 - ${THREAD_MIN_POSTS} to ${THREAD_MAX_POSTS} posts, each within the <platform> block's limit, each worth reading on its own.
-- The first post is the hook: it makes one clear promise of what the thread gives the reader.
+- The first post says the most interesting true thing plainly, and what the thread walks through. No tease, no formula.
 - Then one step, idea or example per post, in order, keeping the promise. No filler posts.
 - No recap or "in summary" post at the end. The last post lands the final step, and may say what to do next.
 - No links and no hashtags. No "1/", "🧵" or numbering: X shows the thread in order.
@@ -50,12 +51,14 @@ const RECAP = /^\s*(to (sum|wrap) (it )?up|in (short|summary|sum)|tl;?dr|recap|s
 const NUMBERED = /^\s*(\d{1,2}\s*(?:[/)]|\.(?!\d))|🧵)/u;
 
 /** Code-only problems of a thread; empty when it passes. `post` is 1-based in the messages. */
-export function threadIssues(posts: readonly string[], profile: PlatformProfile, rules: ReturnType<typeof checkRules>): string[] {
+export function threadIssues(posts: readonly string[], profile: PlatformProfile, rules: CheckRules): string[] {
   const issues: string[] = [];
+  // A question inside a thread leads to the next post; only the last post must not end by baiting replies.
+  const inside: CheckRules = { ...rules, allowSlop: new Set([...(rules.allowSlop ?? []), "closing_question"]) };
   if (posts.length < THREAD_MIN_POSTS || posts.length > THREAD_MAX_POSTS) issues.push(`A thread has ${THREAD_MIN_POSTS} to ${THREAD_MAX_POSTS} posts; this one has ${posts.length}.`);
   posts.forEach((post, i) => {
     if (!post.trim()) issues.push(`Post ${i + 1} is empty.`);
-    for (const issue of checkPostFor(post, profile, rules)) issues.push(`Post ${i + 1}: ${issue}`);
+    for (const issue of checkPostFor(post, profile, i === posts.length - 1 ? rules : inside)) issues.push(`Post ${i + 1}: ${issue}`);
     if (NUMBERED.test(post)) issues.push(`Post ${i + 1} starts with a number or a thread emoji; X shows the order.`);
   });
   const last = posts.at(-1) ?? "";

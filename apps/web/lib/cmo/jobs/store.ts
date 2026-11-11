@@ -66,7 +66,7 @@ export function supabaseStore(admin: BaseClient): CmoStore {
     async voiceNotes(userId, limit) {
       const { data, error } = await admin.rpc("voice_notes_for", { p_user: userId, p_limit: limit, p_platform: null });
       if (error) throw new Error(`voice_notes_for: ${error.message}`);
-      return ((data ?? []) as { body: string; platform: string | null; created_at: string; weight: number }[]).map((n) => ({ body: n.body, platform: n.platform, created_at: n.created_at, weight: Number(n.weight) }));
+      return ((data ?? []) as { body: string; platform: string | null; created_at: string; weight: number; source: string }[]).map((n) => ({ body: n.body, platform: n.platform, created_at: n.created_at, weight: Number(n.weight), source: n.source }));
     },
     // The editor's code loads only for a caption run.
     videoSource: async (userId, clipId) => (await import("../writer/video-source")).readVideoSource(userId, clipId),

@@ -9,13 +9,15 @@
  */
 
 import { countHashtags } from "../platforms";
+import { slopIssues } from "../slop";
 
 import { numberTokens } from "./context";
 
 export const X_LIMIT = 280;
 
 /** `names`: the founder's own product name(s), which may look like a domain ("Cal.com") and are not links. */
-export type CheckRules = { avoid: string[]; known: Set<string>; names?: string[] };
+/** `allowSlop`: the no-ai-slop patterns the founder's own writing uses, which pass the gate for them (`lib/cmo/slop.ts`). */
+export type CheckRules = { avoid: string[]; known: Set<string>; names?: string[]; allowSlop?: ReadonlySet<string> };
 
 /**
  * Always a link: a URL, a `www.` address, or a domain with a path ("opencmo.io/pricing"), but not a code file name
@@ -62,5 +64,6 @@ export function checkPost(text: string, rules: CheckRules, profile: { limit: num
   issues.push(...factIssues(t, rules));
   if (hasLink(t, rules.names)) issues.push("It has a link. Posts carry no links.");
   if (hashtagCount(t)) issues.push("It has a hashtag. Posts carry no hashtags; they go only on video captions.");
+  issues.push(...slopIssues(t, rules.allowSlop));
   return issues;
 }

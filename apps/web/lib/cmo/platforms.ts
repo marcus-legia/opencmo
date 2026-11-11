@@ -23,7 +23,7 @@ export const PlatformProfileSchema = z
     visibleBeforeMore: z.number().int().min(1).nullable(),
     hashtags: z.number().int().min(0).max(30),
     links: z.literal(false),
-    tone: z.string().min(1).max(200),
+    tone: z.string().min(1).max(300),
   })
   .strict();
 export type PlatformProfile = z.infer<typeof PlatformProfileSchema>;

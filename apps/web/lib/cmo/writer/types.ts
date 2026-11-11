@@ -125,6 +125,11 @@ export type WriterContext = {
   niche?: string;
   /** The URLs `niche` cites: the only ones a brief may say it learned from. */
   nicheUrls?: string[];
+  /**
+   * The no-ai-slop patterns the founder's own writing uses (their rules and the drafts they edited): those pass the
+   * code gate for them (`lib/cmo/slop.ts`).
+   */
+  allowSlop?: ReadonlySet<string>;
 };
 
 const angle = z.string().describe("The hook in a few words");

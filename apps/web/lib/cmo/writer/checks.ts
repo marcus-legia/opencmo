@@ -10,6 +10,7 @@
 import { SLIDE_TEXT_MAX } from "@opencmo/editor-core";
 
 import { checkPost, factIssues, hashtagCount, hasLink, type CheckRules } from "../jobs/check-post";
+import { slopIssues } from "../slop";
 import { SCRIPT_BEATS, type CaptionDraft, type Slide, type VideoBrief, type WriterProfile, type YoutubeDraft } from "./types";
 
 const chars = (text: string) => [...text].length;
@@ -62,6 +63,7 @@ export function checkCaption(draft: Pick<CaptionDraft, "text" | "hashtags">, pro
     ...factIssues(text, rules),
     ...linkIssues(text, profile, rules),
     ...tagIssues(text, draft.hashtags, profile),
+    ...slopIssues(text, rules.allowSlop),
   ];
 }
 
@@ -78,6 +80,8 @@ export function checkYoutube(draft: Pick<YoutubeDraft, "title" | "description" |
     ...factIssues(`${title}\n${description}`, rules),
     ...linkIssues(`${title}\n${description}`, profile, rules),
     ...tagIssues(description, draft.hashtags, profile),
+    ...slopIssues(title, rules.allowSlop).map((issue) => `The title: ${issue}`),
+    ...slopIssues(description, rules.allowSlop).map((issue) => `The description: ${issue}`),
   ];
 }
 
@@ -97,6 +101,10 @@ export function checkVideoBrief(brief: VideoBrief, rules: CheckRules): string[] 
     if (slow >= 0) issues.push(`Beat ${slow + 1} has more words than can be said in ${beats[slow]!.seconds} s.`);
   }
   issues.push(...factIssues([brief.objective, brief.angle, ...brief.hooks, ...brief.keyPoints, brief.cta, ...beats.map((beat) => `${beat.say}\n${beat.show}`)].join("\n"), rules));
+  // What the founder says aloud, line by line: a question inside a script is fine, the other patterns are not.
+  const spoken = [...brief.hooks, brief.cta, ...beats.map((beat) => beat.say)];
+  const said = new Set(spoken.flatMap((line) => slopIssues(line, new Set([...(rules.allowSlop ?? []), "closing_question"]))));
+  issues.push(...[...said].map((issue) => `The script: ${issue}`));
   return issues;
 }
 
@@ -111,5 +119,6 @@ export function checkSlides(slides: readonly Slide[], rules: CheckRules): string
   if (hasLink(text, rules.names)) issues.push("A slide has a link.");
   if (hashtagCount(text)) issues.push("A slide has a hashtag.");
   issues.push(...factIssues(text, rules));
+  issues.push(...slopIssues(text, rules.allowSlop).map((issue) => `A slide: ${issue}`));
   return issues;
 }

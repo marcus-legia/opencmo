@@ -232,7 +232,7 @@ https://developers.tiktok.com/doc/content-posting-api-reference-direct-post
 ## 10. Gaps in the code today
 
 The gaps of 2026-10-25 are closed: the brain reaches Studio (change 4), video has approval states, Writer covers six
-platforms, no-ai-slop is guidance in every writing prompt, `x-writing.md` was rewritten, hashtags follow the platform
+platforms, no-ai-slop is guidance in every writing prompt and a code gate on its plain patterns (2026-11-12), `x-writing.md` became the shared `post.md`, hashtags follow the platform
 profiles, voice is learned from edits, and email and push exist. What the audits of 2026-11-08 found:
 
 | Gap | Evidence | Fix |

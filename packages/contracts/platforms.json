@@ -12,7 +12,7 @@
       "visibleBeforeMore": null,
       "hashtags": 0,
       "links": false,
-      "tone": "One idea, a clear first line."
+      "tone": "Short: one point, the plain true line first; under 100 characters is fine. Line breaks only between thoughts. People scroll fast and reply to specifics, not to questions asked for replies."
     },
     {
       "id": "threads",
@@ -24,7 +24,7 @@
       "visibleBeforeMore": null,
       "hashtags": 0,
       "links": false,
-      "tone": "Conversational, as if talking to one person."
+      "tone": "Conversational, as if talking to one person: looser and warmer than X, a few short lines are fine. Personal and behind-the-scenes posts land; polished marketing reads as an ad."
     },
     {
       "id": "linkedin",
@@ -36,7 +36,7 @@
       "visibleBeforeMore": 140,
       "hashtags": 0,
       "links": false,
-      "tone": "Longer, short paragraphs, the hook before the cut (about 140 characters on a phone, 210 on a desktop)."
+      "tone": "Longer, short paragraphs, the first line before the cut (about 140 characters on a phone, 210 on a desktop). A real story or lesson with its details. No \"I'm excited to announce\", no one-line paragraphs stacked for drama, no moral at the end."
     },
     {
       "id": "instagram_caption",

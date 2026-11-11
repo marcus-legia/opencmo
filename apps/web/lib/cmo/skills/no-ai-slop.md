@@ -1,7 +1,7 @@
 ---
 name: no-ai-slop
 kind: playbook
-description: Editing principles and the stock patterns that make writing read as AI. Every prompt that writes words a person reads or hears carries it: scripts, storyboards, on-screen text, posts, captions, plans and replies. Advice, not a rule; the founder's own voice wins.
+description: Editing principles and the stock patterns that make writing read as AI. Every prompt that writes words a person reads or hears carries it: scripts, storyboards, on-screen text, posts, captions, plans and replies. The plain stock patterns are refused in code; the founder's own writing wins.
 agents: [x_writer, threads_writer, linkedin_writer, instagram_writer, tiktok_writer, youtube_writer, brief_writer, slides_writer, writer, checker, sales, cmo, onboarding, planner, research, director, shorts]
 source: no-ai-slop/skills/no-ai-slop (SKILL.md, eval.md), adapted for drafts a founder approves
 license: MIT — Copyright (c) 2026 Peter Yang
@@ -12,8 +12,9 @@ Write like a sharp human editor would leave it: the founder's point and personal
 
 ## How to use this guidance
 
-- **It is advice, not a rule.** Use it to write better versions and to say what to fix. A pattern on its own is never a reason to throw a draft away.
-- **The founder's voice wins.** The founder's rules and voice notes come first. When they show the founder writes a certain way (a phrase, a rhythm, an em dash, a "just"), keep it, even if this guidance warns against it.
+- **The stock patterns are refused.** Our code checks posts, captions, slides and scripts for the plain patterns below (binary contrasts, faux insight, throat-clearing, colon reveals, rhetorical setups, recap endings, headline formulas, hype words, dashes between clauses, a closing question). A version that shows one is sent back to be fixed, and dropped if it still does. Write without them the first time.
+- **The rest is judgment.** Everything a pattern list cannot catch (a generic sentence, a moral at the end, three versions of one shape) is for you to fix while writing, and for the checker to name.
+- **The founder's voice wins.** The founder's rules and the drafts they edited come first. When they show the founder writes a certain way (a phrase, a rhythm, an em dash, a "just"), keep it, even if this guidance warns against it: our code lets their own patterns through. A draft they approved as written is our writing, not theirs.
 - **Facts stay facts.** Nothing here allows a new claim, number, customer, quote or result. Use only what the documents and the brief say.
 
 ## Editing principles
@@ -80,7 +81,11 @@ Often-empty phrases: it's worth noting, it's important to note, at the end of th
 
 **Formatting slop.** Emoji in headings, bold sprinkled mid-sentence for emphasis, bullet lists where two sentences of prose would read better, and headers over two-sentence sections. Format should follow the content, not decorate it.
 
-**Em dashes.** Do not use them as a default rhythm crutch. In short copy such as a post, a caption or a reply, use none. In longer text, 1-2 are fine if they clearly beat commas, periods, or parentheses. Remove clusters and decorative dashes.
+**Em dashes.** Do not use them as a default rhythm crutch. In a post, a caption, a slide, a script or a reply, use none, and no spaced en dash or double hyphen between clauses either. In longer text (a document, a plan), 1-2 are fine if they clearly beat commas, periods, or parentheses. Remove clusters and decorative dashes.
+
+**Headline formulas and hype.** "The secret to", "the hidden cost of", "here's why", "why X beats Y", "game changer", "unlock your", "supercharge". Say the thing plainly.
+
+**Closing questions.** A post that ends by asking the reader something ("Which would you pick?") to bait replies. End on the point itself.
 
 ## Before you hand it over
 

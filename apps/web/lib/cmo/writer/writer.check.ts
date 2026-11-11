@@ -48,23 +48,26 @@ for (const text of ["Read more at https://example.com", "Details on www.example.
 for (const text of ["Shipping this week #buildinpublic", "#saas tip of the day", "We ship.\n#indiehackers"]) {
   assert.ok(checkPost(text, rules).some((issue) => issue.includes("hashtag")), `a hashtag is refused: ${text}`);
 }
-for (const text of ["We moved the app to Next.js and Node.js.", "Our #1 rule: answer within a day.", "I wrote it in C# first.", "Ship it. Then measure."]) {
+for (const text of ["We moved the app to Next.js and Node.js.", "Our #1 rule is to answer within a day.", "I wrote it in C# first.", "Ship it. Then measure."]) {
   assert.deepEqual(checkPost(text, rules), [], `not a link or a hashtag: ${text}`);
 }
 
-// No AI Slop is guidance in a skill, read by the writer, the checker, sales and CMO chat; never a code check.
+// No AI Slop is a skill read by the writer, the checker, sales and CMO chat; its plain stock patterns are also a code
+// gate (lib/cmo/slop.ts, checked in slop.check.ts).
 assert.deepEqual([...CMO_SKILLS["no-ai-slop"].agents].sort(), ["brief_writer", "checker", "cmo", "director", "instagram_writer", "linkedin_writer", "onboarding", "planner", "research", "sales", "shorts", "slides_writer", "threads_writer", "tiktok_writer", "writer", "x_writer", "youtube_writer"]);
 assert.match(CMO_SKILLS["no-ai-slop"].license, /MIT — Copyright \(c\) 2026 Peter Yang/);
 for (const agent of ["x_writer", "checker", "sales", "cmo"] as const) assert.ok(skillIndex(agent).includes("- no-ai-slop:"), `${agent} lists no-ai-slop`);
-assert.ok(REVIEW_SYSTEM.includes('<skill name="no-ai-slop">') && /advice/.test(REVIEW_SYSTEM), "the checker reads the guidance as advice");
+assert.ok(REVIEW_SYSTEM.includes('<skill name="no-ai-slop">') && /reads like AI wrote it/.test(REVIEW_SYSTEM), "the checker fails a draft that reads as AI");
 const body = CMO_SKILLS["no-ai-slop"].body;
 const words = body.split(/\s+/).filter(Boolean).length;
 assert.ok(words >= 1400 && words <= 2000, `about 1,700 words (got ${words})`);
 for (const left of ["What changed", "Two jobs", "What to ask for", "ask them to paste"]) assert.ok(!body.includes(left), `its chat parts stay out: ${left}`);
-const xWriting = CMO_SKILLS["x-writing"].body;
-for (const taught of ["isn't what you think", "is wrong. Here's why:", "the last post sums up", "1-2 hashtags", "link in reply"]) {
-  assert.ok(!xWriting.includes(taught), `x-writing no longer teaches: ${taught}`);
+const postSkill = CMO_SKILLS["post"].body;
+// The old x-writing taught fill-in hook formulas and a closing question; the post skill teaches neither.
+for (const taught of ["isn't what you think", "is wrong. Here's why:", "the last post sums up", "1-2 hashtags", "link in reply", "I was wrong about [", "Do this instead:", "a question, a takeaway"]) {
+  assert.ok(!postSkill.includes(taught), `the post skill does not teach: ${taught}`);
 }
+assert.deepEqual([...CMO_SKILLS["post"].agents].sort(), ["checker", "cmo", "linkedin_writer", "threads_writer", "x_writer"], "one post skill for every post writer");
 
 // The eval's stock-pattern measure: catches the old fake drafts, passes the new ones and plain posts.
 assert.deepEqual(stockPatterns("Most founders skip this: polite reminders get invoices paid."), ["faux_insight", "colon_reveal"]);
@@ -172,14 +175,18 @@ async function writerChecks() {
   const posted = await createWriter({ think: scripted([post]).think, agentFor: () => "x_writer", canFix: false, postSystem: "POST SYSTEM" }).draft("post", threads, { idea: "Reminders" }, ctx);
   assert.deepEqual(posted.versions.map((v) => v.angle), ["a"]);
 
-  // The checker's review joins the fix round as advice; it never drops a version on its own.
+  // The checker's review joins the fix round; on its own it never drops a version.
   const reviewed = scripted([{ ...post, versions: [post.versions[0]!, { text: "Most founders skip this: reminders.", angle: "b" }, { text: "Day 7 helps.", angle: "c" }] }, { ...post, versions: [post.versions[0]!, { text: "Reminders on day 7 get paid.", angle: "b" }, { text: "Day 7 helps.", angle: "c" }] }]);
   const withReview = await createWriter({ think: reviewed.think, agentFor: () => "x_writer", canFix: true, postSystem: "POST SYSTEM", review: async () => [[], ["Cut the faux-insight setup."], []] }).draft("post", threads, { idea: "Reminders" }, ctx);
   assert.equal(withReview.versions.length, 3);
   assert.match(reviewed.calls[1]!.prompt, /Cut the faux-insight setup/);
   const noFix = scripted([{ ...post, versions: [post.versions[0]!, { text: "Most founders skip this: reminders.", angle: "b" }, { text: "Day 7 helps.", angle: "c" }] }]);
   const kept = await createWriter({ think: noFix.think, agentFor: () => "x_writer", canFix: false, postSystem: "POST SYSTEM", review: async () => [[], ["Cut the faux-insight setup."], []] }).draft("post", threads, { idea: "Reminders" }, ctx);
-  assert.equal(kept.versions.length, 3, "a style problem the writer could not fix still reaches the founder");
+  assert.deepEqual(kept.versions.map((v) => v.text), ["We send the reminder on day 3.", "Day 7 helps."], "a stock pattern the writer could not fix is dropped (the no-ai-slop gate)");
+  // The checker's judgment alone (no pattern the code refuses) never drops a version.
+  const judged = scripted([{ ...post, versions: [post.versions[0]!, { text: "Reminders on day 7 get paid.", angle: "b" }, { text: "Day 7 helps.", angle: "c" }] }]);
+  const judgedOut = await createWriter({ think: judged.think, agentFor: () => "x_writer", canFix: false, postSystem: "POST SYSTEM", review: async () => [[], ["Too generic."], []] }).draft("post", threads, { idea: "Reminders" }, ctx);
+  assert.equal(judgedOut.versions.length, 3, "a review note without a refused pattern still reaches the founder");
 
   // Video brief: exactly three hooks, facts from the documents, parsed into Studio's type.
   const brief = { objective: "Show how Paylane chases a late invoice", angle: "Show it working", hooks: ["Your invoice is late.", "Paylane sends the reminder.", "Stop chasing invoices."], keyPoints: ["Plans start at $12/month"], cta: "Try Paylane", seconds: 30, aspect: "9:16", rationale: "r", learnedFrom: [],
