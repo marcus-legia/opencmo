@@ -47,6 +47,13 @@ const LogsIcon = () => (
 );
 
 /** The business switcher: the product's initial and name, a menu with what has no other place in the frame. */
+const CoinIcon = () => (
+  <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 7v10M9 9.5h4.5a2 2 0 0 1 0 4H10a2 2 0 0 0 0 4h5" />
+  </svg>
+);
+
 function Project({ menu }: { menu: ReactNode }) {
   const ws = useWorkspace();
   const name = ws.name ?? siteLabel(ws.site) ?? "Your business";
@@ -57,7 +64,7 @@ function Project({ menu }: { menu: ReactNode }) {
         <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: "20px", height: "20px", borderRadius: "5px", background: "var(--accent)", color: "var(--accent-ink)", fontWeight: "700", fontSize: "12px" }}>
           {name.charAt(0).toUpperCase()}
         </span>
-        <span style={{ fontWeight: "600" }}>{name}</span>
+        <span className="td-project-name" style={{ fontWeight: "600" }}>{name}</span>
         <Chevron />
       </summary>
       <div className="td-menu">{menu}</div>
@@ -117,7 +124,13 @@ export function TopBar({
   const ws = useWorkspace();
   const x = ws.accounts.find((a) => a.platform === "x");
   const linkedin = ws.accounts.some((a) => a.platform === "linkedin");
-  const creditsLabel = `${credits ?? "–"} credits`;
+  // On a phone the word goes (the coin and the number stay; the link keeps "credits" for screen readers).
+  const creditsLabel = (
+    <span>
+      {credits ?? "–"}
+      <span className="td-pill-more"> credits</span>
+    </span>
+  );
 
   // Feed, Calendar and Analytics share one bar (owner, 2026-11-10): the business and its accounts on the left, the three
   // views in the middle as links (prefetched, so a switch is instant), credits, Logs and the chat on the right. On the
@@ -204,15 +217,12 @@ export function TopBar({
         </nav>
         <div style={{ flex: "1 1 auto" }}></div>
         <Link href="/app/billing" className="pill" style={{ textDecoration: "none" }}>
-          <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
-            <circle cx="12" cy="12" r="9" />
-            <path d="M12 7v10M9 9.5h4.5a2 2 0 0 1 0 4H10a2 2 0 0 0 0 4h5" />
-          </svg>
+          <CoinIcon />
           {creditsLabel}
         </Link>
         <button type="button" className="pill" aria-pressed={logsOpen} onClick={onLogs}>
           <LogsIcon />
-          Logs
+          <span className="td-pill-label">Logs</span>
         </button>
         <Link href="/app/studio" className="ib" aria-label="Open the editor">
           <svg className="i" viewBox="0 0 24 24" aria-hidden="true">
@@ -225,7 +235,7 @@ export function TopBar({
         {current === "feed" ? null : (
           <button type="button" className="pill" onClick={onChat}>
             <ChatIcon />
-            Chat
+            <span className="td-pill-label">Chat</span>
           </button>
         )}
         <Avatar email={email} />
@@ -236,8 +246,8 @@ export function TopBar({
   return (
     <header className="top">
       <Project menu={MORE} />
-      {variant.trail.map((step) => (
-        <span key={step.label} style={{ display: "contents" }}>
+      {variant.trail.map((step, index) => (
+        <span key={step.label} className={index === variant.trail.length - 1 ? "td-crumb is-last" : "td-crumb"} style={{ display: "contents" }}>
           <span className="meta">/</span>
           {step.href ? (
             <Link href={step.href} style={{ display: "inline-flex", alignItems: "center", gap: "4px", color: "var(--muted)", textDecoration: "none", fontSize: "13.5px" }}>
@@ -251,24 +261,27 @@ export function TopBar({
       <div style={{ flex: "1 1 auto" }}></div>
       {variant.credits ? (
         <Link href="/app/billing" className="pill" style={{ textDecoration: "none" }}>
+          <CoinIcon />
           {creditsLabel}
         </Link>
       ) : null}
       {variant.logs ? (
         <button type="button" className="pill" aria-pressed={logsOpen} onClick={onLogs}>
           <LogsIcon />
-          Logs
+          <span className="td-pill-label">Logs</span>
         </button>
       ) : null}
       {variant.back ? (
         <Link href="/app" className="pill" style={{ textDecoration: "none" }}>
-          Back to today
+          <span>
+            Back<span className="td-pill-more"> to today</span>
+          </span>
         </Link>
       ) : null}
       {variant.chat ? (
         <button type="button" className="pill" onClick={onChat}>
           <ChatIcon />
-          Chat
+          <span className="td-pill-label">Chat</span>
         </button>
       ) : null}
       <Avatar email={email} />

@@ -1,8 +1,10 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { CmoView } from "@/components/cmo/CmoView";
 import { CmoWorkspace } from "@/components/cmo/workspace/CmoWorkspace";
+import { TodayLoading } from "@/components/today/TodayLoading";
 import { Feed } from "@/components/today/Feed";
 import { UI_V2 } from "@/lib/screens/flag";
 import { loadWorkspace } from "@/lib/cmo/load-workspace";
@@ -45,7 +47,13 @@ export default async function CmoHome({ searchParams }: { searchParams: Promise<
       const query = new URLSearchParams({ ...(site ? { site } : {}), ...(paid ? { paid } : {}) }).toString();
       redirect(query ? `/app/setup?${query}` : "/app/setup");
     }
-    return <Feed email={user?.email ?? null} />;
+    // The feed and its Context column read `?doc=` (useSearchParams). The route is dynamic, so this rarely suspends;
+    // the boundary keeps a static render from turning the whole page client-only, and the frame stays either way.
+    return (
+      <Suspense fallback={<TodayLoading label="Loading your feed" />}>
+        <Feed email={user?.email ?? null} />
+      </Suspense>
+    );
   }
 
   const state = await loadCmoState(supabase);

@@ -26,14 +26,17 @@ export function AccountUsage({
   showIdentity = false,
   showStorage = false,
   emphasizeCredits = false,
+  hideCredits = false,
 }: {
   account: AccountSummary;
+  /** The page shows the balance elsewhere (v2 Billing's "Credits left"): leave it out here. */
+  hideCredits?: boolean;
   showIdentity?: boolean;
   showStorage?: boolean;
   emphasizeCredits?: boolean;
 }) {
   const rows = accountUsageRows(account, formatQuotaReset(account.resets_at));
-  const visibleRows = emphasizeCredits
+  const visibleRows = emphasizeCredits || hideCredits
     ? rows.filter((row) => row.label !== "Credits left")
     : rows;
 
@@ -49,6 +52,10 @@ export function AccountUsage({
             : `Enough for about ${account.credits} ${account.credits === 1 ? "minute" : "minutes"} of video.`}
         </p>
       )}
+      {/* With the balance shown elsewhere, the warning still belongs next to the usage. */}
+      {hideCredits && !emphasizeCredits && account.credits < account.job_hold_credits ? (
+        <p className="acct-hint is-low">A new job needs {account.job_hold_credits} credits. Buy credits or pick a plan below.</p>
+      ) : null}
       <ul className="acct-list">
         {showIdentity && (
           <li>
@@ -74,7 +81,7 @@ export function AccountUsage({
 }
 
 /** Billing đọc cùng hợp đồng /account như Settings và editor. */
-export function AccountUsageLoader({ emphasizeCredits = false }: { emphasizeCredits?: boolean }) {
+export function AccountUsageLoader({ emphasizeCredits = false, hideCredits = false }: { emphasizeCredits?: boolean; hideCredits?: boolean }) {
   const [account, setAccount] = useState<AccountSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -96,5 +103,5 @@ export function AccountUsageLoader({ emphasizeCredits = false }: { emphasizeCred
 
   if (error) return <p className="field-error">{error}</p>;
   if (!account) return <Skeleton height={72} radius="var(--ds-radius-lg)" />;
-  return <AccountUsage account={account} emphasizeCredits={emphasizeCredits} />;
+  return <AccountUsage account={account} emphasizeCredits={emphasizeCredits} hideCredits={hideCredits} />;
 }

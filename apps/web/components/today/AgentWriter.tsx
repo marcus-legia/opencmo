@@ -35,6 +35,26 @@ const when = (d: Draft) => {
 const kindOf = (d: Draft) => (d.kind === "post" ? `${PLATFORM_LABEL[d.platform]} post` : KIND_LABEL[d.kind]);
 const iconOf = (d: Draft) => (d.kind === "video_brief" ? KIND_ICON.script : d.kind === "slide_text" ? KIND_ICON.slideshow : d.kind === "caption" ? KIND_ICON.price : (PLATFORM_ICON[d.platform] ?? KIND_ICON.post));
 
+const WEEKDAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+
+/**
+ * Minutes from this Monday 00:00: a draft with a time at that time, one with only a day (still to come this week) at
+ * that day's end, one with neither last of all.
+ */
+function weekOrder(d: Draft, monday: number): number {
+  if (d.at) return Math.round((Date.parse(d.at) - monday) / 60_000);
+  const day = WEEKDAYS.indexOf((d.dayText ?? "").slice(0, 3).toLowerCase());
+  return day < 0 ? 8 * 1440 : day * 1440 + 1439;
+}
+
+/** This Monday, 00:00 on this device. */
+function thisMonday(): number {
+  const t = new Date();
+  t.setHours(0, 0, 0, 0);
+  t.setDate(t.getDate() - ((t.getDay() + 6) % 7));
+  return t.getTime();
+}
+
 /**
  * The Writer agent page (AgentWriter.dc.html). Asking for a post goes through the CMO chat, which shows its price card
  * before anything runs (charge before running). A waiting row opens its real card in place; an approved script offers
@@ -67,6 +87,10 @@ export function AgentWriter() {
   const active = platform && platforms.length > 1 && platforms.includes(platform as Draft["platform"]) ? platform : null;
   const shown = active ? listed.filter((d) => d.platform === active) : listed;
   const firstOpen = open ?? waiting[0]?.id ?? null;
+  // The side card reads in the order the drafts go out (weekOrder).
+  const monday = thisMonday();
+  // "This week" means this week: the screen also carries last week's drafts, which would push this week's out of seven.
+  const week = drafts.filter((d) => !d.at || Date.parse(d.at) >= monday).sort((a, b) => weekOrder(a, monday) - weekOrder(b, monday)).slice(0, 7);
   const askPrompt = ASK_KINDS.find((k) => k.id === askKind)!;
 
   function write() {
@@ -247,8 +271,8 @@ export function AgentWriter() {
               Calendar
             </Link>
           </div>
-          {drafts.length === 0 ? <div className="meta">The week's plan lands here on Sunday.</div> : null}
-          {drafts.slice(0, 7).map((d) => (
+          {week.length === 0 ? <div className="meta">The week's plan lands here on Sunday.</div> : null}
+          {week.map((d) => (
             <div key={d.id} className="day">
               <span className="d">{(d.at ? new Date(d.at).toLocaleDateString("en-GB", { weekday: "short" }) : (d.dayText ?? "").slice(0, 3)).toUpperCase()}</span>
               <span className="dot" style={{ background: d.column === "posted" || d.column === "scheduled" ? "var(--ok)" : "var(--warn)" }}></span>
