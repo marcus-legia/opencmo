@@ -126,7 +126,7 @@ function ThreadRow({ t, open, onToggle, onDecide }: { t: Thread; open: boolean; 
   }
 
   return (
-    <div className="th" data-open={open}>
+    <div className="th" data-open={open} role="listitem">
       <button type="button" className="row" onClick={onToggle} aria-expanded={open}>
         <span className={tone(t.score)}>{tenth(t.score)}</span>
         <span style={{ flex: "1 1 auto", minWidth: "0" }}>
@@ -154,7 +154,9 @@ function ThreadRow({ t, open, onToggle, onDecide }: { t: Thread; open: boolean; 
             </div>
           ) : null}
           <div className="meta">{t.rule.text}</div>
-          {skipped ? null : t.draft === null ? (
+          {skipped ? (
+            <div className="meta">Sales did not draft a reply. The community&apos;s rules leave no room for one.</div>
+          ) : t.draft === null ? (
             <div className="meta">No draft yet. Sales drafts replies for the highest-scored threads first.</div>
           ) : (
             <div>
@@ -267,6 +269,12 @@ export function AgentSales() {
   const lastScan = runs[0]?.at ?? null;
   const name = ws.name ?? "your product";
 
+  // The banner's way to the settings: the tab, then the cursor on its heading, so the founder lands where to act.
+  const openSettings = () => {
+    setTab("settings");
+    requestAnimationFrame(() => document.getElementById("sales-settings-title")?.focus());
+  };
+
   return (
     <div style={{ display: "flex", flexWrap: "wrap", maxWidth: "1320px", margin: "0 auto", padding: "22px 24px 40px", gap: "24px" }} data-testid="v2-sales">
       <main style={{ flex: "999 1 600px", minWidth: "0" }}>
@@ -318,7 +326,7 @@ export function AgentSales() {
         {data?.stuck ? (
           <div className="card" role="alert" style={{ marginTop: "14px" }}>
             <b>{data.stuck.text}</b>{" "}
-            <button type="button" className="ghost" onClick={() => setTab("settings")} style={{ marginLeft: "8px" }}>
+            <button type="button" className="ghost" onClick={openSettings} style={{ marginLeft: "8px" }}>
               Change where Sales looks
             </button>
           </div>
@@ -337,7 +345,7 @@ export function AgentSales() {
               <span className="meta">Sort</span>
               <span className="pill">Score</span>
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }} role="list" aria-label="Threads">
               {list.length === 0 ? <div className="meta">No threads yet. Sales scans the communities your customers use and scores what it finds.</div> : null}
               {list.map((t) => (
                 <ThreadRow key={t.id} t={t} open={open === t.id} onToggle={() => setOpen(open === t.id ? null : t.id)} onDecide={decide} />

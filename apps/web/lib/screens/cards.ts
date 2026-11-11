@@ -236,7 +236,8 @@ function build(row: ApprovalRow): Built | null {
       return {
         title: clip(`${v.title} · ${Math.round(v.seconds!)} s`, 300),
         summary: clip(`${v.what || shots}.${v.wait_minutes ? ` Ready in about ${v.wait_minutes} minutes.` : ""}`, 400),
-        meta: v.keyframes.length ? "Redo any keyframe before you approve · credits held until the video is done" : "Credits held until the video is done",
+        // A keyframe is redone in the editor now (`redo_keyframe`), not from the card (S2 review, 2026-11-08).
+        meta: v.keyframes.length ? "Redo a keyframe in the editor after you approve · credits held until the video is done" : "Credits held until the video is done",
         body: {
           kind: "price",
           stepId: v.step_id,

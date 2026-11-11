@@ -367,8 +367,11 @@ test("Help-only Sales card says why and has no post button", async ({ page }) =>
 
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/app/sales");
+  // AgentSales.dc.html: a thread opens in place with its rule and its draft.
   const threads = page.getByRole("list", { name: "Threads" });
-  await expect(threads).toContainText("r/startups bans self-promotion: help only");
+  const helpOnly = threads.getByRole("listitem").filter({ hasText: "how do you make launch videos?" });
+  if ((await helpOnly.getByRole("button").first().getAttribute("aria-expanded")) !== "true") await helpOnly.getByRole("button").first().click();
+  await expect(helpOnly).toContainText("r/startups bans self-promotion: help only");
   await threads.getByRole("button", { name: /Do AI captions hurt reach\?/ }).click();
   await expect(page.getByText("Sales did not draft a reply.")).toBeVisible();
   // The Sales screen itself (the shell's chat column suggests "Draft a post…" prompts, which post nothing).
@@ -394,7 +397,7 @@ test("Sales settings save live; a stuck scan points at them, not at credits", as
   for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: width < 500 ? 844 : 1000 });
     await page.goto("/app/sales");
-    await expect(page.getByTestId("sales-settings")).toBeVisible();
+    await expect(page.getByTestId("v2-sales")).toBeVisible();
     const banner = page.getByRole("alert").filter({ hasText: "found no conversation worth joining" });
     await expect(banner).toBeVisible();
     await expect(banner).not.toContainText("threads found before it stopped");
@@ -402,7 +405,9 @@ test("Sales settings save live; a stuck scan points at them, not at credits", as
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
     await noSeriousAxe(page);
   }
+  // The banner leads to the Settings tab with the cursor on its heading.
   await page.getByRole("alert").getByRole("button", { name: "Change where Sales looks" }).click();
+  await expect(page.getByTestId("sales-settings")).toBeVisible();
   await expect(page.locator("#sales-settings-title")).toBeFocused();
 
   const settings = page.getByTestId("sales-settings");
@@ -418,6 +423,7 @@ test("Sales settings save live; a stuck scan points at them, not at credits", as
     .toEqual({ excluded_subreddits: ["memes"], co_occurrence: [["video", "editor"]] });
 
   await page.reload();
+  await page.getByRole("tablist", { name: "Sales" }).getByRole("tab", { name: "Settings" }).click();
   await expect(page.getByTestId("sales-settings").getByRole("list", { name: "Excluded subreddits" })).toContainText("r/memes");
   await expect(page.getByTestId("sales-settings").getByRole("list", { name: "Word pairs" })).toContainText("video + editor");
 });

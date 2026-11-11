@@ -212,6 +212,11 @@ export function StudioScreen() {
           ))}
         </div>
       </div>
+      {shownCards.length === 0 && projects.loaded ? (
+        <p className="meta" role="status">
+          {query.trim() ? "Nothing matches." : "Nothing here yet. Upload a video, or start a blank edit."}
+        </p>
+      ) : null}
       <div className="grid">
         {shownCards.map((p) => {
           const tall = p.kind === "short" || p.kind === "post_image";

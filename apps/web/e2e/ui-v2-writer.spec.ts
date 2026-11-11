@@ -204,14 +204,23 @@ test("Library → Voice: notes with platform, source and weight; delete asks fir
 test("Writer filters drafts per platform", async ({ page }) => {
   await signIn(page, state().users.a);
   await page.goto("/app/writer?sample=1");
-  // One row per draft since the Today redesign.
-  const cards = page.locator(".td-row-item");
-  await expect(cards).toHaveCount(8);
+  // One row per draft (AgentWriter.dc.html); a chip per platform the week's drafts are for.
+  const rows = page.getByTestId("writer-row");
+  const all = await rows.count();
+  expect(all).toBeGreaterThan(1);
   const filter = page.getByRole("group", { name: "Platform" });
-  await filter.getByRole("button", { name: "LinkedIn", exact: true }).click();
-  await expect(cards).toHaveCount(4);
-  await filter.getByRole("button", { name: "X", exact: true }).click();
-  await expect(cards).toHaveCount(4);
+  for (const name of ["LinkedIn", "X"]) {
+    await filter.getByRole("button", { name, exact: true }).click();
+    await expect(filter.getByRole("button", { name, exact: true })).toHaveAttribute("aria-pressed", "true");
+    const shown = await rows.count();
+    expect(shown).toBeGreaterThan(0);
+    expect(shown).toBeLessThan(all);
+    for (const platform of await rows.evaluateAll((els) => els.map((el) => el.getAttribute("data-platform")))) {
+      expect(platform?.toLowerCase()).toBe(name === "X" ? "x" : "linkedin");
+    }
+  }
+  await filter.getByRole("button", { name: "All", exact: true }).click();
+  await expect(rows).toHaveCount(all);
 });
 
 // ------------------------------------------------------------------ C3: posts and captions on live rows

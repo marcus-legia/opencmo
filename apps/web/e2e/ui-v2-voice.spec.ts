@@ -24,6 +24,9 @@ async function founderWithDrafts(): Promise<E2EUser> {
   const created = await db.auth.admin.createUser({ email: user.email, password: user.password, email_confirm: true });
   expect(created.error).toBeNull();
   user.id = created.data.user!.id;
+  // An onboarded founder: Voice is a pane over the feed, and a founder with no document is sent to Setup first.
+  const doc = await db.from("marketing_documents").insert({ user_id: user.id, kind: "product", version: 1, created_by: "user", body: { name: "Duely", one_liner: "Invoices that chase themselves." } });
+  expect(doc.error).toBeNull();
   const posts = await db.from("content_items").insert([
     {
       user_id: user.id, department: "post", platform: "X", day: new Date().toISOString().slice(0, 10), idea: "Invoices", status: "in_review",

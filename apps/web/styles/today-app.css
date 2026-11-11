@@ -327,3 +327,5 @@ html:not([data-theme="dark"]) .k { --ok: #16744c; --warn: #8f5a0e; }
 .td-pane .scr-split { display: flex; flex-direction: column; gap: 14px; }
 .td-pane .scr-split > * { min-width: 0; }
 .td-pane .scr-side { display: flex; flex-direction: column; gap: 14px; max-width: none; }
+/* Writer's platform chips, pressed as the Calendar's are. */
+.pg-agentwriter [role="group"] .chip[aria-pressed="true"] { color: var(--text); border-color: var(--line-2); background: var(--raised); }
