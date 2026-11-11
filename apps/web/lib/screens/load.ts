@@ -699,7 +699,9 @@ async function schedule({ supabase, userId, params }: LoadContext): Promise<Part
   const asked = params.get("from");
   const askedDay = asked && /^\d{4}-\d{2}-\d{2}$/.test(asked) && !Number.isNaN(Date.parse(`${asked}T12:00:00Z`)) ? asked : null;
   const monday = askedDay ? localMonday(Date.parse(`${askedDay}T12:00:00Z`), "UTC") : localMonday(Date.now(), timezone);
-  const nextMonday = new Date(Date.parse(`${monday}T12:00:00Z`) + 7 * 86_400_000).toISOString().slice(0, 10);
+  // `?range=month`: the Calendar's Month view draws four weeks, so it reads four (it read one, and weeks 2-4 were empty).
+  const days = params.get("range") === "month" ? 28 : 7;
+  const nextMonday = new Date(Date.parse(`${monday}T12:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
   const from = new Date(localMidnight(monday, timezone) ?? `${monday}T00:00:00Z`);
   const to = new Date(localMidnight(nextMonday, timezone) ?? `${nextMonday}T00:00:00Z`);
   return parts<ScheduleScreen>("schedule", {

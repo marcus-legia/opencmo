@@ -139,17 +139,7 @@ export function ContextDrawer({ doc, edit = false, onClose, onOpen }: { doc: Doc
       .catch(() => setLoadError(true));
   }, [loads]);
 
-  // Escape leaves the form first (the draft is dropped, nothing saved), then the drawer.
   const editing = draft !== null;
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      if (editing) setDraft(null);
-      else onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose, editing]);
 
   const row = ROWS.find((r) => r.id === doc)!;
   const pane = PANES.has(doc) ? (doc as PaneId) : null;
@@ -162,6 +152,22 @@ export function ContextDrawer({ doc, edit = false, onClose, onOpen }: { doc: Doc
     if (id !== doc && changed && !window.confirm("Leave without saving your changes?")) return;
     onOpen(id, withForm);
   };
+  // Closing the drawer (X, the scrim) with changes in the form asks first, as another document does.
+  const close = () => {
+    if (changed && !window.confirm("Leave without saving your changes?")) return;
+    onClose();
+  };
+
+  // Escape leaves the form first, then the drawer; changes in the form are dropped only once the founder says so.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      if (!editing) onClose();
+      else if (!changed || window.confirm("Leave without saving your changes?")) setDraft(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose, editing, changed]);
 
   // `?edit=1` (a link from the CMO, "+", Research's "Add a competitor") opens the form; another document drops a draft.
   useEffect(() => {
@@ -252,7 +258,7 @@ export function ContextDrawer({ doc, edit = false, onClose, onOpen }: { doc: Doc
           ) : null}
         </aside>
 
-        <div aria-hidden="true" onClick={onClose} style={{ position: "absolute", inset: "0 0 0 288px", background: "var(--scrim)", zIndex: "1" }}></div>
+        <div aria-hidden="true" onClick={close} style={{ position: "absolute", inset: "0 0 0 288px", background: "var(--scrim)", zIndex: "1" }}></div>
 
         <section
           className="drawer"
@@ -272,7 +278,7 @@ export function ContextDrawer({ doc, edit = false, onClose, onOpen }: { doc: Doc
               </span>
             ) : null}
             <div style={{ flex: "1 1 auto" }}></div>
-            <button type="button" className="ib" aria-label="Close" onClick={onClose}>
+            <button type="button" className="ib" aria-label="Close" onClick={close}>
               <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M18 6 6 18" />
                 <path d="m6 6 12 12" />

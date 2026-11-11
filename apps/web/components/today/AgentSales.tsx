@@ -101,7 +101,7 @@ function ScanNow() {
   );
 }
 
-function ThreadRow({ t, open, onToggle, onDecide }: { t: Thread; open: boolean; onToggle: () => void; onDecide: (t: Thread, action: "replied" | "dismissed", reason?: string) => Promise<void> }) {
+function ThreadRow({ t, open, onToggle, onDecide }: { t: Thread; open: boolean; onToggle: () => void; onDecide: (t: Thread, action: "replied" | "dismissed", reason?: string, text?: string) => Promise<void> }) {
   const [draft, setDraft] = useState(t.draft ?? "");
   const [copied, setCopied] = useState(false);
   const [dismissing, setDismissing] = useState(false);
@@ -121,7 +121,10 @@ function ThreadRow({ t, open, onToggle, onDecide }: { t: Thread; open: boolean; 
   }
   async function run(action: "replied" | "dismissed", why?: string) {
     setBusy(true);
-    await onDecide(t, action, why);
+    // The reply that counts is the one the founder posted: an edited draft goes with "replied", so the 1-in-10 mention
+    // rule and the learning read what went out, not the draft.
+    const posted = draft.trim();
+    await onDecide(t, action, why, action === "replied" && posted && posted !== (t.draft ?? "").trim() ? posted.slice(0, 3000) : undefined);
     setBusy(false);
   }
 
@@ -250,12 +253,12 @@ export function AgentSales() {
       .catch(() => {});
   }, []);
 
-  async function decide(t: Thread, action: "replied" | "dismissed", reason?: string) {
+  async function decide(t: Thread, action: "replied" | "dismissed", reason?: string, text?: string) {
     setError(null);
     try {
       // Sample threads change only in the browser; live ones go through the ownership-checking RPC.
-      if (live) await api(`/cmo/opportunities/${encodeURIComponent(t.id)}`, jsonBody({ action, reason }));
-      setThreads((all) => (all ?? []).map((x) => (x.id === t.id ? { ...x, status: action } : x)));
+      if (live) await api(`/cmo/opportunities/${encodeURIComponent(t.id)}`, jsonBody(action === "replied" ? { action, ...(text ? { text } : {}) } : { action, reason }));
+      setThreads((all) => (all ?? []).map((x) => (x.id === t.id ? { ...x, status: action, ...(text ? { draft: text } : {}) } : x)));
       setWeek((w) => (w ? (action === "replied" ? { ...w, replied: w.replied + 1 } : { ...w, dismissed: w.dismissed + 1 }) : w));
       setOpen((threads ?? []).find((x) => x.id !== t.id && x.status === "open")?.id ?? null);
     } catch (err) {
