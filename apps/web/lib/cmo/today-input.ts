@@ -69,8 +69,10 @@ export async function loadTodayInput(
   const [waiting, decidedToday, decidedEver, strategy, failed, published, tomorrow, accounts, rate, coming] = await Promise.all([
     db.from("approvals").select("id, kind, department, snapshot, created_at, expires_at").eq("user_id", userId).eq("status", "waiting")
       .order("created_at").limit(100),
-    db.from("approvals").select("id", { count: "exact", head: true }).eq("user_id", userId)
-      .in("status", ["approved", "edited", "skipped"]).gte("decided_at", startOfToday),
+    // The rows, not a count: a time approved with its post is a `schedule` card that was born decided, and counting
+    // it made one Approve read "2 done".
+    db.from("approvals").select("id, created_at, decided_at").eq("user_id", userId)
+      .in("status", ["approved", "edited", "skipped"]).gte("decided_at", startOfToday).limit(500),
     db.from("approvals").select("id", { count: "exact", head: true }).eq("user_id", userId).in("status", ["approved", "edited", "skipped"]),
     db.from("marketing_documents").select("id", { count: "exact", head: true }).eq("user_id", userId).eq("kind", "strategy"),
     // A failed post still inside its window, with its Retry card waiting.
@@ -135,7 +137,7 @@ export async function loadTodayInput(
     now,
     timezone,
     cards,
-    decidedToday: decidedToday.count ?? 0,
+    decidedToday: ((decidedToday.data ?? []) as { created_at: string; decided_at: string | null }[]).filter((row) => row.decided_at !== row.created_at).length,
     failedSlots,
     lastPosted: [...last.entries()].map(([platform, at]) => ({ platform, at })),
     needsAccount,

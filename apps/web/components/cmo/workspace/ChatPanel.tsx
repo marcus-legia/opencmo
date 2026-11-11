@@ -215,10 +215,14 @@ export function ChatPanel({
 
   /** Opens a tool's screen in column 3; true when the result named a screen, so that screen reloads. */
   const openPanel = useCallback(
-    (open: unknown): boolean => {
+    (open: unknown, asked = false): boolean => {
       const href = panelHref(open);
       if (!href) return false;
       const path = href.split("?")[0]!;
+      // On the feed a finished draft is already in front of the founder: its card arrives in the list. Moving them to
+      // Writer on its own took them off the page they approve on (owner, 2026-11-10: fewer jumps). The run line's
+      // "Open" still goes there when they ask.
+      if (!asked && pathRef.current === "/app" && path === "/app/writer") return true;
       shown.current = { path, ids: targetIds(open) };
       // The editor with a request always opens, even on the same clip: the request is new.
       if (pathRef.current !== path || href.includes("?ask=")) {
@@ -534,7 +538,7 @@ export function ChatPanel({
                       <li key={`run-${run.id}`} className={`cmo-msg is-note${line.status === "failed" ? " is-failed" : ""}`} data-testid="run-line">
                         <p>{line.text}</p>
                         {href ? (
-                          <button type="button" className="cmo-note-open" onClick={() => openPanel(line.open)}>
+                          <button type="button" className="cmo-note-open" onClick={() => openPanel(line.open, true)}>
                             Open
                           </button>
                         ) : null}

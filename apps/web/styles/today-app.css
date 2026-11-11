@@ -348,3 +348,26 @@ html:not([data-theme="dark"]) .k { --ok: #16744c; --warn: #8f5a0e; }
 
 /* The screens' loading state (components/today/TodayLoading.tsx): the column's width and padding, never the page's. */
 .td-frame .td-loading { flex: 1 1 600px; min-width: 0; max-width: 1080px; margin: 0 auto; padding: 22px 24px 40px; display: flex; flex-direction: column; gap: 14px; box-sizing: border-box; }
+
+/* The feed's week and activity (components/today/Feed.tsx): a stage on every piece of the week, and the last things
+   that happened. The washes are mixed from the page's own colours, which the feed's artboard does not carry as tokens. */
+.pg-main .stage { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 6px; font-size: 12.5px; font-weight: 500; white-space: nowrap; flex-shrink: 0; }
+.pg-main .stage.plan { background: var(--raised); color: var(--muted); border: 1px solid var(--line); }
+.pg-main .stage.new { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
+.pg-main .stage.wait { background: color-mix(in srgb, var(--warn) 16%, transparent); color: var(--warn); }
+.pg-main .stage.ok { background: color-mix(in srgb, var(--ok) 14%, transparent); color: var(--ok); }
+.pg-main [data-testid="week-row"] .meta { white-space: nowrap; flex-shrink: 0; }
+.pg-main .row > .do, .pg-main .row > .skip { white-space: nowrap; flex-shrink: 0; }
+.pg-main .row > .tile { flex-shrink: 0; }
+.pg-main .td-rowlink { display: inline-flex; align-items: center; text-decoration: none; flex-shrink: 0; }
+.pg-main .sec .meta a { color: inherit; }
+.pg-main .td-activity { list-style: none; margin: 0 0 26px; padding: 4px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+.pg-main .td-activity li { display: flex; align-items: baseline; gap: 10px; padding: 8px 0; font-size: 13.5px; }
+.pg-main .td-activity li + li { border-top: 1px solid var(--line); }
+.pg-main .td-activity .who { flex: 0 0 76px; color: var(--muted); font-weight: 500; }
+.pg-main .td-activity .who.you { color: var(--text); }
+.pg-main .td-activity .what { flex: 1 1 auto; min-width: 0; }
+.pg-main .td-activity time { flex-shrink: 0; color: var(--subtle); font-size: 12.5px; }
+@media (max-width: 640px) {
+  .pg-main [data-testid="week-row"] .meta { display: none; }
+}

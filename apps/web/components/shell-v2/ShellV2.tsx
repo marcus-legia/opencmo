@@ -208,10 +208,11 @@ function TodayFrame({ credits, plan, email, userId, pending, chatLive, children,
       reportQueue,
       toast: setMessage,
       focusChat,
+      openLogs,
       workVersion,
       clipAssistantSlot,
     }),
-    [queue, account.pending, reportQueue, focusChat, workVersion, clipAssistantSlot],
+    [queue, account.pending, reportQueue, focusChat, openLogs, workVersion, clipAssistantSlot],
   );
 
   const toastText = message ?? jobToast?.text ?? null;

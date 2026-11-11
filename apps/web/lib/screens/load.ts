@@ -945,7 +945,7 @@ async function writer({ supabase }: LoadContext): Promise<Partial<WriterScreen>>
       };
       const columns = "id, day, idea, platform, status, body, final_text, published_at, clip_id";
       const statuses = ["planned", "drafting", "in_review", "approved", "published"];
-      const [posts, captions, briefs, cards, videoCards, batchCards, shorts, scriptCards] = await Promise.all([
+      const [posts, captions, briefs, cards, videoCards, batchCards, shorts, scriptCards, slotTimes] = await Promise.all([
         supabase.from("content_items").select(columns).eq("department", "post").in("status", statuses).gte("day", since).order("day").limit(100),
         supabase.from("content_items").select(columns).eq("department", "video").not("clip_id", "is", null).in("status", statuses).gte("day", since).order("day").limit(60),
         supabase.from("work_orders").select("id, status, brief, due_at, created_at").eq("kind", "write_video_brief").in("status", ["queued", "running", "deferred", "done"]).gte("created_at", `${since}T00:00:00Z`).order("created_at").limit(20),
@@ -954,7 +954,14 @@ async function writer({ supabase }: LoadContext): Promise<Partial<WriterScreen>>
         liveByRef(supabase, "short_batch"),
         supabase.from("shorts").select("short_clip_id, batch_id").not("short_clip_id", "is", null).gte("created_at", `${since}T00:00:00Z`).limit(200),
         supabase.from("approvals").select("id, ref_id, status").eq("ref_kind", "work_order").eq("kind", "script").gte("created_at", `${since}T00:00:00Z`).limit(40),
+        // The time an approved post goes out: its slot's, not only the day the plan gave it.
+        supabase.from("schedule_slots").select("publish_at, deliverable:deliverables(ref_kind, ref_id)").in("status", ["waiting", "due", "publishing", "reminded"]).gte("publish_at", `${since}T00:00:00Z`).order("publish_at").limit(200),
       ]);
+      // A read that fails here only loses the exact time; the row keeps its day.
+      const goesOut = new Map<string, string>();
+      for (const slot of ((slotTimes.data ?? []) as unknown as { publish_at: string; deliverable: { ref_kind: string; ref_id: string } | null }[])) {
+        if (slot.deliverable?.ref_kind === "content_item" && !goesOut.has(slot.deliverable.ref_id)) goesOut.set(slot.deliverable.ref_id, slot.publish_at);
+      }
       const column = { planned: "planned", drafting: "drafting", in_review: "waiting", approved: "scheduled", published: "posted" } as const;
       // A draft in review whose card is not in the queue: held past the day's budget, or gone (cancelled, never raised
       // again). The row still opens, with "Show it now" (`approval_show_now`) instead of a card that is not there.
@@ -975,8 +982,8 @@ async function writer({ supabase }: LoadContext): Promise<Partial<WriterScreen>>
           id: r.id,
           kind: "post" as const,
           platform: screenPlatform(r.platform, "x"),
-          at: iso(r.published_at),
-          dayText: r.published_at ? null : dayText(r.day),
+          at: iso(r.published_at ?? (r.status === "approved" ? (goesOut.get(r.id) ?? null) : null)),
+          dayText: r.published_at || (r.status === "approved" && goesOut.has(r.id)) ? null : dayText(r.day),
           title: (r.final_text ?? text).slice(0, 300),
           column: column[r.status],
           versions: Math.min(3, Math.max(1, 1 + (Array.isArray(r.body.alternates) ? r.body.alternates.length : 0))),
