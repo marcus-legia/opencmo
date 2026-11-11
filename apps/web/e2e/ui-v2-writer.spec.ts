@@ -196,7 +196,8 @@ test("Library → Voice: notes with platform, source and weight; delete asks fir
 
     await page.goto("/app/library?tab=skills&sample=1");
     await expect(page.getByText("Read by Writer, Checker, Sales, CMO chat")).toBeVisible();
-    await expect(page.getByRole("main").getByRole("switch")).toHaveCount(0);
+    // Skills are read only: no switch in the pane.
+    await expect(page.getByRole("dialog", { name: "Skills" }).getByRole("switch")).toHaveCount(0);
     await axeAndShot(page, "library-skills", width);
   }
 });

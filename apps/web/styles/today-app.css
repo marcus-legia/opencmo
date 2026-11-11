@@ -329,3 +329,5 @@ html:not([data-theme="dark"]) .k { --ok: #16744c; --warn: #8f5a0e; }
 .td-pane .scr-side { display: flex; flex-direction: column; gap: 14px; max-width: none; }
 /* Writer's platform chips, pressed as the Calendar's are. */
 .pg-agentwriter [role="group"] .chip[aria-pressed="true"] { color: var(--text); border-color: var(--line-2); background: var(--raised); }
+/* The drawer's open row sits on the accent wash: its second line takes --muted, which passes 4.5:1 there. */
+.td-ctx .doc[aria-current="true"] .u { color: var(--muted); }

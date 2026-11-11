@@ -205,6 +205,16 @@ test("Studio cards 1–3 decide live: a stale hash is refused, a beat is edited,
     // What the order runner records once the shots are made: the render comes next.
     next: { tool: "render" },
   });
+  // The look check (P6) reads the full-size export before the card is raised; this stack has no real export, so the
+  // order's check is recorded as passed: the render then raises the card at once, as a passed check does.
+  expect(
+    (
+      await db.from("look_checks").insert({
+        user_id: user.id, ref_kind: "editor_project", ref_id: video.clipId, order_id: orderId, round: 0,
+        doc_key: video.hash, status: "passed", settled_at: new Date().toISOString(), raised_at: new Date().toISOString(),
+      })
+    ).error,
+  ).toBeNull();
   const taskId = randomUUID();
   expect(
     (
@@ -222,7 +232,9 @@ test("Studio cards 1–3 decide live: a stale hash is refused, a beat is edited,
       })
     ).error,
   ).toBeNull();
-  await db.from("tasks").update({ status: "done", output_path: `${user.id}/e2e.mp4`, finished_at: new Date().toISOString() }).eq("id", taskId);
+  // The full-size export's own path (`<user>/<clip>/<task>.mp4`): the look check reads nothing else.
+  await db.from("tasks").update({ status: "done", output_path: `${user.id}/${video.clipId}/${taskId}.mp4`, finished_at: new Date().toISOString() }).eq("id", taskId);
+  await expect.poll(async () => (await waitingCard(db, "editor_project", video.clipId))?.id ?? null, { timeout: 30_000 }).not.toBeNull();
   const card3 = await waitingCard(db, "editor_project", video.clipId);
   expect(card3).not.toBeNull();
   card = await cardPage(page, card3!.id);
@@ -265,8 +277,8 @@ test("Mark finished on Studio shows the badge; an edit after it clears it", asyn
 
   // Any later edit of the document clears the mark (A3's trigger); Studio shows it after a reload.
   await db.from("editor_projects").update({ document: { version: 1, stage: { name: "Editor launch v2" } } }).eq("clip_id", video.clipId);
+  // The drawer is in the URL (`?item=`): the reload opens it again.
   await page.reload();
-  await page.locator("button.proj").filter({ hasText: "Editor launch" }).click();
   await expect(page.getByRole("dialog").getByTestId("studio-mark-finished")).toBeVisible();
   await expect(page.getByRole("dialog").getByTestId("studio-cut-shorts")).toHaveCount(0);
 });

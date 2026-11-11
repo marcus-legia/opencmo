@@ -158,17 +158,19 @@ test("a schedule card is approved; dragging its slot to another day asks again w
   await page.goto(`/app/schedule?from=${mondayOf(slot.publish_at)}`);
   // Calendar.dc.html: one column per day, a card per slot.
   const days = page.getByTestId("v2-schedule").locator(".grid > .day");
-  // The card's own column, in the founder's zone as the Calendar lays it out; the target is the next day (or the one
-  // before on Sunday).
+  // The card's own day, in the founder's zone as the Calendar keys it (`data-day`); the target is the next day (or the
+  // one before on the week's last day).
   const slotCard = page.locator(`[data-slot-id="${slot.id}"]`);
-  const index = await slotCard.evaluate((el) => [...el.closest(".grid")!.children].indexOf(el.closest(".day")!));
-  const target = index === 6 ? 5 : index + 1;
+  const fromKey = await slotCard.evaluate((el) => (el.closest("[data-day]") as HTMLElement).dataset.day!);
+  const keys = await days.evaluateAll((els) => els.map((el) => (el as HTMLElement).dataset.day!));
+  const at = keys.indexOf(fromKey);
+  const toDay = page.getByTestId("v2-schedule").locator(`[data-day="${keys[at === keys.length - 1 ? at - 1 : at + 1]}"]`);
   // The card's own drag events, carrying one DataTransfer from the card to the day: the page's handlers run as they do
   // under a founder's mouse, without depending on how Chromium starts a native drag from synthetic mouse steps.
   const dataTransfer = await page.evaluateHandle(() => new DataTransfer());
   await slotCard.dispatchEvent("dragstart", { dataTransfer });
-  await days.nth(target).dispatchEvent("dragover", { dataTransfer });
-  await days.nth(target).dispatchEvent("drop", { dataTransfer });
+  await toDay.dispatchEvent("dragover", { dataTransfer });
+  await toDay.dispatchEvent("drop", { dataTransfer });
   await expect(page.getByText("New time saved. A new card asks you to approve it.")).toBeVisible();
 
   await expect.poll(async () => (await db.from("schedule_slots").select("status, approval_id").eq("id", slot.id).single()).data?.approval_id).not.toBe(slot.approval_id);
