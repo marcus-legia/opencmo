@@ -33,7 +33,7 @@ import type { ScreenName } from "@/lib/screens/registry";
 import { ContextColumn } from "./ContextColumn";
 import { KIND_ICON, PLATFORM_ICON, kindLabel, whenLabel } from "./cards";
 import { LEFT, useTodayColumns } from "./columns";
-import { draftsThisWeek } from "./week";
+import { dayLabel, draftsLeftOver, draftsThisWeek } from "./week";
 
 type Draft = WriterScreen["drafts"][number];
 
@@ -59,7 +59,7 @@ const draftIcon = (d: Draft) =>
 /** "Thu 12 Nov, 09:00" for a draft with a time, its day otherwise. */
 function draftWhen(d: Draft): string | null {
   if (d.at) return timeLine.format(new Date(d.at));
-  return d.dayText;
+  return dayLabel(d);
 }
 
 const WHO: Record<string, string> = { you: "You", brain: "Planner", writer: "Writer", studio: "Studio", schedule: "Publisher", publish: "Publisher", sales: "Sales", research: "Research" };
@@ -363,6 +363,8 @@ export function Feed({ email }: { email?: string | null }) {
   const live = state.status === "ready" ? state.live : null;
   const slots = week.status === "ready" ? week.data.slots : [];
   const drafts = useMemo(() => (writer.status === "ready" ? draftsThisWeek(writer.data.drafts) : []), [writer]);
+  // Last week's drafts nobody decided: not this week's, but still the founder's to approve or skip.
+  const leftOver = useMemo(() => (writer.status === "ready" ? draftsLeftOver(writer.data.drafts) : []), [writer]);
 
   // The week's rows and the calendar's slots are their own reads. Whatever moves the queue (a decision here, a new
   // card, a line in the log, Refresh) also moves them, so they are read again right after it: an approved post turns
@@ -674,6 +676,18 @@ export function Feed({ email }: { email?: string | null }) {
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: "26px" }} data-testid="feed-week">
                 {writer.status === "error" ? emptyRow("This week could not be read. Refresh to try again.") : drafts.map(weekRow)}
+              </div>
+            </>
+          ) : null}
+
+          {step === "waiting" && leftOver.length > 0 ? (
+            <>
+              <div className="sec">
+                <h2>From last week</h2>
+                <span className="meta">{leftOver.length} not approved yet · approve or skip them</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: "26px" }} data-testid="feed-left-over">
+                {leftOver.map(weekRow)}
               </div>
             </>
           ) : null}

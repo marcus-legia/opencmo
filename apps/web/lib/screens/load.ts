@@ -984,6 +984,7 @@ async function writer({ supabase }: LoadContext): Promise<Partial<WriterScreen>>
           platform: screenPlatform(r.platform, "x"),
           at: iso(r.published_at ?? (r.status === "approved" ? (goesOut.get(r.id) ?? null) : null)),
           dayText: r.published_at || (r.status === "approved" && goesOut.has(r.id)) ? null : dayText(r.day),
+          day: r.day.slice(0, 10),
           title: (r.final_text ?? text).slice(0, 300),
           column: column[r.status],
           versions: Math.min(3, Math.max(1, 1 + (Array.isArray(r.body.alternates) ? r.body.alternates.length : 0))),
@@ -1005,6 +1006,7 @@ async function writer({ supabase }: LoadContext): Promise<Partial<WriterScreen>>
           platform: screenPlatform(r.platform, "tiktok"),
           at: iso(r.published_at),
           dayText: r.published_at ? null : dayText(r.day),
+          day: r.day.slice(0, 10),
           title: (typeof r.body.title === "string" && r.body.title ? r.body.title : typeof r.body.text === "string" ? r.body.text : r.idea).slice(0, 300),
           column: column[r.status],
           versions: 1,
@@ -1033,6 +1035,7 @@ async function writer({ supabase }: LoadContext): Promise<Partial<WriterScreen>>
           platform: screenPlatform(o.brief.platform, "youtube"),
           at: null,
           dayText: dayText((o.due_at ?? o.created_at).slice(0, 10)),
+          day: (o.due_at ?? o.created_at).slice(0, 10),
           title: (typeof o.brief.objective === "string" && o.brief.objective ? o.brief.objective : "This week's video").slice(0, 300),
           // An approved script is the founder's next video to record, not something posted.
           column: waiting ? ("waiting" as const) : approved ? ("scheduled" as const) : o.status === "done" ? ("posted" as const) : ("drafting" as const),

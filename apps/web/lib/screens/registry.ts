@@ -125,6 +125,28 @@ export function released(name: ScreenName): boolean {
  * cannot make a field live by accident); the rest come from the fixture, or from `empty` in production and when
  * the caller asks for no samples. `sample` forces the pure fixture (look checks and e2e, never in production).
  */
+/**
+ * The rows of a list field that match its item schema, or null when the field is not a list (or none of it parses as
+ * one). Each dropped row is logged once with its id, so a bad row is found from the log instead of an empty screen.
+ */
+export function keepValidRows(schema: z.ZodType, value: unknown): { rows: unknown[]; dropped: number; issue: unknown } | null {
+  const element = (schema as unknown as { element?: z.ZodType }).element;
+  if (!element || typeof element.safeParse !== "function" || !Array.isArray(value)) return null;
+  const rows: unknown[] = [];
+  let dropped = 0;
+  let issue: unknown = null;
+  for (const row of value) {
+    const r = element.safeParse(row);
+    if (r.success) rows.push(r.data);
+    else {
+      dropped += 1;
+      issue ??= { id: (row as { id?: unknown } | null)?.id ?? null, ...r.error.issues[0] };
+    }
+  }
+  // The list as a whole may still fail (a max length): then the field falls back as before.
+  return schema.safeParse(rows).success ? { rows, dropped, issue } : null;
+}
+
 export function compose<N extends ScreenName>(
   name: N,
   loaded: Partial<ScreenData<N>>,
@@ -138,12 +160,22 @@ export function compose<N extends ScreenName>(
   for (const field of Object.keys(base)) {
     let isLive = !useSample && screen.live.includes(field) && Object.hasOwn(loaded, field);
     if (isLive) {
-      // A row the contract cannot carry drops only its own field back to the non-live value.
-      const parsed = (screen.schema.shape[field] as z.ZodType).safeParse((loaded as Record<string, unknown>)[field]);
+      const fieldSchema = screen.schema.shape[field] as z.ZodType;
+      const value = (loaded as Record<string, unknown>)[field];
+      const parsed = fieldSchema.safeParse(value);
       if (parsed.success) data[field] = parsed.data;
       else {
-        isLive = false;
-        console.warn(`[screens] ${name}.${field} did not match the contract`, parsed.error.issues[0]);
+        // A list drops only the rows the contract cannot carry: one bad approval card used to empty the whole queue,
+        // so Today showed nothing to approve while Writer listed drafts waiting (2026-11-11).
+        const kept = keepValidRows(fieldSchema, value);
+        if (kept) {
+          data[field] = kept.rows;
+          console.warn(`[screens] ${name}.${field}: ${kept.dropped} row(s) did not match the contract`, kept.issue);
+        } else {
+          // Anything else drops only its own field back to the non-live value.
+          isLive = false;
+          console.warn(`[screens] ${name}.${field} did not match the contract`, parsed.error.issues[0]);
+        }
       }
     }
     live[field] = isLive;

@@ -177,13 +177,14 @@ const children = [
   }),
 ];
 
+// Declared before the banner reads it (a `const` read before its line throws and stopped `npm run dev`).
+const sweepOn = process.env.OPENCMO_DEV_SWEEP !== "0";
 console.log(`\nWeb  http://127.0.0.1:3000\nMail http://127.0.0.1:54324  (magic link không gửi ra ngoài)\n${sweepOn ? "CMO sweep: every minute (due posts, queued work, the daily schedule)" : "CMO sweep: off (OPENCMO_DEV_SWEEP=0)"}\n`);
 
 // The local stand-in for Modal's sweep. In production Modal fires due slots, runs queued CMO work every minute and
 // calls the daily schedule; on a laptop nothing did, so an approved post never reached its time, a queued draft stayed
 // queued and tomorrow's post was never written: the app looked dead after the first card. `OPENCMO_DEV_SWEEP=0` turns
 // it off. The daily schedule runs once at start and then hourly; it only queues what is due and not yet queued.
-const sweepOn = process.env.OPENCMO_DEV_SWEEP !== "0";
 const cronSecret = process.env.CRON_SECRET ?? readEnvFiles((key) => key === "CRON_SECRET").CRON_SECRET ?? "";
 const webUrl = `http://127.0.0.1:${port}`;
 const cronHeaders = cronSecret ? { Authorization: `Bearer ${cronSecret}` } : {};

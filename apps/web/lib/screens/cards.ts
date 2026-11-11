@@ -99,7 +99,8 @@ function build(row: ApprovalRow): Built | null {
       const profile = named && named.kind === "post" ? named : profileOf("x");
       if (!profile) return null;
       const text = str(s.text);
-      const versions = [text, ...strings(s.alternates)].filter(Boolean).slice(0, 3);
+      // Clipped to the contract: one long version or rationale must not fail the card (and with it the whole queue).
+      const versions = [text, ...strings(s.alternates)].filter(Boolean).slice(0, 3).map((v) => clip(v, 3000));
       // An X thread (P6 W4): SQL emits it only when it is valid (5 to 8 posts, the first being `text`).
       const thread = strings(s.thread);
       const { head, rest } = firstSentence(text);
@@ -118,11 +119,11 @@ function build(row: ApprovalRow): Built | null {
               versions: versions.length ? versions : [str(s.idea)],
               limit: profile.limit,
               visibleBeforeMore: profile.visibleBeforeMore,
-              ...(thread.length >= 5 && thread.length <= 8 && thread[0] === text ? { thread } : {}),
+              ...(thread.length >= 5 && thread.length <= 8 && thread[0] === text && thread.every((t) => t.length <= 280) ? { thread } : {}),
             },
           ],
           checks: [],
-          why: str(s.rationale) || null,
+          why: clip(str(s.rationale), 200) || null,
           ...timed,
         },
       };
@@ -132,8 +133,8 @@ function build(row: ApprovalRow): Built | null {
       const valid = parts.filter((p) => typeof p.label === "string" && typeof p.score === "number" && typeof p.max === "number" && p.max > 0);
       const quotes = valid.filter((p) => typeof p.evidence === "string" && p.evidence).map((p) => ({ text: clip(p.evidence!, 400), from: p.label!.toLowerCase() }));
       const hn = s.platform === "hn";
-      const community = str(s.community) || (hn ? "Hacker News" : "Reddit");
-      const score = typeof s.score === "number" ? Math.round(s.score) : 0;
+      const community = clip(str(s.community) || (hn ? "Hacker News" : "Reddit"), 80);
+      const score = typeof s.score === "number" ? Math.min(100, Math.max(0, Math.round(s.score))) : 0;
       return {
         title: clip(`${community} · “${str(s.title)}”`, 300),
         summary: clip(quotes[0] ? `“${quotes[0].text}” Reply drafted, help first.` : "Reply drafted, help first.", 400),
@@ -146,7 +147,7 @@ function build(row: ApprovalRow): Built | null {
           score,
           parts: valid.map((p) => ({ label: p.label!, score: p.score!, max: p.max! })),
           quotes,
-          draft: str(s.reply),
+          draft: clip(str(s.reply), 10000),
           rules: "you post it yourself",
           ...(hn ? { platform: "hn" as const } : {}),
           // Cards raised before P5 have no rule; a skipped thread has no card.

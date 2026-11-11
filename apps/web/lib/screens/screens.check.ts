@@ -330,6 +330,27 @@ check("cards: a 100-character handle still makes a valid schedule card (the queu
   assert.equal(card.body.where.handle.length, 80);
 });
 
+check("cards: a long rationale, version or reply still makes a valid card (the queue must not empty)", () => {
+  const post = approvalToCard(row("post", { kind: "post", text: "t".repeat(3500), rationale: "r".repeat(600), idea: "x", thread: ["t".repeat(3500), "a", "b", "c", "d"] }));
+  assert.ok(post && post.body.kind === "post");
+  ApprovalCardSchema.parse(post);
+  assert.equal(post.body.why!.length, 200);
+  assert.equal(post.body.platforms[0]!.thread, undefined, "a thread with a post over 280 characters is left out");
+  const reply = approvalToCard(
+    row("reply", { kind: "reply", url: "https://news.ycombinator.com/item?id=1", community: "c".repeat(200), title: "T", reply: "r".repeat(12000), score: 140 }, { department: "sales", ref_kind: "opportunity" }),
+  );
+  assert.ok(reply);
+  ApprovalCardSchema.parse(reply);
+});
+
+check("compose: one card the contract cannot carry is dropped, the rest of the queue stays", () => {
+  const good = approvalToCard(row("post", { kind: "post", text: "Fine post.", idea: "x" }))!;
+  const bad = { ...good, id: "bad-card", title: "x".repeat(500) };
+  const out = compose("dashboard", { queue: [good, bad] } as never, { production: true, sample: false });
+  assert.equal(out.live.queue, true, "the queue stays live");
+  assert.deepEqual(out.data.queue.map((c) => c.id), [good.id], "only the bad card is dropped");
+});
+
 // Last: a check registered after this gate could never fail the script.
 if (failures.length) {
   console.error(`screens.check: ${failures.length} failed\n  ${failures.join("\n  ")}`);
