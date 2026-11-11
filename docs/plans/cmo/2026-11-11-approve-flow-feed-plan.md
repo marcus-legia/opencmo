@@ -58,6 +58,10 @@ Setup → feed → open the post → Approve → look for it.
 - [x] Walked again after the change: a draft asked in the chat arrives on the feed without a reload, Approve turns
   its row "Approved · Goes out Fri 13 Nov, 09:00", scheduled goes 1 → 2, Today 2 of 4 → 3 of 4, Activity shows it.
 
+- [x] Checks: `tsc --noEmit`; `screens.check`, `load.check`, `today.check`, `digest.check`, `cmo-live.check`; v2 e2e for
+  the touched screens (dashboard, today, live, writer, setup, reach, decisions, activation): 44 passed. Looked at the
+  feed at 1440 light and dark and at 390 (no sideways scroll).
+
 ## 5. Not done here
 
 - **The errors the owner saw with real providers.** With the fake providers no page and no request failed (16 pages
