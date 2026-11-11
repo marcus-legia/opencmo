@@ -11,13 +11,37 @@
 import { countHashtags } from "../platforms";
 import { slopIssues } from "../slop";
 
-import { numberTokens } from "./context";
+import { normalizeNumber, numberTokens } from "./context";
 
 export const X_LIMIT = 280;
 
 /** `names`: the founder's own product name(s), which may look like a domain ("Cal.com") and are not links. */
-/** `allowSlop`: the no-ai-slop patterns the founder's own writing uses, which pass the gate for them (`lib/cmo/slop.ts`). */
-export type CheckRules = { avoid: string[]; known: Set<string>; names?: string[]; allowSlop?: ReadonlySet<string> };
+/**
+ * `allowSlop`: the no-ai-slop patterns the founder's own writing uses, which pass the gate for them (`lib/cmo/slop.ts`).
+ * `noProduct`: the brief says not to pitch the product, so a version that names it (`names`) is refused.
+ */
+export type CheckRules = { avoid: string[]; known: Set<string>; names?: string[]; allowSlop?: ReadonlySet<string>; noProduct?: boolean };
+
+/** A brief that asks for no product pitch ("No product pitch", "don't mention OpenCMO", "no promo"). */
+const NO_PITCH = /\bno (?:product )?(?:pitch|plug|promo(?:tion)?|product mention)s?\b|\b(?:don['’]t|do not|never) (?:pitch|plug|promote|mention|name)\b/i;
+
+export function asksNoPitch(brief: string): boolean {
+  return NO_PITCH.test(brief);
+}
+
+/**
+ * The rules for one brief. The founder's own brief (CMO chat, Write it) carries facts they gave: its numbers count as
+ * known, as the documents' do. A brief the planner wrote does not: its numbers must still be in the documents. Either
+ * kind can ask for no product pitch.
+ */
+export function briefRules(rules: CheckRules, brief: string, fromFounder: boolean): CheckRules {
+  const known = new Set(rules.known);
+  if (fromFounder) {
+    for (const raw of brief.match(/\d[\d,.]*/g) ?? []) known.add(normalizeNumber(raw));
+    for (const token of numberTokens(brief)) known.add(token.n);
+  }
+  return { ...rules, known, ...(asksNoPitch(brief) ? { noProduct: true } : {}) };
+}
 
 /**
  * Always a link: a URL, a `www.` address, or a domain with a path ("opencmo.io/pricing"), but not a code file name
@@ -65,5 +89,9 @@ export function checkPost(text: string, rules: CheckRules, profile: { limit: num
   if (hasLink(t, rules.names)) issues.push("It has a link. Posts carry no links.");
   if (hashtagCount(t)) issues.push("It has a hashtag. Posts carry no hashtags; they go only on video captions.");
   issues.push(...slopIssues(t, rules.allowSlop));
+  if (rules.noProduct) {
+    const named = (rules.names ?? []).find((name) => new RegExp(`\\b${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(t));
+    if (named) issues.push(`It names ${named}, and the brief asks for no product pitch. Help the reader without the product.`);
+  }
   return issues;
 }

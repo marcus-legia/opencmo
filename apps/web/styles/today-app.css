@@ -371,3 +371,8 @@ html:not([data-theme="dark"]) .k { --ok: #16744c; --warn: #8f5a0e; }
 @media (max-width: 640px) {
   .pg-main [data-testid="week-row"] .meta { display: none; }
 }
+
+/* One frame per feed section (Today, This week, From last week), five rows before "Show more" (owner, 2026-11-12). */
+.pg-main .td-box { display: flex; flex-direction: column; gap: 6px; margin-bottom: 26px; padding: 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+.pg-main .td-box-more { align-self: center; margin-top: 2px; padding: 4px 12px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-size: 13px; cursor: pointer; }
+.pg-main .td-box-more:hover { color: var(--text); background: var(--raised); }
