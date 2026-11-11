@@ -42,7 +42,8 @@ test("rate three drafts, accept two rules, see them in Library → Voice", async
   await signIn(page, user);
   await page.goto("/app/library?tab=voice");
   await page.getByRole("button", { name: "Rate your drafts" }).click();
-  const sheet = page.getByTestId("rating-sheet");
+  // The feed and the Voice pane each mount the sheet; the open one is the dialog.
+  const sheet = page.getByTestId("rating-sheet").filter({ visible: true });
   const drafts = sheet.getByTestId("rating-draft");
   await expect(drafts).toHaveCount(3);
 

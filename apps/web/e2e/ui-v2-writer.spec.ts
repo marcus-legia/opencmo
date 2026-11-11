@@ -206,12 +206,14 @@ test("Writer filters drafts per platform", async ({ page }) => {
   await page.goto("/app/writer?sample=1");
   // One row per draft (AgentWriter.dc.html); a chip per platform the week's drafts are for.
   const rows = page.getByTestId("writer-row");
+  await expect(rows.first()).toBeVisible();
   const all = await rows.count();
   expect(all).toBeGreaterThan(1);
   const filter = page.getByRole("group", { name: "Platform" });
   for (const name of ["LinkedIn", "X"]) {
     await filter.getByRole("button", { name, exact: true }).click();
     await expect(filter.getByRole("button", { name, exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect.poll(() => rows.count()).toBeLessThan(all);
     const shown = await rows.count();
     expect(shown).toBeGreaterThan(0);
     expect(shown).toBeLessThan(all);

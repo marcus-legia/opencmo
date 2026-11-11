@@ -184,6 +184,11 @@ test("Studio cards 1–3 decide live: a stale hash is refused, a beat is edited,
   // `redo_keyframe` does it after the price is approved, and the card says so.
   await expect(card.getByRole("button", { name: /Redo/ })).toHaveCount(0);
   await expect(card).toContainText("Redo a keyframe in the editor after you approve");
+  // Close this price card (Cancel, then its reason step) so the order moves on to the render's card.
+  await card.getByRole("button", { name: "Cancel", exact: true }).click();
+  const confirm = card.locator(".v2-card-decline").getByRole("button", { name: "Cancel", exact: true });
+  if (await confirm.isVisible().catch(() => false)) await confirm.click();
+  await expect.poll(async () => (await db.from("studio_steps").select("decision").eq("id", sheetId).single()).data?.decision).toBeTruthy();
 
   // Card 3: the render of the edit as it is now raises the finished video; approving marks it finished.
   await db.from("studio_steps").insert({

@@ -62,7 +62,7 @@ test("the free first run: website → documents, plan and drafts with no payment
 
   // Approve on the post card answers with the plan sheet; the draft stays waiting.
   await page.reload();
-  const card = await openFeedCard(page, /X post ·/);
+  const card = await openFeedCard(page, /\bpost · /i);
   await card.getByRole("button", { name: /^Approve( for this time)?$/ }).click();
   await expect(page.getByTestId("plan-sheet")).toBeVisible();
   await expect(page.getByTestId("plan-sheet")).toContainText("Your first plan and drafts were free");
@@ -128,7 +128,7 @@ test("the first week: website → plan card and a first draft, then I posted it 
 
   // The X draft, with no X account: Open X and I posted it on the card itself.
   await page.reload();
-  const card = await openFeedCard(page, /X post ·/);
+  const card = await openFeedCard(page, /\bpost · /i);
   await expect(card.getByRole("button", { name: "Open X" })).toBeVisible();
   const cardId = await card.getAttribute("data-card-id");
   const posted = page.waitForResponse((response) => response.url().endsWith(`/approvals/${cardId}/posted`));

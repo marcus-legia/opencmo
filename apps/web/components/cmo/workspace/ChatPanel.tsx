@@ -120,11 +120,14 @@ export function ChatPanel({
   onToast,
   onWorkStarted,
   drivesPanel = false,
+  onOpenPanel,
 }: {
   ws: ChatSource;
   onToast: (message: string) => void;
   onWorkStarted: () => void | Promise<void>;
   drivesPanel?: boolean;
+  /** Called when the chat itself moves the founder to another screen: the shell keeps the chat open there. */
+  onOpenPanel?: () => void;
 }) {
   const live = ws.live.chat;
   const router = useRouter();
@@ -218,10 +221,13 @@ export function ChatPanel({
       const path = href.split("?")[0]!;
       shown.current = { path, ids: targetIds(open) };
       // The editor with a request always opens, even on the same clip: the request is new.
-      if (pathRef.current !== path || href.includes("?ask=")) router.push(href);
+      if (pathRef.current !== path || href.includes("?ask=")) {
+        onOpenPanel?.();
+        router.push(href);
+      }
       return true;
     },
-    [router],
+    [router, onOpenPanel],
   );
 
   // Runs still working: realtime (with useLive's fallback poll) re-reads them under RLS; the payload is never trusted.

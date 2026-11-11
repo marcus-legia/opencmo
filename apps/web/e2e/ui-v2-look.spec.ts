@@ -25,11 +25,13 @@ const SCREENS: { name: string; path: string; ready: string }[] = [
   // P5 C0: the slideshow card on its fixture.
   { name: "inbox-card-slideshow", path: "/app/inbox/card-slideshow", ready: "inbox-card-page" },
   // Session C's pages on their fixtures (`?sample=1`), so the screenshots compare with the frames.
-  ...["analytics", "brain", "library", "research", "writer", "studio", "sales", "schedule", "settings", "setup"].map((name) => ({
+  ...["analytics", "research", "writer", "studio", "sales", "schedule", "settings", "setup"].map((name) => ({
     name,
     path: `/app/${name}?sample=1`,
     ready: `v2-${name}`,
   })),
+  // Brain and Library are panes of the Context drawer over the feed (plan 2026-11-10-today-in-place).
+  ...["plan", "learned", "voice", "skills"].map((pane) => ({ name: `drawer-${pane}`, path: `/app?doc=${pane}&sample=1`, ready: "v2-dashboard" })),
 ];
 
 for (const screen of SCREENS) {

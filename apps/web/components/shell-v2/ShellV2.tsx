@@ -169,11 +169,19 @@ function TodayFrame({ credits, plan, email, userId, pending, chatLive, children,
   // is ready, or the screen a request is about): the founder is mid-conversation, and on that screen the chat is a
   // drawer, so it stays open instead of vanishing with the answer.
   const shown = useRef(segment);
+  const chatMoved = useRef(false);
+  const onChatOpensPanel = useCallback(() => {
+    chatMoved.current = true;
+    // Only the navigation it starts: a later one the founder makes closes the drawer as usual.
+    window.setTimeout(() => {
+      chatMoved.current = false;
+    }, 5_000);
+  }, []);
   useEffect(() => {
     if (shown.current === segment) return;
     shown.current = segment;
-    const fromChat = !!chatColumn.current && chatColumn.current.contains(document.activeElement);
-    setChatOpen(fromChat && screen.chat === "drawer");
+    setChatOpen(chatMoved.current && screen.chat === "drawer");
+    chatMoved.current = false;
     setLogsOpen(false);
   }, [segment, screen.chat]);
 
@@ -250,7 +258,7 @@ function TodayFrame({ credits, plan, email, userId, pending, chatLive, children,
                   </button>
                 ) : null}
                 {/* Hidden, not unmounted, in the editor: the CMO chat keeps its draft for the way back. */}
-                <ChatPanel ws={chatSource} onToast={setMessage} onWorkStarted={() => setWorkVersion((n) => n + 1)} drivesPanel />
+                <ChatPanel ws={chatSource} onToast={setMessage} onWorkStarted={() => setWorkVersion((n) => n + 1)} drivesPanel onOpenPanel={onChatOpensPanel} />
                 {screen.chat === "assistant" ? <div className="v2-clip-slot" ref={setClipAssistantSlot} /> : null}
               </aside>
             </div>

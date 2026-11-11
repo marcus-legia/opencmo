@@ -345,8 +345,8 @@ export function AgentSales() {
               <span className="meta">Sort</span>
               <span className="pill">Score</span>
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }} role="list" aria-label="Threads">
-              {list.length === 0 ? <div className="meta">No threads yet. Sales scans the communities your customers use and scores what it finds.</div> : null}
+            {list.length === 0 ? <div className="meta">No threads yet. Sales scans the communities your customers use and scores what it finds.</div> : null}
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }} role={list.length ? "list" : undefined} aria-label={list.length ? "Threads" : undefined}>
               {list.map((t) => (
                 <ThreadRow key={t.id} t={t} open={open === t.id} onToggle={() => setOpen(open === t.id ? null : t.id)} onDecide={decide} />
               ))}
