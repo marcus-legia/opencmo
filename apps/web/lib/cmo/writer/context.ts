@@ -10,6 +10,7 @@
 import { correctionsBlock, documentsBlock, lessonsBlock, memoriesBlock } from "../jobs/context";
 import type { CmoStore, MemoryTopic } from "../jobs/types";
 import { profileOf } from "../platforms";
+import { founderPatterns } from "../slop";
 import type { VoiceNote, WriterContext, WriterProfile } from "./types";
 
 /** At most this many voice notes reach a prompt; the read RPC already sorts them newest and heaviest first. */
@@ -42,23 +43,29 @@ export function voiceBlock(notes: readonly VoiceNote[]): string {
   const top = [...notes].sort((a, b) => b.weight - a.weight || b.createdAt.localeCompare(a.createdAt)).slice(0, VOICE_NOTES_MAX);
   const label = (platform: string | null) => (platform ? (profileOf(platform)?.label ?? platform) : "any platform");
   const lines = top.map((note) => `- (${label(note.platform)}, weight ${note.weight.toFixed(2)}, ${note.createdAt.slice(0, 10)}) ${note.body}`);
-  return `<founder_voice learned_from="the founder's approvals and edits" newer_counts_more="true">\n${lines.join("\n")}\n</founder_voice>`;
+  return `<founder_voice learned_from="the founder's edits and skip reasons" newer_counts_more="true">\n${lines.join("\n")}\n</founder_voice>`;
 }
 
 /**
  * What a writer remembers, split so each part takes its place in the prompt: the founder's rules (tier 0), their
  * voice notes (read apart, newest and heaviest first), then the topic's lessons and the other notes.
  */
-export async function writerMemory(store: CmoStore, userId: string, topic: MemoryTopic = "post"): Promise<Pick<WriterContext, "corrections" | "voiceNotes" | "memories">> {
-  const [corrections, notes, lessons, memories] = await Promise.all([
+export async function writerMemory(store: CmoStore, userId: string, topic: MemoryTopic = "post"): Promise<Pick<WriterContext, "corrections" | "voiceNotes" | "memories" | "allowSlop">> {
+  const [corrections, read, lessons, memories] = await Promise.all([
     store.corrections(userId),
-    store.voiceNotes(userId, VOICE_NOTES_MAX),
+    // Read twice as many: the ones approved as written are dropped below.
+    store.voiceNotes(userId, VOICE_NOTES_MAX * 2),
     store.lessons(userId),
     store.memories(userId, 15, topic, { voice: false }),
   ]);
   const relevant = lessons.filter((lesson) => lesson.topic === topic || lesson.topic === "general");
+  // A draft approved as written is the writer's words, not the founder's: learning a voice from it taught the writer
+  // its own AI voice back (2026-11-12). Edits and skip reasons are the founder's.
+  const notes = read.filter((note) => note.source !== "approved").slice(0, VOICE_NOTES_MAX);
+  const edited = notes.filter((note) => note.source === "edited").map((note) => note.body);
   return {
     corrections,
+    allowSlop: founderPatterns([...corrections, ...edited]),
     voiceNotes: notes.map((note) => ({ body: note.body, platform: note.platform, weight: note.weight, createdAt: note.created_at })),
     memories: [lessonsBlock(relevant), memoriesBlock(memories)].filter(Boolean).join("\n\n"),
   };

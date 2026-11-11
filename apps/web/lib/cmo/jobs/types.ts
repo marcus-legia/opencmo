@@ -40,7 +40,8 @@ export type MemoryEvent = { kind: "preference" | "fact" | "feedback" | "result";
 
 /** Tier 3: a weekly lesson for one topic; `week` is the Monday it covers. */
 /** A voice note as `voice_notes_for` returns it: the founder's own words from one decision, and its platform. */
-export type VoiceNoteRow = { body: string; platform: string | null; created_at: string; weight: number };
+/** `source`: what the note was learned from (`voice_notes_of`): an edit, a skip, or a draft approved as written. */
+export type VoiceNoteRow = { body: string; platform: string | null; created_at: string; weight: number; source?: "edited" | "skipped" | "approved" | string };
 
 /** One rated version of a draft (cmo-review-3 2.2), with the words as they were rated. */
 export type DraftRating = {

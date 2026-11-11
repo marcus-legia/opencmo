@@ -273,7 +273,7 @@ place, and briefs stay small because a brief names what to load.
 | Goal, week plan, work orders, budgets | the brain's own decisions |
 | Events, lessons, corrections (memory tiers 0, 2, 3) | learned by the Reviewer; corrections need the founder's approval card |
 
-Not in the Library: the department playbooks in `lib/cmo/skills/` (`x-writing.md`, `reddit-listening.md`,
+Not in the Library: the department playbooks in `lib/cmo/skills/` (`post.md`, `reddit-listening.md`,
 `short-video.md`, the `marketingskills/` set…). They are how each department does its job, shipped and versioned by
 us, so they stay with the department; the Library shows only what the founder can change. (The set lived in
 `lib/cmo/skills/library/` until 2026-10-27 and was renamed to avoid the clash; its MCP resource URIs keep
@@ -293,7 +293,7 @@ Rules:
 | Cost ceiling | the same migration | the brain's own runs holding more than 40 % of the weekly budget (at least 10 credits) within an hour pause the brain (`cmo_paused_at`) with a note | ai-cmo-operator | ✅ |
 | Kill switch | `OPENCMO_CMO_PAUSED=1` (global, `lib/cmo/pause.ts`) + each founder's Pause CMO (`profiles.cmo_paused_at`) | stops every order within one sweep | ai-cmo-operator | ✅ |
 | Studio order hold | `studio_order_hold` (`20270109050000`) | a Studio order holds an allowance (`studio_plan_hold()` = 5 credits) before its team calls a model; short of it the order fails as `needs_credits` and no model runs; what is unused comes back when the order ends | review C1 (team calls were free at 0 credits) | ✅ |
-| Invented numbers, words to avoid, no links, hashtags per platform | code before the checker model | `check-post.ts` per platform profile; no-ai-slop stays guidance, not code (`writer.md`) | ai-cmo-operator, our cascade judge | ✅ |
+| Invented numbers, words to avoid, no links, hashtags per platform | code before the checker model | `check-post.ts` per platform profile; plus the no-ai-slop gate on plain stock patterns (`lib/cmo/slop.ts`, `writer.md` §5) | ai-cmo-operator, our cascade judge | ✅ |
 | Stage fit | planner prompt | no tactics that do not fit the founder's stage (no testimonials the documents do not hold) | ai-cmo-operator | ✅ prompt only |
 | Outbound | Approval + Publish | the brain never posts; time and account are approved | product rules | rule |
 | Untrusted text | `lib/cmo/untrusted.ts` | outside text is data, never instructions | our security reports | ✅ |

@@ -45,7 +45,7 @@
         },
         "hashtags": { "type": "integer", "minimum": 0, "maximum": 30, "description": "Most hashtags allowed; 0 for every post (decided 2026-10-26: hashtags only on videos)." },
         "links": { "const": false, "description": "No links anywhere (decided 2026-10-26)." },
-        "tone": { "type": "string", "minLength": 1, "maxLength": 200, "description": "One line for the writer, read after the cached prompt prefix." }
+        "tone": { "type": "string", "minLength": 1, "maxLength": 300, "description": "A few lines for the writer, read after the cached prompt prefix." }
       }
     }
   }

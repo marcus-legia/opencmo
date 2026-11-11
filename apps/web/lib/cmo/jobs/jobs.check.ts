@@ -349,14 +349,14 @@ async function main() {
   const lib = all.filter((s) => s.kind === "marketing");
   assert.equal(lib.length, 38, "38 skill thư viện");
   assert.ok(lib.every((s) => s.agents.length === 1 && s.agents[0] === "cmo"), "thư viện chỉ cho CMO chat, không lọt vào job");
-  assert.ok(skillText("launch").includes(MARKETING_PREAMBLE) && !skillText("x-writing").includes(MARKETING_PREAMBLE));
+  assert.ok(skillText("launch").includes(MARKETING_PREAMBLE) && !skillText("post").includes(MARKETING_PREAMBLE));
   const index = skillIndex("cmo");
   assert.ok(index.length < 12_000, `chỉ mục CMO ${index.length} ký tự`);
-  assert.ok(index.indexOf("- x-writing:") < index.indexOf("- social:"), "playbook đứng trước thư viện");
+  assert.ok(index.indexOf("- post:") < index.indexOf("- social:"), "playbook đứng trước thư viện");
   assert.equal(skillIndex("x_writer").includes("<library>"), false);
   const readSkill = CMO_TOOL_SPECS.find((t) => t.name === "read_skill")!;
   const allowed = (readSkill.schema as { properties: { name: { enum: string[] } } }).properties.name.enum;
-  for (const name of ["launch", "pricing", "seo-audit", "marketing-plan", "x-writing"]) assert.ok(allowed.includes(name), `read_skill đọc được ${name}`);
+  for (const name of ["launch", "pricing", "seo-audit", "marketing-plan", "post"]) assert.ok(allowed.includes(name), `read_skill đọc được ${name}`);
   assert.ok(names.includes("read_site"), "CMO đọc được website để nhận xét SEO");
 
   // W7: handle lấy từ Competitor Analysis + input, khử trùng, tối đa 4.
@@ -520,7 +520,7 @@ async function main() {
   assert.equal(memIn.inbox.length, 1, "one inbox item");
   const waiting = memIn.inbox[0]!;
   assert.equal(waiting.step, "draft_post", "it waits for the draft");
-  assert.ok(waiting.request.prompt.includes("3-7-14") && waiting.request.system.includes("posts on X"), "with the prompt the job would have sent");
+  assert.ok(waiting.request.prompt.includes("3-7-14") && waiting.request.system.includes("<skill name=\"post\">"), "with the prompt the job would have sent");
   assert.equal((waiting.request.schema as { type?: string }).type, "object", "and the answer's JSON schema");
   assert.equal(memIn.items.filter((i) => i.status === "in_review").length, 0, "no card before the answer");
   assert.equal(ask.steps.at(-1)!.status, "skipped", "Activity shows the waiting step");

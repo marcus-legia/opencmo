@@ -19,7 +19,7 @@ export const PlanSchema = z.object({
         day_offset: z.number().int().describe("0 = today, 6 = six days from today"),
         department: z.enum(["post", "sales", "video"]),
         platform: z.string().describe("X, Threads or LinkedIn for post; Reddit for sales; Slideshow for a slideshow"),
-        idea: z.string().describe("The idea in one line, specific to this product"),
+        idea: z.string().describe("A topic note in one plain line (what happened, what was learned, what to show), specific to this product; not a headline"),
         reason: z.string().describe("One sentence: why this, why now, citing the strategy or last week"),
         image: z.boolean().optional().describe("Posts only: true when the post is stronger with an image (a launch, a product screen, a before and after); false otherwise"),
       }),
@@ -37,6 +37,9 @@ Rules:
 - A video script (department "video", platform TikTok, Reels or Shorts), at most one a week, only when the strategy or this week's goal calls for video (a launch, a demo, a walkthrough). You write the script and the storyboard; the founder records the video themselves, to camera or as a screen recording. Its idea says what the video shows. Never plan an AI-generated video. Short clips are cut from the founder's finished videos, outside this plan.
 - At most two posts a week get an image (image true): a launch, a product screen, a before and after. The image is the post's title on the founder's brand, or a frame of their product; nothing is generated. Every other item has image false.
 - Every item is specific to this product and its customers, and every reason cites the strategy, a pain, or what happened last week.
+- An idea is a topic note for the writer, not a headline: "How we approve each draft by hand before it goes out", not "Why manual approval is the secret to AI marketing". No headline formulas ("the secret to", "the hidden cost of", "the danger of", "why X beats Y", "here's why"), no hype, no dashes.
+- At most one post a week is about the product itself (a launch, an update). The others help the founder's customers with what the founder knows, did or learned; they may mention the product only where it is the plain answer.
+- No two items on the same topic in one week, and none that repeats an item from the last two weeks.
 - Learn from the memories: they are reasons the founder skipped drafts and notes they gave you.
 - Plain English, no hype, no invented numbers.
 - Fit the business's stage: never plan a post that quotes customers, testimonials, reviews, case studies or results unless the documents contain them.

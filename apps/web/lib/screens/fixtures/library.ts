@@ -33,7 +33,7 @@ export const libraryFixture: LibraryScreen = {
   skills: {
     writing: [
       { id: "no-ai-slop", name: "Plain writing (No AI Slop)", origin: "built_in", note: "Guidance on stock phrases and patterns to avoid, never a hard filter", readBy: ["Writer", "Checker", "Sales", "CMO chat"] },
-      { id: "x-writing", name: "Writing for X", origin: "built_in", note: "One idea per post, a clear first line, no links and no hashtags", readBy: ["Writer", "Checker"] },
+      { id: "post", name: "Writing a post", origin: "built_in", note: "One true thing in your voice, a plain first line, no links and no hashtags", readBy: ["Writer", "Checker"] },
       { id: "s-launch", name: "Launch threads", origin: "yours", note: "Saved from a chat on Oct 18", readBy: ["Writer"] },
     ],
     video: [

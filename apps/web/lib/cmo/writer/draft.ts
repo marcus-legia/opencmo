@@ -66,7 +66,7 @@ export function writerPromptVersion(kind: WriterKind, postSystem = ""): string {
 
 /** Numbers the founder's documents hold, plus those said in the video a caption is written for. */
 export function rulesFor(context: WriterContext, video?: VideoSource): CheckRules {
-  const rules = checkRules(context.documents);
+  const rules: CheckRules = { ...checkRules(context.documents), ...(context.allowSlop ? { allowSlop: context.allowSlop } : {}) };
   for (const raw of video?.transcript.match(/\d[\d,.]*/g) ?? []) rules.known.add(normalizeNumber(raw));
   return rules;
 }
@@ -82,7 +82,7 @@ function briefBlock(kind: WriterKind, brief: WriterBrief): string {
   switch (kind) {
     case "post": {
       const b = brief as WriterBrief<"post">;
-      return `Today's idea: "${b.idea}"${reasonOf(b)}\n\nWrite three versions with different hooks for this platform. Do not repeat the recent texts.`;
+      return `Today's idea: "${b.idea}"${reasonOf(b)}\n\nWrite three versions for this platform: three different takes on the same true thing. The idea is a topic, not a headline; never reuse its wording as the first line. Do not repeat the recent texts.`;
     }
     case "caption":
       return `${videoBlock((brief as WriterBrief<"caption">).video)}\n\nWrite the caption for this platform.`;
