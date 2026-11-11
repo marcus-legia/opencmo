@@ -51,7 +51,8 @@ const label = (key: string, opts: Intl.DateTimeFormatOptions) => keyDate(key).to
 
 /** Moves an instant to another calendar day in the founder's zone, keeping its time of day. */
 function sameTimeOn(at: string, fromKey: string, toKey: string): string {
-  return new Date(Date.parse(at) + (keyDate(toKey).getTime() - keyDate(fromKey).getTime())).toISOString();
+  // To the minute, as the route asks (`approval-card.ts` refuses fractions of a second): `toISOString` writes ".000".
+  return new Date(Date.parse(at) + (keyDate(toKey).getTime() - keyDate(fromKey).getTime())).toISOString().replace(/\.\d{3}Z$/, "Z");
 }
 
 /**

@@ -28,6 +28,12 @@ test("video work asked in the CMO chat opens the editor with the request sent on
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/app");
   const chat = page.locator("#v2-chat");
+  // The Assistant's turn is shown before its request lands; the reload below waits for the server to have it. The CMO
+  // chat's own turn answers while the feed is still open, so only a turn answered on the editor counts.
+  const sent = page.waitForResponse(
+    (r) => /\/agent\/sessions\/[^/]+\/turns$/.test(new URL(r.url()).pathname) && r.request().method() === "POST" && page.url().includes("/app/editor/"),
+    { timeout: 180_000 },
+  );
   await chat.getByLabel("Ask your CMO").fill(ASK);
   await chat.getByLabel("Ask your CMO").press("Enter");
 
@@ -37,6 +43,8 @@ test("video work asked in the CMO chat opens the editor with the request sent on
   const assistant = page.getByRole("complementary", { name: "Assistant" });
   await expect(assistant.getByTestId("assistant-turn").first()).toContainText(ASK, { timeout: 60_000 });
   await page.screenshot({ path: join(OUT, "handoff-1440.png") });
+
+  expect((await sent).status()).toBe(200);
 
   // A reload never sends it again.
   await page.reload();
