@@ -41,7 +41,8 @@ test("Brain and Library open as panes of the Context drawer over the feed", asyn
     ["/app/library?edit=competitors", "/app?doc=competitors&edit=1", "Competitors"],
   ] as const) {
     await page.goto(from);
-    await expect(page).toHaveURL(new RegExp(`${to.replace(/[?]/g, "\\?")}$`));
+    // The URL must end with `to` exactly: every regex metacharacter in it escaped, backslash included.
+    await expect(page).toHaveURL(new RegExp(`${to.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`));
     await expect(page.getByRole("dialog", { name: title })).toBeVisible();
     await expect(page.getByTestId("v2-dashboard")).toBeAttached();
   }
