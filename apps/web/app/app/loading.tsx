@@ -1,4 +1,6 @@
 import { PageSkeleton } from "@/components/clipping/Skeleton";
+import { TodayLoading } from "@/components/today/TodayLoading";
+import { UI_V2 } from "@/lib/screens/flag";
 
 /**
  * Ranh giới này không phải để trang trí.
@@ -10,5 +12,6 @@ import { PageSkeleton } from "@/components/clipping/Skeleton";
  * vùng nội dung đổi.
  */
 export default function AppLoading() {
-  return <PageSkeleton variant="library" />;
+  // In the Today frame the screen's own column waits; the classic shell keeps its library grid.
+  return UI_V2 ? <TodayLoading /> : <PageSkeleton variant="library" />;
 }

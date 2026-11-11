@@ -108,8 +108,9 @@ export function BillingV2({
             </Link>
           </div>
           <div className="bd td-v2host">
-            {/* The classic page's usage rows (held per video, exports left today, when quotas reset), kept whole. */}
-            <AccountUsageLoader emphasizeCredits />
+            {/* The classic page's usage rows (held per video, exports left today, when quotas reset). The balance is the
+                "Credits left" above: shown again here, unlabelled under "Spent this month", it read as what was spent. */}
+            <AccountUsageLoader hideCredits />
           </div>
         </section>
 

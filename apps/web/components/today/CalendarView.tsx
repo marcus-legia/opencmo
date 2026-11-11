@@ -291,7 +291,8 @@ export function CalendarView() {
           </>
         ) : (
           <div style={{ padding: "16px" }} className="meta">
-            Nothing on the calendar this week. Approved posts show here at their time.
+            {/* Until the week is read, "nothing on the calendar" would be a guess. */}
+            {data ? `Nothing on the calendar this ${range}. Approved posts show here at their time.` : state.status === "error" ? null : "Loading…"}
           </div>
         )}
       </aside>

@@ -40,6 +40,18 @@ const iconOf = (d: Draft) => (d.kind === "video_brief" ? KIND_ICON.script : d.ki
  * before anything runs (charge before running). A waiting row opens its real card in place; an approved script offers
  * the phone prompter and the editor.
  */
+const WEEKDAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+
+/** Minutes from Monday 00:00 in the founder's week; a draft with no day goes last. */
+function weekOrder(d: Draft): number {
+  if (d.at) {
+    const t = new Date(d.at);
+    return ((t.getDay() + 6) % 7) * 1440 + t.getHours() * 60 + t.getMinutes();
+  }
+  const day = WEEKDAYS.indexOf((d.dayText ?? "").slice(0, 3).toLowerCase());
+  return day < 0 ? 7 * 1440 : day * 1440 + 1439;
+}
+
 export function AgentWriter() {
   const [state, reload] = useScreen("writer");
   const [dash, reloadCards] = useScreen("dashboard");
@@ -67,6 +79,8 @@ export function AgentWriter() {
   const active = platform && platforms.length > 1 && platforms.includes(platform as Draft["platform"]) ? platform : null;
   const shown = active ? listed.filter((d) => d.platform === active) : listed;
   const firstOpen = open ?? waiting[0]?.id ?? null;
+  // The side card reads as a week, Monday first: a draft with a time at that time, one with only a day at that day's end.
+  const week = [...drafts].sort((a, b) => weekOrder(a) - weekOrder(b)).slice(0, 7);
   const askPrompt = ASK_KINDS.find((k) => k.id === askKind)!;
 
   function write() {
@@ -248,7 +262,7 @@ export function AgentWriter() {
             </Link>
           </div>
           {drafts.length === 0 ? <div className="meta">The week's plan lands here on Sunday.</div> : null}
-          {drafts.slice(0, 7).map((d) => (
+          {week.map((d) => (
             <div key={d.id} className="day">
               <span className="d">{(d.at ? new Date(d.at).toLocaleDateString("en-GB", { weekday: "short" }) : (d.dayText ?? "").slice(0, 3)).toUpperCase()}</span>
               <span className="dot" style={{ background: d.column === "posted" || d.column === "scheduled" ? "var(--ok)" : "var(--warn)" }}></span>

@@ -33,6 +33,21 @@ html[data-ui="v2"][data-theme="dark"] body { background: #121110; }
   .td-frame .top { flex-wrap: wrap; height: auto; min-height: 48px; padding-block: 8px; row-gap: 6px; }
   .td-frame .top > * { min-width: 0; }
   .td-menu { max-width: calc(100vw - 24px); }
+  /* Logs and Chat keep their icon and their name for screen readers; the words would push the account to a row of
+     its own. */
+  /* The business name and the trail give way first: the bar stays one row with the views under it. */
+  .td-frame .top { column-gap: 4px; }
+  .td-frame .top a.pill[href="/app/billing"] > svg { display: none; }
+  .td-frame .top .td-project-name { display: inline-block; max-width: 16vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* `!important`: the crumb sets `display: contents` inline. */
+  .td-frame .top .td-crumb:not(.is-last) { display: none !important; }
+  .td-frame .top .td-pill-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  /* A post row's action goes under the post instead of past the screen's edge. */
+  .pg-analytics .row { flex-wrap: wrap; }
+  .pg-analytics .row > .ghost { margin-left: auto; }
+}
+@media (max-width: 380px) {
+  .td-frame .top .td-pill-more { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 }
 .td-menu-note { padding: 6px 8px; font-size: 12.5px; color: var(--subtle); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .td-menu a, .td-menu button { display: flex; align-items: center; height: 32px; padding: 0 8px; border: 0; border-radius: 6px; background: transparent; color: var(--text); font: inherit; font-size: 14px; text-align: left; text-decoration: none; cursor: pointer; width: 100%; }
@@ -333,3 +348,6 @@ html:not([data-theme="dark"]) .k { --ok: #16744c; --warn: #8f5a0e; }
 .pg-agentwriter [role="group"] .chip[aria-pressed="true"] { color: var(--text); border-color: var(--line-2); background: var(--raised); }
 /* The drawer's open row sits on the accent wash: its second line takes --muted, which passes 4.5:1 there. */
 .td-ctx .doc[aria-current="true"] .u { color: var(--muted); }
+
+/* The screens' loading state (components/today/TodayLoading.tsx): the column's width and padding, never the page's. */
+.td-frame .td-loading { flex: 1 1 600px; min-width: 0; max-width: 1080px; margin: 0 auto; padding: 22px 24px 40px; display: flex; flex-direction: column; gap: 14px; box-sizing: border-box; }

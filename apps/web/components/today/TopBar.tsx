@@ -57,7 +57,7 @@ function Project({ menu }: { menu: ReactNode }) {
         <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: "20px", height: "20px", borderRadius: "5px", background: "var(--accent)", color: "var(--accent-ink)", fontWeight: "700", fontSize: "12px" }}>
           {name.charAt(0).toUpperCase()}
         </span>
-        <span style={{ fontWeight: "600" }}>{name}</span>
+        <span className="td-project-name" style={{ fontWeight: "600" }}>{name}</span>
         <Chevron />
       </summary>
       <div className="td-menu">{menu}</div>
@@ -212,7 +212,7 @@ export function TopBar({
         </Link>
         <button type="button" className="pill" aria-pressed={logsOpen} onClick={onLogs}>
           <LogsIcon />
-          Logs
+          <span className="td-pill-label">Logs</span>
         </button>
         <Link href="/app/studio" className="ib" aria-label="Open the editor">
           <svg className="i" viewBox="0 0 24 24" aria-hidden="true">
@@ -225,7 +225,7 @@ export function TopBar({
         {current === "feed" ? null : (
           <button type="button" className="pill" onClick={onChat}>
             <ChatIcon />
-            Chat
+            <span className="td-pill-label">Chat</span>
           </button>
         )}
         <Avatar email={email} />
@@ -236,8 +236,8 @@ export function TopBar({
   return (
     <header className="top">
       <Project menu={MORE} />
-      {variant.trail.map((step) => (
-        <span key={step.label} style={{ display: "contents" }}>
+      {variant.trail.map((step, index) => (
+        <span key={step.label} className={index === variant.trail.length - 1 ? "td-crumb is-last" : "td-crumb"} style={{ display: "contents" }}>
           <span className="meta">/</span>
           {step.href ? (
             <Link href={step.href} style={{ display: "inline-flex", alignItems: "center", gap: "4px", color: "var(--muted)", textDecoration: "none", fontSize: "13.5px" }}>
@@ -257,18 +257,20 @@ export function TopBar({
       {variant.logs ? (
         <button type="button" className="pill" aria-pressed={logsOpen} onClick={onLogs}>
           <LogsIcon />
-          Logs
+          <span className="td-pill-label">Logs</span>
         </button>
       ) : null}
       {variant.back ? (
         <Link href="/app" className="pill" style={{ textDecoration: "none" }}>
-          Back to today
+          <span>
+            Back<span className="td-pill-more"> to today</span>
+          </span>
         </Link>
       ) : null}
       {variant.chat ? (
         <button type="button" className="pill" onClick={onChat}>
           <ChatIcon />
-          Chat
+          <span className="td-pill-label">Chat</span>
         </button>
       ) : null}
       <Avatar email={email} />
