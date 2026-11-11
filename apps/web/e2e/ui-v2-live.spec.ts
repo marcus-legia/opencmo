@@ -16,7 +16,7 @@ test.beforeAll(ensureOnboarded);
 
 const OUT = join(__dirname, "..", "..", "..", "docs", "plans", "cmo", "2026-11-02-cmo-chat-live-shots");
 
-test("a finished draft comes back to the chat and opens Writer; a rating is kept", async ({ page }) => {
+test("a finished draft comes back to the chat and lands on the feed; Open goes to Writer; a rating is kept", async ({ page }) => {
   test.setTimeout(240_000);
   mkdirSync(OUT, { recursive: true });
   await signIn(page, state().users.b);
@@ -28,8 +28,12 @@ test("a finished draft comes back to the chat and opens Writer; a rating is kept
 
   const line = chat.getByTestId("run-line");
   await expect(line).toContainText("Draft ready to review", { timeout: 120_000 });
+  // On the feed the founder stays on the feed: the draft's card arrives in the list, and its row in "This week".
+  await expect(page).toHaveURL(/\/app$/);
+  await expect(page.getByTestId("approval-queue").locator('[data-testid="feed-row"][data-card-id]').first()).toBeVisible();
+  // The run line's Open is the way to Writer: there the chat is a drawer, and it stays open.
+  await line.getByRole("button", { name: "Open" }).click();
   await expect(page).toHaveURL(/\/app\/writer/);
-  // The chat moved the founder to Writer mid-conversation: there it is a drawer, and it stays open.
   await expect(chat.getByLabel("Ask your CMO")).toBeVisible();
   await page.screenshot({ path: join(OUT, "run-line-1440.png") });
 

@@ -10,7 +10,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
 import { PlanSheet } from "@/components/billing/PlanSheet";
@@ -18,21 +18,60 @@ import { ApprovalCard, type DecideHandler } from "@/components/cards/ApprovalCar
 import { RatingSheet } from "@/components/cards/RatingSheet";
 import { fillChat } from "@/components/dashboard/TodayBlock";
 import { useDashboard } from "@/components/dashboard/useDashboard";
+import { useLive } from "@/components/clipping/useLive";
+import { useShellAccount } from "@/components/clipping/web/WebShell";
 import { Sash } from "@/components/shell-v2/Sash";
 import { useShellState } from "@/components/shell-v2/ShellState";
 import { prefetchScreen, useScreen } from "@/components/screens/useScreen";
 import { isTodayPrompt } from "@/lib/cmo/today";
 import type { ApprovalCard as Card } from "@/lib/screens/approval-card";
+import { PLATFORM_LABEL } from "@/lib/screens/common";
+import type { WriterScreen } from "@/lib/screens/writer";
 import type { DashboardScreen, TodayRowData } from "@/lib/screens/dashboard";
 import type { ScreenName } from "@/lib/screens/registry";
 
 import { ContextColumn } from "./ContextColumn";
 import { KIND_ICON, PLATFORM_ICON, kindLabel, whenLabel } from "./cards";
 import { LEFT, useTodayColumns } from "./columns";
+import { draftsThisWeek } from "./week";
+
+type Draft = WriterScreen["drafts"][number];
 
 type Step = "planned" | "waiting" | "making" | "scheduled" | "posted";
 
 const dayLine = new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short" });
+const timeLine = new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false });
+
+/** Where a piece of the week stands, in the founder's words. The feed keeps a row for it at every step. */
+const STAGE: Record<Draft["column"], { label: string; tone: "plan" | "new" | "wait" | "ok" }> = {
+  planned: { label: "Planned", tone: "plan" },
+  drafting: { label: "Being written", tone: "new" },
+  waiting: { label: "Waiting on you", tone: "wait" },
+  scheduled: { label: "Approved", tone: "ok" },
+  posted: { label: "Posted", tone: "ok" },
+};
+
+const draftKind = (d: Draft) =>
+  d.kind === "video_brief" ? "Script · you record" : d.kind === "slide_text" ? "Slideshow" : d.kind === "caption" ? "Caption" : `${PLATFORM_LABEL[d.platform] ?? d.platform} post`;
+const draftIcon = (d: Draft) =>
+  d.kind === "video_brief" ? KIND_ICON.script : d.kind === "slide_text" ? KIND_ICON.slideshow : d.kind === "caption" ? KIND_ICON.price : (PLATFORM_ICON[d.platform] ?? KIND_ICON.post);
+
+/** "Thu 12 Nov, 09:00" for a draft with a time, its day otherwise. */
+function draftWhen(d: Draft): string | null {
+  if (d.at) return timeLine.format(new Date(d.at));
+  return d.dayText;
+}
+
+const WHO: Record<string, string> = { you: "You", brain: "Planner", writer: "Writer", studio: "Studio", schedule: "Publisher", publish: "Publisher", sales: "Sales", research: "Research" };
+
+/** "just now", "12 min ago", "3 h ago", then the day. */
+function ago(at: string, now: number): string {
+  const minutes = Math.max(0, Math.round((now - Date.parse(at)) / 60_000));
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes} min ago`;
+  if (minutes < 24 * 60) return `${Math.round(minutes / 60)} h ago`;
+  return dayLine.format(new Date(at));
+}
 
 /** "marcus.le@…" → "Marcus": the greeting uses the founder's first name when the email gives one. */
 function firstName(email: string | null | undefined): string | null {
@@ -83,7 +122,9 @@ function Row({
   actions,
   children,
   cardId,
+  testId = "feed-row",
 }: {
+  testId?: string;
   inv?: boolean;
   icon: ReactNode;
   kind: string;
@@ -107,7 +148,7 @@ function Row({
     </>
   );
   return (
-    <div className={inv ? "item inv" : "item"} data-testid="feed-row" data-card-id={cardId}>
+    <div className={inv ? "item inv" : "item"} data-testid={testId} data-card-id={cardId}>
       {onToggle && !actions ? (
         <button type="button" className="row" onClick={onToggle} aria-expanded={open}>
           {line}
@@ -283,8 +324,10 @@ function agentLine(data: DashboardScreen, key: (typeof AGENT_ROWS)[number]["key"
 
 export function Feed({ email }: { email?: string | null }) {
   const { state, decideCard, reload, planSheet, closePlanSheet } = useDashboard();
-  const [week] = useScreen("schedule");
-  const { focusChat, workVersion } = useShellState();
+  const [week, reloadWeek] = useScreen("schedule");
+  const [writer, reloadWriter] = useScreen("writer");
+  const { focusChat, openLogs, workVersion } = useShellState();
+  const { userId } = useShellAccount();
   const search = useSearchParams();
   const [step, setStep] = useState<Step>("waiting");
   const [open, setOpen] = useState<string | null>(null);
@@ -319,6 +362,39 @@ export function Feed({ email }: { email?: string | null }) {
   const data = state.status === "ready" ? state.data : null;
   const live = state.status === "ready" ? state.live : null;
   const slots = week.status === "ready" ? week.data.slots : [];
+  const drafts = useMemo(() => (writer.status === "ready" ? draftsThisWeek(writer.data.drafts) : []), [writer]);
+
+  // The week's rows and the calendar's slots are their own reads. Whatever moves the queue (a decision here, a new
+  // card, a line in the log, Refresh) also moves them, so they are read again right after it: an approved post turns
+  // "Approved" in place instead of vanishing until the next visit. One read for a burst of events.
+  const side = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reloadSide = useCallback(() => {
+    if (side.current) clearTimeout(side.current);
+    side.current = setTimeout(() => {
+      reloadWeek();
+      reloadWriter();
+    }, 400);
+  }, [reloadWeek, reloadWriter]);
+  useEffect(() => () => void (side.current && clearTimeout(side.current)), []);
+  const queueRef = data?.queue;
+  const logRef = data?.log;
+  const seen = useRef(false);
+  useEffect(() => {
+    if (!queueRef) return;
+    // The first answer arrives with the side reads already under way.
+    if (!seen.current) {
+      seen.current = true;
+      return;
+    }
+    reloadSide();
+  }, [queueRef, logRef, reloadSide]);
+  // A slot that changes on its own (published, missed, moved from the Calendar in another tab).
+  useLive("schedule_slots", userId ? `user_id=eq.${userId}` : null, reloadSide, Boolean(userId) && Boolean(live?.queue), false, "feed");
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const tick = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(tick);
+  }, []);
 
   const counts = useMemo(() => {
     const waiting = data?.queue.filter((c) => c.status === "waiting").length ?? 0;
@@ -360,6 +436,59 @@ export function Feed({ email }: { email?: string | null }) {
   const firstCardId = firstCard ? firstCard.card.id : null;
   const openId = open ?? firstCardId;
 
+  /** Opens a waiting card where it sits in the list above and brings it into view. */
+  const review = (approvalId: string) => {
+    setStep("waiting");
+    setLater((was) => new Set([...was].filter((id) => id !== approvalId)));
+    setOpen(approvalId);
+    requestAnimationFrame(() => document.querySelector(`[data-testid="feed-row"][data-card-id="${CSS.escape(approvalId)}"]`)?.scrollIntoView({ block: "nearest", behavior: "smooth" }));
+  };
+  const queued = new Set((data?.queue ?? []).filter((c) => c.status === "waiting").map((c) => c.id));
+
+  const weekRow = (d: Draft) => {
+    const stage = STAGE[d.column];
+    const when = draftWhen(d);
+    return (
+      <Row
+        key={d.id}
+        testId="week-row"
+        icon={draftIcon(d)}
+        kind={draftKind(d)}
+        title={d.title}
+        meta={d.column === "scheduled" && when ? `Goes out ${when}` : d.column === "posted" && when ? when : (when ?? undefined)}
+        actions={
+          <>
+            <span className={`stage ${stage.tone}`} data-stage={d.column}>
+              {stage.label}
+            </span>
+            {d.column === "waiting" ? (
+              d.approvalId && queued.has(d.approvalId) ? (
+                <button type="button" className="do" onClick={() => review(d.approvalId!)}>
+                  Review
+                </button>
+              ) : (
+                <Link className="do td-rowlink" href="/app/writer">
+                  Open in Writer
+                </Link>
+              )
+            ) : d.column === "scheduled" || d.column === "posted" ? (
+              <Link className="skip td-rowlink" href="/app/schedule">
+                Calendar
+              </Link>
+            ) : null}
+          </>
+        }
+      />
+    );
+  };
+  const emptyRow = (text: ReactNode) => (
+    <div className="item">
+      <div className="row" style={{ justifyContent: "center", color: "var(--muted)" }}>
+        {text}
+      </div>
+    </div>
+  );
+
   const done = data?.today.done ?? 0;
   const total = Math.max(data?.today.total ?? 0, done);
   const progress = total > 0 ? `${Math.round((done / total) * 100)}%` : "0%";
@@ -367,18 +496,29 @@ export function Feed({ email }: { email?: string | null }) {
   const needs = counts.waiting;
   const held = data?.week.heldCards ?? 0;
 
-  const slotRows = (wanted: "scheduled" | "posted" | "all") =>
+  const slotRows = (wanted: "scheduled" | "posted") =>
     slots
-      .filter((s) => (wanted === "all" ? true : s.status === wanted))
+      .filter((s) => s.status === wanted)
       .map((s) => (
         <Row
           key={s.id}
           icon={PLATFORM_ICON[s.where.platform] ?? KIND_ICON.post}
           kind={`${s.where.platform === "x" ? "X" : s.where.platform.charAt(0).toUpperCase() + s.where.platform.slice(1)} post`}
           title={s.title}
-          meta={s.note ?? dayLine.format(new Date(s.at))}
+          meta={s.note ?? timeLine.format(new Date(s.at))}
+          actions={
+            <>
+              <span className="stage ok">{wanted === "posted" ? "Posted" : "Approved"}</span>
+              <Link className="skip td-rowlink" href="/app/schedule">
+                Calendar
+              </Link>
+            </>
+          }
         />
       ));
+  const scheduledRows = slotRows("scheduled");
+  const postedRows = slotRows("posted");
+  const working = data?.team.nodes.filter((n) => n.state === "working") ?? [];
 
   return (
     <>
@@ -504,13 +644,12 @@ export function Feed({ email }: { email?: string | null }) {
                 )
               )
             ) : null}
-            {step === "scheduled" ? slotRows("scheduled") : null}
-            {step === "posted" ? slotRows("posted") : null}
-            {step === "planned" ? slotRows("all") : null}
+            {step === "scheduled" ? (scheduledRows.length ? scheduledRows : emptyRow("Nothing is scheduled yet. Approve a post and it shows here with its time.")) : null}
+            {step === "posted" ? (postedRows.length ? postedRows : emptyRow("Nothing went out this week yet.")) : null}
+            {step === "planned" ? (drafts.length ? drafts.map(weekRow) : emptyRow(writer.status === "loading" ? "Loading this week…" : "Nothing is planned for this week yet. Ask your CMO to plan the week.")) : null}
             {step === "making" && data
-              ? data.team.nodes
-                  .filter((n) => n.state === "working")
-                  .map((n) => (
+              ? working.length
+                ? working.map((n) => (
                     <Row
                       key={n.department}
                       icon={KIND_ICON.slideshow}
@@ -519,8 +658,46 @@ export function Feed({ email }: { email?: string | null }) {
                       meta={<span className="live"></span>}
                     />
                   ))
+                : emptyRow("Nobody is making anything right now.")
               : null}
           </div>
+
+          {/* The week, every piece with where it stands: what the founder approved stays on the feed. */}
+          {step === "waiting" && (drafts.length > 0 || writer.status === "error") ? (
+            <>
+              <div className="sec">
+                <h2>This week</h2>
+                <span className="meta">
+                  {drafts.filter((d) => d.column === "scheduled" || d.column === "posted").length} of {drafts.length} approved ·{" "}
+                  <Link href="/app/schedule">Calendar</Link>
+                </span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: "26px" }} data-testid="feed-week">
+                {writer.status === "error" ? emptyRow("This week could not be read. Refresh to try again.") : drafts.map(weekRow)}
+              </div>
+            </>
+          ) : null}
+
+          {step === "waiting" && data && data.log.length > 0 ? (
+            <>
+              <div className="sec">
+                <h2>Activity</h2>
+                <button type="button" className="skip" onClick={openLogs}>
+                  All activity
+                </button>
+              </div>
+              <ul className="td-activity" data-testid="feed-activity">
+                {data.log.slice(0, 6).map((line) => (
+                  <li key={line.id}>
+                    {/* A decision is logged under the department it was for; the line itself starts with "You". */}
+                    <span className={line.who === "you" || line.text.startsWith("You ") ? "who you" : "who"}>{line.text.startsWith("You ") ? "You" : (WHO[line.who] ?? line.who)}</span>
+                    <span className="what">{line.text}</span>
+                    <time dateTime={line.at}>{ago(line.at, now)}</time>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : null}
 
           <div className="sec">
             <h2>Agents</h2>

@@ -28,6 +28,7 @@ State: ✅ done · 🟡 partial · ❌ not built.
 | Surface | Where | What it approves | State |
 |---|---|---|---|
 | Approval inbox | `app/app/inbox/`, `components/screens/` (v2 shell), `lib/cmo/pending.ts` | every card kind in §5, grouped by department; one card opens at `/app/inbox/[id]` | ✅ |
+| The feed after a decision | `components/today/Feed.tsx` | a decided piece keeps a row under "This week" with its stage (Planned, Being written, Waiting on you, Approved with its time, Posted), and "Activity" lists the last decisions and agent lines; both re-read after every change of the queue (2026-11-11) | ✅ |
 | One table, one decide | `approvals`, `approval_raise`, `approval_decide`, `approval_snapshot`, `app/api/v1/approvals/[id]/route.ts` | owner check under RLS, advisory lock, "already decided", the snapshot hash checked again, daily caps | ✅ |
 | The old decision RPCs | `cmo_decide_post`, `cmo_decide_opportunity`, `cmo_decide_goal`, `cmo_decide_correction`, `cmo_mark_posted` | called by `approval_decide`; `approvals_sync` triggers keep the rows in step | ✅ |
 | CMO chat decisions | `lib/agent/cmo-decisions.ts` | the founder approves or schedules by asking; the chat shows the card and calls the same RPC on confirm; the model never passes a hash | ✅ |
@@ -91,7 +92,7 @@ batching is by row (one `short_batch` for the shorts of one video) rather than a
 |---|---|---|---|---|
 | `plan` | Brain | the week plan, item by item | approve, edit or remove items | ✅ (`20270106050000`) |
 | `goal` | Brain | goal, metric, target | approve, change target, reject | ✅ |
-| `post` | Writer | text per platform, 1–2 alternates, checks passed, and the time and account it goes out on | approve (the words and the time at once), edit then approve, change time, skip with reason | ✅ X, Threads, LinkedIn |
+| `post` | Writer | text per platform, 1–2 alternates, checks passed, and the time and account it goes out on | approve (the words and the time at once; always the first button, and with no connected account "Open X" and "I posted it" follow it), edit then approve, change time, skip with reason | ✅ X, Threads, LinkedIn |
 | `reply` | Sales | thread, score with evidence, reply draft | copy and open, replied, dismiss | ✅ |
 | `script` | Studio Director | storyboard: words, picture, motion per beat | approve, send back | ✅ |
 | `price` | Studio | what will be made, one price for all of it | approve, cancel | ✅ |

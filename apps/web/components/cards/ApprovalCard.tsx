@@ -307,12 +307,15 @@ export function ApprovalCard({
         if (card.body.platforms.some((p) => p.thread)) return [primary("Approve thread"), ...(postChangeTime ? [postChangeTime] : []), ...declineAction];
         if (postYourself && postPlatform && isPublishPlatform(postPlatform)) {
           const target = intentFor(postPlatform, postText());
+          // Approve leads (owner, 2026-11-11: it was a quiet link after four buttons, and nobody found it). Posting it
+          // right now by hand stays one click away, as the second and third buttons.
           return [
+            { label: proposed ? "Approve for this time" : "Approve and schedule", variant: "primary", run: approve },
             // X and Threads open their composer with the words in it; LinkedIn's label already says it copies.
-            ...(target ? [{ label: target.label, variant: "primary" as const, run: () => void copyAndOpenText(postPlatform, postText()) }] : []),
+            ...(target ? [{ label: target.label, variant: "secondary" as const, run: () => void copyAndOpenText(postPlatform, postText()) }] : []),
             {
               label: "I posted it",
-              variant: target ? ("secondary" as const) : ("primary" as const),
+              variant: "secondary" as const,
               run: () => {
                 const text = postText();
                 void run({ action: "posted_self", text: text !== firstText(card) ? text : undefined });
@@ -320,7 +323,6 @@ export function ApprovalCard({
             },
             editAction(),
             ...(postChangeTime ? [postChangeTime] : []),
-            { label: proposed ? "Approve for this time" : "Approve and schedule", variant: "quiet", run: approve },
             ...declineAction,
           ];
         }

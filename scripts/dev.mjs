@@ -177,7 +177,43 @@ const children = [
   }),
 ];
 
-console.log(`\nWeb  http://127.0.0.1:3000\nMail http://127.0.0.1:54324  (magic link không gửi ra ngoài)\n`);
+console.log(`\nWeb  http://127.0.0.1:3000\nMail http://127.0.0.1:54324  (magic link không gửi ra ngoài)\n${sweepOn ? "CMO sweep: every minute (due posts, queued work, the daily schedule)" : "CMO sweep: off (OPENCMO_DEV_SWEEP=0)"}\n`);
+
+// The local stand-in for Modal's sweep. In production Modal fires due slots, runs queued CMO work every minute and
+// calls the daily schedule; on a laptop nothing did, so an approved post never reached its time, a queued draft stayed
+// queued and tomorrow's post was never written: the app looked dead after the first card. `OPENCMO_DEV_SWEEP=0` turns
+// it off. The daily schedule runs once at start and then hourly; it only queues what is due and not yet queued.
+const sweepOn = process.env.OPENCMO_DEV_SWEEP !== "0";
+const cronSecret = process.env.CRON_SECRET ?? readEnvFiles((key) => key === "CRON_SECRET").CRON_SECRET ?? "";
+const webUrl = `http://127.0.0.1:${port}`;
+const cronHeaders = cronSecret ? { Authorization: `Bearer ${cronSecret}` } : {};
+let lastSchedule = 0;
+let sweepWarned = false;
+async function sweepOnce() {
+  try {
+    // Not ready yet (first compile): try again on the next tick.
+    if (!(await fetch(`${webUrl}/login`, { signal: AbortSignal.timeout(20_000) })).ok) return;
+    await fetch(`${supabase.API_URL}/rest/v1/rpc/schedule_claim_due`, {
+      method: "POST",
+      headers: { apikey: supabase.SERVICE_ROLE_KEY, Authorization: `Bearer ${supabase.SERVICE_ROLE_KEY}`, "content-type": "application/json" },
+      body: "{}",
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (Date.now() - lastSchedule > 3_600_000) {
+      const daily = await fetch(`${webUrl}/api/cron/cmo`, { headers: cronHeaders, signal: AbortSignal.timeout(300_000) });
+      if (daily.ok) lastSchedule = Date.now();
+      else if (!sweepWarned) {
+        sweepWarned = true;
+        console.warn(`\n[dev sweep] /api/cron/cmo answered ${daily.status}. The daily CMO schedule is not running locally (check CRON_SECRET in apps/web/.env.local).\n`);
+      }
+    }
+    await fetch(`${webUrl}/api/internal/cmo/run`, { method: "POST", headers: cronHeaders, signal: AbortSignal.timeout(20_000) });
+  } catch {
+    // The web app is restarting or still compiling; the next tick tries again.
+  }
+}
+const sweepTimer = sweepOn ? setInterval(() => void sweepOnce(), 60_000) : null;
+if (sweepOn) setTimeout(() => void sweepOnce(), 15_000);
 
 // Một tiến trình chết là cả hai dừng: worker im lặng trong lúc web vẫn chạy là
 // đúng cái trạng thái khó tìm ra nhất — job "đang xử lý" mãi mãi.
@@ -185,6 +221,7 @@ let stopping = false;
 function stop(code) {
   if (stopping) return;
   stopping = true;
+  if (sweepTimer) clearInterval(sweepTimer);
   for (const child of children) {
     // Số âm = cả nhóm, không riêng tiến trình con. Lỗi ESRCH chỉ nghĩa là nhóm
     // đó đã tự thoát trước.

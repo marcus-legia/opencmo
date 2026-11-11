@@ -22,7 +22,7 @@ const DEBOUNCE_MS = 300;
 const FALLBACK_MS = 5000;
 
 export function useLive(
-  table: "jobs" | "clips" | "tasks" | "media_assets" | "approvals" | "work_order_events" | "cmo_runs",
+  table: "jobs" | "clips" | "tasks" | "media_assets" | "approvals" | "work_order_events" | "cmo_runs" | "schedule_slots",
   filter: string | null,
   onChange: () => void,
   enabled = true,
