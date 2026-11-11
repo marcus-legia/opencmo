@@ -95,18 +95,22 @@ Branch `claude/today-inline-edit`, cut from #188 (which carries #189's Today fra
 - [x] Full v2 runs: 46 failed right after the #189 merge → 13 → 3 (95 passed). The last three: Setup's axe title
   check (a poll between two renders; axe now retries for a few seconds), Studio's third card (the P6 look check needs
   an export this stack does not have: the spec records a passed check), and the Calendar drag (below).
-- [ ] Calendar drag-to-move: no move and no toast in e2e, with real mouse steps or dispatched drag events. The spec
-  logs what the page receives (`[dnd-debug]`); find the cause from that run, fix it, remove the log.
+- [x] Calendar drag-to-move was broken for every founder: the new time went out with milliseconds and the slot route
+  refuses fractions of a second (422). It is written to the minute now. (The spec first dropped on the wrong column;
+  it targets the day by `data-day`.)
+- [x] Final: full v2 run after the review fixes 94 passed, 4 failed; those four fixed (Calendar above; handoff and live
+  reloaded before an optimistic write landed; studio cancelled the order it then needed), and their specs rerun 10/10.
+  All 98 v2 tests green.
 
 ## 4. Code review (`/code-review high` on #190, 2026-11-11)
 
-Ten findings; nine fixed in the commit after this note, one open:
+Ten findings, all fixed:
 1. A failed documents read showed every document as unwritten, and Save would write an empty version over the real
    one: the drawer now says the read failed and offers Try again.
 2. Column widths were not clamped to the window: the side columns now give way to their minimums and the feed keeps
    420 px.
 3. Switching documents with unsaved changes dropped them: the drawer asks first.
-4. The Calendar drag (open, §3.7).
+4. The Calendar drag: a real product bug (milliseconds refused by the route), fixed (§3.7).
 5. The chat kept its drawer open by a 5 s timer: it now records the path it opened and the shell compares it.
 6. The brain screen was read twice when a pane opened: the drawer passes its read to the pane.
 7. The Calendar read `?from=` only on mount: a later link to another week moves it too.
