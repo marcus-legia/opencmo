@@ -9,7 +9,7 @@ export const metadata: Metadata = { title: "Calendar" };
 
 export default function SchedulePage() {
   requireUiV2();
-  // The Calendar reads `?from=` (useSearchParams): its own boundary, so the week waits and not the frame.
+  // The Calendar reads `?from=` (useSearchParams): a boundary of its own, so a suspended read waits here, not the frame.
   return (
     <Suspense fallback={<TodayLoading label="Loading the calendar" />}>
       <CalendarView />

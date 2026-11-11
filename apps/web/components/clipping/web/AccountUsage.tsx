@@ -52,6 +52,10 @@ export function AccountUsage({
             : `Enough for about ${account.credits} ${account.credits === 1 ? "minute" : "minutes"} of video.`}
         </p>
       )}
+      {/* With the balance shown elsewhere, the warning still belongs next to the usage. */}
+      {hideCredits && !emphasizeCredits && account.credits < account.job_hold_credits ? (
+        <p className="acct-hint is-low">A new job needs {account.job_hold_credits} credits. Buy credits or pick a plan below.</p>
+      ) : null}
       <ul className="acct-list">
         {showIdentity && (
           <li>

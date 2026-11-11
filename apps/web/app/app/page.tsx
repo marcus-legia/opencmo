@@ -47,7 +47,8 @@ export default async function CmoHome({ searchParams }: { searchParams: Promise<
       const query = new URLSearchParams({ ...(site ? { site } : {}), ...(paid ? { paid } : {}) }).toString();
       redirect(query ? `/app/setup?${query}` : "/app/setup");
     }
-    // The feed and its Context column read `?doc=` (useSearchParams): their own boundary inside the frame.
+    // The feed and its Context column read `?doc=` (useSearchParams). The route is dynamic, so this rarely suspends;
+    // the boundary keeps a static render from turning the whole page client-only, and the frame stays either way.
     return (
       <Suspense fallback={<TodayLoading label="Loading your feed" />}>
         <Feed email={user?.email ?? null} />

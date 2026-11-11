@@ -47,6 +47,13 @@ const LogsIcon = () => (
 );
 
 /** The business switcher: the product's initial and name, a menu with what has no other place in the frame. */
+const CoinIcon = () => (
+  <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 7v10M9 9.5h4.5a2 2 0 0 1 0 4H10a2 2 0 0 0 0 4h5" />
+  </svg>
+);
+
 function Project({ menu }: { menu: ReactNode }) {
   const ws = useWorkspace();
   const name = ws.name ?? siteLabel(ws.site) ?? "Your business";
@@ -117,7 +124,13 @@ export function TopBar({
   const ws = useWorkspace();
   const x = ws.accounts.find((a) => a.platform === "x");
   const linkedin = ws.accounts.some((a) => a.platform === "linkedin");
-  const creditsLabel = `${credits ?? "–"} credits`;
+  // On a phone the word goes (the coin and the number stay; the link keeps "credits" for screen readers).
+  const creditsLabel = (
+    <span>
+      {credits ?? "–"}
+      <span className="td-pill-more"> credits</span>
+    </span>
+  );
 
   // Feed, Calendar and Analytics share one bar (owner, 2026-11-10): the business and its accounts on the left, the three
   // views in the middle as links (prefetched, so a switch is instant), credits, Logs and the chat on the right. On the
@@ -204,10 +217,7 @@ export function TopBar({
         </nav>
         <div style={{ flex: "1 1 auto" }}></div>
         <Link href="/app/billing" className="pill" style={{ textDecoration: "none" }}>
-          <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
-            <circle cx="12" cy="12" r="9" />
-            <path d="M12 7v10M9 9.5h4.5a2 2 0 0 1 0 4H10a2 2 0 0 0 0 4h5" />
-          </svg>
+          <CoinIcon />
           {creditsLabel}
         </Link>
         <button type="button" className="pill" aria-pressed={logsOpen} onClick={onLogs}>
@@ -251,6 +261,7 @@ export function TopBar({
       <div style={{ flex: "1 1 auto" }}></div>
       {variant.credits ? (
         <Link href="/app/billing" className="pill" style={{ textDecoration: "none" }}>
+          <CoinIcon />
           {creditsLabel}
         </Link>
       ) : null}
