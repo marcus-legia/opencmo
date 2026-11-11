@@ -34,10 +34,13 @@ Branch `claude/today-inline-edit`, cut from #188 (which carries #189's Today fra
 - [x] `?doc=<kind>&edit=1` opens the form; "+" writes the first missing document; "Add a competitor" opens its form.
 - [x] Today's "Ready to read: your marketing strategy" → `/app?doc=strategy` (was Library).
 - [x] Research "Add a competitor" and its banner, Settings' Brand Kit link → the drawer.
-- [ ] Brain (`/app/brain`) and Library (`/app/library`) still render in the old v2 look inside the frame (screenshots of
-  2026-11-10). Bring their headers and type to the artboards' tokens, or move what the founder needs from them (what
-  the CMO learned, Voice) into drawers on the feed. Ask the owner which.
-- [ ] Look for other links from the CMO chat and cards that leave the feed for something a drawer could show.
+- [x] Brain and Library: the owner chose drawers (2026-11-11). The Context drawer's list has the documents, then "Your
+  CMO" (Plan and orders, What it learned, Past weeks) and "How it writes" (Voice, Skills): the old pages' own parts as
+  panes (`components/today/panes.tsx`), loaded when opened. `/app/brain` and `/app/library` redirect to the same pane;
+  the page-level components and `BusinessDocs` are removed.
+- [x] Links that left the feed for these: the plan card's "Edit plan", Rating's and Writer's voice links, Analytics'
+  memory link, the Planner agent, the business menu.
+- [x] Calendar reads `?from=` again (the old Schedule screen's links to a given week).
 
 ### 3.2 Readable type
 - [x] `bump_type` in `port-today-css.py`; `today.css` regenerated.
@@ -60,7 +63,8 @@ Branch `claude/today-inline-edit`, cut from #188 (which carries #189's Today fra
 - [x] The two ~80 kB gz chunks on `/app`: `3727-*` is Next's own runtime; `3040-*` was all of `editor-core`, pulled in
   by the approval cards for one constant (`SLIDE_TEXT_MAX`). It now has its own subpath
   (`@opencmo/editor-core/slide-limits`). `/app` 406 → 320 kB; Calendar, Analytics, Writer 286 → ~200 kB.
-- [ ] `marked` (18 kB gz) and zod (28 kB gz) in the feed's client bundle: load them only where used.
+- [x] ~~`marked` and zod~~: kept. `marked` draws the CMO chat, which is on screen on the feed; zod checks every
+  screen's data as it arrives. Neither waits for a click, so splitting them saves no first-paint time.
 - [ ] ~~`ShellV2` imports the classic `WebShell` statically~~: 11 kB gz, and the server layout imports it for the v1
   shell too, so a split moves the account context for little gain. Left as is.
 - [x] Before / after (First Load JS, `next build`):
@@ -82,3 +86,11 @@ Branch `claude/today-inline-edit`, cut from #188 (which carries #189's Today fra
 - [x] v2 e2e for the touched screens: shell, context (new), dashboard, today, theme, look: 28/28, then shell, dashboard,
   look again after the phone CSS: 23/23. CI does not run e2e.
 - [x] Looked at Feed and Calendar at 1440 and the feed at 390 (e2e screenshots).
+
+### 3.7 The old v2 e2e, ported to the Today frame
+- [x] Product gaps the old tests found: Projects' empty state; Writer's platform filter; Sales' thread list role, the
+  skipped-thread line and the settings focus; the Studio price card's stale "redo any keyframe" line.
+- [x] Specs: dashboard, shell, today, activation, setup, live, decisions, reach, pages, schedule, slides, studio,
+  writer, voice; new: context, theme.
+- [ ] One full v2 run, every spec (result below when it lands).
+
