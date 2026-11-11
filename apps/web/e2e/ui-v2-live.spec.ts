@@ -34,8 +34,11 @@ test("a finished draft comes back to the chat and opens Writer; a rating is kept
   await page.screenshot({ path: join(OUT, "run-line-1440.png") });
 
   const up = chat.getByRole("button", { name: "Good answer" }).last();
+  // The button turns at once; the rating is saved by its own request, which a reload must not cut short.
+  const saved = page.waitForResponse((r) => r.url().includes("/ratings") && r.request().method() === "POST");
   await up.click();
   await expect(up).toHaveAttribute("aria-pressed", "true");
+  expect((await saved).ok()).toBe(true);
   await page.reload();
   await page.getByRole("banner").getByRole("button", { name: "Chat" }).click();
   await expect(chat.getByTestId("run-line")).toContainText("Draft ready to review");

@@ -139,8 +139,11 @@ const motionEnv = {
 // phải con — `npx` mới là con — nên SIGTERM gửi cho con không tới được nó, và
 // nó giữ cổng 3000 cho tới lần `npm run dev` sau, lần đó Next lặng lẽ nhảy
 // sang 3001 còn magic link thì vẫn trỏ về 3000.
+// Turbopack compiles a route on its first visit several times faster than webpack (4–10 s per page or API route
+// before). `OPENCMO_WEBPACK=1 npm run dev` goes back to webpack if a dependency ever breaks under it.
+const bundler = process.env.OPENCMO_WEBPACK === "1" ? [] : ["--turbopack"];
 const children = [
-  spawn("npx", ["next", "dev", "-H", "127.0.0.1"], {
+  spawn("npx", ["next", "dev", ...bundler, "-H", "127.0.0.1"], {
     cwd: WEB, stdio: "inherit", detached: true,
     env: {
       ...process.env,

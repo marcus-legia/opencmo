@@ -80,10 +80,10 @@ function ScanNow() {
   }
   return (
     <div className="card" role="group" aria-labelledby="scan-now-title" style={{ maxWidth: "360px" }}>
-      <h2 id="scan-now-title" style={{ margin: "0 0 6px", fontSize: "13px", fontWeight: "600" }}>
+      <h2 id="scan-now-title" style={{ margin: "0 0 6px", fontSize: "14px", fontWeight: "600" }}>
         {claude ? "Scan now · in your Claude, no OpenCMO credits" : `Scan now · ${card.credits} credits`}
       </h2>
-      <ul style={{ margin: "0 0 10px", paddingLeft: "18px", fontSize: "12.5px", color: "var(--muted)" }}>
+      <ul style={{ margin: "0 0 10px", paddingLeft: "18px", fontSize: "13.5px", color: "var(--muted)" }}>
         {card.changes.map((line) => (
           <li key={line}>{line}</li>
         ))}
@@ -126,11 +126,11 @@ function ThreadRow({ t, open, onToggle, onDecide }: { t: Thread; open: boolean; 
   }
 
   return (
-    <div className="th" data-open={open}>
+    <div className="th" data-open={open} role="listitem">
       <button type="button" className="row" onClick={onToggle} aria-expanded={open}>
         <span className={tone(t.score)}>{tenth(t.score)}</span>
         <span style={{ flex: "1 1 auto", minWidth: "0" }}>
-          <span style={{ display: "block", fontSize: "13.5px", fontWeight: "500", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: done ? "var(--muted)" : undefined }}>{t.title}</span>
+          <span style={{ display: "block", fontSize: "14.5px", fontWeight: "500", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: done ? "var(--muted)" : undefined }}>{t.title}</span>
           <span className="meta">
             {[t.community, t.postedAt ? ago(t.postedAt) : null, t.comments != null ? `${t.comments} comments` : null, done ? (t.status === "replied" ? "you replied" : "dismissed") : null].filter(Boolean).join(" · ")}
           </span>
@@ -154,14 +154,16 @@ function ThreadRow({ t, open, onToggle, onDecide }: { t: Thread; open: boolean; 
             </div>
           ) : null}
           <div className="meta">{t.rule.text}</div>
-          {skipped ? null : t.draft === null ? (
+          {skipped ? (
+            <div className="meta">Sales did not draft a reply. The community&apos;s rules leave no room for one.</div>
+          ) : t.draft === null ? (
             <div className="meta">No draft yet. Sales drafts replies for the highest-scored threads first.</div>
           ) : (
             <div>
               <label className="meta" htmlFor={`reply-${t.id}`} style={{ display: "block", marginBottom: "6px" }}>
                 Draft reply
               </label>
-              <textarea id={`reply-${t.id}`} className="reply" value={draft} onChange={(e) => setDraft(e.target.value)} disabled={done} rows={4} style={{ width: "100%", resize: "vertical", font: "inherit", fontSize: "14px", lineHeight: "1.55", color: "var(--text)" }} />
+              <textarea id={`reply-${t.id}`} className="reply" value={draft} onChange={(e) => setDraft(e.target.value)} disabled={done} rows={4} style={{ width: "100%", resize: "vertical", font: "inherit", fontSize: "15px", lineHeight: "1.55", color: "var(--text)" }} />
               {t.draftChecks ? (
                 <div className="meta" style={{ marginTop: "6px" }}>
                   {t.draftChecks}
@@ -267,6 +269,12 @@ export function AgentSales() {
   const lastScan = runs[0]?.at ?? null;
   const name = ws.name ?? "your product";
 
+  // The banner's way to the settings: the tab, then the cursor on its heading, so the founder lands where to act.
+  const openSettings = () => {
+    setTab("settings");
+    requestAnimationFrame(() => document.getElementById("sales-settings-title")?.focus());
+  };
+
   return (
     <div style={{ display: "flex", flexWrap: "wrap", maxWidth: "1320px", margin: "0 auto", padding: "22px 24px 40px", gap: "24px" }} data-testid="v2-sales">
       <main style={{ flex: "999 1 600px", minWidth: "0" }}>
@@ -285,7 +293,7 @@ export function AgentSales() {
                 </span>
               ) : null}
             </div>
-            <p style={{ margin: "4px 0 8px", color: "var(--muted)", fontSize: "13px", maxWidth: "620px" }}>
+            <p style={{ margin: "4px 0 8px", color: "var(--muted)", fontSize: "14px", maxWidth: "620px" }}>
               Finds public conversations where people describe the problem {name} solves, scores each one with the exact words, and drafts a help-first reply. You post it yourself; Sales has no post button.
             </p>
             <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
@@ -318,7 +326,7 @@ export function AgentSales() {
         {data?.stuck ? (
           <div className="card" role="alert" style={{ marginTop: "14px" }}>
             <b>{data.stuck.text}</b>{" "}
-            <button type="button" className="ghost" onClick={() => setTab("settings")} style={{ marginLeft: "8px" }}>
+            <button type="button" className="ghost" onClick={openSettings} style={{ marginLeft: "8px" }}>
               Change where Sales looks
             </button>
           </div>
@@ -337,8 +345,8 @@ export function AgentSales() {
               <span className="meta">Sort</span>
               <span className="pill">Score</span>
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-              {list.length === 0 ? <div className="meta">No threads yet. Sales scans the communities your customers use and scores what it finds.</div> : null}
+            {list.length === 0 ? <div className="meta">No threads yet. Sales scans the communities your customers use and scores what it finds.</div> : null}
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }} role={list.length ? "list" : undefined} aria-label={list.length ? "Threads" : undefined}>
               {list.map((t) => (
                 <ThreadRow key={t.id} t={t} open={open === t.id} onToggle={() => setOpen(open === t.id ? null : t.id)} onDecide={decide} />
               ))}
@@ -370,7 +378,7 @@ export function AgentSales() {
       <aside style={{ flex: "1 1 300px", maxWidth: "360px", display: "flex", flexDirection: "column", gap: "14px" }}>
         <section className="card">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "6px" }}>
-            <h2 style={{ margin: "0", fontSize: "13px", fontWeight: "600" }}>This week</h2>
+            <h2 style={{ margin: "0", fontSize: "14px", fontWeight: "600" }}>This week</h2>
             <span className="meta">since Mon</span>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: "8px" }}>
@@ -389,7 +397,7 @@ export function AgentSales() {
           </div>
         </section>
         <section className="card">
-          <h2 style={{ margin: "0 0 6px", fontSize: "13px", fontWeight: "600" }}>Recent runs</h2>
+          <h2 style={{ margin: "0 0 6px", fontSize: "14px", fontWeight: "600" }}>Recent runs</h2>
           {runs.length === 0 ? <div className="meta">No scans yet.</div> : null}
           {runs.slice(0, 3).map((r) => (
             <div key={r.id} className="run">
@@ -401,7 +409,7 @@ export function AgentSales() {
           ))}
         </section>
         <section className="card">
-          <h2 style={{ margin: "0 0 8px", fontSize: "13px", fontWeight: "600" }}>Where it looks</h2>
+          <h2 style={{ margin: "0 0 8px", fontSize: "14px", fontWeight: "600" }}>Where it looks</h2>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 0" }}>
             <span>Reddit</span>
             <span className="meta">{data?.settings.excludedSubreddits.length ? `all but ${data.settings.excludedSubreddits.length} excluded` : "on"}</span>

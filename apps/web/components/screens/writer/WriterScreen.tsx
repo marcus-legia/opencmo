@@ -81,7 +81,7 @@ export function WriterScreen() {
             sub={
               <>
                 What Writer uses right now. Learned from your edits; newer notes win.{" "}
-                <a href="/app/library?tab=voice">Edit in Library →</a>
+                <a href="/app?doc=voice">Edit your voice →</a>
               </>
             }
           >

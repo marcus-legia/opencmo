@@ -9,7 +9,7 @@
  */
 
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 
@@ -18,14 +18,17 @@ import { ApprovalCard, type DecideHandler } from "@/components/cards/ApprovalCar
 import { RatingSheet } from "@/components/cards/RatingSheet";
 import { fillChat } from "@/components/dashboard/TodayBlock";
 import { useDashboard } from "@/components/dashboard/useDashboard";
+import { Sash } from "@/components/shell-v2/Sash";
 import { useShellState } from "@/components/shell-v2/ShellState";
-import { useScreen } from "@/components/screens/useScreen";
+import { prefetchScreen, useScreen } from "@/components/screens/useScreen";
 import { isTodayPrompt } from "@/lib/cmo/today";
 import type { ApprovalCard as Card } from "@/lib/screens/approval-card";
 import type { DashboardScreen, TodayRowData } from "@/lib/screens/dashboard";
+import type { ScreenName } from "@/lib/screens/registry";
 
 import { ContextColumn } from "./ContextColumn";
 import { KIND_ICON, PLATFORM_ICON, kindLabel, whenLabel } from "./cards";
+import { LEFT, useTodayColumns } from "./columns";
 
 type Step = "planned" | "waiting" | "making" | "scheduled" | "posted";
 
@@ -189,7 +192,7 @@ const AGENT_ROWS: { key: "brain" | "writer" | "studio" | "schedule" | "sales" | 
   {
     key: "brain",
     label: "Planner",
-    href: "/app/brain",
+    href: "/app?doc=plan",
     icon: (
       <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
         <rect width="18" height="18" x="3" y="4" rx="2" />
@@ -256,6 +259,16 @@ const AGENT_ROWS: { key: "brain" | "writer" | "studio" | "schedule" | "sales" | 
   },
 ];
 
+/** What each agent's page reads first: its link reads it ahead on hover or focus. */
+const AGENT_SCREEN: Record<(typeof AGENT_ROWS)[number]["key"], ScreenName> = {
+  brain: "brain",
+  writer: "writer",
+  studio: "studio",
+  schedule: "schedule",
+  sales: "sales",
+  research: "research",
+};
+
 function agentLine(data: DashboardScreen, key: (typeof AGENT_ROWS)[number]["key"]): { line: string; live: boolean } {
   if (key === "brain") {
     const next = data.team.brain.nextCheckAt;
@@ -269,7 +282,6 @@ function agentLine(data: DashboardScreen, key: (typeof AGENT_ROWS)[number]["key"
 }
 
 export function Feed({ email }: { email?: string | null }) {
-  const router = useRouter();
   const { state, decideCard, reload, planSheet, closePlanSheet } = useDashboard();
   const [week] = useScreen("schedule");
   const { focusChat, workVersion } = useShellState();
@@ -277,6 +289,7 @@ export function Feed({ email }: { email?: string | null }) {
   const [step, setStep] = useState<Step>("waiting");
   const [open, setOpen] = useState<string | null>(null);
   const [later, setLater] = useState<ReadonlySet<string>>(new Set());
+  const sides = useTodayColumns();
 
   // `?ask=1` and Today's `prompt` land in the chat's box; the founder sends it. Only a request Today writes is taken.
   const asking = search.get("ask") === "1";
@@ -370,23 +383,18 @@ export function Feed({ email }: { email?: string | null }) {
       <PlanSheet open={planSheet} onClose={closePlanSheet} />
       <RatingSheet open={rating} onClose={closeRating} />
       <ContextColumn goal={data ? { text: data.week.goal, done: data.week.deliverables.done, total: data.week.deliverables.total } : null} />
+      <Sash
+        label="Resize the context column"
+        controls="td-context"
+        value={sides.columns.left}
+        min={LEFT.min}
+        max={LEFT.max}
+        onLive={(value) => sides.live("left", value)}
+        onCommit={(value) => sides.commit("left", value)}
+        onReset={() => sides.commit("left", LEFT.base)}
+      />
 
       <main className="mid" data-testid="v2-dashboard">
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 20px", borderBottom: "1px solid var(--line)" }}>
-          <div className="seg" role="tablist" aria-label="View">
-            <button type="button" role="tab" aria-selected="true">
-              Feed
-            </button>
-            <button type="button" role="tab" aria-selected="false" onClick={() => router.push("/app/schedule")}>
-              Calendar
-            </button>
-            <button type="button" role="tab" aria-selected="false" onClick={() => router.push("/app/analytics")}>
-              Analytics
-            </button>
-          </div>
-          <span className="meta">{dayLine.format(new Date()).replace(",", "")}</span>
-        </div>
-
         <div style={{ flex: "1 1 auto", overflow: "auto", padding: "18px 24px 40px", maxWidth: "920px", width: "100%", margin: "0 auto" }}>
           <div style={{ display: "flex", alignItems: "flex-start", gap: "14px", marginBottom: "16px" }}>
             <Robot />
@@ -397,7 +405,7 @@ export function Feed({ email }: { email?: string | null }) {
                 </h1>
                 <span className="live" title="Your CMO is working"></span>
               </div>
-              <p style={{ margin: "4px 0 0", color: "var(--muted)", fontSize: "13px", lineHeight: "18px" }}>
+              <p style={{ margin: "4px 0 0", color: "var(--muted)", fontSize: "14px", lineHeight: "18px" }}>
                 {state.status === "loading"
                   ? "Loading your team…"
                   : needs === 0
@@ -509,7 +517,15 @@ export function Feed({ email }: { email?: string | null }) {
             {AGENT_ROWS.map((a) => {
               const status = data ? agentLine(data, a.key) : { line: "", live: false };
               return (
-                <Link key={a.key} href={a.href} className="agent" style={{ textDecoration: "none", color: "inherit" }} aria-label={`${a.label}: ${status.line}`}>
+                <Link
+                  key={a.key}
+                  href={a.href}
+                  className="agent"
+                  style={{ textDecoration: "none", color: "inherit" }}
+                  aria-label={`${a.label}: ${status.line}`}
+                  onMouseEnter={() => prefetchScreen(AGENT_SCREEN[a.key])}
+                  onFocus={() => prefetchScreen(AGENT_SCREEN[a.key])}
+                >
                   <span className="tile">{a.icon}</span>
                   <span style={{ minWidth: "0", flex: "1" }}>
                     <span style={{ display: "block", fontWeight: "500" }}>{a.label}</span>

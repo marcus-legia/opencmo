@@ -48,6 +48,8 @@ export function AgentWriter() {
   const [open, setOpen] = useState<string | null>(null);
   const [ask, setAsk] = useState("");
   const [askKind, setAskKind] = useState<(typeof ASK_KINDS)[number]["id"]>("post");
+  // The platforms this week's drafts are for: a chip each (as the Calendar's), when there is more than one.
+  const [platform, setPlatform] = useState<string | null>(null);
   const data = state.status === "ready" ? state.data : null;
   const queue = dash.status === "ready" ? ((dash.data as { queue: Card[] }).queue ?? []) : [];
   const sample = !(dash.status === "ready" && (dash.live as { queue?: boolean }).queue);
@@ -59,7 +61,11 @@ export function AgentWriter() {
   const drafts = data?.drafts ?? [];
   const waiting = drafts.filter((d) => d.column === "waiting");
   const approved = drafts.filter((d) => d.column === "scheduled" || d.column === "posted").length;
-  const shown = tab === "week" ? [...waiting, ...drafts.filter((d) => d.column !== "waiting")] : tab === "drafts" ? drafts.filter((d) => d.column === "drafting") : [];
+  const platforms = [...new Set(drafts.map((d) => d.platform))];
+  const listed = tab === "week" ? [...waiting, ...drafts.filter((d) => d.column !== "waiting")] : tab === "drafts" ? drafts.filter((d) => d.column === "drafting") : [];
+  // A filter whose chips are gone (one platform left, or the chosen one no longer has drafts) no longer applies.
+  const active = platform && platforms.length > 1 && platforms.includes(platform as Draft["platform"]) ? platform : null;
+  const shown = active ? listed.filter((d) => d.platform === active) : listed;
   const firstOpen = open ?? waiting[0]?.id ?? null;
   const askPrompt = ASK_KINDS.find((k) => k.id === askKind)!;
 
@@ -89,7 +95,7 @@ export function AgentWriter() {
                 </span>
               ) : null}
             </div>
-            <p style={{ margin: "4px 0 8px", color: "var(--muted)", fontSize: "13px", maxWidth: "640px" }}>
+            <p style={{ margin: "4px 0 8px", color: "var(--muted)", fontSize: "14px", maxWidth: "640px" }}>
               Writes the week from your strategy: X posts, slideshows, and scripts with storyboards for the videos you film. Nothing is built or posted until you approve the words.
             </p>
             <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
@@ -155,6 +161,16 @@ export function AgentWriter() {
             <div style={{ display: "flex", alignItems: "center", gap: "8px", margin: "14px 0 10px", flexWrap: "wrap" }}>
               <span style={{ fontWeight: "600" }}>{waiting.length} waiting for your OK</span>
               <span className="meta">· {approved} approved this week</span>
+              <div style={{ flex: "1 1 auto" }}></div>
+              {platforms.length > 1 ? (
+                <div role="group" aria-label="Platform" style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                  {[null, ...platforms].map((p) => (
+                    <button key={p ?? "all"} type="button" className="chip" aria-pressed={active === p} onClick={() => setPlatform(p)} style={{ cursor: "pointer" }}>
+                      {p ? PLATFORM_LABEL[p] : "All"}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
               {shown.length === 0 ? <div className="meta">Nothing here yet. Writer drafts the week from your strategy every Sunday.</div> : null}
@@ -163,7 +179,7 @@ export function AgentWriter() {
                 const opens = Boolean(card) || Boolean(d.scriptId);
                 const isOpen = opens && firstOpen === d.id;
                 return (
-                  <div key={d.id} className="th" data-open={isOpen}>
+                  <div key={d.id} className="th" data-open={isOpen} data-testid="writer-row" data-platform={d.platform}>
                     <button type="button" className="row" onClick={opens ? () => setOpen(isOpen ? "" : d.id) : undefined} aria-expanded={opens ? isOpen : undefined} style={opens ? undefined : { cursor: "default" }}>
                       <span className="st">{iconOf(d)}</span>
                       <span className="ttl">
@@ -215,7 +231,7 @@ export function AgentWriter() {
               </div>
             ))}
             <div style={{ marginTop: "10px" }}>
-              <Link href="/app/library?tab=voice" className="ghost" style={{ textDecoration: "none" }}>
+              <Link href="/app?doc=voice" className="ghost" style={{ textDecoration: "none" }}>
                 Edit your voice
               </Link>
             </div>
@@ -226,8 +242,8 @@ export function AgentWriter() {
       <aside style={{ flex: "1 1 300px", maxWidth: "360px", display: "flex", flexDirection: "column", gap: "14px" }}>
         <section className="card">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "4px" }}>
-            <h2 style={{ margin: "0", fontSize: "13px", fontWeight: "600" }}>This week</h2>
-            <Link href="/app/schedule" style={{ fontSize: "11.5px", textDecoration: "none" }}>
+            <h2 style={{ margin: "0", fontSize: "14px", fontWeight: "600" }}>This week</h2>
+            <Link href="/app/schedule" style={{ fontSize: "12.5px", textDecoration: "none" }}>
               Calendar
             </Link>
           </div>
@@ -241,9 +257,9 @@ export function AgentWriter() {
             </div>
           ))}
         </section>
-        <section className="card">
-          <h2 style={{ margin: "0 0 4px", fontSize: "13px", fontWeight: "600" }}>Your voice</h2>
-          <p className="meta" style={{ margin: "0 0 10px", fontSize: "12px" }}>
+        <section className="card" aria-labelledby="writer-voice-title">
+          <h2 id="writer-voice-title" style={{ margin: "0 0 4px", fontSize: "14px", fontWeight: "600" }}>Your voice</h2>
+          <p className="meta" style={{ margin: "0 0 10px", fontSize: "13px" }}>
             Writer learns your voice from what you change in its drafts.
           </p>
           {data?.voice.wordsCut.length ? (
@@ -265,7 +281,7 @@ export function AgentWriter() {
               <div className="meta" style={{ marginBottom: "6px" }}>
                 Rules it keeps
               </div>
-              <ul style={{ margin: "0", paddingLeft: "18px", fontSize: "12.5px", lineHeight: "1.6" }}>
+              <ul style={{ margin: "0", paddingLeft: "18px", fontSize: "13.5px", lineHeight: "1.6" }}>
                 {data.voice.lines.slice(0, 4).map((l) => (
                   <li key={l.text}>{l.text}</li>
                 ))}
@@ -274,7 +290,7 @@ export function AgentWriter() {
           ) : null}
         </section>
         <section className="card">
-          <h2 style={{ margin: "0 0 6px", fontSize: "13px", fontWeight: "600" }}>What it costs</h2>
+          <h2 style={{ margin: "0 0 6px", fontSize: "14px", fontWeight: "600" }}>What it costs</h2>
           <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0" }}>
             <span>Week plan</span>
             <span className="meta">{JOB_PRICES.plan_week ?? 1} credit</span>

@@ -6,7 +6,8 @@
   "scripts": {
     "media:sync": "tsx scripts/sync-media.mts",
     "predev": "npm run media:sync",
-    "dev": "next dev",
+    "dev": "next dev --turbopack",
+    "dev:webpack": "next dev",
     "dev:credits": "tsx scripts/dev-credits.mts",
     "prebuild": "npm run media:sync",
     "build": "next build",

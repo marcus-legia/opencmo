@@ -45,14 +45,15 @@ export function ResearchScreen() {
           </>
         }
         sample={state.status === "ready" && isSample(state.live)}
-        actions={<ButtonLink href="/app/library?edit=competitors">Add a competitor</ButtonLink>}
+        actions={<ButtonLink href="/app?doc=competitors&edit=1">Add a competitor</ButtonLink>}
       />
       <div className="scr-banner">
         <p className="scr-small">
-          <b>Research drafted your 4 marketing documents.</b> They live in the Library now, where every department reads them.
+          <b>Research drafted your 4 marketing documents.</b> They sit in the Context column of your feed, where every
+          department reads them.
         </p>
-        <a href="/app/library" className="scr-mono-link">
-          Open Library →
+        <a href="/app?doc=product" className="scr-mono-link">
+          Open them →
         </a>
       </div>
       {state.status === "loading" && <SkeletonBlocks />}

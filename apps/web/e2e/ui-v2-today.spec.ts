@@ -42,7 +42,7 @@ async function approveTopRow(page: Page, width: number): Promise<void> {
   // The feed (Main.dc.html): Today's rows first, the first one inverted and opened on its card.
   const feed = page.getByTestId("approval-queue");
   const rows = feed.getByTestId("feed-row");
-  const count = page.getByTestId("today-count");
+  const count = page.getByRole("main").getByTestId("today-count");
   await expect(feed.getByText("Sample data")).toHaveCount(0);
   await expect(rows).toHaveCount(2);
   await expect(count).toHaveText("0 of 2 done");

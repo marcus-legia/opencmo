@@ -24,6 +24,9 @@ async function founderWithDrafts(): Promise<E2EUser> {
   const created = await db.auth.admin.createUser({ email: user.email, password: user.password, email_confirm: true });
   expect(created.error).toBeNull();
   user.id = created.data.user!.id;
+  // An onboarded founder: Voice is a pane over the feed, and a founder with no document is sent to Setup first.
+  const doc = await db.from("marketing_documents").insert({ user_id: user.id, kind: "product", version: 1, created_by: "user", body: { name: "Duely", one_liner: "Invoices that chase themselves." } });
+  expect(doc.error).toBeNull();
   const posts = await db.from("content_items").insert([
     {
       user_id: user.id, department: "post", platform: "X", day: new Date().toISOString().slice(0, 10), idea: "Invoices", status: "in_review",
@@ -39,7 +42,8 @@ test("rate three drafts, accept two rules, see them in Library → Voice", async
   await signIn(page, user);
   await page.goto("/app/library?tab=voice");
   await page.getByRole("button", { name: "Rate your drafts" }).click();
-  const sheet = page.getByTestId("rating-sheet");
+  // The feed and the Voice pane each mount the sheet; the open one is the dialog.
+  const sheet = page.getByTestId("rating-sheet").filter({ visible: true });
   const drafts = sheet.getByTestId("rating-draft");
   await expect(drafts).toHaveCount(3);
 

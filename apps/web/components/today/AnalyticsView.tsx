@@ -75,7 +75,7 @@ export function AnalyticsView() {
         <div className="card">
           <div className="meta">{goal?.goal ? `Goal: ${goal.goal}` : "Goal this week"}</div>
           <div className="kpi">
-            {goal?.deliverables.done ?? "–"} <span style={{ fontSize: "15px", color: "var(--subtle)", fontWeight: "500" }}>/ {goal?.deliverables.total ?? "–"}</span>
+            {goal?.deliverables.done ?? "–"} <span style={{ fontSize: "16px", color: "var(--subtle)", fontWeight: "500" }}>/ {goal?.deliverables.total ?? "–"}</span>
           </div>
           <div style={{ height: "4px", borderRadius: "4px", background: "var(--line-2)", marginTop: "10px" }}>
             <div style={{ width: `${goal && goal.deliverables.total ? Math.round((goal.deliverables.done / goal.deliverables.total) * 100) : 0}%`, height: "4px", borderRadius: "4px", background: "var(--accent)" }}></div>

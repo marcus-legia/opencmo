@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 import type { DragEvent } from "react";
 
 import { ApprovalCard } from "@/components/cards/ApprovalCard";
@@ -50,7 +51,8 @@ const label = (key: string, opts: Intl.DateTimeFormatOptions) => keyDate(key).to
 
 /** Moves an instant to another calendar day in the founder's zone, keeping its time of day. */
 function sameTimeOn(at: string, fromKey: string, toKey: string): string {
-  return new Date(Date.parse(at) + (keyDate(toKey).getTime() - keyDate(fromKey).getTime())).toISOString();
+  // To the minute, as the route asks (`approval-card.ts` refuses fractions of a second): `toISOString` writes ".000".
+  return new Date(Date.parse(at) + (keyDate(toKey).getTime() - keyDate(fromKey).getTime())).toISOString().replace(/\.\d{3}Z$/, "Z");
 }
 
 /**
@@ -59,7 +61,14 @@ function sameTimeOn(at: string, fromKey: string, toKey: string): string {
  * time. SQL checks the posting rules and says why when it refuses.
  */
 export function CalendarView() {
-  const [from, setFrom] = useState<string | null>(null);
+  // `?from=YYYY-MM-DD` opens that week (a card's "See it in the calendar", the old Schedule screen's links).
+  const asked = useSearchParams().get("from");
+  const askedWeek = asked && /^\d{4}-\d{2}-\d{2}$/.test(asked) ? asked : null;
+  const [from, setFrom] = useState<string | null>(askedWeek);
+  // A link to another week while the Calendar is open (the component stays mounted) moves it there too.
+  useEffect(() => {
+    if (askedWeek) setFrom(askedWeek);
+  }, [askedWeek]);
   const [range, setRange] = useState<"week" | "month">("week");
   const [state, reload] = useScreen("schedule", from ? { from } : {});
   // The cards that wait, so a picked slot shows its post, versions and actions in the drawer (Calendar.dc.html).
@@ -180,19 +189,21 @@ export function CalendarView() {
                 <div
                   key={key}
                   className={key === today ? "day today" : "day"}
+                  data-day={key}
                   style={range === "month" ? { minHeight: "140px", borderBottom: "1px solid var(--line)" } : undefined}
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={(e) => drop(e, key)}
                 >
                   <div className="dh">
                     <span className="meta">{label(key, { weekday: "short" })}</span>
-                    <b style={{ fontSize: "13px", fontWeight: "600" }}>{label(key, { day: "numeric" })}</b>
+                    <b style={{ fontSize: "14px", fontWeight: "600" }}>{label(key, { day: "numeric" })}</b>
                   </div>
                   {items.map((e) => (
                     <button
                       key={e.id}
                       type="button"
                       className="ev"
+                      data-slot-id={e.id}
                       aria-pressed={sel?.id === e.id}
                       draggable={MOVABLE.has(e.status)}
                       onDragStart={(ev) => ev.dataTransfer.setData("text/plain", e.id)}
@@ -234,7 +245,7 @@ export function CalendarView() {
               <div>
                 <span className={ST[sel.status][1]}>{ST[sel.status][0]}</span>
               </div>
-              <h2 style={{ margin: "0", fontSize: "16px", fontWeight: "600", letterSpacing: "-0.2px" }}>{sel.title}</h2>
+              <h2 style={{ margin: "0", fontSize: "17px", fontWeight: "600", letterSpacing: "-0.2px" }}>{sel.title}</h2>
               <div className="meta">
                 {sel.where.handle ? `${chanName(sel)} · ${sel.where.handle}` : chanName(sel)}
                 {sel.note ? ` · ${sel.note}` : ""}

@@ -103,7 +103,7 @@ export function BillingV2({
             <h2>Spent this month</h2>
             <span className="meta">{spentThisMonth} credits</span>
             <div style={{ flex: "1 1 auto" }}></div>
-            <Link href="/app?logs=1" style={{ fontSize: "12px", textDecoration: "none" }}>
+            <Link href="/app?logs=1" style={{ fontSize: "13px", textDecoration: "none" }}>
               Open Logs
             </Link>
           </div>
@@ -136,7 +136,7 @@ export function BillingV2({
                       </span>
                     ) : null}
                     {plan.interval === "year" && plan.slug ? <span className="meta">Billed ${plan.billedPrice} once a year</span> : null}
-                    <ul style={{ margin: "0", paddingLeft: "18px", fontSize: "12.5px", lineHeight: "1.6", color: "var(--muted)" }}>
+                    <ul style={{ margin: "0", paddingLeft: "18px", fontSize: "13.5px", lineHeight: "1.6", color: "var(--muted)" }}>
                       {plan.features.map((feature) => (
                         <li key={feature}>{feature}</li>
                       ))}

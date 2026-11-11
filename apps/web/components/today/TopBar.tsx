@@ -1,11 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useRef } from "react";
 import type { ReactNode } from "react";
 
+import { prefetchScreen } from "@/components/screens/useScreen";
+import type { ScreenName } from "@/lib/screens/registry";
+
 import { siteLabel, useWorkspace } from "./workspace";
+
+/** What each view reads: hovering or focusing its link reads it ahead, so the click lands on data, not "Loading…". */
+const VIEW_SCREENS: Record<string, ScreenName[]> = {
+  feed: ["schedule"],
+  calendar: ["schedule", "dashboard"],
+  analytics: ["analytics", "dashboard", "research", "sales"],
+};
+const readAhead = (view: string) => () => VIEW_SCREENS[view]?.forEach((name) => prefetchScreen(name));
 
 /**
  * The top bars of the Today canvas (docs/design/today-canvas). Each artboard has its own: `home` (Main), `views`
@@ -44,7 +54,7 @@ function Project({ menu }: { menu: ReactNode }) {
   return (
     <details className="td-menuwrap" ref={ref} onClick={(e) => (e.target as HTMLElement).closest("a") && ref.current?.removeAttribute("open")}>
       <summary className="pill" style={{ color: "var(--text)", gap: "8px", border: "0", padding: "0 8px", listStyle: "none" }}>
-        <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: "20px", height: "20px", borderRadius: "5px", background: "var(--accent)", color: "var(--accent-ink)", fontWeight: "700", fontSize: "11px" }}>
+        <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: "20px", height: "20px", borderRadius: "5px", background: "var(--accent)", color: "var(--accent-ink)", fontWeight: "700", fontSize: "12px" }}>
           {name.charAt(0).toUpperCase()}
         </span>
         <span style={{ fontWeight: "600" }}>{name}</span>
@@ -61,7 +71,7 @@ function Avatar({ email }: { email: string | null }) {
     <details className="td-menuwrap is-right" ref={ref} onClick={(e) => (e.target as HTMLElement).closest("a") && ref.current?.removeAttribute("open")}>
       <summary
         aria-label="Account"
-        style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: "28px", height: "28px", borderRadius: "50%", background: "var(--line-2)", fontSize: "12px", fontWeight: "600", listStyle: "none", cursor: "pointer" }}
+        style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: "28px", height: "28px", borderRadius: "50%", background: "var(--line-2)", fontSize: "13px", fontWeight: "600", listStyle: "none", cursor: "pointer" }}
       >
         {(email ?? "?").charAt(0).toUpperCase()}
       </summary>
@@ -80,9 +90,10 @@ function Avatar({ email }: { email: string | null }) {
 /** Pages the canvas reaches from the business menu rather than from a rail. */
 const MORE = (
   <>
-    <Link href="/app/library">Library</Link>
+    <Link href="/app?doc=product">Documents and Brand Kit</Link>
     <Link href="/app/research">Research</Link>
-    <Link href="/app/brain">Brain</Link>
+    <Link href="/app?doc=plan">Plan and orders</Link>
+    <Link href="/app?doc=voice">Voice and skills</Link>
     <Link href="/app/studio">Projects</Link>
     <Link href="/app/settings">Settings</Link>
   </>
@@ -104,68 +115,15 @@ export function TopBar({
   onChat: () => void;
 }) {
   const ws = useWorkspace();
-  const router = useRouter();
   const x = ws.accounts.find((a) => a.platform === "x");
   const linkedin = ws.accounts.some((a) => a.platform === "linkedin");
   const creditsLabel = `${credits ?? "–"} credits`;
 
-  if (variant.kind === "home") {
-    return (
-      <header className="top">
-        <Project menu={MORE} />
-        <span style={{ width: "1px", height: "18px", background: "var(--line-2)", margin: "0 4px" }}></span>
-        {x ? (
-          <span className="pill" style={{ cursor: "default" }}>
-            <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M17.5 3h3l-6.6 7.5L21.6 21h-6l-4.7-6.1L5.5 21h-3l7.1-8.1L2.4 3h6.1l4.2 5.6z" />
-            </svg>
-            @{x.handle.replace(/^@/, "")}
-            <span className="live" style={{ marginLeft: "2px" }}></span>
-          </span>
-        ) : (
-          <Link href="/app/settings#settings-connected-accounts" className="pill" style={{ textDecoration: "none" }}>
-            <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M17.5 3h3l-6.6 7.5L21.6 21h-6l-4.7-6.1L5.5 21h-3l7.1-8.1L2.4 3h6.1l4.2 5.6z" />
-            </svg>
-            Connect X
-          </Link>
-        )}
-        {linkedin ? null : (
-          <Link href="/app/settings#settings-connected-accounts" className="pill" style={{ textDecoration: "none" }}>
-            <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-4 0v7h-4v-7a6 6 0 0 1 6-6z" />
-              <rect width="4" height="12" x="2" y="9" />
-              <circle cx="4" cy="4" r="2" />
-            </svg>
-            Connect LinkedIn
-          </Link>
-        )}
-        <div style={{ flex: "1 1 auto" }}></div>
-        <Link href="/app/billing" className="pill" style={{ textDecoration: "none" }}>
-          <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
-            <circle cx="12" cy="12" r="9" />
-            <path d="M12 7v10M9 9.5h4.5a2 2 0 0 1 0 4H10a2 2 0 0 0 0 4h5" />
-          </svg>
-          {creditsLabel}
-        </Link>
-        <button type="button" className="pill" aria-pressed={logsOpen} onClick={onLogs}>
-          <LogsIcon />
-          Logs
-        </button>
-        <Link href="/app/studio" className="ib" aria-label="Open the editor">
-          <svg className="i" viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M20.2 6 3 11l-.9-2.4c-.3-1.1.3-2.2 1.3-2.5l13.5-4c1.1-.3 2.2.3 2.5 1.3Z" />
-            <path d="m6.2 5.3 3.1 3.9" />
-            <path d="m12.4 3.4 3.1 4" />
-            <path d="M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />
-          </svg>
-        </Link>
-        <Avatar email={email} />
-      </header>
-    );
-  }
-
-  if (variant.kind === "views") {
+  // Feed, Calendar and Analytics share one bar (owner, 2026-11-10): the business and its accounts on the left, the three
+  // views in the middle as links (prefetched, so a switch is instant), credits, Logs and the chat on the right. On the
+  // feed the chat is a column, so its button is not needed there.
+  if (variant.kind === "home" || variant.kind === "views") {
+    const current = variant.kind === "home" ? "feed" : variant.current;
     const views = [
       {
         id: "feed",
@@ -206,23 +164,70 @@ export function TopBar({
       },
     ] as const;
     return (
-      <header className="top">
+      <header className="top td-viewsbar">
         <Project menu={MORE} />
+        <span style={{ width: "1px", height: "18px", background: "var(--line-2)", margin: "0 4px" }}></span>
+        {x ? (
+          <span className="pill" style={{ cursor: "default" }}>
+            <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M17.5 3h3l-6.6 7.5L21.6 21h-6l-4.7-6.1L5.5 21h-3l7.1-8.1L2.4 3h6.1l4.2 5.6z" />
+            </svg>
+            @{x.handle.replace(/^@/, "")}
+            <span className="live" style={{ marginLeft: "2px" }}></span>
+          </span>
+        ) : (
+          <Link href="/app/settings#settings-connected-accounts" className="pill" style={{ textDecoration: "none" }}>
+            <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M17.5 3h3l-6.6 7.5L21.6 21h-6l-4.7-6.1L5.5 21h-3l7.1-8.1L2.4 3h6.1l4.2 5.6z" />
+            </svg>
+            Connect X
+          </Link>
+        )}
+        {linkedin ? null : (
+          <Link href="/app/settings#settings-connected-accounts" className="pill" style={{ textDecoration: "none" }}>
+            <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-4 0v7h-4v-7a6 6 0 0 1 6-6z" />
+              <rect width="4" height="12" x="2" y="9" />
+              <circle cx="4" cy="4" r="2" />
+            </svg>
+            Connect LinkedIn
+          </Link>
+        )}
         <div style={{ flex: "1 1 auto" }}></div>
-        <div className="seg" role="tablist" aria-label="View">
+        <nav className="td-views" aria-label="View">
           {views.map((v) => (
-            <button key={v.id} type="button" role="tab" aria-selected={variant.current === v.id} onClick={() => router.push(v.href)}>
-              {/* The Calendar artboard draws every icon, the Analytics one only the open view's. */}
-              {variant.current === "calendar" || variant.current === v.id ? v.icon : null}
+            <Link key={v.id} href={v.href} aria-current={current === v.id ? "page" : undefined} onMouseEnter={readAhead(v.id)} onFocus={readAhead(v.id)}>
+              {v.icon}
               {v.label}
-            </button>
+            </Link>
           ))}
-        </div>
+        </nav>
         <div style={{ flex: "1 1 auto" }}></div>
-        <button type="button" className="pill" onClick={onChat}>
-          <ChatIcon />
-          Chat
+        <Link href="/app/billing" className="pill" style={{ textDecoration: "none" }}>
+          <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 7v10M9 9.5h4.5a2 2 0 0 1 0 4H10a2 2 0 0 0 0 4h5" />
+          </svg>
+          {creditsLabel}
+        </Link>
+        <button type="button" className="pill" aria-pressed={logsOpen} onClick={onLogs}>
+          <LogsIcon />
+          Logs
         </button>
+        <Link href="/app/studio" className="ib" aria-label="Open the editor">
+          <svg className="i" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M20.2 6 3 11l-.9-2.4c-.3-1.1.3-2.2 1.3-2.5l13.5-4c1.1-.3 2.2.3 2.5 1.3Z" />
+            <path d="m6.2 5.3 3.1 3.9" />
+            <path d="m12.4 3.4 3.1 4" />
+            <path d="M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />
+          </svg>
+        </Link>
+        {current === "feed" ? null : (
+          <button type="button" className="pill" onClick={onChat}>
+            <ChatIcon />
+            Chat
+          </button>
+        )}
         <Avatar email={email} />
       </header>
     );
@@ -235,11 +240,11 @@ export function TopBar({
         <span key={step.label} style={{ display: "contents" }}>
           <span className="meta">/</span>
           {step.href ? (
-            <Link href={step.href} style={{ display: "inline-flex", alignItems: "center", gap: "4px", color: "var(--muted)", textDecoration: "none", fontSize: "12.5px" }}>
+            <Link href={step.href} style={{ display: "inline-flex", alignItems: "center", gap: "4px", color: "var(--muted)", textDecoration: "none", fontSize: "13.5px" }}>
               {step.label}
             </Link>
           ) : (
-            <span style={{ fontSize: "12.5px", fontWeight: "500" }}>{step.label}</span>
+            <span style={{ fontSize: "13.5px", fontWeight: "500" }}>{step.label}</span>
           )}
         </span>
       ))}

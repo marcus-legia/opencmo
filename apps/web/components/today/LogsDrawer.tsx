@@ -134,7 +134,7 @@ export function LogsDrawer({ onClose, running = 0 }: { onClose: () => void; runn
             <polyline points="4 17 10 11 4 5" />
             <line x1="12" x2="20" y1="19" y2="19" />
           </svg>
-          <span style={{ fontWeight: "600", fontSize: "14px" }}>Logs</span>
+          <span style={{ fontWeight: "600", fontSize: "15px" }}>Logs</span>
           <span className="meta">· what your CMO did, and what it cost</span>
           <div style={{ flex: "1 1 auto" }}></div>
           <button type="button" className="ib" aria-label="Close" onClick={onClose}>
@@ -183,7 +183,7 @@ export function LogsDrawer({ onClose, running = 0 }: { onClose: () => void; runn
             return (
               <div key={e.key}>
                 {heading ? (
-                  <div className="meta" style={{ padding: "12px 20px 4px", textTransform: "uppercase", letterSpacing: ".05em", fontSize: "10.5px" }}>
+                  <div className="meta" style={{ padding: "12px 20px 4px", textTransform: "uppercase", letterSpacing: ".05em", fontSize: "12px" }}>
                     {heading}
                   </div>
                 ) : null}
@@ -216,15 +216,15 @@ export function LogsDrawer({ onClose, running = 0 }: { onClose: () => void; runn
                         <div className="ledger">
                           <div>
                             <div className="meta">Held</div>
-                            <div className="mono" style={{ fontSize: "13px" }}>{e.held}</div>
+                            <div className="mono" style={{ fontSize: "14px" }}>{e.held}</div>
                           </div>
                           <div>
                             <div className="meta">Spent</div>
-                            <div className="mono" style={{ fontSize: "13px" }}>{e.spent}</div>
+                            <div className="mono" style={{ fontSize: "14px" }}>{e.spent}</div>
                           </div>
                           <div>
                             <div className="meta">Back to you</div>
-                            <div className="mono" style={{ fontSize: "13px" }}>{e.back}</div>
+                            <div className="mono" style={{ fontSize: "14px" }}>{e.back}</div>
                           </div>
                         </div>
                       ) : null}

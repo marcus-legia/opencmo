@@ -2,23 +2,16 @@
 
 import { Fragment, useState } from "react";
 
-import { Button, ButtonLink, Chip, TableWrap, Tabs, type ChipTone } from "@/components/ui";
+import { Button, Chip, TableWrap, type ChipTone } from "@/components/ui";
 import type { BrainScreen as Data, Learned, Measure, OrderRow } from "@/lib/screens/brain";
 import { DEPARTMENT_LABEL } from "@/lib/screens/common";
 
 import { shortDate } from "../format";
-import { ErrorNote, PageHeader, Panel, Screen, SkeletonBlocks } from "../parts";
+import { Panel } from "../parts";
 import { TeamSteps } from "../studio/StudioScreen";
-import { useTabParam } from "../useTabParam";
-import { isSample, useScreen } from "../useScreen";
-import { PauseButton } from "./PauseButton";
 
-const TABS = [
-  { id: "week", label: "This week" },
-  { id: "memory", label: "Memory" },
-  { id: "past", label: "Past weeks" },
-] as const;
-type Tab = (typeof TABS)[number]["id"];
+/** The Brain's three views, shown as panes of the Context drawer (`components/today/panes.tsx`). */
+export type Tab = "week" | "memory" | "past";
 
 const KIND_LABEL: Record<Learned["kind"], string> = {
   lesson: "Lesson",
@@ -39,38 +32,7 @@ const STATE_TONE: Record<OrderRow["state"], ChipTone> = {
   cancelled: "idle",
 };
 
-export function BrainScreen() {
-  const [tab, setTab] = useTabParam<Tab>("tab", TABS.map((t) => t.id), "week");
-  const [state] = useScreen("brain");
-  // The founder's own pause or resume wins over what the page loaded with.
-  const [pausedOverride, setPausedOverride] = useState<string | null | undefined>(undefined);
-  const pausedAt = pausedOverride !== undefined ? pausedOverride : state.status === "ready" ? state.data.cmo.pausedAt : null;
-
-  return (
-    <Screen label="Brain">
-      <PageHeader
-        eyebrow="Brain · thinks with OpenCMO's model"
-        title="The plan, the orders, what it learned."
-        sub={pausedAt ? `Paused since ${new Date(pausedAt).toLocaleString("en-GB", { weekday: "short", hour: "2-digit", minute: "2-digit" })}. Nothing runs until you resume.` : undefined}
-        sample={state.status === "ready" && isSample(state.live)}
-        actions={
-          <>
-            <ButtonLink href="/app?ask=1">Ask your CMO</ButtonLink>
-            {state.status === "ready" && <PauseButton pausedAt={pausedAt} live={state.live.cmo} onChange={setPausedOverride} />}
-          </>
-        }
-      />
-      <Tabs<Tab> label="Brain views" idBase="brain-tab" items={[...TABS]} value={tab} onChange={setTab} />
-      <div role="tabpanel" id="brain-tab-panel" aria-labelledby={`brain-tab-${tab}`} className="scr-tabpanel">
-        {state.status === "loading" && <SkeletonBlocks />}
-        {state.status === "error" && <ErrorNote>{state.message}</ErrorNote>}
-        {state.status === "ready" && <BrainBody data={state.data} tab={tab} />}
-      </div>
-    </Screen>
-  );
-}
-
-function BrainBody({ data, tab }: { data: Data; tab: Tab }) {
+export function BrainBody({ data, tab }: { data: Data; tab: Tab }) {
   // Deleting a note waits for the corrections RPC (brain B0); until then it only hides the row.
   const [learned, setLearned] = useState(data.learned);
   const forget = (id: string) => setLearned((all) => all.filter((note) => note.id !== id));

@@ -25,11 +25,14 @@ test("the top bars move between views and agent pages; the chat is a column on t
   await expect(page.getByTestId("v2-dashboard")).toBeVisible();
   await expect(chat.getByLabel("Ask your CMO")).toBeVisible();
 
-  // Feed → Calendar → Analytics through the views switch (Calendar.dc.html, Analytics.dc.html).
-  await page.getByTestId("v2-dashboard").getByRole("tablist", { name: "View" }).getByRole("tab", { name: "Calendar" }).click();
+  // Feed → Calendar → Analytics through the one bar the three views share.
+  const views = page.getByRole("banner").getByRole("navigation", { name: "View" });
+  await expect(views.getByRole("link", { name: "Feed" })).toHaveAttribute("aria-current", "page");
+  await views.getByRole("link", { name: "Calendar" }).click();
   await expect(page).toHaveURL(/\/app\/schedule/);
   await expect(chat.getByLabel("Ask your CMO")).toBeHidden();
-  await page.getByRole("banner").getByRole("tab", { name: "Analytics" }).click();
+  await expect(views.getByRole("link", { name: "Calendar" })).toHaveAttribute("aria-current", "page");
+  await views.getByRole("link", { name: "Analytics" }).click();
   await expect(page).toHaveURL(/\/app\/analytics/);
 
   // The chat opens as a drawer and Escape closes it.
@@ -51,6 +54,43 @@ test("the top bars move between views and agent pages; the chat is a column on t
   await expect(logs).toBeVisible();
   await logs.getByRole("button", { name: "Close" }).first().click();
   await expect(logs).toHaveCount(0);
+});
+
+test("the feed's Context and chat columns resize by drag and keyboard, and keep their width across a reload", async ({ page }) => {
+  await signIn(page, state().users.a);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/app?sample=1");
+  await expect(page.getByTestId("v2-dashboard")).toBeVisible();
+  const width = (selector: string) => page.locator(selector).evaluate((el) => Math.round(el.getBoundingClientRect().width));
+
+  const chatSash = page.getByRole("separator", { name: "Resize the chat" });
+  await expect(chatSash).toHaveAttribute("aria-valuenow", "380");
+  await chatSash.focus();
+  await page.keyboard.press("ArrowLeft");
+  await page.keyboard.press("ArrowLeft");
+  await expect(chatSash).toHaveAttribute("aria-valuenow", "412");
+  expect(await width("#v2-chat")).toBe(412);
+
+  const leftSash = page.getByRole("separator", { name: "Resize the context column" });
+  const box = (await leftSash.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + 200);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 + 60, box.y + 200, { steps: 6 });
+  await page.mouse.up();
+  await expect.poll(() => width("#td-context")).toBe(348);
+
+  await page.reload();
+  await expect(page.getByTestId("v2-dashboard")).toBeVisible();
+  expect(await width("#v2-chat")).toBe(412);
+  expect(await width("#td-context")).toBe(348);
+
+  // Enter puts a column back to its default.
+  await chatSash.focus();
+  await page.keyboard.press("Enter");
+  await expect(chatSash).toHaveAttribute("aria-valuenow", "380");
+  await leftSash.focus();
+  await page.keyboard.press("Enter");
+  await expect.poll(() => width("#td-context")).toBe(288);
 });
 
 test("the chat keeps its draft across screens, and ?ask=1 puts the cursor in it", async ({ page }) => {

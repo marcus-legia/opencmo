@@ -20,6 +20,7 @@ import { MAX_SLIDES, SLIDE_OP, type ClipDocument, type Marker } from '@opencmo/c
 
 import { readBrand, themeFromBrand } from '../brand';
 import { clone, drawId, type Entity } from '../doc';
+import { SLIDE_TEXT_MAX } from '../slide-limits';
 import { LOGO_MARK } from './brand';
 import { OpFailure } from './context';
 import { activeScene } from './timeline';
@@ -27,7 +28,7 @@ import { activeScene } from './timeline';
 export { MAX_SLIDES };
 export const SLIDE_SECONDS = { min: 1, max: 30, default: 4 } as const;
 /** What fits its text box on every frame shape; the Slideshow squad's reviewer and Writer hold slides to it. */
-export const SLIDE_TEXT_MAX = { heading: 60, body: 130 } as const;
+export { SLIDE_TEXT_MAX };
 export const SLIDE_LAYERS = { background: 'Background', scrim: 'Scrim', heading: 'Heading', body: 'Body' } as const;
 
 const slideId = z.string().min(1).max(40);

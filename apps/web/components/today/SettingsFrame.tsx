@@ -8,7 +8,7 @@ const NAV = [
   { id: "general", label: "General", href: "/app/settings#settings-your-cmo" },
   { id: "accounts", label: "Accounts", href: "/app/settings#settings-connected-accounts" },
   { id: "notifications", label: "Notifications", href: "/app/settings#settings-notify" },
-  { id: "brand", label: "Brand Kit", href: "/app/library?tab=brand" },
+  { id: "brand", label: "Brand Kit", href: "/app?doc=brand" },
   { id: "billing", label: "Billing", href: "/app/billing" },
   { id: "keys", label: "API keys", href: "/app/settings#api-keys" },
 ] as const;
