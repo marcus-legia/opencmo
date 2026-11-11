@@ -10,7 +10,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Children, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
 import { PlanSheet } from "@/components/billing/PlanSheet";
@@ -322,6 +322,30 @@ function agentLine(data: DashboardScreen, key: (typeof AGENT_ROWS)[number]["key"
   return { line: node.line, live: node.state === "working" };
 }
 
+/** Rows a section shows before "Show more": the feed stays one screen tall. */
+const BOX_ROWS = 5;
+
+/**
+ * One section's rows in their own frame, five at a time (owner, 2026-11-12: the feed ran far down the page). `keep`
+ * opens it whole, so a card opened from a row below the fifth is never hidden.
+ */
+function Box({ children, testId, keep = false }: { children: ReactNode; testId: string; keep?: boolean }) {
+  const [all, setAll] = useState(false);
+  const rows = Children.toArray(children);
+  const open = all || keep;
+  const more = rows.length - BOX_ROWS;
+  return (
+    <div className="td-box" data-testid={testId}>
+      {open ? rows : rows.slice(0, BOX_ROWS)}
+      {more > 0 && !keep ? (
+        <button type="button" className="td-box-more" aria-expanded={all} onClick={() => setAll(!all)} data-testid={`${testId}-more`}>
+          {all ? "Show less" : `Show ${more} more`}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 export function Feed({ email }: { email?: string | null }) {
   const { state, decideCard, reload, planSheet, closePlanSheet } = useDashboard();
   const [week, reloadWeek] = useScreen("schedule");
@@ -437,6 +461,8 @@ export function Feed({ email }: { email?: string | null }) {
   const firstCard = ordered.find((item): item is { type: "card"; card: Card } => item.type === "card");
   const firstCardId = firstCard ? firstCard.card.id : null;
   const openId = open ?? firstCardId;
+  // A card opened below the fifth row (from This week's Review) opens the Today frame whole, so it is on screen.
+  const openBeyond = openId !== null && ordered.findIndex((item) => item.type === "card" && item.card.id === openId) >= BOX_ROWS;
 
   /** Opens a waiting card where it sits in the list above and brings it into view. */
   const review = (approvalId: string) => {
@@ -609,7 +635,7 @@ export function Feed({ email }: { email?: string | null }) {
             ) : null}
           </div>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: "26px" }} data-testid="approval-queue">
+          <Box testId="approval-queue" keep={openBeyond}>
             {step === "waiting" && data && live ? (
               ordered.length === 0 ? (
                 <div className="item">
@@ -662,7 +688,7 @@ export function Feed({ email }: { email?: string | null }) {
                   ))
                 : emptyRow("Nobody is making anything right now.")
               : null}
-          </div>
+          </Box>
 
           {/* The week, every piece with where it stands: what the founder approved stays on the feed. */}
           {step === "waiting" && (drafts.length > 0 || writer.status === "error") ? (
@@ -674,9 +700,7 @@ export function Feed({ email }: { email?: string | null }) {
                   <Link href="/app/schedule">Calendar</Link>
                 </span>
               </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: "26px" }} data-testid="feed-week">
-                {writer.status === "error" ? emptyRow("This week could not be read. Refresh to try again.") : drafts.map(weekRow)}
-              </div>
+              <Box testId="feed-week">{writer.status === "error" ? emptyRow("This week could not be read. Refresh to try again.") : drafts.map(weekRow)}</Box>
             </>
           ) : null}
 
@@ -686,9 +710,7 @@ export function Feed({ email }: { email?: string | null }) {
                 <h2>From last week</h2>
                 <span className="meta">{leftOver.length} not approved yet · approve or skip them</span>
               </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: "26px" }} data-testid="feed-left-over">
-                {leftOver.map(weekRow)}
-              </div>
+              <Box testId="feed-left-over">{leftOver.map(weekRow)}</Box>
             </>
           ) : null}
 

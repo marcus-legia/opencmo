@@ -16,6 +16,7 @@ import { checkPostFor, moreAdvice } from "../writer/checks";
 import { fakePost } from "../writer/draft";
 import { profileBlock, voiceBlock, writerData, writerMemory } from "../writer/context";
 import { PostDraftSchema } from "../writer/types";
+import { briefRules } from "./check-post";
 import { checkRules, correctionsBlock, documentsBlock, insightBlock, postText } from "./context";
 import { writeThread } from "./draft-thread";
 import { genModel, promptVersion } from "./edit-taxonomy";
@@ -119,8 +120,14 @@ export async function draftPost(ctx: JobContext): Promise<JobOutput> {
   );
   const product = typeof docs.product?.name === "string" && docs.product.name ? docs.product.name : "our product";
   const idea = due?.idea ?? asked;
+  // The founder's own brief (CMO chat, Write it) carries facts they gave; a planner's brief does not.
+  const fromFounder = Boolean(asked) || due?.body?.source === "cmo_chat";
   // The patterns the founder's own writing uses pass the no-ai-slop gate for them.
-  const rules = { ...checkRules(docs), allowSlop: memory.allowSlop };
+  const rules = briefRules({ ...checkRules(docs), allowSlop: memory.allowSlop }, idea, fromFounder);
+  const briefNote = [
+    fromFounder ? "The founder wrote this brief: its facts and numbers are theirs. Use them; do not replace them with facts from the documents." : "",
+    rules.noProduct ? "The brief asks for no product pitch: do not name the product in any version." : "",
+  ].filter(Boolean).join(" ");
   const profile = postProfile(due?.platform);
   const agent = POST_WRITERS[profile.id] ?? "x_writer";
   const mine = recent.filter((i) => postProfile(i.platform).id === profile.id).slice(0, 10);
@@ -158,7 +165,7 @@ export async function draftPost(ctx: JobContext): Promise<JobOutput> {
       fake: () => fakePost(idea, product),
       agent,
       system: SYSTEM,
-      prompt: `${context}\n\n${idea ? `Today's calendar item: "${idea}"${due?.reason ? ` (why: ${due.reason})` : ""}` : "No calendar item is due. Pick the most useful post from the content strategy."}\n\nWrite three versions. Do not repeat the recent posts.`,
+      prompt: `${context}\n\n${idea ? `Today's calendar item: "${idea}"${due?.reason ? ` (why: ${due.reason})` : ""}` : "No calendar item is due. Pick the most useful post from the content strategy."}${briefNote ? `\n${briefNote}` : ""}\n\nWrite three versions. Do not repeat the recent posts.`,
       schema: DraftSchema,
       onUsage: noteModel,
       label: "draft_post",
@@ -194,7 +201,7 @@ export async function draftPost(ctx: JobContext): Promise<JobOutput> {
       const fixed = await structured({
         agent,
         system: SYSTEM,
-        prompt: `${context}\n\nThese drafts had problems. Rewrite all three, fixing each problem and keeping what worked.\n\n${draft.versions
+        prompt: `${context}${briefNote ? `\n\n${briefNote}` : ""}\n\nThese drafts had problems. Rewrite all three, fixing each problem and keeping what worked.\n\n${draft.versions
           .map((v, i) => `<draft index="${i}">${v.text}</draft>\n<problems>${problems[i].join(" ") || "none"}</problems>`)
           .join("\n")}`,
         schema: DraftSchema,
