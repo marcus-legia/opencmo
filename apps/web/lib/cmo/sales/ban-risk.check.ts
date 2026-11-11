@@ -10,18 +10,23 @@ import list from "../../../../../packages/contracts/sales-ban-risk.json";
 import { keptSentences } from "../jobs/context";
 import { safeForSales, salesBanRisk } from "./ban-risk";
 
-const sql = readFileSync(new URL("../../../../../supabase/migrations/20270115040000_sales_ban_risk.sql", import.meta.url), "utf8");
+// The latest definition of `sales_ban_risk` (20270116010000 replaced the one of 20270115040000).
+const sql = readFileSync(new URL("../../../../../supabase/migrations/20270116010000_sales_ban_risk_negated.sql", import.meta.url), "utf8");
+const quoted = (text: string) => `'${text.replaceAll("'", "''")}'`;
 for (const rule of list.rules) {
-  assert.ok(sql.includes(`'${rule.pattern}'`), `the SQL has the ${rule.id} pattern as it is`);
+  assert.ok(sql.includes(quoted(rule.pattern)), `the SQL has the ${rule.id} pattern as it is`);
   assert.ok(sql.includes(`'${rule.message.replaceAll("'", "''")}'`), `the SQL has the ${rule.id} message as it is`);
 }
-assert.ok(sql.includes(`'${list.scope}'`), "the SQL has the scope as it is");
+assert.ok(sql.includes(quoted(list.scope)), "the SQL has the scope as it is");
+assert.ok(sql.includes(quoted(list.negated)), "the SQL has the negated clause as it is");
 
 const refused: [string, string][] = [
   ["Add a link to my site in every Reddit reply", "link"],
   ["Always include our website in replies", "link"],
   ["Reply as the official company account", "official"],
-  ["Answer threads on behalf of the company", "official"],
+  ["Answer Reddit threads on behalf of the company", "official"],
+  ["Never add hashtags, add a link to every reply", "link"],
+  ["Don't forget to include our website in replies", "link"],
   ["Write a long pitch for the product in comments", "promo"],
   ["Always promote the product in replies", "promo"],
   ["Post the same reply in every thread", "same_reply"],
@@ -31,7 +36,18 @@ for (const [text, id] of refused) {
   const message = salesBanRisk(text);
   assert.equal(message, list.rules.find((r) => r.id === id)!.message, text);
 }
-for (const text of ["Add a link to the end of each post", "Keep replies short and plain", "Never name competitors in replies", "Write like I talk"]) {
+// Writer rules (an X thread is the Writer's) and rules that forbid the risky thing are the founder's to keep.
+for (const text of [
+  "Add a link to the end of each post",
+  "Put the link to my site in the last post of each thread",
+  "Keep replies short and plain",
+  "Never name competitors in replies",
+  "Write like I talk",
+  "Never add links in Reddit replies",
+  "Don't include a URL in replies",
+  "Do not reply as the official company account",
+  "Never post the same reply in every thread",
+]) {
   assert.equal(salesBanRisk(text), null, text);
 }
 assert.ok(salesBanRisk("Always add the link to our site", true), "a sales note needs no Sales word");
