@@ -18,6 +18,7 @@ type Draft = Data["drafts"][number];
 
 const KIND_LABEL: Record<Kind, string> = { post: "Posts", caption: "Captions", video_brief: "Video briefs", slide_text: "Slide text" };
 const COLUMN_LABEL: Record<(typeof WRITER_COLUMNS)[number], string> = {
+  planned: "Planned",
   drafting: "Drafting",
   waiting: "Waiting on you",
   scheduled: "Scheduled",
@@ -129,10 +130,10 @@ function OpenScript({ orderId }: { orderId: string }) {
 }
 
 /** Waiting on you first: the feed leads with what needs the founder (canvas AgentWriter.dc.html). */
-const LIST_ORDER = ["waiting", "drafting", "scheduled", "posted"] as const satisfies readonly (typeof WRITER_COLUMNS)[number][];
+const LIST_ORDER = ["waiting", "drafting", "planned", "scheduled", "posted"] as const satisfies readonly (typeof WRITER_COLUMNS)[number][];
 const KIND_ICON: Record<Kind, IconName> = { post: "message-circle", caption: "captions", video_brief: "video", slide_text: "layers" };
 const KIND_ONE: Record<Kind, string> = { post: "Post", caption: "Caption", video_brief: "Video brief", slide_text: "Slide text" };
-const BADGE: Record<(typeof WRITER_COLUMNS)[number], string> = { waiting: "is-waiting", drafting: "is-running", scheduled: "is-scheduled", posted: "is-posted" };
+const BADGE: Record<(typeof WRITER_COLUMNS)[number], string> = { waiting: "is-waiting", drafting: "is-running", planned: "", scheduled: "is-scheduled", posted: "is-posted" };
 
 function Board({ drafts }: { drafts: Draft[] }) {
   if (drafts.length === 0) {

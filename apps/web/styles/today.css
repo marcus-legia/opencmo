@@ -345,6 +345,7 @@ html[data-theme="dark"] .k.pg-agentwriter{--bg:#121110;--panel:#181715;--raised:
 .pg-agentwriter .b-wait{background:var(--warn-wash);color:var(--warn)}
 .pg-agentwriter .b-ok{background:var(--ok-wash);color:var(--ok)}
 .pg-agentwriter .b-new{background:var(--accent-wash);color:var(--accent)}
+.pg-agentwriter .b-plan{background:var(--raised);color:var(--muted);border:1px solid var(--line)}
 .pg-agentwriter .detail{border-top:1px solid var(--line);padding:14px 14px 14px 48px;display:flex;flex-direction:column;gap:12px}
 .pg-agentwriter .post{margin:0;padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--bg);font-size:15.5px;line-height:1.55;white-space:pre-line}
 .pg-agentwriter .beats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}

@@ -323,7 +323,8 @@ export function Feed({ email }: { email?: string | null }) {
   const counts = useMemo(() => {
     const waiting = data?.queue.filter((c) => c.status === "waiting").length ?? 0;
     return {
-      planned: data?.week.deliverables.total ?? 0,
+      // A week without a plan still has its calendar: count what Writer lists for this week too.
+      planned: Math.max(data?.week.deliverables.total ?? 0, data?.week.itemsThisWeek ?? 0),
       waiting,
       making: data?.team.nodes.filter((n) => n.state === "working").length ?? 0,
       scheduled: slots.filter((s) => s.status === "scheduled").length,
@@ -364,6 +365,7 @@ export function Feed({ email }: { email?: string | null }) {
   const progress = total > 0 ? `${Math.round((done / total) * 100)}%` : "0%";
   const name = firstName(email);
   const needs = counts.waiting;
+  const held = data?.week.heldCards ?? 0;
 
   const slotRows = (wanted: "scheduled" | "posted" | "all") =>
     slots
@@ -409,7 +411,9 @@ export function Feed({ email }: { email?: string | null }) {
                 {state.status === "loading"
                   ? "Loading your team…"
                   : needs === 0
-                    ? "Nothing waits on you. Your team keeps working."
+                    ? held > 0
+                      ? `Nothing in the queue today. ${held} ${held === 1 ? "card is" : "cards are"} held until tomorrow.`
+                      : "Nothing waits on you. Your team keeps working."
                     : `${needs} ${needs === 1 ? "item needs" : "items need"} your attention today. Approve, edit or skip.`}
               </p>
             </div>
@@ -469,7 +473,16 @@ export function Feed({ email }: { email?: string | null }) {
                 <div className="item">
                   <div className="row" style={{ justifyContent: "center", color: "var(--muted)" }}>
                     {ICON_SPARK}
-                    Nothing waits on you. Tomorrow&apos;s post is written overnight.
+                    {held > 0 ? (
+                      <span>
+                        {held} {held === 1 ? "card is" : "cards are"} held until tomorrow (about ten new cards a day).{" "}
+                        <Link href="/app/writer" data-testid="today-held">
+                          Show them in Writer
+                        </Link>
+                      </span>
+                    ) : (
+                      <>Nothing waits on you. Tomorrow&apos;s post is written overnight.</>
+                    )}
                   </div>
                 </div>
               ) : (

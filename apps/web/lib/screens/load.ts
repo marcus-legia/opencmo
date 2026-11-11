@@ -207,7 +207,17 @@ async function dashboard({ supabase, userId }: LoadContext): Promise<Partial<Das
         "content_items",
       ) as { body: { text?: string } }[];
       const words = drafts.reduce((n, d) => n + (typeof d.body.text === "string" ? d.body.text.split(/\s+/).filter(Boolean).length : 0), 0);
+      // The calendar's items this week and the held cards, so the step bar matches what Writer lists.
+      const monday = mondayOf();
+      const nextMonday = new Date(Date.parse(`${monday}T12:00:00Z`) + 7 * 86_400_000).toISOString().slice(0, 10);
+      const [items, held] = await Promise.all([
+        supabase.from("content_items").select("id").in("department", ["post", "video"]).gte("day", monday).lt("day", nextMonday)
+          .in("status", ["planned", "drafting", "in_review", "approved", "published"]).limit(500),
+        supabase.from("approvals").select("id").eq("status", "held").limit(500),
+      ]);
       return {
+        itemsThisWeek: (must(items, "content_items") as unknown[]).length,
+        heldCards: (must(held, "approvals") as unknown[]).length,
         goal,
         deliverables: { done: open.filter((o) => o.status === "done").length, total: open.length },
         workingNow: new Set(orders.filter((o) => o.status === "running" && (TEAM as string[]).includes(o.department)).map((o) => o.department)).size,
@@ -810,6 +820,20 @@ async function waitingByRef(supabase: SupabaseClient, refKind: string): Promise<
   return new Map(rows.map((r) => [r.ref_id, r.id]));
 }
 
+type LiveCard = { id: string; status: "waiting" | "held"; heldUntil: string | null };
+
+/**
+ * Live cards (waiting or held past the day's card budget) keyed by the row they decide. Writer needs both: a held card
+ * is not in the queue, so its row offers "Show it now" instead of opening a card that is not there.
+ */
+async function liveByRef(supabase: SupabaseClient, refKind: string): Promise<Map<string, LiveCard>> {
+  const rows = must(
+    await supabase.from("approvals").select("id, ref_id, status, held_until").eq("ref_kind", refKind).in("status", ["waiting", "held"]),
+    "approvals",
+  ) as { id: string; ref_id: string; status: "waiting" | "held"; held_until: string | null }[];
+  return new Map(rows.map((r) => [r.ref_id, { id: r.id, status: r.status, heldUntil: iso(r.held_until) }]));
+}
+
 async function research({ supabase }: LoadContext): Promise<Partial<ResearchScreen>> {
   const now = new Date();
   const latest = supabase.from("cmo_insights").select("body, created_at").eq("kind", "competitors").order("created_at", { ascending: false }).limit(1).maybeSingle();
@@ -925,13 +949,23 @@ async function writer({ supabase }: LoadContext): Promise<Partial<WriterScreen>>
         supabase.from("content_items").select(columns).eq("department", "post").in("status", statuses).gte("day", since).order("day").limit(100),
         supabase.from("content_items").select(columns).eq("department", "video").not("clip_id", "is", null).in("status", statuses).gte("day", since).order("day").limit(60),
         supabase.from("work_orders").select("id, status, brief, due_at, created_at").eq("kind", "write_video_brief").in("status", ["queued", "running", "deferred", "done"]).gte("created_at", `${since}T00:00:00Z`).order("created_at").limit(20),
-        waitingByRef(supabase, "content_item"),
-        waitingByRef(supabase, "editor_project"),
-        waitingByRef(supabase, "short_batch"),
+        liveByRef(supabase, "content_item"),
+        liveByRef(supabase, "editor_project"),
+        liveByRef(supabase, "short_batch"),
         supabase.from("shorts").select("short_clip_id, batch_id").not("short_clip_id", "is", null).gte("created_at", `${since}T00:00:00Z`).limit(200),
         supabase.from("approvals").select("id, ref_id, status").eq("ref_kind", "work_order").eq("kind", "script").gte("created_at", `${since}T00:00:00Z`).limit(40),
       ]);
-      const column = { planned: "drafting", drafting: "drafting", in_review: "waiting", approved: "scheduled", published: "posted" } as const;
+      const column = { planned: "planned", drafting: "drafting", in_review: "waiting", approved: "scheduled", published: "posted" } as const;
+      // A draft in review whose card is not in the queue: held past the day's budget, or gone (cancelled, never raised
+      // again). The row still opens, with "Show it now" (`approval_show_now`) instead of a card that is not there.
+      const cardOf = (status: ItemRow["status"], card: LiveCard | null | undefined) =>
+        status !== "in_review"
+          ? { cardState: null, heldUntil: null, approvalId: null }
+          : card?.status === "waiting"
+            ? { cardState: "waiting" as const, heldUntil: null, approvalId: card.id }
+            : card
+              ? { cardState: "held" as const, heldUntil: card.heldUntil, approvalId: null }
+              : { cardState: "missing" as const, heldUntil: null, approvalId: null };
       const dayText = (day: string) => WEEKDAY[new Date(`${day}T00:00:00Z`).getUTCDay()]!;
       const batchOf = new Map((must(shorts, "shorts") as { short_clip_id: string; batch_id: string }[]).map((s) => [s.short_clip_id, s.batch_id]));
       const postDrafts = (must(posts, "content_items") as ItemRow[]).map((r) => {
@@ -947,11 +981,17 @@ async function writer({ supabase }: LoadContext): Promise<Partial<WriterScreen>>
           column: column[r.status],
           versions: Math.min(3, Math.max(1, 1 + (Array.isArray(r.body.alternates) ? r.body.alternates.length : 0))),
           note: r.status === "published" || r.status === "approved" ? (edited ? "You edited it before approving" : "Approved as drafted") : null,
-          approvalId: cards.get(r.id) ?? null,
+          ...cardOf(r.status, cards.get(r.id)),
+          ref: { kind: "content_item" as const, id: r.id },
+          text: (r.final_text ?? text).slice(0, 5000),
         };
       });
       const captionDrafts = (must(captions, "content_items") as ItemRow[]).map((r) => {
-        const card = videoCards.get(r.clip_id!) ?? batchCards.get(batchOf.get(r.clip_id!) ?? "") ?? null;
+        const batch = batchOf.get(r.clip_id!);
+        const videoCard = videoCards.get(r.clip_id!);
+        const card = videoCard ?? (batch ? batchCards.get(batch) : undefined) ?? null;
+        // A caption has no card of its own: it is decided on its video's (or its batch's) card.
+        const ref = videoCard ? { kind: "editor_project" as const, id: r.clip_id! } : batch ? { kind: "short_batch" as const, id: batch } : null;
         return {
           id: r.id,
           kind: "caption" as const,
@@ -962,7 +1002,10 @@ async function writer({ supabase }: LoadContext): Promise<Partial<WriterScreen>>
           column: column[r.status],
           versions: 1,
           note: r.body.edited_at ? "You edited it on the card" : r.status === "in_review" ? "On the video's card" : null,
-          approvalId: card,
+          // Only a held card can be shown now: a caption without one waits on its video, not on a card to raise.
+          ...(card?.status === "held" ? cardOf(r.status, card) : { cardState: card && r.status === "in_review" ? ("waiting" as const) : null, heldUntil: null, approvalId: card?.status === "waiting" ? card.id : null }),
+          ref,
+          text: null,
         };
       });
       // A script the founder records (2026-11-09): its card while it waits, then "Open in editor" once approved.
@@ -988,7 +1031,11 @@ async function writer({ supabase }: LoadContext): Promise<Partial<WriterScreen>>
           column: waiting ? ("waiting" as const) : approved ? ("scheduled" as const) : o.status === "done" ? ("posted" as const) : ("drafting" as const),
           versions: 1,
           note: card ? (waiting ? "Your script" : approved ? "Approved: you record it" : card.status === "skipped" ? "You skipped it" : "Dropped from the plan") : o.status === "done" ? "Fed the Studio team" : null,
-          approvalId: waiting ? card!.id : null,
+          approvalId: card?.status === "waiting" ? card.id : null,
+          cardState: card?.status === "waiting" ? ("waiting" as const) : card?.status === "held" ? ("held" as const) : null,
+          heldUntil: null,
+          ref: card?.status === "held" ? { kind: "work_order" as const, id: o.id } : null,
+          text: null,
           scriptId: approved ? o.id : null,
         };
       });

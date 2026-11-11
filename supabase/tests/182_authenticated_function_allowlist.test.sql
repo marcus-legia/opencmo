@@ -37,6 +37,7 @@ insert into allowed values
   ('ai_check_spec(ai_models,jsonb)'),
   ('ai_price(ai_models,jsonb)'),
   ('approval_decide(uuid,text,jsonb)'),
+  ('approval_show_now(text,uuid)'),
   ('auto_transcript_daily_seconds()'),
   ('brand_logo_allows(text)'),
   ('cancel_export(uuid)'),

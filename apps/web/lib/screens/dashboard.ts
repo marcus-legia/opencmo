@@ -45,6 +45,10 @@ export const WeekStripSchema = z.object({
   workingNow: z.number().int().min(0).max(6),
   wordsDraftedToday: z.number().int().min(0),
   credits: CreditsSchema,
+  /** Posts and video items on this week's calendar (Mon–Sun), with or without a week plan: the "planned" step. */
+  itemsThisWeek: z.number().int().min(0).optional(),
+  /** Cards held past the day's ten new cards: not in the queue, they come in tomorrow (or now, from Writer). */
+  heldCards: z.number().int().min(0).optional(),
 });
 
 /** A node of the team graph. `line` is what it does now ("Rendering shot 9 of 12 · 62%"). */
