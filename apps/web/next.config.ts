@@ -146,5 +146,7 @@ export default withSentryConfig(config, {
   telemetry: false,
   // The client sends errors only (`tracesSampleRate: 0` in instrumentation-client.ts), yet the SDK's tracing code was
   // the largest chunk on every page, the login form included. Shake it and the SDK's debug logger out of the bundle.
+  // Under Turbopack (local dev) Next warns that Sentry's boolean `compiler.define` values are invalid; the warning is
+  // harmless, and production builds (webpack) apply the shake.
   bundleSizeOptimizations: { excludeTracing: true, excludeDebugStatements: true },
 });

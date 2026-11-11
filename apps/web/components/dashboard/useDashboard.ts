@@ -23,6 +23,12 @@ function screenPath(): string {
 }
 
 /**
+ * The feed as it was last shown in this tab (decisions included), by path: coming back to the feed shows it at once and
+ * reads again behind it, as `useScreen`'s cache does for the other screens. Memory only; a sign-out reloads the page.
+ */
+const shown = new Map<string, Extract<DashboardState, { status: "ready" }>>();
+
+/**
  * The Dashboard's data (`GET /api/v1/screens/dashboard`, `DashboardScreen`) and its one write: deciding a card.
  * Shared by `/app` and `/app/inbox`, so both show the same queue. New cards and log lines arrive through
  * Realtime on `approvals` and `work_order_events`, which trigger a re-read under RLS.
@@ -30,7 +36,10 @@ function screenPath(): string {
 export function useDashboard() {
   const { reportQueue, toast } = useShellState();
   const { userId } = useShellAccount();
-  const [state, setState] = useState<DashboardState>({ status: "loading" });
+  const [state, setState] = useState<DashboardState>(() => (typeof window === "undefined" ? undefined : shown.get(screenPath())) ?? { status: "loading" });
+  useEffect(() => {
+    if (state.status === "ready") shown.set(screenPath(), state);
+  }, [state]);
   // Approving or posting without a plan (cmo-review-3 A3): the card goes back and the plan sheet answers instead of a toast.
   const [planSheet, setPlanSheet] = useState(false);
   // Bumped by every decision: a read that started before it carries the old queue and must not overwrite it.

@@ -4,7 +4,18 @@ import Link from "next/link";
 import { useRef } from "react";
 import type { ReactNode } from "react";
 
+import { prefetchScreen } from "@/components/screens/useScreen";
+import type { ScreenName } from "@/lib/screens/registry";
+
 import { siteLabel, useWorkspace } from "./workspace";
+
+/** What each view reads: hovering or focusing its link reads it ahead, so the click lands on data, not "Loading…". */
+const VIEW_SCREENS: Record<string, ScreenName[]> = {
+  feed: ["schedule"],
+  calendar: ["schedule", "dashboard"],
+  analytics: ["analytics", "dashboard", "research", "sales"],
+};
+const readAhead = (view: string) => () => VIEW_SCREENS[view]?.forEach((name) => prefetchScreen(name));
 
 /**
  * The top bars of the Today canvas (docs/design/today-canvas). Each artboard has its own: `home` (Main), `views`
@@ -185,7 +196,7 @@ export function TopBar({
         <div style={{ flex: "1 1 auto" }}></div>
         <nav className="td-views" aria-label="View">
           {views.map((v) => (
-            <Link key={v.id} href={v.href} aria-current={current === v.id ? "page" : undefined}>
+            <Link key={v.id} href={v.href} aria-current={current === v.id ? "page" : undefined} onMouseEnter={readAhead(v.id)} onFocus={readAhead(v.id)}>
               {v.icon}
               {v.label}
             </Link>

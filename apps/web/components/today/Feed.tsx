@@ -20,10 +20,11 @@ import { fillChat } from "@/components/dashboard/TodayBlock";
 import { useDashboard } from "@/components/dashboard/useDashboard";
 import { Sash } from "@/components/shell-v2/Sash";
 import { useShellState } from "@/components/shell-v2/ShellState";
-import { useScreen } from "@/components/screens/useScreen";
+import { prefetchScreen, useScreen } from "@/components/screens/useScreen";
 import { isTodayPrompt } from "@/lib/cmo/today";
 import type { ApprovalCard as Card } from "@/lib/screens/approval-card";
 import type { DashboardScreen, TodayRowData } from "@/lib/screens/dashboard";
+import type { ScreenName } from "@/lib/screens/registry";
 
 import { ContextColumn } from "./ContextColumn";
 import { KIND_ICON, PLATFORM_ICON, kindLabel, whenLabel } from "./cards";
@@ -257,6 +258,16 @@ const AGENT_ROWS: { key: "brain" | "writer" | "studio" | "schedule" | "sales" | 
     ),
   },
 ];
+
+/** What each agent's page reads first: its link reads it ahead on hover or focus. */
+const AGENT_SCREEN: Record<(typeof AGENT_ROWS)[number]["key"], ScreenName> = {
+  brain: "brain",
+  writer: "writer",
+  studio: "studio",
+  schedule: "schedule",
+  sales: "sales",
+  research: "research",
+};
 
 function agentLine(data: DashboardScreen, key: (typeof AGENT_ROWS)[number]["key"]): { line: string; live: boolean } {
   if (key === "brain") {
@@ -506,7 +517,15 @@ export function Feed({ email }: { email?: string | null }) {
             {AGENT_ROWS.map((a) => {
               const status = data ? agentLine(data, a.key) : { line: "", live: false };
               return (
-                <Link key={a.key} href={a.href} className="agent" style={{ textDecoration: "none", color: "inherit" }} aria-label={`${a.label}: ${status.line}`}>
+                <Link
+                  key={a.key}
+                  href={a.href}
+                  className="agent"
+                  style={{ textDecoration: "none", color: "inherit" }}
+                  aria-label={`${a.label}: ${status.line}`}
+                  onMouseEnter={() => prefetchScreen(AGENT_SCREEN[a.key])}
+                  onFocus={() => prefetchScreen(AGENT_SCREEN[a.key])}
+                >
                   <span className="tile">{a.icon}</span>
                   <span style={{ minWidth: "0", flex: "1" }}>
                     <span style={{ display: "block", fontWeight: "500" }}>{a.label}</span>
