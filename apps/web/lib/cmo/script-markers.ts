@@ -1,6 +1,6 @@
 import type { ScriptBeat } from "./writer/types";
 
-const SHOT_LABEL: Record<ScriptBeat["shot"], string> = { talking_head: "To camera", screen: "Screen", broll: "You film" };
+export const SHOT_LABEL: Record<ScriptBeat["shot"], string> = { talking_head: "To camera", screen: "Screen", broll: "You film" };
 
 /**
  * A script's beats as timeline markers (owner, 2026-11-09): one per beat at its time, with what to say and what to

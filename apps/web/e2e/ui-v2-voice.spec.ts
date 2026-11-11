@@ -24,6 +24,9 @@ async function founderWithDrafts(): Promise<E2EUser> {
   const created = await db.auth.admin.createUser({ email: user.email, password: user.password, email_confirm: true });
   expect(created.error).toBeNull();
   user.id = created.data.user!.id;
+  // An onboarded founder: Voice is a pane over the feed, and a founder with no document is sent to Setup first.
+  const doc = await db.from("marketing_documents").insert({ user_id: user.id, kind: "product", version: 1, created_by: "user", body: { name: "Duely", one_liner: "Invoices that chase themselves." } });
+  expect(doc.error).toBeNull();
   const posts = await db.from("content_items").insert([
     {
       user_id: user.id, department: "post", platform: "X", day: new Date().toISOString().slice(0, 10), idea: "Invoices", status: "in_review",
@@ -39,7 +42,8 @@ test("rate three drafts, accept two rules, see them in Library → Voice", async
   await signIn(page, user);
   await page.goto("/app/library?tab=voice");
   await page.getByRole("button", { name: "Rate your drafts" }).click();
-  const sheet = page.getByTestId("rating-sheet");
+  // The feed and the Voice pane each mount the sheet; the open one is the dialog.
+  const sheet = page.getByTestId("rating-sheet").filter({ visible: true });
   const drafts = sheet.getByTestId("rating-draft");
   await expect(drafts).toHaveCount(3);
 
@@ -60,8 +64,8 @@ test("rate three drafts, accept two rules, see them in Library → Voice", async
   expect((await admin().from("approvals").select("status").eq("user_id", user.id).eq("kind", "post")).data).toEqual([{ status: "waiting" }]);
   await page.reload();
   await expect(page.getByTestId("voice-rule")).toHaveCount(2);
-  await expect(page.locator("#library-voice-rules")).toContainText("Help first: drop the pitch and the hype.");
-  await expect(page.locator("#library-voice-rules")).toContainText("From your ratings");
+  await expect(page.locator('section[aria-labelledby="library-voice-rules"]')).toContainText("Help first: drop the pitch and the hype.");
+  await expect(page.locator('section[aria-labelledby="library-voice-rules"]')).toContainText("From your ratings");
   await expect(page.getByTestId("voice-event")).toHaveCount(2);
 });
 
@@ -71,14 +75,14 @@ test("edit a rule on the Voice page, Undo, and it reads as before", async ({ pag
   expect((await db.from("cmo_corrections").insert({ user_id: user.id, rule: "Keep it short: one idea, no extra lines.", status: "active", decided_at: new Date().toISOString() })).error).toBeNull();
   await signIn(page, user);
   await page.goto("/app/library?tab=voice");
-  const rules = page.locator("#library-voice-rules");
+  const rules = page.locator('section[aria-labelledby="library-voice-rules"]');
   await rules.getByRole("button", { name: /^Edit rule/ }).click();
   await rules.getByLabel("The rule, in your words (up to 200 characters)").fill("Keep it short: under 200 characters.");
   await rules.getByRole("button", { name: "Save rule" }).click();
   await expect(rules).toContainText("Keep it short: under 200 characters.");
   await expect(page.getByTestId("voice-event").first()).toContainText("Rule changed");
 
-  await page.locator("#library-voice-history").getByRole("button", { name: "Undo" }).click();
+  await page.locator('section[aria-labelledby="library-voice-history"]').getByRole("button", { name: "Undo" }).click();
   await expect(rules).toContainText("Keep it short: one idea, no extra lines.");
   await expect(page.getByTestId("voice-event").first()).toHaveAttribute("data-undone", "true");
 });

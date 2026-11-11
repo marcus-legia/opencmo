@@ -196,7 +196,8 @@ test("Library → Voice: notes with platform, source and weight; delete asks fir
 
     await page.goto("/app/library?tab=skills&sample=1");
     await expect(page.getByText("Read by Writer, Checker, Sales, CMO chat")).toBeVisible();
-    await expect(page.getByRole("main").getByRole("switch")).toHaveCount(0);
+    // Skills are read only: no switch in the pane.
+    await expect(page.getByRole("dialog", { name: "Skills" }).getByRole("switch")).toHaveCount(0);
     await axeAndShot(page, "library-skills", width);
   }
 });
@@ -204,13 +205,25 @@ test("Library → Voice: notes with platform, source and weight; delete asks fir
 test("Writer filters drafts per platform", async ({ page }) => {
   await signIn(page, state().users.a);
   await page.goto("/app/writer?sample=1");
-  const cards = page.locator(".scr-board-card");
-  await expect(cards).toHaveCount(8);
+  // One row per draft (AgentWriter.dc.html); a chip per platform the week's drafts are for.
+  const rows = page.getByTestId("writer-row");
+  await expect(rows.first()).toBeVisible();
+  const all = await rows.count();
+  expect(all).toBeGreaterThan(1);
   const filter = page.getByRole("group", { name: "Platform" });
-  await filter.getByRole("button", { name: "LinkedIn", exact: true }).click();
-  await expect(cards).toHaveCount(4);
-  await filter.getByRole("button", { name: "X", exact: true }).click();
-  await expect(cards).toHaveCount(4);
+  for (const name of ["LinkedIn", "X"]) {
+    await filter.getByRole("button", { name, exact: true }).click();
+    await expect(filter.getByRole("button", { name, exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect.poll(() => rows.count()).toBeLessThan(all);
+    const shown = await rows.count();
+    expect(shown).toBeGreaterThan(0);
+    expect(shown).toBeLessThan(all);
+    for (const platform of await rows.evaluateAll((els) => els.map((el) => el.getAttribute("data-platform")))) {
+      expect(platform?.toLowerCase()).toBe(name === "X" ? "x" : "linkedin");
+    }
+  }
+  await filter.getByRole("button", { name: "All", exact: true }).click();
+  await expect(rows).toHaveCount(all);
 });
 
 // ------------------------------------------------------------------ C3: posts and captions on live rows
@@ -364,7 +377,7 @@ test("a voice note learned from a decision shows live in Writer and Library, and
   await page.goto("/app/library?tab=voice");
   const row = page.getByTestId("voice-note");
   await expect(row).toHaveCount(1);
-  const voice = page.getByRole("region", { name: /^Voice/ });
+  const voice = page.getByRole("region", { name: /^Learned notes/ });
   await expect(voice).toContainText(note.body);
   await expect(voice.getByText(/sample/i)).toHaveCount(0);
   await expect(row).toContainText("X · Approved as written");

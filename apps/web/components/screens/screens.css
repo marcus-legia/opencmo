@@ -217,6 +217,8 @@
 .is-rule-mention_allowed { color: var(--v2-ok); }
 .is-rule-help_only { color: var(--v2-brand-deep); }
 .is-rule-skipped { color: var(--v2-ink2); }
+.is-rule-requires_disclosure { color: var(--v2-ok); }
+.is-rule-not_verified { color: var(--v2-waiting); }
 .scr-thread-detail { flex: 999 1 480px; min-width: 0; padding: 20px; display: flex; flex-direction: column; gap: 14px; }
 .scr .scr-thread-title { font-size: 22px; letter-spacing: -0.02em; }
 .scr .scr-thread-title a { color: var(--v2-ink); }

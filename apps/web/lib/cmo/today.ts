@@ -281,7 +281,7 @@ export function buildToday(input: TodayInput): Today {
       detail: "Your CMO wrote it from your website. Edit anything that is wrong; every draft after reads it.",
       department: "brain",
       platform: null,
-      action: { type: "link", href: "/app/library?tab=business", label: "Read it" },
+      action: { type: "link", href: "/app?doc=strategy", label: "Read it" },
     });
   }
   if (input.firstRun.rateDrafts) {

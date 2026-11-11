@@ -332,7 +332,7 @@ export function ApprovalCard({
           ...declineAction,
         ];
       case "goal":
-        return [primary(), { label: "Edit plan", variant: "secondary", href: "/app/brain" }, ...declineAction];
+        return [primary(), { label: "Edit plan", variant: "secondary", href: "/app?doc=plan" }, ...declineAction];
       case "script":
         if (card.body.forFounder) return [{ label: editing ? "Approve edit and open" : "Approve and open in editor", variant: "primary", run: () => void approveAndOpen() }, editAction("Edit a beat"), ...declineAction];
         return [primary(editing ? "Approve edit" : PRIMARY_ACTION.script), editAction("Edit a beat"), ...declineAction];

@@ -26,6 +26,10 @@ function fakeClient(
 ): SupabaseClient {
   return {
     auth: {
+      getClaims: async () => ({
+        data: user ? { claims: { sub: user.id, email: user.email } } : null,
+        error: user ? null : { message: "no session" },
+      }),
       getUser: async () => ({
         data: { user },
         error: user ? null : { message: "no session" },

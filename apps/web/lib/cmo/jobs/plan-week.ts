@@ -156,6 +156,10 @@ function fakePlan(docs: Documents, brief?: unknown, goal?: string): Plan {
   if (typeof brief === "string" && /\bslideshow\b/i.test(brief)) {
     items.push({ day_offset: 3, department: "video", platform: SLIDESHOW, idea: `${base[0]!.idea}, in five slides`, reason: "You asked for a slideshow this week.", image: false });
   }
+  // Asked for a video: one script the founder records, as the planner is told (cmo-review-3 I0).
+  if (typeof brief === "string" && /\bvideo\b/i.test(brief)) {
+    items.push({ day_offset: 1, department: "video", platform: "TikTok", idea: `${base[0]!.idea}, shown on screen`, reason: "You asked for a video this week.", image: false });
+  }
   return { items };
 }
 

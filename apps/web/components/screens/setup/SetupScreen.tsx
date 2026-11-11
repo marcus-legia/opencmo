@@ -6,12 +6,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { PlanSheet, isPlanRequired } from "@/components/billing/PlanSheet";
 import { api, jsonBody } from "@/components/clipping/api";
 import { Icon } from "@/components/icons";
-import { Button, MonoLabel } from "@/components/ui";
 import { DOCUMENT_KINDS } from "@/lib/cmo/documents";
 import { setupFinished, setupSteps, type OnboardingStatus } from "@/lib/cmo/onboard-status";
 import type { CmoState } from "@/lib/cmo/state";
 
-import { ErrorNote, Screen, SkeletonBlocks } from "../parts";
 import { SetupQuestions } from "./SetupQuestions";
 
 const POLL_MS = 2_000;
@@ -108,71 +106,93 @@ export function SetupScreen() {
 
   const steps = status ? setupSteps(status) : [];
   const site = params.get("site")?.slice(0, 300) ?? "";
+  const doneCount = steps.filter((x) => x.state === "done").length;
+  // The real order (cmo-review-3): the website, the documents and first week the CMO writes from it, then the feed.
+  // A plan is asked for on the first decision, an account when the first post is scheduled: neither is a Setup step.
+  const stepper = [
+    { n: 1, label: "Website", cur: phase !== "working", done: phase === "working" },
+    { n: 2, label: "What it learned", cur: phase === "working", done: false },
+    { n: 3, label: "First week", cur: false, done: false },
+  ];
 
   return (
-    <Screen label="Setup" className="scr-setup">
-      <div className="scr-setup-top td-setup-top">
-        <MonoLabel>Setup</MonoLabel>
-        <ol className="td-steps" aria-label="Setup steps">
-          <li {...(phase === "working" ? { "data-done": "" } : { "aria-current": "step" as const })}>
-            <span className="n" aria-hidden="true">
-              {phase === "working" ? <Icon name="check" size={12} /> : "1"}
-            </span>
-            Website
-          </li>
-          <li {...(phase === "working" ? { "aria-current": "step" as const } : {})}>
-            <span className="n">2</span>
-            Documents and first week
-          </li>
-          <li>
-            <span className="n">3</span>
-            Dashboard
-          </li>
-        </ol>
-      </div>
-      {params.get("paid") === "1" && (
-        <p role="status" className="scr-small scr-muted" data-testid="setup-paid">
-          Payment received. Credits arrive within a minute.
-        </p>
-      )}
-      {params.get("paid") === "pending" && (
-        <p role="status" className="scr-small scr-muted" data-testid="setup-paid-pending">
-          Your payment has not arrived yet. It usually takes under a minute after checkout; your first run is free either way.
-        </p>
-      )}
-      {error && <ErrorNote>{error}</ErrorNote>}
-      {phase === "loading" && !error && <SkeletonBlocks rows={2} />}
-      {phase === "form" && docs && (
-        <WebsiteStep initial={site || docs.lastRun?.input.site || ""} error={submitError} onStart={(value) => void start(value)} />
-      )}
-      {phase === "working" && (
-        <div className="td-setup">
-          <section className="v2-panel td-setup-progress" aria-labelledby="setup-progress-title" data-testid="setup-progress">
-            <div className="v2-panel-body">
-              <h1 id="setup-progress-title" className="scr-setup-title">
-                Your CMO is at work.
-              </h1>
-              <p className="scr-muted">This takes a minute or two. Nothing is posted: every draft waits for your approval.</p>
-              <ol className="td-setup-steps" aria-live="polite">
-                {steps.map((step) => (
-                  <li key={step.id} data-state={step.state} data-testid="setup-step">
-                    <span className="td-setup-dot" aria-hidden="true">
-                      {step.state === "done" ? <Icon name="check" size={12} /> : step.state === "failed" ? "!" : null}
-                    </span>
-                    <span>{step.label}</span>
-                    <span className="v2-mono is-muted td-setup-state">
-                      {step.state === "done" ? "Done" : step.state === "running" ? "Working" : step.state === "failed" ? "Did not finish" : ""}
-                    </span>
-                  </li>
-                ))}
-              </ol>
+    <>
+      <header style={{ height: "56px", display: "flex", alignItems: "center", gap: "10px", padding: "0 24px", borderBottom: "1px solid var(--line)" }}>
+        <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: "24px", height: "24px", borderRadius: "6px", background: "var(--text)", color: "var(--bg)", fontWeight: "700", fontSize: "13px" }}>O</span>
+        <span style={{ fontWeight: "600" }}>OpenCMO</span>
+        <div style={{ flex: "1 1 auto" }}></div>
+        <nav className="stepper" aria-label="Setup steps">
+          {stepper.map((x) => (
+            <button key={x.n} type="button" aria-current={x.cur ? "step" : undefined} data-done={x.done ? "true" : "false"} tabIndex={-1}>
+              <span className="n">{x.done ? <Icon name="check" size={12} /> : x.n}</span>
+              {x.label}
+            </button>
+          ))}
+        </nav>
+      </header>
+
+      <div style={{ maxWidth: "1080px", margin: "0 auto", padding: "56px 24px 48px" }} data-testid="v2-setup">
+        {params.get("paid") === "1" && (
+          <p role="status" className="meta" data-testid="setup-paid" style={{ marginBottom: "16px" }}>
+            Payment received. Credits arrive within a minute.
+          </p>
+        )}
+        {params.get("paid") === "pending" && (
+          <p role="status" className="meta" data-testid="setup-paid-pending" style={{ marginBottom: "16px" }}>
+            Your payment has not arrived yet. It usually takes under a minute after checkout; your first run is free either way.
+          </p>
+        )}
+        {error ? <p className="meta">{error}</p> : null}
+        {phase === "loading" && !error ? <p className="meta">Loading…</p> : null}
+        {phase === "form" && docs ? <WebsiteStep initial={site || docs.lastRun?.input.site || ""} error={submitError} onStart={(value) => void start(value)} /> : null}
+        {phase === "working" ? (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "32px", alignItems: "flex-start" }}>
+            <div style={{ flex: "1 1 420px", minWidth: "0" }}>
+              <div className="meta" style={{ marginBottom: "10px" }}>
+                Step 2 of 3{status?.suggestedHandle ? ` · @${status.suggestedHandle}` : ""}
+              </div>
+              <h1>Your CMO is reading your website.</h1>
+              <p className="lead">It writes the documents every agent works from, then plans your first week and drafts your first posts. Nothing is posted: every draft waits for your approval.</p>
+              {status ? (
+                <div className="card v2" style={{ marginTop: "24px" }}>
+                  <SetupQuestions status={status} />
+                </div>
+              ) : null}
             </div>
-          </section>
-          {status ? <SetupQuestions status={status} /> : null}
-        </div>
-      )}
+            <div className="card" style={{ flex: "1 1 320px", maxWidth: "400px" }} data-testid="setup-progress">
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "8px" }}>
+                <span style={{ fontWeight: "600" }}>Your documents</span>
+                <span className="meta">
+                  {doneCount} of {steps.length}
+                </span>
+              </div>
+              <div aria-live="polite">
+                {steps.map((step) => (
+                  <div key={step.id} className="task" data-state={step.state} data-testid="setup-step">
+                    <span className={step.state === "done" ? "dot d-ok" : step.state === "running" ? "dot d-run" : "dot d-wait"}>
+                      {step.state === "done" ? (
+                        <svg className="i s" viewBox="0 0 24 24" aria-hidden="true" style={{ width: "12px", height: "12px" }}>
+                          <path d="M20 6 9 17l-5-5" />
+                        </svg>
+                      ) : step.state === "running" ? (
+                        <svg className="i s spin" viewBox="0 0 24 24" aria-hidden="true" style={{ width: "12px", height: "12px" }}>
+                          <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                        </svg>
+                      ) : step.state === "failed" ? (
+                        "!"
+                      ) : null}
+                    </span>
+                    <span style={{ flex: "1", color: step.state === "waiting" ? "var(--muted)" : undefined }}>{step.label}</span>
+                    <span className="meta">{step.state === "done" ? "done" : step.state === "running" ? "writing" : step.state === "failed" ? "did not finish" : "next"}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </div>
       <PlanSheet open={planSheet} onClose={() => setPlanSheet(false)} action="read your website again" />
-    </Screen>
+    </>
   );
 }
 
@@ -180,46 +200,64 @@ function WebsiteStep({ initial, error, onStart }: { initial: string; error: stri
   const [value, setValue] = useState(initial);
 
   return (
-    <div className="td-setup">
+    <div style={{ display: "flex", flexWrap: "wrap", gap: "48px", alignItems: "flex-start" }}>
       <form
-        className="scr-setup-body"
+        style={{ flex: "1 1 420px", minWidth: "0" }}
         data-testid="cmo-onboarding"
         onSubmit={(event) => {
           event.preventDefault();
           if (value.trim()) onStart(value.trim());
         }}
       >
-        <header className="scr-setup-head">
-          <h1>Start with your website.</h1>
-          <p>
-            Your CMO reads it, writes the four documents every department works from, then plans your first week and drafts
-            your first posts. This first run is free. You can edit every word later in Library.
-          </p>
-        </header>
-        <label className="v2-field" htmlFor="setup-site">
-          Your website
-          <input id="setup-site" className="v2-input" type="text" inputMode="url" placeholder="yourproduct.com" value={value} onChange={(e) => setValue(e.target.value)} />
-        </label>
-        {error && <ErrorNote>{error}</ErrorNote>}
-        <div className="scr-setup-foot">
-          <span className="scr-small scr-muted">Nothing is posted. Every draft waits for your approval.</span>
-          <span className="v2-actions">
-            <Button type="submit" variant="primary" disabled={!value.trim()}>
+        <div className="meta" style={{ marginBottom: "10px" }}>
+          Step 1 of 3
+        </div>
+        <h1>Start with your website.</h1>
+        <p className="lead">Your CMO reads it and writes the four documents every agent works from: Product, Strategy, Competitors and Content plan. You can change any of them later.</p>
+        <div style={{ marginTop: "28px", display: "flex", flexDirection: "column", gap: "10px", maxWidth: "520px" }}>
+          <label htmlFor="setup-site" style={{ fontSize: "13.5px", fontWeight: "500" }}>
+            Your website
+          </label>
+          <div className="field">
+            <svg className="i" viewBox="0 0 24 24" aria-hidden="true" style={{ color: "var(--subtle)" }}>
+              <circle cx="12" cy="12" r="10" />
+              <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" />
+              <path d="M2 12h20" />
+            </svg>
+            <input id="setup-site" type="text" inputMode="url" placeholder="yourproduct.com" value={value} onChange={(e) => setValue(e.target.value)} />
+            <button type="submit" className="primary" disabled={!value.trim()}>
               Read my website
-            </Button>
-          </span>
+              <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M5 12h14" />
+                <path d="m12 5 7 7-7 7" />
+              </svg>
+            </button>
+          </div>
+          <span className="meta">Free. It reads public pages only and takes about a minute.</span>
+          {error ? <span className="meta" role="alert" style={{ color: "var(--warn)" }}>{error}</span> : null}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "28px", color: "var(--muted)" }}>
+          <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" />
+          </svg>
+          <span style={{ fontSize: "14px" }}>Nothing is posted. Every draft waits for your approval.</span>
         </div>
       </form>
-      <aside className="v2-panel td-setup-next" aria-labelledby="setup-next-title">
-        <div className="v2-panel-body">
-          <h2 id="setup-next-title" className="v2-panel-title">What happens next</h2>
-          <ol className="td-setup-list">
-            <li>Your CMO reads the site and writes Product, Strategy, Competitors and Content plan.</li>
-            <li>Writer plans your first week and drafts your first posts.</li>
-            <li>You read them on the Dashboard. To approve and post, you pick a plan.</li>
-          </ol>
+      <div className="card" style={{ flex: "1 1 340px", maxWidth: "420px" }}>
+        <div style={{ fontWeight: "600", marginBottom: "12px" }}>What happens next</div>
+        <div className="task">
+          <span className="dot d-wait mono" style={{ fontSize: "12px" }}>1</span>
+          <span style={{ flex: "1" }}>Your CMO reads the site and writes your documents.</span>
         </div>
-      </aside>
+        <div className="task">
+          <span className="dot d-wait mono" style={{ fontSize: "12px" }}>2</span>
+          <span style={{ flex: "1" }}>Writer plans your first week and drafts your first posts. This first run is free.</span>
+        </div>
+        <div className="task">
+          <span className="dot d-wait mono" style={{ fontSize: "12px" }}>3</span>
+          <span style={{ flex: "1" }}>You read them in your feed. To approve and post, you pick a plan.</span>
+        </div>
+      </div>
     </div>
   );
 }

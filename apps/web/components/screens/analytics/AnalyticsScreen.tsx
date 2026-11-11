@@ -124,7 +124,7 @@ function AnalyticsBody({ data, days }: { data: Data; days: number }) {
                 </p>
               ))}
             </div>
-            <a href="/app/brain?tab=memory" className="scr-on-dark-link">
+            <a href="/app?doc=learned" className="scr-on-dark-link">
               See it in Brain memory →
             </a>
           </aside>

@@ -97,9 +97,35 @@ export const QuoteSchema = z.object({ text: z.string().max(400), from: z.string(
 export type Quote = z.infer<typeof QuoteSchema>;
 
 /**
- * The rule a Sales thread was drafted under (P5 R1; SQL `opportunities.rule`: `mention_ok` → `mention_allowed`,
- * `skip` → `skipped`). `text` says why: "r/SaaS forbids self-promotion", "you named the product in 1 of the last 10
- * replies". A `skipped` thread gets no draft and no card.
+ * The rule a Sales thread was drafted under (P5 R1, 5.1; SQL `opportunities.rule` through `salesRuleKind`). `text` says
+ * why: "r/SaaS forbids self-promotion", "you named the product in 1 of the last 10 replies". `needs` is what a member
+ * needs before posting there, when the rules say it. A `skipped` thread gets no draft and no card.
  */
-export const SalesRuleSchema = z.object({ kind: z.enum(["mention_allowed", "help_only", "skipped"]), text: z.string().max(200) });
+export const SALES_RULE_KINDS = ["mention_allowed", "requires_disclosure", "help_only", "not_verified", "skipped"] as const;
+export const SalesRuleSchema = z.object({ kind: z.enum(SALES_RULE_KINDS), text: z.string().max(200), needs: z.string().max(120).optional() });
 export type SalesRule = z.infer<typeof SalesRuleSchema>;
+
+/** SQL `opportunities.rule` (old and 5.1 values) → the kind a screen shows. Unknown or absent: help only. */
+export function salesRuleKind(rule: unknown): SalesRule["kind"] {
+  switch (rule) {
+    case "safe":
+    case "mention_ok":
+      return "mention_allowed";
+    case "requires_disclosure":
+      return "requires_disclosure";
+    case "not_verified":
+      return "not_verified";
+    case "skip":
+      return "skipped";
+    default:
+      return "help_only";
+  }
+}
+
+/** The requirement line: "Posting there needs 50 karma and an account 30 days old"; undefined when there is none. */
+export function salesNeeds(minKarma: unknown, minAccountAgeDays: unknown): string | undefined {
+  const karma = typeof minKarma === "number" && minKarma > 0 ? `${Math.round(minKarma)} karma` : "";
+  const age = typeof minAccountAgeDays === "number" && minAccountAgeDays > 0 ? `an account ${Math.round(minAccountAgeDays)} days old` : "";
+  const parts = [karma, age].filter(Boolean);
+  return parts.length ? `Posting there needs ${parts.join(" and ")}` : undefined;
+}

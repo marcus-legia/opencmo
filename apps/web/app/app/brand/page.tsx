@@ -5,6 +5,6 @@ import { UI_V2 } from "@/lib/screens/flag";
 
 export default function BrandPage() {
   // The redesign moves the Brand Kit into Library (U6); old links keep working.
-  if (UI_V2) redirect("/app/library?tab=brand");
+  if (UI_V2) redirect("/app?doc=brand");
   return <BrandView />;
 }

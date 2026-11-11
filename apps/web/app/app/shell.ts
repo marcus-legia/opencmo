@@ -1,7 +1,6 @@
-import type { User } from "@supabase/supabase-js";
-
 import { cmoPending } from "@/lib/cmo/pending";
 import type { createServerClient } from "@/lib/supabase/server";
+import type { SignedInUser } from "@/lib/supabase/user";
 
 type ServerClient = Awaited<ReturnType<typeof createServerClient>>;
 
@@ -29,7 +28,7 @@ export type ShellAccount = {
  */
 export async function shellAccount(
   supabase: ServerClient,
-  user: User,
+  user: SignedInUser,
 ): Promise<ShellAccount> {
   const [{ data: balance }, { data: profile }, pending] = await Promise.all([
     supabase.rpc("credit_balance", { p_user_id: user.id }),

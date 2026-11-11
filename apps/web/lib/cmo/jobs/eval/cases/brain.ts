@@ -34,8 +34,11 @@ export function planIssues(profile: BrainEvalProfile, plan: readonly PlanItem[])
   const salesPerDay = new Map<string, number>();
   for (const item of plan) if (item.department === "sales") salesPerDay.set(item.day, (salesPerDay.get(item.day) ?? 0) + 1);
   if ([...salesPerDay.values()].some((n) => n > 1)) issues.push("more than one Reddit item on a day");
-  // No AI video in a week plan (cmo-review-2 §2.2), even when the founder's strategy talks about video.
-  if (plan.some((i) => i.department === "video" && i.platform !== "Slideshow")) issues.push("an AI video in the plan");
+  // A video item is a script the founder records (C1, owner 2026-11-09), one a week; asked for a video in the week's
+  // brief, the plan holds that script (cmo-review-3 I0, the case C1 left open). Nothing in a plan builds a video.
+  const scripts = plan.filter((i) => i.department === "video" && i.platform !== "Slideshow");
+  if (scripts.length > 1) issues.push("more than one script in the week");
+  if (profile.brief && /\bvideo\b/i.test(profile.brief) && scripts.length === 0) issues.push("no script for the video the founder asked for");
   plan.forEach((item, index) => {
     if (!item.reason.trim()) issues.push(`item ${index + 1}: no reason`);
     for (const issue of ideaIssues(item.idea, item.reason, profile.docs)) issues.push(`item ${index + 1}: ${issue}`);

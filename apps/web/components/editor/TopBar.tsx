@@ -57,6 +57,7 @@ export function TopBar({
   picker,
   panels,
   finish,
+  home,
 }: {
   credits: number | null;
   status: SaveStatus;
@@ -82,11 +83,24 @@ export function TopBar({
   panels?: React.ReactNode;
   /** P2 (v2 UI only): Mark finished for this edit, at the hash of the last save (null while changes are unsaved). */
   finish?: { clipId: string; documentHash: string | null };
+  /** v2 UI only (Editor.dc.html): the way back to the feed, first in the bar. */
+  home?: { label: string; onOpen: () => void };
 }) {
   const exporting = ["preparing", "queued", "running"].includes(exportState.phase);
   return (
     <header className="ed2-top">
       <div className="ed2-row">
+        {home ? (
+          <>
+            <button type="button" className="ed2-home" data-testid="editor-home" onClick={home.onOpen}>
+              <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m15 18-6-6 6-6" />
+              </svg>
+              {home.label}
+            </button>
+            <span className="ed2-divider" aria-hidden="true" />
+          </>
+        ) : null}
         {menu}
         {picker ?? (
           <button type="button" className="ed2-btn" data-testid="editor-back" onClick={onBack}>
@@ -134,7 +148,10 @@ export function TopBar({
           aria-label="Undo"
           onClick={onUndo}
         >
-          ↶
+          <svg className="i" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M9 14 4 9l5-5" />
+            <path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />
+          </svg>
         </button>
         <button
           type="button"
@@ -145,7 +162,10 @@ export function TopBar({
           aria-label="Redo"
           onClick={onRedo}
         >
-          ↷
+          <svg className="i" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="m15 14 5-5-5-5" />
+            <path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13" />
+          </svg>
         </button>
       </div>
 

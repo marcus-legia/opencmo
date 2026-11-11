@@ -17,7 +17,10 @@ export const config = {
   //
   // Blog và các file SEO là trang TĨNH công khai: không cần phiên, và một vòng
   // `auth.getUser()` cho mỗi lượt crawl là tiền trả cho bot.
+  //
+  // Fonts and the other files in `public/` are static too: each one used to wait on a session check before the
+  // browser could paint text in it.
   matcher: [
-    "/((?!_next/static|_next/image|editor/assets|favicon.ico|blog|robots.txt|sitemap.xml|llms.txt|.*\\.(?:svg|png|jpg|mp4)$).*)",
+    "/((?!_next/static|_next/image|editor/assets|fonts/|favicon.ico|blog|robots.txt|sitemap.xml|llms.txt|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|mp4|woff2?|ttf|otf)$).*)",
   ],
 };

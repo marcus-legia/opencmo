@@ -42,7 +42,7 @@ test("a decision waits on its card: Cancel changes nothing, the card survives a 
     await page.setViewportSize({ width, height: 900 });
     await page.goto("/app");
     const chat = page.locator("#v2-chat");
-    if (width === 390) await page.getByRole("button", { name: "Chat" }).click();
+    // On the feed the chat is the right column (Main.dc.html); at 390 px it stacks under the feed.
     await chat.getByLabel("Ask your CMO").fill("Pause my CMO for now, I'm travelling.");
     await chat.getByLabel("Ask your CMO").press("Enter");
 

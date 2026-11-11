@@ -657,7 +657,7 @@ function script(history: StoredMessage[], offered: ReadonlySet<string> = new Set
 /**
  * Kịch bản CMO chat (scope `cmo`, nhận ra nhờ tool `create_task`):
  *   "research"        → search_reddit → create_task sales (brief kèm URL đầu tiên)
- *   "clip"/"video"    → create_task video (a calendar item with an Upload video button)
+ *   "clip"/"video"/"script" → create_task video (a script and storyboard the founder records, behind its price card)
  *   "plan"            → create_task planner
  *   "draft"/"post"    → create_task x_writer
  *   "calendar"        → list_calendar → nói số mục
@@ -752,7 +752,7 @@ function cmoScript(history: StoredMessage[]): unknown[] {
   if (site) return [text("Reading the site."), use("read_site", { url: site })];
   if (/research/.test(lower)) return [text("Looking at Reddit first."), use("search_reddit", { query: "late invoices" })];
   if (/\b(editor|captions)\b/.test(lower)) return [text("Finding your video."), use("list_projects", {})];
-  if (/clip|video/.test(lower)) return [text("Adding a video task."), use("create_task", { agent: "video", brief: "A short video about how you onboard a new client" })];
+  if (/clip|video|script/.test(lower)) return [text("Ordering a script for the video you record."), use("create_task", { agent: "video", brief: "A 30 second demo of how you onboard a new client" })];
   if (/reddit/.test(lower)) return [text("Scanning Reddit for people who need this."), use("create_task", { agent: "sales", brief: "People who struggle with the problem we solve", when: "now" })];
   if (/plan/.test(lower)) return [text("Planning your week."), use("create_task", { agent: "planner", brief: "A balanced week from the content strategy", when: "now" })];
   if (/draft|post/.test(lower)) return [text("Drafting a post for X."), use("create_task", { agent: "x_writer", brief: "A post from the content strategy", when: "now" })];

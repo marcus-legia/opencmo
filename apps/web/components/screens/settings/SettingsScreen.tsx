@@ -6,6 +6,7 @@ import { ApiError, api, jsonBody } from "@/components/clipping/api";
 import type { AccountSummary } from "@/components/clipping/web/AccountUsage";
 import { ApiKeys } from "@/components/clipping/web/ApiKeys";
 import { ConnectedApps } from "@/components/clipping/web/ConnectedApps";
+import { ThemeSwitch } from "@/components/theme";
 import { Button, MonoLabel } from "@/components/ui";
 import { formatBytes } from "@/lib/upload";
 import { BUDGET_MAX, BUDGET_MIN, type SettingsScreen as Data } from "@/lib/screens/settings";
@@ -39,24 +40,19 @@ export function SettingsScreen({ mcpEndpoint, paid }: { mcpEndpoint: string | nu
   const [state] = useScreen("settings");
 
   return (
-    <Screen label="Settings">
-      <PageHeader eyebrow="Settings" title="Settings" sub="Accounts, budget, notifications and the off switch." sample={state.status === "ready" && isSample(state.live)} />
-      <div className="td-settings">
-        {/* A menu of the page's own parts plus the settings that have their own page (canvas Settings.dc.html). */}
-        <nav className="td-settings-nav" aria-label="Settings">
-          <a href={`#${ACCOUNTS_PANEL_ID}`}>Accounts</a>
-          <a href="#settings-your-cmo">Your CMO</a>
-          <a href="#settings-notify">Notifications</a>
-          <a href="#off-title">Off switch</a>
-          <a href="#api-keys">API keys</a>
-          <span className="td-settings-sep" aria-hidden="true" />
-          <a href="/app/billing">Billing</a>
-          <a href="/app/library?tab=brand">Brand Kit</a>
-        </nav>
+    <div className="v2 scr td-cardhost td-v2host" data-testid="v2-settings">
+      <h1 style={{ margin: "0 0 4px", fontSize: "22px", fontWeight: "600", letterSpacing: "-0.4px" }}>
+        Settings {state.status === "ready" && isSample(state.live) ? <span className="meta">· sample data</span> : null}
+      </h1>
         <div className="td-settings-body">
           {state.status === "loading" && <SkeletonBlocks />}
           {state.status === "error" && <ErrorNote>{state.message}</ErrorNote>}
           {state.status === "ready" && <SettingsBody data={state.data} live={state.live} />}
+          <section aria-labelledby="appearance-title" className="v2-panel" data-testid="settings-appearance">
+            <h2 id="appearance-title">Appearance</h2>
+            <p className="scr-tiny scr-muted">System follows your computer&apos;s light or dark mode.</p>
+            <ThemeSwitch />
+          </section>
           {/* Today's account, API keys and connected apps: kept whole so nothing the old page did is lost. */}
           <AccountPanel />
           <div id="api-keys" className="scr-legacy-cards">
@@ -64,8 +60,7 @@ export function SettingsScreen({ mcpEndpoint, paid }: { mcpEndpoint: string | nu
             <ConnectedApps paid={paid} />
           </div>
         </div>
-      </div>
-    </Screen>
+    </div>
   );
 }
 
@@ -226,7 +221,7 @@ function SettingsBody({ data, live }: { data: Data; live: Record<keyof Data, boo
             </span>
             <span className="scr-off-links">
               <a href="/app/billing">Billing</a>
-              <a href="/app/library?tab=brand">Brand Kit</a>
+              <a href="/app?doc=brand">Brand Kit</a>
               <a href="#api-keys">API keys</a>
             </span>
           </div>

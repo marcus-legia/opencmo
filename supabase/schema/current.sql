@@ -2125,7 +2125,10 @@ begin
     return v || coalesce(v_extra, '{}'::jsonb);
   end if;
   if p_ref_kind = 'opportunity' then
-    select case when platform <> 'reddit' then jsonb_build_object('platform', platform) end into v_extra
+    -- 5.1: what a member needs before posting there, when the rules say it.
+    select coalesce(case when platform <> 'reddit' then jsonb_build_object('platform', platform) end, '{}'::jsonb)
+        || jsonb_strip_nulls(jsonb_build_object('min_karma', min_karma, 'min_account_age_days', min_account_age_days))
+      into v_extra
     from public.opportunities where id = p_ref_id;
     return v || coalesce(v_extra, '{}'::jsonb);
   end if;
@@ -3621,6 +3624,37 @@ $$;
 
 
 --
+-- Name: cmo_corrections_ban_risk(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_corrections_ban_risk() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_message text;
+begin
+  if tg_op = 'UPDATE' and new.rule is not distinct from old.rule and new.status is not distinct from old.status then
+    return new;
+  end if;
+  -- A rule turned off is not followed: it may stay as it is.
+  if new.status = 'rejected' then
+    return new;
+  end if;
+  v_message := public.sales_ban_risk(new.rule, false);
+  if v_message is null then
+    return new;
+  end if;
+  -- A proposal a job made (from edits or ratings) is dropped; the founder's own words or approval is refused.
+  if tg_op = 'INSERT' and (auth.uid() is null or new.status = 'proposed') then
+    return null;
+  end if;
+  raise exception '%', v_message using errcode = '22023';
+end;
+$$;
+
+
+--
 -- Name: cmo_corrections; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -3782,15 +3816,19 @@ CREATE TABLE public.opportunities (
     gen jsonb DEFAULT '{}'::jsonb NOT NULL,
     rule text,
     rule_why text,
+    min_karma integer,
+    min_account_age_days integer,
     CONSTRAINT opportunities_author_check CHECK ((char_length(author) <= 100)),
     CONSTRAINT opportunities_comments_check CHECK ((comments >= 0)),
     CONSTRAINT opportunities_community_check CHECK ((char_length(community) <= 100)),
     CONSTRAINT opportunities_gen_check CHECK (((jsonb_typeof(gen) = 'object'::text) AND (octet_length((gen)::text) <= 256))),
+    CONSTRAINT opportunities_min_account_age_days_check CHECK (((min_account_age_days >= 0) AND (min_account_age_days <= 3650))),
+    CONSTRAINT opportunities_min_karma_check CHECK (((min_karma >= 0) AND (min_karma <= 1000000))),
     CONSTRAINT opportunities_platform_check CHECK ((platform = ANY (ARRAY['reddit'::text, 'hn'::text]))),
     CONSTRAINT opportunities_priority_check CHECK ((priority = ANY (ARRAY['high'::text, 'medium'::text, 'low'::text]))),
     CONSTRAINT opportunities_reply_check CHECK (((char_length(reply) >= 1) AND (char_length(reply) <= 3000))),
     CONSTRAINT opportunities_reply_or_skip CHECK (((reply IS NOT NULL) OR (rule = 'skip'::text))),
-    CONSTRAINT opportunities_rule_check CHECK ((rule = ANY (ARRAY['mention_ok'::text, 'help_only'::text, 'skip'::text]))),
+    CONSTRAINT opportunities_rule_check CHECK ((rule = ANY (ARRAY['safe'::text, 'requires_disclosure'::text, 'no_product_mention'::text, 'not_verified'::text, 'skip'::text, 'mention_ok'::text, 'help_only'::text]))),
     CONSTRAINT opportunities_rule_why_check CHECK ((char_length(rule_why) <= 200)),
     CONSTRAINT opportunities_score_check CHECK (((score >= 0) AND (score <= 100))),
     CONSTRAINT opportunities_score_parts_check CHECK (((jsonb_typeof(score_parts) = 'array'::text) AND (octet_length((score_parts)::text) <= 8192))),
@@ -4453,6 +4491,33 @@ $$;
 
 
 --
+-- Name: cmo_memories_ban_risk(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_memories_ban_risk() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_message text;
+begin
+  if tg_op = 'UPDATE' and new.body is not distinct from old.body and new.topic is not distinct from old.topic then
+    return new;
+  end if;
+  v_message := public.sales_ban_risk(new.body, new.topic = 'sales');
+  if v_message is null or new.topic not in ('general', 'sales') then
+    return new;
+  end if;
+  -- The founder (or their CMO chat, signed in as them) is told why; a note a job writes is dropped.
+  if auth.uid() is not null and new.type in ('user', 'agent') then
+    raise exception '%', v_message using errcode = '22023';
+  end if;
+  return case when tg_op = 'INSERT' then null else old end;
+end;
+$$;
+
+
+--
 -- Name: cmo_memories_classify(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -4559,6 +4624,55 @@ begin
   perform public.cmo_apply_onboarding_answers(v_user, v_handle is not null);
 end;
 $_$;
+
+
+--
+-- Name: cmo_order_script(text, date, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_order_script(p_brief text, p_day date DEFAULT NULL::date, p_brain text DEFAULT NULL::text) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_item public.content_items;
+  v_root public.work_orders;
+  v_order public.work_orders;
+  v_run public.cmo_runs;
+  v_free integer;
+  v_price integer := public.cmo_job_price('write_video_brief');
+  v_input jsonb;
+begin
+  if p_brain is not null and p_brain <> 'claude' then
+    raise exception 'This request is not valid.' using errcode = '22023';
+  end if;
+  v_item := public.cmo_add_item('video', p_brief, coalesce(p_day, current_date), 'Asked in the CMO chat', '{}'::jsonb);
+  v_root := public.work_order_week_root(v_user);
+  v_free := v_root.budget_credits - v_root.spent_credits - coalesce((
+    select sum(budget_credits - spent_credits) from public.work_orders
+    where parent_id = v_root.id and status not in ('done', 'failed', 'cancelled')), 0);
+  -- The founder confirmed this price on the chat's card, so it is theirs to spend, not the brain's weekly budget: when
+  -- the week has less than the price left, the root grows by what is missing and the order spends exactly that. The
+  -- brain gets no more room for its own work, and the order is never "over budget" for a charge the founder chose.
+  if greatest(v_free, 0) < v_price then
+    update public.work_orders set budget_credits = budget_credits + (v_price - greatest(v_free, 0)), updated_at = now()
+    where id = v_root.id;
+  end if;
+  v_order := public.work_order_create(v_user, v_root.week, v_root.id, 'write_video_brief',
+    left('Script for “' || v_item.idea || '”', 200),
+    jsonb_build_object('objective', v_item.idea, 'reason', 'Asked in the CMO chat', 'platform', v_item.platform,
+      'done_when', 'The founder approved the script.'),
+    v_price, (v_item.day + interval '23 hours 59 minutes') at time zone 'UTC', '{}', 'chat',
+    v_item.id);
+  v_input := jsonb_build_object('idea', v_item.idea, 'reason', 'Asked in the CMO chat', 'seconds', public.cmo_video_seconds(),
+    'aspect', '9:16', 'platform', v_item.platform, 'order_id', v_order.id, 'source', 'chat')
+    || case when p_brain = 'claude' then '{"brain": "claude"}'::jsonb else '{}'::jsonb end;
+  v_run := public.cmo_enqueue(v_user, 'write_video_brief', v_input);
+  return jsonb_build_object('item_id', v_item.id, 'order_id', v_order.id, 'run_id', v_run.id, 'status', v_run.status,
+    'day', v_item.day, 'credits', v_run.credits);
+end;
+$$;
 
 
 --
@@ -5516,6 +5630,8 @@ declare
   v_score integer;
   v_gen jsonb;
   v_rule text;
+  v_karma integer;
+  v_age integer;
 begin
   if p_items is null or jsonb_typeof(p_items) <> 'array' or jsonb_array_length(p_items) > 10 then
     raise exception 'These conversations are not valid.' using errcode = '22023';
@@ -5525,17 +5641,26 @@ begin
     v_gen := case when jsonb_typeof(v_item->'gen') = 'object' then jsonb_strip_nulls(jsonb_build_object(
       'model', left(v_item->'gen'->>'model', 100),
       'prompt_version', left(v_item->'gen'->>'prompt_version', 40))) else '{}'::jsonb end;
-    -- The subreddit's rule the draft was written under (P5 R1); a skipped thread is kept without a draft.
-    v_rule := case when v_item->>'rule' in ('mention_ok', 'help_only', 'skip') then v_item->>'rule' end;
+    -- The subreddit's rule the draft was written under (P5 R1, 5.1); a skipped thread is kept without a draft.
+    v_rule := case v_item->>'rule'
+      when 'mention_ok' then 'safe'
+      when 'help_only' then 'no_product_mention'
+      else case when v_item->>'rule' in ('safe', 'requires_disclosure', 'no_product_mention', 'not_verified', 'skip') then v_item->>'rule' end
+    end;
     if v_rule is distinct from 'skip' and coalesce(v_item->>'reply', '') = '' then
       continue;
     end if;
     if coalesce(v_item->>'platform', 'reddit') not in ('reddit', 'hn') then
       raise exception 'A conversation comes from Reddit or Hacker News.' using errcode = '22023';
     end if;
+    -- Clamped while still numeric: a huge number (1e10) cast to integer first would abort the whole scan's save.
+    v_karma := case when jsonb_typeof(v_item->'min_karma') = 'number' and (v_item->>'min_karma')::numeric between 0 and 1000000
+      then (v_item->>'min_karma')::numeric::integer end;
+    v_age := case when jsonb_typeof(v_item->'min_account_age_days') = 'number' and (v_item->>'min_account_age_days')::numeric between 0 and 3650
+      then (v_item->>'min_account_age_days')::numeric::integer end;
     insert into public.opportunities (
       user_id, run_id, platform, url, community, title, author, snippet, posted_at, comments, score, score_parts, reply,
-      priority, gen, rule, rule_why
+      priority, gen, rule, rule_why, min_karma, min_account_age_days
     ) values (
       p_user, p_run, coalesce(v_item->>'platform', 'reddit'), v_item->>'url', left(coalesce(v_item->>'community', ''), 100),
       left(v_item->>'title', 400),
@@ -5544,7 +5669,9 @@ begin
       v_score, coalesce(v_item->'score_parts', '[]'::jsonb),
       case when v_rule = 'skip' then null else left(v_item->>'reply', 3000) end,
       case when v_score >= 85 then 'high' when v_score >= 70 then 'medium' else 'low' end,
-      v_gen, v_rule, left(nullif(trim(coalesce(v_item->>'rule_why', '')), ''), 200)
+      v_gen, v_rule, left(nullif(trim(coalesce(v_item->>'rule_why', '')), ''), 200),
+      case when v_karma between 0 and 1000000 then v_karma end,
+      case when v_age between 0 and 3650 then v_age end
     )
     on conflict (user_id, url) do nothing;
     if found then
@@ -5597,6 +5724,61 @@ begin
   return true;
 end;
 $_$;
+
+
+--
+-- Name: cmo_script_edit_beat(uuid, integer, text, text, timestamp with time zone); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_script_edit_beat(p_order uuid, p_beat integer, p_say text, p_show text, p_version timestamp with time zone) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_order public.work_orders;
+  v_beats integer;
+  v_say text := nullif(trim(coalesce(p_say, '')), '');
+  v_show text := nullif(trim(coalesce(p_show, '')), '');
+  v_beat jsonb;
+begin
+  select * into v_order from public.work_orders
+  where id = p_order and user_id = v_user and kind = 'write_video_brief' for update;
+  if not found or jsonb_typeof(v_order.brief->'storyboard') is distinct from 'array' then
+    raise exception 'Script not found.' using errcode = 'P0002';
+  end if;
+  if not exists (select 1 from public.approvals where user_id = v_user and ref_kind = 'work_order' and ref_id = v_order.id
+                 and kind = 'script' and status in ('approved', 'edited')) then
+    raise exception 'Approve the script first.' using errcode = 'P0001';
+  end if;
+  if p_version is distinct from v_order.updated_at then
+    raise exception 'This script changed. Look at it again before editing.' using errcode = 'P0001';
+  end if;
+  v_beats := jsonb_array_length(v_order.brief->'storyboard');
+  if p_beat is null or p_beat < 1 or p_beat > v_beats then
+    raise exception 'That beat is not in this script.' using errcode = '22023';
+  end if;
+  if v_say is null and v_show is null then
+    raise exception 'Write what to say or what to show.' using errcode = '22023';
+  end if;
+  if char_length(coalesce(v_say, '')) > 300 or char_length(coalesce(v_show, '')) > 300 then
+    raise exception 'Keep each line of a beat under 300 characters.' using errcode = '22023';
+  end if;
+  v_beat := (v_order.brief->'storyboard'->(p_beat - 1))
+    || case when v_say is not null then jsonb_build_object('say', v_say) else '{}'::jsonb end
+    || case when v_show is not null then jsonb_build_object('show', v_show) else '{}'::jsonb end;
+  -- The order's brief is capped at 4096 bytes (`work_orders_brief_check`): say so in words before the constraint does.
+  if octet_length(jsonb_set(v_order.brief, array['storyboard', (p_beat - 1)::text], v_beat)::text) > 4096 then
+    raise exception 'This script is too long to save. Shorten this beat or another one.' using errcode = '22023';
+  end if;
+  update public.work_orders set brief = jsonb_set(brief, array['storyboard', (p_beat - 1)::text], v_beat), updated_at = clock_timestamp()
+  where id = v_order.id
+  returning * into v_order;
+  insert into public.work_order_events (user_id, order_id, department, kind, text)
+  values (v_user, v_order.id, 'writer', 'note', left('You edited beat ' || p_beat || ' of “' || coalesce(v_order.title, 'the script') || '”', 200));
+  return jsonb_build_object('version', v_order.updated_at, 'beat', p_beat, 'say', v_beat->>'say', 'show', v_beat->>'show');
+end;
+$$;
 
 
 --
@@ -12297,6 +12479,28 @@ $$;
 
 
 --
+-- Name: sales_ban_risk(text, boolean); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.sales_ban_risk(p_text text, p_sales boolean) RETURNS text
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO 'public'
+    AS $$
+  select case
+    when p_text is null or not (p_sales or p_text ~* '(reddit|subreddit|hacker news|repl(y|ies)|comments?|threads?|sales)') then null
+    when p_text ~* '(add|include|put|drop|share|paste|insert|post)[^.!?]{0,40}(links?|urls?|websites?|https?:)'
+      then 'Replies never carry a link: most communities remove them and ban the account. Write the rule without the link.'
+    when p_text ~* '((official|company|brand)[^.!?]{0,20}(account|page|team|representative)|on behalf of (the|our|my) (company|team|brand))'
+      then 'Replies come from you, a person, never as an official or company account. Write the rule without that.'
+    when p_text ~* '((long|longer|detailed|full)[^.!?]{0,30}(pitch|promo|promotion|advert)|always (promote|pitch|sell|advertise)|(promote|pitch|sell|advertise)[^.!?]{0,30}(every|each|all) (repl|comment|thread))'
+      then 'Long or constant promotion gets an account banned. Replies help first and name the product at most once.'
+    when p_text ~* '(same (reply|comment|message|answer|text)[^.!?]{0,40}(every|each|all|many|multiple|several)|(copy|paste|reuse|repeat)[^.!?]{0,30}(repl|comment|answer)[^.!?]{0,30}(every|each|all|many|multiple|several|across))'
+      then 'The same reply in many threads reads as spam and gets the account banned. Each reply is written for its thread.'
+  end
+$$;
+
+
+--
 -- Name: sales_mention_count(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -12318,6 +12522,29 @@ CREATE FUNCTION public.sales_mention_count_for(p_user uuid) RETURNS integer
     select mentioned_product from public.cmo_draft_outcomes
     where user_id = p_user and department = 'sales' and action = 'replied'
     order by decided_at desc limit 10) last_ten
+$$;
+
+
+--
+-- Name: sales_rules_backfill(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.sales_rules_backfill() RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_rules integer;
+  v_opps integer;
+begin
+  update public.subreddit_rules set verdict = case verdict when 'mention_ok' then 'safe' else 'no_product_mention' end
+  where verdict in ('mention_ok', 'help_only');
+  get diagnostics v_rules = row_count;
+  update public.opportunities set rule = case rule when 'mention_ok' then 'safe' else 'no_product_mention' end
+  where rule in ('mention_ok', 'help_only');
+  get diagnostics v_opps = row_count;
+  return v_rules + v_opps;
+end;
 $$;
 
 
@@ -17466,9 +17693,14 @@ CREATE TABLE public.subreddit_rules (
     verdict text NOT NULL,
     summary text DEFAULT ''::text NOT NULL,
     read_at timestamp with time zone DEFAULT now() NOT NULL,
+    min_karma integer,
+    min_account_age_days integer,
+    megathread boolean DEFAULT false NOT NULL,
+    CONSTRAINT subreddit_rules_min_account_age_days_check CHECK (((min_account_age_days >= 0) AND (min_account_age_days <= 3650))),
+    CONSTRAINT subreddit_rules_min_karma_check CHECK (((min_karma >= 0) AND (min_karma <= 1000000))),
     CONSTRAINT subreddit_rules_subreddit_check CHECK ((subreddit ~ '^[a-z0-9_]{2,21}$'::text)),
     CONSTRAINT subreddit_rules_summary_check CHECK ((char_length(summary) <= 200)),
-    CONSTRAINT subreddit_rules_verdict_check CHECK ((verdict = ANY (ARRAY['mention_ok'::text, 'help_only'::text, 'skip'::text])))
+    CONSTRAINT subreddit_rules_verdict_check CHECK ((verdict = ANY (ARRAY['safe'::text, 'requires_disclosure'::text, 'no_product_mention'::text, 'not_verified'::text, 'skip'::text, 'mention_ok'::text, 'help_only'::text])))
 );
 
 
@@ -19381,6 +19613,13 @@ CREATE TRIGGER clips_record_storage_deletions BEFORE DELETE ON public.clips FOR 
 
 
 --
+-- Name: cmo_corrections cmo_corrections_ban_risk; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER cmo_corrections_ban_risk BEFORE INSERT OR UPDATE ON public.cmo_corrections FOR EACH ROW EXECUTE FUNCTION public.cmo_corrections_ban_risk();
+
+
+--
 -- Name: cmo_draft_outcomes cmo_draft_outcomes_learn; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -19392,6 +19631,13 @@ CREATE TRIGGER cmo_draft_outcomes_learn AFTER INSERT OR UPDATE OF edit_mode ON p
 --
 
 CREATE TRIGGER cmo_draft_outcomes_platform BEFORE INSERT ON public.cmo_draft_outcomes FOR EACH ROW EXECUTE FUNCTION public.cmo_draft_outcomes_platform();
+
+
+--
+-- Name: cmo_memories cmo_memories_ban_risk; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER cmo_memories_ban_risk BEFORE INSERT OR UPDATE ON public.cmo_memories FOR EACH ROW EXECUTE FUNCTION public.cmo_memories_ban_risk();
 
 
 --

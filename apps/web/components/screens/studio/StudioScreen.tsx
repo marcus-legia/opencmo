@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -46,6 +47,7 @@ export function StudioScreen() {
   const { toast } = useShellState();
   /** The edit a Mark finished or Cut shorts call is running for. */
   const [finishing, setFinishing] = useState<string | null>(null);
+  const [stateFilter, setStateFilter] = useState<"all" | "progress" | "finished">("all");
 
   // The search box lives in the URL (`?q=`), so coming back to Studio shows the same results.
   useEffect(() => {
@@ -149,92 +151,114 @@ export function StudioScreen() {
     cutShorts: (clipId) => void finish(clipId, () => cutShorts(clipId), "Cutting 3 shorts. The batch card comes to your Dashboard"),
   };
 
-  return (
-    <Screen label="Studio">
-      <PageHeader
-        numeral="III"
-        eyebrow="Studio"
-        title="Videos, shorts, slides."
-        sub="Everything here opens in the editor. Shorts are cut only from edits you marked finished."
-        actions={
-          <>
-            <ButtonLink href="/app/editor?panel=upload" variant="secondary">
-              Upload your video
-            </ButtonLink>
-            <NewMenu label="New in the editor" onOpen={(href) => router.push(href)} onError={setError} />
-          </>
-        }
-      />
-      <ScriptsToFilm />
-      <Tabs<Tab> label="Kind" idBase="studio-kind" panel={false} items={TABS.map((t) => ({ id: t.id, label: `${t.label} · ${count(t.id)}` }))} value={tab} onChange={setTab} />
-      <div className="scr-studio-tools">
-        <label className="scr-search">
-          <span aria-hidden="true">⌕</span>
-          <input
-            type="search"
-            data-project-search
-            aria-label="Search videos, shorts, uploads"
-            placeholder="Search videos, shorts, uploads"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-        </label>
-        <button type="button" className="scr-pill" aria-pressed={favorites} onClick={() => setFavorites((on) => !on)}>
-          <span aria-hidden="true">★</span> Favorites
-        </button>
-        <label className="scr-sort">
-          <span className="scr-small scr-muted">Sort</span>
-          <select className="v2-input" value={sort} onChange={(e) => setSort(e.target.value as Sort)}>
-            {SORTS.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.label}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-      {(error || projects.error) && <ErrorNote>{error ?? projects.error}</ErrorNote>}
-      {sampleItems && cards.some((c) => !c.project) && (
-        <p className="scr-tiny scr-muted">
-          <SampleTag /> Generated videos, shorts and slides below are sample data; your uploads are real.
-        </p>
-      )}
+  const STATE_FILTERS = [
+    { id: "all", label: "All" },
+    { id: "progress", label: "In progress" },
+    { id: "finished", label: "Finished" },
+  ] as const;
+  const shownCards = visible.filter((c) =>
+    stateFilter === "all" ? true : stateFilter === "finished" ? c.status === "finished" || c.status === "ready" : !(c.status === "finished" || c.status === "ready"),
+  );
+  const BADGE: Record<Card["status"], [string, string]> = {
+    uploading: ["Uploading", "badge b-run"],
+    processing: ["Transcribing", "badge b-run"],
+    running: ["Being made", "badge b-run"],
+    waiting_founder: ["Waits on you", "badge b-edit"],
+    ready: ["Editing", "badge b-edit"],
+    finished: ["Finished", "badge b-ok"],
+    failed: ["Failed", "badge b-edit"],
+    cancelled: ["Cancelled", "badge b-edit"],
+  };
 
-      <div className="scr-split">
-        <div className="scr-main">
-          {!projects.loaded && screen.status === "loading" ? (
-            <SkeletonBlocks rows={2} />
-          ) : visible.length === 0 ? (
-            <EmptyState
-              title={needle || favorites ? "Nothing matches." : "Nothing here yet."}
-              action={
-                needle || favorites ? (
-                  <Button variant="secondary" onClick={() => { setQuery(""); setFavorites(false); }}>
-                    Clear filters
-                  </Button>
-                ) : (
-                  <ButtonLink href="/app/editor?panel=upload" variant="primary">
-                    Upload your video
-                  </ButtonLink>
-                )
-              }
-            >
-              {needle || favorites ? "Clear the search or the favorites filter to see everything." : "Upload a video you made, or start a new edit."}
-            </EmptyState>
-          ) : (
-            <div className="scr-grid">
-              {visible.map((card) => (
-                <StudioCard key={card.id} card={card} busy={projects.busyId === card.id || (!!finishing && finishing === card.clipId)} actions={actions} />
-              ))}
-            </div>
-          )}
-          {projects.hasMore && (
-            <Button variant="secondary" disabled={projects.loading} onClick={projects.loadMore}>
-              {projects.loading ? "Loading…" : "Load more"}
-            </Button>
-          )}
+  // Projects.dc.html: the editor's home. Scripts to film first (the founder makes the videos), then the projects.
+  return (
+    <div style={{ maxWidth: "1240px", margin: "0 auto", padding: "24px 24px 48px" }} data-testid="v2-studio">
+      <div style={{ display: "flex", alignItems: "flex-end", gap: "12px", flexWrap: "wrap", marginBottom: "20px" }}>
+        <div style={{ flex: "1 1 320px" }}>
+          <h1 style={{ margin: "0", fontSize: "22px", fontWeight: "600", letterSpacing: "-0.4px" }}>Videos</h1>
+          <p style={{ margin: "4px 0 0", color: "var(--muted)", fontSize: "14px" }}>Film from the script, upload the take, fine-tune it here. Cut short clips from a finished video and Post schedules them.</p>
         </div>
-        {screen.status === "ready" && screen.data.team && <TeamPanel team={screen.data.team} sample={!screen.live.team} />}
+        <span className="v2 td-newmenu">
+          <NewMenu label="Blank edit" onOpen={(href) => router.push(href)} onError={setError} />
+        </span>
+        <Link href="/app/editor?panel=upload" className="primary" style={{ textDecoration: "none" }}>
+          <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="17 8 12 3 7 8" />
+            <line x1="12" x2="12" y1="3" y2="15" />
+          </svg>
+          Upload a video
+        </Link>
+      </div>
+
+      <ScriptsToFilm />
+
+      {(error || projects.error) ? <p className="meta" role="alert">{error ?? projects.error}</p> : null}
+      {sampleItems && cards.some((c) => !c.project) ? <p className="meta">Generated videos, shorts and slides below are sample data; your uploads are real.</p> : null}
+
+      <div className="sec" style={{ flexWrap: "wrap" }}>
+        <h2>Projects</h2>
+        <span className="meta">{cards.length}</span>
+        <div style={{ flex: "1 1 auto" }}></div>
+        <label htmlFor="project-search" style={{ position: "absolute", width: "1px", height: "1px", overflow: "hidden", clip: "rect(0 0 0 0)" }}>
+          Search videos, shorts, uploads
+        </label>
+        <input id="project-search" type="search" data-project-search placeholder="Search" value={query} onChange={(e) => setQuery(e.target.value)} className="pill" style={{ width: "160px" }} />
+        <div className="seg" role="tablist" aria-label="Filter projects">
+          {STATE_FILTERS.map((f) => (
+            <button key={f.id} type="button" role="tab" aria-selected={stateFilter === f.id} onClick={() => setStateFilter(f.id)}>
+              {f.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {/* Only once both reads are in: uploads come first, generated items with the screen. */}
+      {shownCards.length === 0 && projects.loaded && screen.status !== "loading" ? (
+        <p className="meta" role="status">
+          {query.trim() ? "Nothing matches." : "Nothing here yet. Upload a video, or start a blank edit."}
+        </p>
+      ) : null}
+      <div className="grid">
+        {shownCards.map((p) => {
+          const tall = p.kind === "short" || p.kind === "post_image";
+          return (
+            <button key={p.id} type="button" className="proj" onClick={() => actions.open(p)} style={{ textAlign: "left", font: "inherit", padding: "0", cursor: "pointer" }}>
+              <span className="thumb" style={p.thumbnailUrl ? { backgroundImage: `url(${p.thumbnailUrl})`, backgroundSize: "cover", backgroundPosition: "center" } : undefined}>
+                {p.thumbnailUrl ? null : tall ? <span className="frame"></span> : <span className="wide"></span>}
+                {p.subtitle.match(/\d+:\d{2}/) ? <span className="dur">{p.subtitle.match(/\d+:\d{2}/)![0]}</span> : null}
+              </span>
+              <span style={{ padding: "10px 12px", display: "flex", flexDirection: "column", gap: "6px" }}>
+                <span style={{ fontWeight: "500", fontSize: "14px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.title}</span>
+                <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                  <span className={BADGE[p.status][1]}>{p.progress !== null && p.status !== "ready" && p.status !== "finished" ? `${BADGE[p.status][0]} ${Math.round(p.progress)}%` : BADGE[p.status][0]}</span>
+                  <span className="meta" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.failure ?? p.subtitle}</span>
+                </span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      {projects.hasMore ? (
+        <div style={{ marginTop: "12px" }}>
+          <button type="button" className="ghost" disabled={projects.loading} onClick={projects.loadMore}>
+            {projects.loading ? "Loading…" : "Load more"}
+          </button>
+        </div>
+      ) : null}
+
+      <div className="drop" style={{ marginTop: "20px" }}>
+        <svg className="i" viewBox="0 0 24 24" aria-hidden="true" style={{ width: "20px", height: "20px", color: "var(--muted)" }}>
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+          <polyline points="17 8 12 3 7 8" />
+          <line x1="12" x2="12" y1="3" y2="15" />
+        </svg>
+        <div style={{ flex: "1 1 300px" }}>
+          <div style={{ fontWeight: "500" }}>Drop your own video here</div>
+          <div className="meta">Any video file, up to 15 minutes. It gets a transcript so you can cut by words.</div>
+        </div>
+        <Link href="/app/editor?panel=upload" className="ghost" style={{ textDecoration: "none" }}>
+          Choose a file
+        </Link>
       </div>
 
       <StudioDrawer
@@ -247,7 +271,7 @@ export function StudioScreen() {
         editStates={editStates}
         finishing={finishing}
       />
-    </Screen>
+    </div>
   );
 }
 
@@ -294,29 +318,50 @@ function ScriptsToFilm() {
   }, []);
   if (scripts.length === 0) return null;
   return (
-    <section className="td-group" aria-labelledby="scripts-to-film">
-      <h2 id="scripts-to-film" className="td-group-head">
-        Scripts to film <span className="v2-num">{scripts.length}</span>
-      </h2>
-      <ul className="td-rows">
-        {scripts.map((d) => (
-          <li key={d.id} className="td-row-item">
-            <div className="td-row">
-              <span className="td-row-tile" aria-hidden="true">
-                <Icon name="video" size={14} />
+    <>
+      <div className="sec">
+        <h2>Scripts to film</h2>
+        <span className="meta">approved in Writer</span>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "28px" }}>
+        {scripts.map((d) => {
+          const total = d.beats.reduce((sum, b) => sum + b.seconds, 0);
+          const camera = d.beats.filter((b) => b.shot === "talking_head").length;
+          return (
+            <div key={d.id} className="script">
+              <span className="st">
+                <svg className="i" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5" />
+                  <rect x="2" y="6" width="14" height="12" rx="2" />
+                </svg>
               </span>
-              <span className="td-row-title">{d.title}</span>
-              <a className="v2-button is-quiet is-compact" href={`/app/script/${encodeURIComponent(d.id)}/prompter`}>
-                <Icon name="smartphone" size={14} />
+              <div style={{ flex: "1 1 280px", minWidth: "0" }}>
+                <div style={{ fontWeight: "500", fontSize: "14.5px" }}>{d.title}</div>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "4px" }}>
+                  <div className="beatbar" aria-hidden="true">
+                    {d.beats.map((b, i) => (
+                      <i key={i} style={{ width: `${Math.max(8, Math.round(b.seconds * 2.2))}px` }}></i>
+                    ))}
+                  </div>
+                  <span className="meta">
+                    {d.beats.length} beats · {total} s · {camera === d.beats.length ? "all to camera" : `${camera} to camera, ${d.beats.length - camera} screen`}
+                  </span>
+                </div>
+              </div>
+              <Link href={`/app/script/${encodeURIComponent(d.id)}/prompter`} className="ghost" style={{ textDecoration: "none" }}>
+                <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
+                  <rect width="14" height="20" x="5" y="2" rx="2" ry="2" />
+                  <path d="M12 18h.01" />
+                </svg>
                 Read on your phone
-              </a>
-              <ButtonLink href="/app/editor?panel=upload" variant="primary" compact>
+              </Link>
+              <Link href="/app/editor?panel=upload" className="primary" style={{ textDecoration: "none" }}>
                 Upload the take
-              </ButtonLink>
+              </Link>
             </div>
-          </li>
-        ))}
-      </ul>
-    </section>
+          );
+        })}
+      </div>
+    </>
   );
 }

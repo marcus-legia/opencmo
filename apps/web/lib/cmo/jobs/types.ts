@@ -184,13 +184,42 @@ export type Opportunity = {
   /** P5 R1: the rule the draft was written under, and why ("r/x forbids self-promotion"). */
   rule?: SubredditVerdict;
   rule_why?: string;
+  /** 5.1: what a member needs before posting there, when the rules say it. */
+  min_karma?: number;
+  min_account_age_days?: number;
   /** P6 R4: where the thread is. Omitted means Reddit (the column's default). */
   platform?: "reddit" | "hn";
 };
 
-/** What a subreddit's rules allow (P5 R1): name the product, help only, or stay out. */
-export type SubredditVerdict = "mention_ok" | "help_only" | "skip";
-export type SubredditRule = { subreddit: string; verdict: SubredditVerdict; summary: string; read_at: string };
+/**
+ * What a subreddit's rules allow (P5 R1, widened in 5.1): name the product (`safe`), name it only with the relation
+ * stated (`requires_disclosure`), help only (`no_product_mention`), help only because the rules could not be read
+ * (`not_verified`), or stay out (`skip`).
+ */
+export const SUBREDDIT_VERDICTS = ["safe", "requires_disclosure", "no_product_mention", "not_verified", "skip"] as const;
+export type SubredditVerdict = (typeof SUBREDDIT_VERDICTS)[number];
+/** Values stored before 5.1, still read from old rows and replays. */
+export type LegacyVerdict = "mention_ok" | "help_only";
+
+/** An old or new stored value → the 5.1 state; anything else reads as not verified (help only). */
+export function toVerdict(value: unknown): SubredditVerdict {
+  if (value === "mention_ok") return "safe";
+  if (value === "help_only") return "no_product_mention";
+  return (SUBREDDIT_VERDICTS as readonly unknown[]).includes(value) ? (value as SubredditVerdict) : "not_verified";
+}
+
+/** Whether a draft under this verdict may name the founder's product. */
+export const mayMention = (verdict: SubredditVerdict) => verdict === "safe" || verdict === "requires_disclosure";
+
+export type SubredditRule = {
+  subreddit: string;
+  verdict: SubredditVerdict;
+  summary: string;
+  read_at: string;
+  min_karma?: number | null;
+  min_account_age_days?: number | null;
+  megathread?: boolean;
+};
 /** The founder's Sales settings (`sales_settings`). */
 export type SalesSettings = { excluded: string[]; pairs: [string, string][] };
 

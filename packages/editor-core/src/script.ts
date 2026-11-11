@@ -67,7 +67,16 @@ export function formatScript(lines: ScriptLine[], maxWords = 2500): string {
 	return out.join('\n');
 }
 
-const token = (text: string): string => text.toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^\p{L}\p{N}']+/gu, '').replace(/^'+|'+$/g, '');
+/** Quotes trimmed from both ends by index: a regex like /^'+|'+$/ backtracks on long runs of quotes (CodeQL). */
+function trimQuotes(text: string): string {
+	let start = 0;
+	let end = text.length;
+	while (start < end && text[start] === "'") start++;
+	while (end > start && text[end - 1] === "'") end--;
+	return text.slice(start, end);
+}
+
+export const token = (text: string): string => trimQuotes(text.toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^\p{L}\p{N}']+/gu, ''));
 
 const tokens = (text: string): string[] => text.split(/\s+/).map(token).filter(Boolean);
 
@@ -85,7 +94,7 @@ export type QuoteHit = { start: number; end: number; score: number; text: string
  * không có mốc từng chữ (YouTube) lưu cả dòng thành một từ — so khớp theo từ
  * thì câu trích ngắn hơn cả dòng không bao giờ khớp.
  */
-function splitWords(words: Word[]): Word[] {
+export function splitWords(words: Word[]): Word[] {
 	return words.flatMap((word) => {
 		const parts = word.text.trim().split(/\s+/).filter(Boolean);
 		if (parts.length <= 1) return [word];
@@ -129,7 +138,7 @@ export function findQuote(input: Word[], quote: string): QuoteHit | null {
 }
 
 /** Độ dài LCS và vị trí (trong `b`) của phần tử khớp đầu và cuối. */
-function lcs(a: string[], b: string[]): { length: number; first: number; last: number } {
+export function lcs(a: string[], b: string[]): { length: number; first: number; last: number } {
 	const rows = a.length + 1;
 	const cols = b.length + 1;
 	const table: number[] = new Array(rows * cols).fill(0);

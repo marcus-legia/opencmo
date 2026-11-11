@@ -17,7 +17,9 @@ const SETTINGS = "/app/settings";
  * `connected=<platform>` or `connect_error=<our sentence>`.
  */
 export const GET = withApi({ rateLimit: { bucket: "accounts", limit: 30, windowSeconds: 3600 } }, async ({ request, supabase, user }) => {
-  const back = new URL(SETTINGS, request.nextUrl.origin);
+  // Built on a placeholder origin and sent as a relative Location: `request.nextUrl.origin` says `localhost` on
+  // 127.0.0.1 or behind a proxy, a host the session cookie is not on (`app/auth/callback/route.ts`).
+  const back = new URL(SETTINGS, "http://opencmo.invalid");
   back.searchParams.set("tab", "accounts");
   try {
     const done = await finishConnect({ adapter: publishAdapter(), store: accountsStore(supabase), userId: user.id }, request.nextUrl.searchParams);
@@ -27,5 +29,5 @@ export const GET = withApi({ rateLimit: { bucket: "accounts", limit: 30, windowS
     if (!(error instanceof PublishError) && !(error instanceof ApiError)) console.error("[accounts] callback failed", error);
     back.searchParams.set("connect_error", error instanceof PublishError ? error.message : "The account was not connected. Try again.");
   }
-  return NextResponse.redirect(back, 303);
+  return new NextResponse(null, { status: 303, headers: { location: `${back.pathname}${back.search}` } });
 });

@@ -10,7 +10,8 @@
     "./transcript": "./src/transcript.ts",
     "./generate": "./src/generate.ts",
     "./capabilities": "./src/capabilities.ts",
-    "./style": "./src/style/index.ts"
+    "./style": "./src/style/index.ts",
+    "./slide-limits": "./src/slide-limits.ts"
   },
   "scripts": {
     "check": "tsc --noEmit",

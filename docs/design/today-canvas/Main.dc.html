@@ -1,0 +1,446 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>OpenCMO Feed</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#f7f6f3}
+@media (prefers-color-scheme:dark){body{background:#121110}}
+a{color:var(--accent)}a:hover{color:var(--accent-hover)}
+.k{--bg:#f7f6f3;--panel:#ffffff;--raised:#f1efeb;--hover:#ebe8e3;--line:#e7e3dc;--line-2:#d8d2c8;--text:#191816;--muted:#625b52;--subtle:#736c62;--accent:#3b4cca;--accent-hover:#2f3fb0;--accent-ink:#ffffff;--ok:#1e8a5e;--warn:#a86a12;--inv:#191816;--inv-panel:#24221f;--inv-text:#f4f1ec;--inv-muted:#aaa397;--inv-line:#3a3733;--top:#ffffff;
+font-family:Geist,ui-sans-serif,system-ui,sans-serif;color:var(--text);background:var(--bg);min-height:100vh;font-size:13px;line-height:1.45;-webkit-font-smoothing:antialiased}
+@media (prefers-color-scheme:dark){.k{--bg:#121110;--panel:#181715;--raised:#201e1c;--hover:#262421;--line:#2a2825;--line-2:#36332f;--text:#f2efe9;--muted:#a59e93;--subtle:#8a847b;--accent:#8b97ff;--accent-hover:#a8b1ff;--accent-ink:#0e1024;--ok:#4cc497;--warn:#e7a948;--inv:#f4f1ec;--inv-panel:#fbf9f6;--inv-text:#171614;--inv-muted:#6e675d;--inv-line:#e2ddd4;--top:#0e0d0c}}
+.rb-bg{fill:var(--panel);stroke:var(--line)}.rb-m{stroke:var(--muted)}.rb-a{stroke:var(--accent)}.rb-t{stroke:var(--text)}.rb-tf{fill:var(--text)}.rb-af{fill:var(--accent)}.rb-ok{fill:var(--ok)}
+.inv .vt{background:var(--inv);border-color:var(--inv-line)}.inv .vt button{color:var(--inv-muted)}.inv .vt button[aria-selected="true"]{background:var(--inv-panel);color:var(--inv-text);box-shadow:0 0 0 1px var(--inv-line)}
+.inv .when{background:var(--inv-panel);border-color:var(--inv-line);color:var(--inv-text)}
+.inv .ghost{color:var(--inv-text);border-color:var(--inv-line)}
+.inv .primary{background:var(--inv-text);color:var(--inv)}
+.k *{box-sizing:border-box}
+.k button{font:inherit;color:inherit;cursor:pointer}
+.k svg.i{width:16px;height:16px;flex-shrink:0;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+.k svg.s{width:14px;height:14px}
+.top{height:48px;display:flex;align-items:center;gap:8px;padding:0 12px;border-bottom:1px solid var(--line);background:var(--top)}
+.ib{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:6px;border:0;background:transparent;color:var(--muted)}
+.ib:hover{background:var(--hover);color:var(--text)}
+.pill{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:6px;border:1px solid var(--line);background:transparent;color:var(--muted);font-size:12.5px}
+.pill:hover{color:var(--text);border-color:var(--line-2)}
+.cols{display:flex;flex-wrap:wrap;min-height:calc(100vh - 48px)}
+.left{flex:1 1 260px;max-width:288px;background:var(--panel);border-right:1px solid var(--line);padding:14px 12px}
+.mid{flex:999 1 520px;min-width:0;display:flex;flex-direction:column}
+.chat{flex:1 1 320px;max-width:380px;background:var(--panel);border-left:1px solid var(--line);display:flex;flex-direction:column}
+.sec{display:flex;align-items:center;justify-content:space-between;margin:0 0 8px}
+.sec h2{margin:0;font-size:13px;font-weight:600;letter-spacing:-0.1px}
+.meta{font-size:11.5px;color:var(--subtle)}
+.chip{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:999px;background:var(--raised);color:var(--muted);font-size:11.5px;border:1px solid var(--line)}
+.doc{display:flex;align-items:flex-start;gap:8px;padding:8px 6px;border-radius:6px;color:var(--text)}
+.doc:hover{background:var(--hover)}
+.doc .u{display:block;font-size:10.5px;color:var(--subtle);margin-top:1px}
+.seg{display:inline-flex;gap:2px;padding:2px;border-radius:8px;background:var(--panel);border:1px solid var(--line)}
+.seg button{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:6px;border:0;background:transparent;color:var(--muted);font-size:12.5px;font-weight:500}
+.seg button[aria-selected="true"]{background:var(--raised);color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.4)}
+.flow{display:flex;align-items:center;gap:4px;flex-wrap:wrap;padding:8px;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
+.flow button{display:flex;align-items:baseline;gap:6px;height:30px;padding:0 10px;border-radius:6px;border:0;background:transparent;color:var(--muted);font-size:12.5px}
+.flow button b{font-weight:600;color:var(--text);font-size:14px}
+.flow button:hover{background:var(--hover)}
+.flow button[aria-pressed="true"]{background:var(--raised);color:var(--text)}
+.flow .ar{color:var(--subtle)}
+.prog{display:inline-block;width:56px;height:4px;border-radius:4px;background:var(--line-2);overflow:hidden;vertical-align:middle;margin-right:8px}
+.prog i{display:block;height:100%;background:var(--ok)}
+.item{border:1px solid var(--line);border-radius:10px;background:var(--panel);overflow:hidden}
+.item.inv{background:var(--inv);border-color:var(--inv);color:var(--inv-text)}
+.row{display:flex;align-items:center;gap:10px;min-height:46px;padding:6px 8px 6px 10px;width:100%;border:0;background:transparent;text-align:left}
+.tile{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:7px;background:var(--raised);border:1px solid var(--line);color:var(--text)}
+.inv .tile{background:var(--inv-panel);border-color:var(--inv-line);color:var(--inv-text)}
+.ttl{flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13.5px;font-weight:500}
+.kind{color:var(--muted);font-weight:400}
+.inv .kind,.inv .meta{color:var(--inv-muted)}
+.skip{height:28px;padding:0 10px;border:0;border-radius:6px;background:transparent;color:var(--muted);font-size:12.5px}
+.inv .skip{color:var(--inv-muted)}
+.skip:hover{color:var(--text)}.inv .skip:hover{color:var(--inv-text)}
+.do{height:28px;padding:0 12px;border-radius:6px;border:1px solid var(--line-2);background:var(--raised);color:var(--text);font-size:12.5px;font-weight:500}
+.do:hover{background:var(--hover)}
+.inv .do{background:var(--inv-text);border-color:var(--inv-text);color:var(--inv)}
+.primary{height:32px;padding:0 14px;border-radius:7px;border:0;background:var(--accent);color:var(--accent-ink);font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.primary:hover{background:var(--accent-hover)}
+.ghost{height:32px;padding:0 12px;border-radius:7px;border:1px solid var(--line-2);background:transparent;color:var(--text);font-size:13px;display:inline-flex;align-items:center;gap:6px}
+.ghost:hover{background:var(--hover)}
+.detail{border-top:1px solid var(--line);padding:14px 14px 14px 48px}
+.inv .detail{border-color:var(--inv-line);background:var(--inv-panel)}
+.vt{display:inline-flex;gap:2px;padding:2px;border-radius:7px;background:var(--bg);border:1px solid var(--line)}
+.vt button{height:24px;padding:0 9px;border:0;border-radius:5px;background:transparent;color:var(--muted);font-size:12px}
+.vt button[aria-selected="true"]{background:var(--raised);color:var(--text)}
+.post{margin:12px 0;font-size:14.5px;line-height:1.55;white-space:pre-line;color:var(--text)}
+.when{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:6px;background:var(--bg);border:1px solid var(--line);color:var(--text);font-size:12.5px}
+.beats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin:12px 0}
+.beat{border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--bg)}
+.beat .h{font-size:10.5px;color:var(--subtle);font-family:"Geist Mono",ui-monospace,monospace;text-transform:uppercase;letter-spacing:.04em}
+.agents{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.agent{display:flex;align-items:center;gap:10px;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--panel);text-align:left}
+.agent:hover{border-color:var(--line-2)}
+.live{position:relative;display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--ok)}
+.live::after{content:"";position:absolute;inset:-3px;border-radius:50%;background:var(--ok);opacity:.35;animation:ping 2.2s cubic-bezier(0,0,.2,1) infinite}
+@keyframes ping{75%,100%{transform:scale(2);opacity:0}}
+.msg{font-size:13.5px;line-height:1.55;color:var(--text)}
+.me{align-self:flex-end;max-width:85%;background:var(--raised);border:1px solid var(--line);border-radius:12px 12px 4px 12px;padding:8px 11px}
+.tool{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 9px;border-radius:6px;background:var(--bg);border:1px solid var(--line);color:var(--muted);font-size:12px}
+.acts{display:flex;gap:2px;margin-top:4px}
+.composer{margin:0 12px 12px;border:1px solid var(--line-2);border-radius:16px;background:var(--bg)}
+.composer textarea{width:100%;min-height:52px;resize:none;border:0;background:transparent;color:var(--text);font:inherit;font-size:13.5px;padding:12px 14px 4px;outline:none}
+.composer textarea::placeholder{color:var(--subtle)}
+.send{width:28px;height:28px;border-radius:8px;border:0;background:var(--text);color:var(--bg);display:inline-flex;align-items:center;justify-content:center}
+@keyframes arm{0%,100%{transform:rotate(-8deg)}50%{transform:rotate(12deg)}}
+@keyframes blink{0%,94%,100%{transform:scaleY(1)}97%{transform:scaleY(.15)}}
+@keyframes line{0%,100%{opacity:.3}50%{opacity:1}}
+.r-arm{transform-origin:27px 27px;animation:arm 3s ease-in-out infinite}
+.r-eye{transform-box:fill-box;transform-origin:center;animation:blink 5s infinite}
+.r-l1{animation:line 3s infinite}.r-l2{animation:line 3s 1s infinite}.r-l3{animation:line 3s 2s infinite}
+@media (prefers-reduced-motion:reduce){.r-arm,.r-eye,.r-l1,.r-l2,.r-l3,.live::after{animation:none}}
+@media (max-width:900px){.left,.chat{max-width:none;border:0;border-top:1px solid var(--line)}.agents{grid-template-columns:repeat(2,minmax(0,1fr))}.beats{grid-template-columns:repeat(2,minmax(0,1fr))}.detail{padding-left:14px}}
+</style>
+</helmet>
+<div class="k">
+
+<header class="top">
+  <button type="button" class="pill" style="color:var(--text);gap:8px;border:0;padding:0 8px">
+    <span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:5px;background:var(--accent);color:var(--accent-ink);font-weight:700;font-size:11px">C</span>
+    <span style="font-weight:600">Cross Push</span>
+    <svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
+  </button>
+  <span style="width:1px;height:18px;background:var(--line-2);margin:0 4px"></span>
+  <span class="pill" style="cursor:default"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4l16 16M20 4 4 20" style="display:none"></path><path d="M17.5 3h3l-6.6 7.5L21.6 21h-6l-4.7-6.1L5.5 21h-3l7.1-8.1L2.4 3h6.1l4.2 5.6z"></path></svg>@xpushapp<span class="live" style="margin-left:2px"></span></span>
+  <button type="button" class="pill"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-4 0v7h-4v-7a6 6 0 0 1 6-6z"></path><rect width="4" height="12" x="2" y="9"></rect><circle cx="4" cy="4" r="2"></circle></svg>Connect LinkedIn</button>
+  <div style="flex:1 1 auto"></div>
+  <span class="pill" style="cursor:default"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v10M9 9.5h4.5a2 2 0 0 1 0 4H10a2 2 0 0 0 0 4h5"></path></svg>212 credits</span>
+  <button type="button" class="pill"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" x2="20" y1="19" y2="19"></line></svg>Logs</button>
+  <button type="button" class="ib" aria-label="Open the editor"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.2 6 3 11l-.9-2.4c-.3-1.1.3-2.2 1.3-2.5l13.5-4c1.1-.3 2.2.3 2.5 1.3Z"></path><path d="m6.2 5.3 3.1 3.9"></path><path d="m12.4 3.4 3.1 4"></path><path d="M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"></path></svg></button>
+  <span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:var(--line-2);font-size:12px;font-weight:600">T</span>
+</header>
+
+<div class="cols">
+
+<aside class="left" aria-label="Context">
+  <div class="sec" style="padding:0 6px"><h2>Context</h2>
+    <button type="button" class="ib" aria-label="Edit context"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"></path></svg></button>
+  </div>
+  <div style="display:flex;flex-wrap:wrap;gap:6px;padding:0 6px;margin-bottom:10px">
+    <span class="chip"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>Solo founder</span>
+    <span class="chip"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"></path><circle cx="7.5" cy="7.5" r=".5"></circle></svg>SaaS</span>
+    <span class="chip"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path><path d="M2 12h20"></path></svg>xpush.app</span>
+  </div>
+  <p style="margin:0 6px 4px;color:var(--muted);font-size:12.5px;line-height:1.5">Founders post a launch brief and find X creators to promote it. Creators list their formats and rates.</p>
+  <button type="button" style="border:0;background:transparent;color:var(--text);font-size:12px;padding:0 6px;margin-bottom:16px;text-decoration:underline;text-underline-offset:2px">View more</button>
+
+  <div style="border-top:1px solid var(--line);padding-top:12px">
+    <div class="sec" style="padding:0 6px"><h2>Documents <span class="meta" style="margin-left:4px">5</span></h2>
+      <button type="button" class="ib" aria-label="Add a document"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"></path><path d="M12 5v14"></path></svg></button>
+    </div>
+    <div class="doc"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true" style="margin-top:2px;color:var(--muted)"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"></path><path d="M14 2v4a2 2 0 0 0 2 2h4"></path><path d="M16 13H8"></path><path d="M16 17H8"></path></svg><div style="flex:1;min-width:0"><span style="font-size:12.5px">Product</span><span class="u">Read by every agent</span></div></div>
+    <div class="doc"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true" style="margin-top:2px;color:var(--muted)"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"></path><path d="M14 2v4a2 2 0 0 0 2 2h4"></path><path d="M16 13H8"></path><path d="M16 17H8"></path></svg><div style="flex:1;min-width:0"><span style="font-size:12.5px">Strategy</span><span class="u">Planner, Writer</span></div><span class="live" style="margin-top:6px" title="Updated today"></span></div>
+    <div class="doc"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true" style="margin-top:2px;color:var(--muted)"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"></path><path d="M14 2v4a2 2 0 0 0 2 2h4"></path><path d="M16 13H8"></path><path d="M16 17H8"></path></svg><div style="flex:1;min-width:0"><span style="font-size:12.5px">Competitors</span><span class="u">Research, Sales</span></div></div>
+    <div class="doc"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true" style="margin-top:2px;color:var(--muted)"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"></path><path d="M14 2v4a2 2 0 0 0 2 2h4"></path><path d="M16 13H8"></path><path d="M16 17H8"></path></svg><div style="flex:1;min-width:0"><span style="font-size:12.5px">Content plan</span><span class="u">Planner, Writer</span></div></div>
+    <div class="doc"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true" style="margin-top:2px;color:var(--muted)"><circle cx="13.5" cy="6.5" r=".5"></circle><circle cx="17.5" cy="10.5" r=".5"></circle><circle cx="8.5" cy="7.5" r=".5"></circle><circle cx="6.5" cy="12.5" r=".5"></circle><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"></path></svg><div style="flex:1;min-width:0"><span style="font-size:12.5px">Brand Kit</span><span class="u">Post images, slideshows</span></div></div>
+  </div>
+
+  <div style="border-top:1px solid var(--line);padding-top:12px;margin-top:10px">
+    <div class="sec" style="padding:0 6px"><h2>Goal this week</h2><span class="meta">7 / 20</span></div>
+    <div style="padding:0 6px">
+      <div style="font-size:12.5px;margin-bottom:6px">20 creator sign-ups</div>
+      <div style="height:4px;border-radius:4px;background:var(--line-2)"><div style="width:35%;height:4px;border-radius:4px;background:var(--accent)"></div></div>
+    </div>
+  </div>
+
+  <div style="border-top:1px solid var(--line);padding-top:12px;margin-top:14px">
+    <div class="sec" style="padding:0 6px"><h2>Competitors <span class="meta" style="margin-left:4px">4</span></h2>
+      <button type="button" class="ib" aria-label="Add a competitor"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"></path><path d="M12 5v14"></path></svg></button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px">
+      <div class="doc" style="align-items:center"><span style="width:16px;height:16px;border-radius:4px;background:#d9467a;display:inline-block"></span><span style="font-size:12.5px">collabstr.com</span></div>
+      <div class="doc" style="align-items:center"><span style="width:16px;height:16px;border-radius:4px;background:#e9773a;display:inline-block"></span><span style="font-size:12.5px">passionfroot.me</span></div>
+      <div class="doc" style="align-items:center"><span style="width:16px;height:16px;border-radius:4px;background:#5b6ee1;display:inline-block"></span><span style="font-size:12.5px">creator.co</span></div>
+      <div class="doc" style="align-items:center"><span style="width:16px;height:16px;border-radius:4px;background:#3aa58a;display:inline-block"></span><span style="font-size:12.5px">collabonly.com</span></div>
+    </div>
+  </div>
+</aside>
+
+<main class="mid">
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 20px;border-bottom:1px solid var(--line)">
+    <div class="seg" role="tablist" aria-label="View">
+      <sc-for list="{{tabs}}" as="t" hint-placeholder-count="3">
+        <button type="button" role="tab" aria-selected="{{t.selected}}" onClick="{{t.pick}}">{{t.label}}</button>
+      </sc-for>
+    </div>
+    <span class="meta">Mon 9 Nov · week 2 of your plan</span>
+  </div>
+
+  <div style="flex:1 1 auto;overflow:auto;padding:18px 24px 40px;max-width:920px;width:100%;margin:0 auto">
+
+    <div style="display:flex;align-items:flex-start;gap:14px;margin-bottom:16px">
+      <svg width="56" height="56" viewBox="0 0 56 56" role="img" aria-label="Your CMO at the planning board" style="flex-shrink:0">
+        <rect class="rb-bg" x="0.75" y="0.75" width="54.5" height="54.5" rx="12" stroke-width="1.5"></rect>
+        <rect class="rb-m" x="31" y="11" width="17" height="14" rx="2" fill="none" stroke-width="1.5"></rect>
+        <line class="r-l1 rb-a" x1="34" y1="15" x2="44" y2="15" stroke-width="1.5" stroke-linecap="round"></line>
+        <line class="r-l2 rb-a" x1="34" y1="18" x2="41" y2="18" stroke-width="1.5" stroke-linecap="round"></line>
+        <line class="r-l3 rb-a" x1="34" y1="21" x2="43" y2="21" stroke-width="1.5" stroke-linecap="round"></line>
+        <line class="rb-m" x1="17" y1="12" x2="17" y2="16" stroke-width="1.5" stroke-linecap="round"></line>
+        <circle class="rb-ok" cx="17" cy="10.5" r="1.8"></circle>
+        <rect class="rb-t" x="9" y="16" width="16" height="12" rx="4" fill="none" stroke-width="1.5"></rect>
+        <circle class="r-eye rb-tf" cx="14" cy="22" r="1.4"></circle>
+        <circle class="r-eye rb-tf" cx="20" cy="22" r="1.4"></circle>
+        <rect class="rb-t" x="10" y="31" width="14" height="13" rx="3.5" fill="none" stroke-width="1.5"></rect>
+        <g class="r-arm"><line class="rb-t" x1="24" y1="34" x2="31" y2="27" stroke-width="1.5" stroke-linecap="round"></line><circle class="rb-af" cx="31.5" cy="26.5" r="1.4"></circle></g>
+        <line class="rb-t" x1="14" y1="44" x2="14" y2="48" stroke-width="1.5" stroke-linecap="round"></line>
+        <line class="rb-t" x1="20" y1="44" x2="20" y2="48" stroke-width="1.5" stroke-linecap="round"></line>
+      </svg>
+      <div style="flex:1 1 auto;min-width:0">
+        <div style="display:flex;align-items:center;gap:8px">
+          <h1 style="margin:0;font-size:22px;font-weight:600;letter-spacing:-0.4px;line-height:28px">Welcome back, Trung.</h1>
+          <span class="live" title="Your CMO is working"></span>
+        </div>
+        <p style="margin:4px 0 0;color:var(--muted);font-size:13px;line-height:18px">{{headline}}</p>
+      </div>
+      <button type="button" class="ib" aria-label="Refresh"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path><path d="M21 3v5h-5"></path><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path><path d="M8 16H3v5"></path></svg></button>
+    </div>
+
+    <div class="flow" role="group" aria-label="This week's workflow" style="margin-bottom:22px">
+      <sc-for list="{{steps}}" as="s" hint-placeholder-count="5">
+        <span style="display:inline-flex;align-items:center;gap:4px">
+          <button type="button" aria-pressed="{{s.pressed}}" onClick="{{s.pick}}"><b>{{s.count}}</b>{{s.label}}</button>
+          <sc-if value="{{s.arrow}}" hint-placeholder-val="{{ true }}"><svg class="i s ar" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></sc-if>
+        </span>
+      </sc-for>
+    </div>
+
+    <div class="sec"><h2>{{listTitle}}</h2><span class="meta"><span class="prog" aria-hidden="true"><i style="width:{{progress}}"></i></span>{{doneLine}}</span></div>
+
+    <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:26px">
+
+      <sc-if value="{{showPost}}" hint-placeholder-val="{{ true }}">
+      <div class="item inv">
+        <button type="button" class="row" onClick="{{togglePost}}" aria-expanded="{{postOpen}}">
+          <span class="tile"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M17.5 3h3l-6.6 7.5L21.6 21h-6l-4.7-6.1L5.5 21h-3l7.1-8.1L2.4 3h6.1l4.2 5.6z"></path></svg></span>
+          <span class="ttl"><span class="kind">X post · </span>Screenshots are not proof that a creator posted</span>
+          <span class="meta">Tue 9:30</span>
+          <svg class="i s" viewBox="0 0 24 24" aria-hidden="true" style="color:var(--inv-muted)"><path d="m6 9 6 6 6-6"></path></svg>
+        </button>
+        <sc-if value="{{postOpen}}" hint-placeholder-val="{{ true }}">
+        <div class="detail">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <div class="vt" role="tablist" aria-label="Versions">
+              <sc-for list="{{versions}}" as="v" hint-placeholder-count="3">
+                <button type="button" role="tab" aria-selected="{{v.selected}}" onClick="{{v.pick}}">{{v.label}}</button>
+              </sc-for>
+            </div>
+            <span class="meta">Writer · angle from your strategy: verified delivery</span>
+          </div>
+          <p class="post" style="color:var(--inv-text)">{{postText}}</p>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <button type="button" class="when"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><rect width="18" height="18" x="3" y="4" rx="2"></rect><path d="M16 2v4"></path><path d="M8 2v4"></path><path d="M3 10h18"></path></svg>Tue 10 Nov, 9:30 · @xpushapp</button>
+            <div style="flex:1 1 auto"></div>
+            <button type="button" class="skip">Skip</button>
+            <button type="button" class="ghost"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"></path></svg>Edit</button>
+            <button type="button" class="primary" onClick="{{approvePost}}"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>Approve and schedule</button>
+          </div>
+        </div>
+        </sc-if>
+      </div>
+      </sc-if>
+
+      <sc-if value="{{showScript}}" hint-placeholder-val="{{ true }}">
+      <div class="item">
+        <button type="button" class="row" onClick="{{toggleScript}}" aria-expanded="{{scriptOpen}}">
+          <span class="tile"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.2 6 3 11l-.9-2.4c-.3-1.1.3-2.2 1.3-2.5l13.5-4c1.1-.3 2.2.3 2.5 1.3Z"></path><path d="m6.2 5.3 3.1 3.9"></path><path d="m12.4 3.4 3.1 4"></path><path d="M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"></path></svg></span>
+          <span class="ttl"><span class="kind">Script · you record · </span>Post a launch brief in under a minute</span>
+          <span class="meta">45 s</span>
+          <sc-if value="{{scriptClosed}}" hint-placeholder-val="{{ true }}">
+            <span class="skip" style="display:inline-flex;align-items:center">Not now</span>
+            <span class="do" style="display:inline-flex;align-items:center">Review</span>
+          </sc-if>
+        </button>
+        <sc-if value="{{scriptOpen}}" hint-placeholder-val="{{ false }}">
+        <div class="detail">
+          <div class="beats">
+            <div class="beat"><div class="h">01 · To camera · 6s</div><div style="margin-top:4px">"Creators keep sending screenshots as proof."</div></div>
+            <div class="beat"><div class="h">02 · Screen · 15s</div><div style="margin-top:4px">Fill in the brief, pick three creators.</div></div>
+            <div class="beat"><div class="h">03 · Screen · 14s</div><div style="margin-top:4px">The live post check marks it delivered.</div></div>
+            <div class="beat"><div class="h">04 · To camera · 10s</div><div style="margin-top:4px">"No commission. Link in bio."</div></div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+            <button type="button" class="skip">Skip</button>
+            <button type="button" class="ghost">Edit a beat</button>
+            <button type="button" class="primary" onClick="{{approveScript}}">Approve and open in editor</button>
+          </div>
+        </div>
+        </sc-if>
+      </div>
+      </sc-if>
+
+      <sc-if value="{{showShorts}}" hint-placeholder-val="{{ true }}">
+      <div class="item">
+        <div class="row">
+          <span class="tile"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="6" r="3"></circle><path d="M8.12 8.12 12 12"></path><path d="M20 4 8.12 15.88"></path><circle cx="6" cy="18" r="3"></circle><path d="M14.8 14.8 20 20"></path></svg></span>
+          <span class="ttl"><span class="kind">3 shorts · </span>cut from "How Cross Push checks delivery"</span>
+          <span class="meta">Wed–Fri</span>
+          <button type="button" class="skip">Not now</button>
+          <button type="button" class="do" onClick="{{approveShorts}}">Approve all</button>
+        </div>
+      </div>
+      </sc-if>
+
+      <sc-if value="{{showReddit}}" hint-placeholder-val="{{ true }}">
+      <div class="item">
+        <div class="row">
+          <span class="tile"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"></path></svg></span>
+          <span class="ttl"><span class="kind">Reddit · r/SaaS · </span>How do you prove an influencer actually posted?</span>
+          <span class="meta">8/10</span>
+          <button type="button" class="skip">Dismiss</button>
+          <button type="button" class="do" onClick="{{approveReddit}}">Copy reply</button>
+        </div>
+      </div>
+      </sc-if>
+
+      <sc-if value="{{showScheduled}}" hint-placeholder-val="{{ false }}">
+      <div class="item"><div class="row"><span class="tile"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M17.5 3h3l-6.6 7.5L21.6 21h-6l-4.7-6.1L5.5 21h-3l7.1-8.1L2.4 3h6.1l4.2 5.6z"></path></svg></span><span class="ttl"><span class="kind">X post · </span>We shipped the live post check</span><span class="meta">Tue 9:30</span></div></div>
+      <div class="item"><div class="row"><span class="tile"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 3h20"></path><path d="M21 3v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V3"></path><path d="m7 21 5-5 5 5"></path></svg></span><span class="ttl"><span class="kind">Slideshow · </span>5 ways to vet a creator</span><span class="meta">Wed 12:00</span></div></div>
+      <div class="item"><div class="row"><span class="tile"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-4 0v7h-4v-7a6 6 0 0 1 6-6z"></path><rect width="4" height="12" x="2" y="9"></rect><circle cx="4" cy="4" r="2"></circle></svg></span><span class="ttl"><span class="kind">LinkedIn · you post · </span>Why we take no commission</span><span class="meta">Thu 18:00</span></div></div>
+      </sc-if>
+
+      <sc-if value="{{showMaking}}" hint-placeholder-val="{{ false }}">
+      <div class="item"><div class="row"><span class="tile"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 3h20"></path><path d="M21 3v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V3"></path><path d="m7 21 5-5 5 5"></path></svg></span><span class="ttl"><span class="kind">Studio · </span>Building slides for "5 ways to vet a creator"</span><span class="live"></span><span class="meta" style="margin-left:6px">about 2 min</span></div></div>
+      </sc-if>
+
+      <sc-if value="{{showPosted}}" hint-placeholder-val="{{ false }}">
+      <div class="item"><div class="row"><span class="tile"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M17.5 3h3l-6.6 7.5L21.6 21h-6l-4.7-6.1L5.5 21h-3l7.1-8.1L2.4 3h6.1l4.2 5.6z"></path></svg></span><span class="ttl"><span class="kind">X post · Sat · </span>Proof of delivery, explained</span><span class="meta">2,140 views</span></div></div>
+      <div class="item"><div class="row"><span class="tile"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"></path></svg></span><span class="ttl"><span class="kind">Reddit · Sun · </span>r/startups reply</span><span class="meta">4 upvotes</span></div></div>
+      </sc-if>
+
+      <sc-if value="{{allDone}}" hint-placeholder-val="{{ false }}">
+      <div class="item"><div class="row" style="justify-content:center;color:var(--muted)"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true" style="color:var(--ok)"><path d="M20 6 9 17l-5-5"></path></svg>Nothing waits on you. Tomorrow's post is written overnight.</div></div>
+      </sc-if>
+    </div>
+
+    <div class="sec"><h2>Agents</h2><span class="meta">6 working for you</span></div>
+    <div class="agents">
+      <button type="button" class="agent"><span class="tile"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><rect width="18" height="18" x="3" y="4" rx="2"></rect><path d="M16 2v4"></path><path d="M8 2v4"></path><path d="M3 10h18"></path></svg></span><span style="min-width:0"><span style="display:block;font-weight:500">Planner</span><span class="meta">Next plan Sunday</span></span></button>
+      <button type="button" class="agent"><span class="tile"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"></path></svg></span><span style="min-width:0;flex:1"><span style="display:block;font-weight:500">Writer</span><span class="meta">Drafting Thursday</span></span><span class="live"></span></button>
+      <button type="button" class="agent"><span class="tile"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 3h20"></path><path d="M21 3v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V3"></path><path d="m7 21 5-5 5 5"></path></svg></span><span style="min-width:0;flex:1"><span style="display:block;font-weight:500">Studio</span><span class="meta">Building slides</span></span><span class="live"></span></button>
+      <button type="button" class="agent"><span class="tile"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="m3 11 18-5v12L3 14v-3z"></path><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"></path></svg></span><span style="min-width:0"><span style="display:block;font-weight:500">Publisher</span><span class="meta">3 scheduled</span></span></button>
+      <button type="button" class="agent"><span class="tile"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"></path></svg></span><span style="min-width:0"><span style="display:block;font-weight:500">Sales</span><span class="meta">3 threads found</span></span></button>
+      <button type="button" class="agent"><span class="tile"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg></span><span style="min-width:0"><span style="display:block;font-weight:500">Research</span><span class="meta">Last run Sunday</span></span></button>
+    </div>
+  </div>
+</main>
+
+<aside class="chat" aria-label="Chat with your CMO">
+  <div style="height:44px;display:flex;align-items:center;gap:4px;padding:0 8px;border-bottom:1px solid var(--line)">
+    <button type="button" class="pill" style="border:0;color:var(--text);font-weight:500">Demo video script<svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></button>
+    <div style="flex:1 1 auto"></div>
+    <button type="button" class="ib" aria-label="New chat"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path><path d="M12 7v6"></path><path d="M9 10h6"></path></svg></button>
+    <button type="button" class="ib" aria-label="More"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg></button>
+  </div>
+  <div style="flex:1 1 auto;overflow:auto;padding:16px 14px;display:flex;flex-direction:column;gap:14px">
+    <div class="msg me">Write me a script for a short demo video.</div>
+    <div>
+      <span class="tool"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"></path></svg>Writer · script · 1 credit</span>
+      <p class="msg" style="margin:8px 0 0">Done: a 45 s Short, "Post a launch brief in under a minute", four beats. It's second in your list. Approve it and the editor opens with one marker per beat.</p>
+      <div class="acts">
+        <button type="button" class="ib" aria-label="Copy"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg></button>
+        <button type="button" class="ib" aria-label="Good answer"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10v12"></path><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z"></path></svg></button>
+        <button type="button" class="ib" aria-label="Bad answer"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M17 14V2"></path><path d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88Z"></path></svg></button>
+      </div>
+    </div>
+    <div class="msg me">What did best last week?</div>
+    <div>
+      <p class="msg" style="margin:0">Saturday's post on proof of delivery: 2,140 views, about three times your average. Two of this week's posts reuse that angle.</p>
+    </div>
+  </div>
+  <div class="composer">
+    <label for="ask" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Ask your CMO</label>
+    <textarea id="ask" rows="1" placeholder="Ask your CMO… type @ to call an agent"></textarea>
+    <div style="display:flex;align-items:center;gap:2px;padding:4px 8px 8px">
+      <button type="button" class="ib" aria-label="Attach a file"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg></button>
+      <button type="button" class="ib" aria-label="Call an agent"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8"></path></svg></button>
+      <div style="flex:1 1 auto"></div>
+      <button type="button" class="send" aria-label="Send"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 7-7 7 7"></path><path d="M12 19V5"></path></svg></button>
+    </div>
+  </div>
+</aside>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { filter: 'waiting', version: 0, done: {}, open: 'post', tab: 'feed' };
+  }
+  renderVals() {
+    var s = this.state, self = this, done = s.done;
+    var ids = ['post', 'script', 'shorts', 'reddit'];
+    var left = ids.filter(function (id) { return !done[id]; }).length;
+    var approved = 4 - left;
+    var defs = [
+      { id: 'written', label: 'planned', count: 9 },
+      { id: 'waiting', label: 'waiting on you', count: left },
+      { id: 'making', label: 'being made', count: 1 },
+      { id: 'scheduled', label: 'scheduled', count: 3 + approved },
+      { id: 'posted', label: 'posted', count: 2 }
+    ];
+    var steps = defs.map(function (d, i) {
+      return { label: d.label, count: d.count, arrow: i < defs.length - 1, pressed: s.filter === d.id ? 'true' : 'false', pick: function () { self.setState({ filter: d.id }); } };
+    });
+    var tabs = [['feed', 'Feed'], ['calendar', 'Calendar'], ['analytics', 'Analytics']].map(function (t) {
+      return { label: t[1], selected: s.tab === t[0] ? 'true' : 'false', pick: function () { self.setState({ tab: t[0] }); } };
+    });
+    var texts = [
+      'Screenshots are not proof that a creator posted.\nCross Push checks the live post on X before the creator gets paid. If the post comes down, you see it.',
+      'A creator sent us a screenshot of a post that was gone an hour later.\nSo Cross Push checks the live post, not the screenshot.',
+      'We check every sponsored post on X while it is live.\nNo screenshots, no commission. You pay the creator directly.'
+    ];
+    var versions = [0, 1, 2].map(function (i) {
+      return { label: 'V' + (i + 1), selected: s.version === i ? 'true' : 'false', pick: function () { self.setState({ version: i }); } };
+    });
+    var approve = function (id) { return function () { var d = Object.assign({}, self.state.done); d[id] = true; self.setState({ done: d, open: null }); }; };
+    var toggle = function (id) { return function () { self.setState({ open: self.state.open === id ? null : id }); }; };
+    var f = s.filter;
+    var titles = { written: 'Planned this week', waiting: 'Today', making: 'Being made', scheduled: 'Scheduled', posted: 'Posted' };
+    var w = f === 'waiting' || f === 'written';
+    return {
+      tabs: tabs,
+      headline: left === 0 ? 'Nothing waits on you today.' : left + (left === 1 ? ' item needs' : ' items need') + ' your attention today. Approve, edit or skip.',
+      steps: steps,
+      versions: versions,
+      postText: texts[s.version],
+      listTitle: titles[f],
+      doneLine: approved + ' of 4 done',
+      progress: (approved * 25) + '%',
+      postOpen: s.open === 'post',
+      scriptOpen: s.open === 'script',
+      scriptClosed: s.open !== 'script',
+      togglePost: toggle('post'),
+      toggleScript: toggle('script'),
+      showPost: w && !done.post,
+      showScript: w && !done.script,
+      showShorts: w && !done.shorts,
+      showReddit: w && !done.reddit,
+      showScheduled: f === 'scheduled',
+      showMaking: f === 'making',
+      showPosted: f === 'posted',
+      allDone: f === 'waiting' && left === 0,
+      approvePost: approve('post'),
+      approveScript: approve('script'),
+      approveShorts: approve('shorts'),
+      approveReddit: approve('reddit')
+    };
+  }
+}
+</script>
+</body>
+</html>

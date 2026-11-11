@@ -1,0 +1,26 @@
+{
+  "$comment": "Founder rules that would get a Reddit account banned (groups 4-5 plan, 5.3). One list for the SQL triggers (migration 20270115040000, `~*`) and the zod at the routes (`apps/web/lib/cmo/sales/ban-risk.ts`, RegExp with the i flag). Patterns use only syntax both engines read the same way: no \\b, no lookarounds. `ban-risk.check.ts` checks the SQL copy matches this file. A rule is refused when it matches a pattern and is about Sales: a memory with topic sales, or words in `scope`.",
+  "scope": "(reddit|subreddit|hacker news|repl(y|ies)|comments?|threads?|sales)",
+  "rules": [
+    {
+      "id": "link",
+      "pattern": "(add|include|put|drop|share|paste|insert|post)[^.!?]{0,40}(links?|urls?|websites?|https?:)",
+      "message": "Replies never carry a link: most communities remove them and ban the account. Write the rule without the link."
+    },
+    {
+      "id": "official",
+      "pattern": "((official|company|brand)[^.!?]{0,20}(account|page|team|representative)|on behalf of (the|our|my) (company|team|brand))",
+      "message": "Replies come from you, a person, never as an official or company account. Write the rule without that."
+    },
+    {
+      "id": "promo",
+      "pattern": "((long|longer|detailed|full)[^.!?]{0,30}(pitch|promo|promotion|advert)|always (promote|pitch|sell|advertise)|(promote|pitch|sell|advertise)[^.!?]{0,30}(every|each|all) (repl|comment|thread))",
+      "message": "Long or constant promotion gets an account banned. Replies help first and name the product at most once."
+    },
+    {
+      "id": "same_reply",
+      "pattern": "(same (reply|comment|message|answer|text)[^.!?]{0,40}(every|each|all|many|multiple|several)|(copy|paste|reuse|repeat)[^.!?]{0,30}(repl|comment|answer)[^.!?]{0,30}(every|each|all|many|multiple|several|across))",
+      "message": "The same reply in many threads reads as spam and gets the account banned. Each reply is written for its thread."
+    }
+  ]
+}

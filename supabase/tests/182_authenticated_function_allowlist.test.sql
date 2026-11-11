@@ -58,7 +58,9 @@ insert into allowed values
   ('cmo_decide_opportunity(uuid,text,text,text)'),
   ('cmo_decide_post(uuid,text,text,text)'),
   ('cmo_edit_correction(uuid,text,boolean)'),
+  ('cmo_order_script(text,date,text)'),
   ('cmo_post_myself(uuid,text,text)'),
+  ('cmo_script_edit_beat(uuid,integer,text,text,timestamp with time zone)'),
   -- CMO review 3, B0: a founder asks about themselves only (another account is not found).
   ('cmo_require_paid(uuid)'),
   -- CMO review 3, 3.2: steps on the founder's own onboarding run, and the three optional answers.

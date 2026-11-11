@@ -180,13 +180,11 @@ test("Studio cards 1–3 decide live: a stale hash is refused, a beat is edited,
   const card2 = await waitingCard(db, "studio_step", sheetId);
   card = await cardPage(page, card2!.id);
   await expect(card).toContainText("Text may be garbled");
-  await card.getByRole("button", { name: "Redo a keyframe" }).click();
-  await card.getByRole("radio", { name: /Keyframe 02/ }).check();
-  await card.getByRole("button", { name: "Redo keyframe 2" }).click();
-  await expect.poll(async () => (await db.from("studio_steps").select("decision, decision_payload").eq("id", sheetId).single()).data).toMatchObject({
-    decision: "redo",
-    decision_payload: { index: 1 },
-  });
+  // No keyframe redo from the card since the S2 review (2026-11-08): it failed the whole order. The editor's
+  // `redo_keyframe` does it after the price is approved, and the card says so.
+  await expect(card.getByRole("button", { name: /Redo/ })).toHaveCount(0);
+  await expect(card).toContainText("Redo a keyframe in the editor after you approve");
+  // Left waiting: cancelling it would cancel the order, and the render below raises card 3 only for a running order.
 
   // Card 3: the render of the edit as it is now raises the finished video; approving marks it finished.
   await db.from("studio_steps").insert({
@@ -203,6 +201,16 @@ test("Studio cards 1–3 decide live: a stale hash is refused, a beat is edited,
     // What the order runner records once the shots are made: the render comes next.
     next: { tool: "render" },
   });
+  // The look check (P6) reads the full-size export before the card is raised; this stack has no real export, so the
+  // order's check is recorded as passed: the render then raises the card at once, as a passed check does.
+  expect(
+    (
+      await db.from("look_checks").insert({
+        user_id: user.id, ref_kind: "editor_project", ref_id: video.clipId, order_id: orderId, round: 0,
+        doc_key: video.hash, status: "passed", settled_at: new Date().toISOString(), raised_at: new Date().toISOString(),
+      })
+    ).error,
+  ).toBeNull();
   const taskId = randomUUID();
   expect(
     (
@@ -220,7 +228,9 @@ test("Studio cards 1–3 decide live: a stale hash is refused, a beat is edited,
       })
     ).error,
   ).toBeNull();
-  await db.from("tasks").update({ status: "done", output_path: `${user.id}/e2e.mp4`, finished_at: new Date().toISOString() }).eq("id", taskId);
+  // The full-size export's own path (`<user>/<clip>/<task>.mp4`): the look check reads nothing else.
+  await db.from("tasks").update({ status: "done", output_path: `${user.id}/${video.clipId}/${taskId}.mp4`, finished_at: new Date().toISOString() }).eq("id", taskId);
+  await expect.poll(async () => (await waitingCard(db, "editor_project", video.clipId))?.id ?? null, { timeout: 30_000 }).not.toBeNull();
   const card3 = await waitingCard(db, "editor_project", video.clipId);
   expect(card3).not.toBeNull();
   card = await cardPage(page, card3!.id);
@@ -254,17 +264,19 @@ test("Mark finished on Studio shows the badge; an edit after it clears it", asyn
   await signIn(page, user);
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/app/studio?kind=video");
-  const item = page.locator("article.scr-card").filter({ hasText: "Editor launch" });
-  await item.getByTestId("studio-mark-finished").click();
-  await expect(item.getByText("Finished", { exact: true })).toBeVisible();
-  await expect(item.getByTestId("studio-cut-shorts")).toBeVisible();
+  // Projects.dc.html: a project opens its drawer, where Mark finished and Cut shorts live.
+  await page.locator("button.proj").filter({ hasText: "Editor launch" }).click();
+  const drawer = page.getByRole("dialog");
+  await drawer.getByTestId("studio-mark-finished").click();
+  await expect(drawer.getByTestId("studio-cut-shorts")).toBeVisible();
   expect((await db.from("editor_projects").select("finished_hash").eq("clip_id", video.clipId).single()).data?.finished_hash).toBe(video.hash);
 
   // Any later edit of the document clears the mark (A3's trigger); Studio shows it after a reload.
   await db.from("editor_projects").update({ document: { version: 1, stage: { name: "Editor launch v2" } } }).eq("clip_id", video.clipId);
+  // The drawer is in the URL (`?item=`): the reload opens it again.
   await page.reload();
-  await expect(item.getByTestId("studio-mark-finished")).toBeVisible();
-  await expect(item.getByText("Finished", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("dialog").getByTestId("studio-mark-finished")).toBeVisible();
+  await expect(page.getByRole("dialog").getByTestId("studio-cut-shorts")).toHaveCount(0);
 });
 
 test("approving a shorts batch puts the three shorts in Studio", async ({ page }) => {
@@ -307,7 +319,7 @@ test("approving a shorts batch puts the three shorts in Studio", async ({ page }
   await expect.poll(async () => (await db.from("deliverables").select("id").eq("user_id", user.id).eq("kind", "short")).data?.length).toBe(3);
 
   await page.goto("/app/studio?kind=short");
-  const item = page.locator("article.scr-card").filter({ hasText: "3 shorts" });
+  const item = page.locator("button.proj").filter({ hasText: "3 shorts" });
   await expect(item).toBeVisible();
-  await expect(item.getByText("Finished", { exact: true })).toBeVisible();
+  await expect(item).toContainText("Finished");
 });

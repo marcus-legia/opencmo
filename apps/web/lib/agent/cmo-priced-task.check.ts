@@ -48,7 +48,14 @@ async function main() {
     { agent: "sales", brief: "x" },
     // create_task refuses `thread` on sales: refused at once, not after the founder approved a card.
     { agent: "sales", brief: "Founders who chase late invoices", when: "now", thread: true },
+    // `have_video` belongs to video: no 5-credit card for a task create_task would then refuse (review of #188).
+    { agent: "sales", brief: "Founders who chase late invoices", when: "now", have_video: true },
+    // A video the founder already has is a free reminder, not a script.
+    { agent: "video", brief: "Post the demo I recorded", have_video: true },
   ]) assert.equal(pricedTaskCard(input), null, JSON.stringify(input));
+  // A script (I0) is priced on any day: the day is when the founder means to film.
+  const script = pricedTaskCard({ agent: "video", brief: "A 30 second demo", when: "2026-11-20" });
+  assert.equal(script?.card.credits, JOB_PRICES.write_video_brief);
 
   // In the chat: the scan asked for stops at a card, and nothing is queued or held.
   const { client, rpcs } = fake();

@@ -197,6 +197,25 @@ export function StudioDrawer({
                   </ButtonLink>
                 )}
                 {view.approvalId && <ButtonLink href={`/app/inbox/${encodeURIComponent(view.approvalId)}`}>Open the approval</ButtonLink>}
+                {/* A built video's own decisions, which the Studio card held before the Projects grid (Projects.dc.html):
+                    Mark finished, then Cut shorts from the finished edit. */}
+                {card && card.clipId && (card.canMarkFinished || card.canCutShorts) ? (
+                  <span className="v2-actions">
+                    {card.canMarkFinished && card.documentHash ? (
+                      <Button compact variant="secondary" disabled={busy || finishing === card.clipId} data-testid="studio-mark-finished" onClick={() => actions.markFinished(card.clipId!, card.documentHash!)}>
+                        Mark finished
+                      </Button>
+                    ) : null}
+                    {card.canCutShorts ? (
+                      <>
+                        <Chip tone="posted">Finished</Chip>
+                        <Button compact variant="secondary" disabled={busy || finishing === card.clipId} data-testid="studio-cut-shorts" onClick={() => actions.cutShorts(card.clipId!)}>
+                          Cut shorts
+                        </Button>
+                      </>
+                    ) : null}
+                  </span>
+                ) : null}
               </>
             )}
 

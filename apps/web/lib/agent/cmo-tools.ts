@@ -14,7 +14,7 @@ import { z } from "zod";
 import { ApiError } from "@/lib/api/errors";
 import { firstRow, rpcOrThrow, type SupabaseClient } from "@/lib/api/handler";
 import { clampDocument, DOCUMENT_KINDS, DOCUMENT_SCHEMAS, DOCUMENTS, wasCut, type DocumentKind } from "@/lib/cmo/documents";
-import { researchCard, salesScanCard, type PriceCard } from "@/lib/cmo/jobs/price-card";
+import { researchCard, salesScanCard, scriptCard, type PriceCard } from "@/lib/cmo/jobs/price-card";
 import { startCmoRun } from "@/lib/cmo/jobs/start";
 import { insightBlock, latestPerTopic } from "@/lib/cmo/jobs/context";
 import { mondayOf } from "@/lib/cmo/jobs/summarize-memory";
@@ -32,6 +32,7 @@ import { WAIT_FOR_RUN_SPEC } from "./cmo-wait";
 import { RESEARCH_TOOL_SPECS, RESEARCH_TOOLS } from "./cmo-research";
 import { PANEL_SCREENS, PanelOpenSchema, type PanelOpen } from "./panel";
 import type { ToolOutcome, ToolSpec } from "./tools";
+import { salesBanRisk } from "../cmo/sales/ban-risk";
 
 const EMPTY = { type: "object", properties: {}, additionalProperties: false };
 
@@ -71,7 +72,7 @@ export const CMO_TOOL_SPECS: ToolSpec[] = [
       "x_writer: draft an X post, three versions, into Approvals (1 credit). With thread: true, one X thread of 5 to 8 posts instead (1 credit; only when the founder asks for a thread; when = now only).",
       "sales: search Reddit for people describing the problem, score threads with quotes, draft replies the founder posts themselves (5 credits; only when the founder asks).",
       "research: study competitors' X accounts, find posts that beat their baseline and the hooks behind them, and save what works for the planner and X writer (2 credits; pass handles, or it uses the X handles in Competitor Analysis; when = now only).",
-      "video: a short-video task. The founder records and uploads their OWN video, so this always becomes a calendar item with an \"Upload video\" button that opens the editor; you cannot upload video for them.",
+      "video: write the script and storyboard of a short video the founder records themselves (1 credit): 3 to 8 beats of what to say and show, on a script card in Approvals. You never make the video. When the founder already has the video and only wants a reminder to post it, set have_video: true: that adds a calendar item with an \"Upload video\" button and costs nothing.",
       "when: \"now\" runs it in the background, usually within a minute: x_writer and sales results land in Approvals, the planner's on the calendar, research's in what the planner and X writer read. A date (YYYY-MM-DD, within 13 days) puts it on the calendar and it runs that morning. Nothing is posted until the founder approves.",
     ].join(" "),
     schema: {
@@ -82,6 +83,7 @@ export const CMO_TOOL_SPECS: ToolSpec[] = [
         when: { type: "string", description: "\"now\" or a date YYYY-MM-DD." },
         handles: { type: "array", items: { type: "string" }, description: "Research only: up to 4 X handles to study." },
         thread: { type: "boolean", description: "x_writer only: true when the founder asked for an X thread." },
+        have_video: { type: "boolean", description: "video only: true when the founder already has the video and wants a reminder, not a script." },
       },
       required: ["agent", "brief"],
       additionalProperties: false,
@@ -226,6 +228,7 @@ const taskInput = z.object({
   when: z.string().trim().regex(/^(now|\d{4}-\d{2}-\d{2})$/).default("now"),
   handles: z.array(z.string().trim().min(1).max(80)).max(4).optional(),
   thread: z.boolean().optional(),
+  have_video: z.boolean().optional(),
 });
 const JOB_OF = { planner: "plan_week", x_writer: "post_draft", sales: "sales_scan", research: "competitor_research" } as const;
 const DEPARTMENT_OF = { x_writer: "post", sales: "sales", video: "video" } as const;
@@ -235,20 +238,32 @@ const DEPARTMENT_OF = { x_writer: "post", sales: "sales", video: "video" } as co
  * approves it. Nothing is held before that. A dated task only adds a calendar item, which costs nothing until its day;
  * the weekly loop keeps its own budget gate.
  */
-export const PRICED_AGENTS = { sales: "sales_scan", research: "competitor_research" } as const;
+export const PRICED_AGENTS = { sales: "sales_scan", research: "competitor_research", video: "write_video_brief" } as const;
 
 export type PricedTask = { input: z.infer<typeof taskInput>; card: PriceCard };
 
 /** The card for a priced task, or null when `create_task` runs at once (a free or dated task, or input it refuses). */
 export function pricedTaskCard(input: unknown): PricedTask | null {
   const parsed = taskInput.safeParse(input);
-  // `thread` belongs to x_writer: let create_task refuse it now instead of after the founder approved a card.
-  if (!parsed.success || parsed.data.when !== "now" || !(parsed.data.agent in PRICED_AGENTS) || parsed.data.thread) return null;
+  // `thread` belongs to x_writer and `have_video` to video: let create_task refuse them now instead of after the
+  // founder approved a card for a task that could never start.
+  if (!parsed.success || !(parsed.data.agent in PRICED_AGENTS) || parsed.data.thread || (parsed.data.have_video && parsed.data.agent !== "video")) return null;
   const task = parsed.data;
+  // A script is written at once whatever its day (the day is when the founder means to film), so it is priced on any
+  // `when`; a reminder for a video the founder has costs nothing. Sales and research are priced when they run now.
+  if (task.agent === "video") return task.have_video ? null : { input: task, card: scriptCard(task.brief) };
+  if (task.when !== "now") return null;
   return { input: task, card: task.agent === "sales" ? salesScanCard(task.brief) : researchCard(task.brief, task.handles) };
 }
 
-const rememberInput = z.object({ note: z.string().trim().min(1).max(600), topic: z.enum(["general", "post", "sales", "video", "research"]).default("general") });
+// 5.3: a note that would get the founder's Reddit account banned is refused with the reason (SQL checks it again).
+const rememberInput = z
+  .object({ note: z.string().trim().min(1).max(600), topic: z.enum(["general", "post", "sales", "video", "research"]).default("general") })
+  .superRefine((input, ctx) => {
+    if (input.topic !== "general" && input.topic !== "sales") return;
+    const risk = salesBanRisk(input.note, input.topic === "sales");
+    if (risk) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["note"], message: risk });
+  });
 const siteInput = z.object({ url: z.string().trim().min(3).max(300) });
 const runInput = z.object({ run_id: z.string().uuid().optional() });
 const goalInput = z.object({
@@ -370,7 +385,27 @@ async function runTool(supabase: SupabaseClient, name: string, input: unknown, t
       const task = parsed.data;
       if (task.thread && task.agent !== "x_writer") return invalid("thread is for x_writer only.");
       if (task.thread && task.when !== "now") return invalid("A thread is written now; when must be \"now\".");
-      // Video is always scheduled (the user uploads their own video in the editor), with or without a date.
+      if (task.have_video && task.agent !== "video") return invalid("have_video is for video only.");
+      // A script (cmo-review-3 I0): the item, the Writer order and its hold in one transaction (`cmo_order_script`);
+      // the script card arrives when Writer is done. The founder records the video; nothing builds it.
+      if (task.agent === "video" && !task.have_video) {
+        try {
+          const order = await rpcOrThrow<{ item_id: string; order_id: string; run_id: string; day: string; credits: number }>(supabase, "cmo_order_script", {
+            p_brief: task.brief,
+            p_day: task.when === "now" ? null : task.when,
+            p_brain: turn.brain === "claude" ? "claude" : null,
+          });
+          return {
+            ok: true,
+            content: JSON.stringify({ started: true, item_id: order.item_id, order_id: order.order_id, run_id: order.run_id, day: order.day, credits: order.credits, note: "The script card lands in Approvals when Writer is done." }),
+            summary: "Writing a script",
+            ...opens({ screen: "writer", ids: [order.run_id] }),
+          };
+        } catch (error) {
+          return { ok: false, content: JSON.stringify({ error: error instanceof Error ? error.message : "Could not order the script." }), summary: "Could not start" };
+        }
+      }
+      // A reminder for a video the founder has is always scheduled, with or without a date.
       const scheduled = task.agent === "video" || task.when !== "now";
       try {
         if (scheduled) {
@@ -403,7 +438,10 @@ async function runTool(supabase: SupabaseClient, name: string, input: unknown, t
     }
     case "remember": {
       const parsed = rememberInput.safeParse(input);
-      if (!parsed.success) return invalid("note must be 1 to 600 characters.");
+      if (!parsed.success) {
+        const risk = parsed.error.issues.find((issue) => issue.code === "custom");
+        return invalid(risk ? risk.message : "note must be 1 to 600 characters.");
+      }
       // 'agent': ranks below the founder's own notes. MCP lands here too, and cannot see what a
       // stateless caller read before, so it never saves at the founder's weight.
       await rpcOrThrow(supabase, "cmo_remember", { p_body: parsed.data.note, p_topic: parsed.data.topic, p_source: "agent" });

@@ -3083,6 +3083,15 @@ html[data-theme] .rail-avatar {
   width: 30px;
   padding: 0;
 }
+.ed2-icon svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
 .ed2-chip {
   border-color: transparent;
   background: transparent;
@@ -5077,6 +5086,149 @@ span.ed2-asst-model {
 }
 .ed2-wrap {
   flex-wrap: wrap;
+}
+/* The Script tab (cmo-review-3 I1, I3): the beats the founder records, beside the edit. */
+.ed2-scr-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--ds-line);
+}
+.ed2-scr-title {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ed2-scr-head .ed2-btn,
+.ed2-scr .ed2-trn-foot .ed2-btn {
+  height: 26px;
+  padding: 0 8px;
+  font-size: var(--ds-text-12);
+  text-decoration: none;
+}
+.ed2-scr-note {
+  margin: 8px 10px 0;
+  font-size: var(--ds-text-12);
+  color: var(--ds-muted, var(--ds-text));
+  white-space: normal;
+}
+.ed2-scr-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ds-muted, var(--ds-text));
+}
+.ed2-scr-hooks ol,
+.ed2-scr-beats {
+  margin: 4px 0 12px;
+  padding: 0;
+  list-style: none;
+}
+.ed2-scr-hooks li {
+  margin: 2px 0;
+}
+.ed2-scr-beat {
+  position: relative;
+  margin: 0 0 6px;
+  border: 1px solid var(--ds-line);
+  border-radius: 8px;
+}
+.ed2-scr-beat.is-current {
+  border-color: var(--ds-peach);
+  box-shadow: inset 3px 0 0 var(--ds-peach);
+}
+.ed2-scr-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 6px 56px 6px 8px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.ed2-scr-row:disabled {
+  cursor: default;
+}
+.ed2-scr-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: var(--ds-text-12);
+  color: var(--ds-muted, var(--ds-text));
+}
+.ed2-scr-num {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--ds-text);
+}
+.ed2-scr-take.is-said {
+  color: var(--ds-ok, var(--ds-text));
+}
+.ed2-scr-take.is-partly,
+.ed2-scr-missing {
+  color: var(--ds-warn, var(--ds-peach));
+}
+.ed2-scr-take.is-missing {
+  color: var(--ds-fg-6);
+}
+.ed2-scr-line {
+  white-space: normal;
+}
+.ed2-scr-edit {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  height: 24px;
+  padding: 0 8px;
+  font-size: var(--ds-text-12);
+}
+.ed2-scr-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+}
+.ed2-scr-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ed2-scr-input {
+  min-height: 52px;
+  padding: 6px 8px;
+  border: 1px solid var(--ds-line);
+  border-radius: 6px;
+  background: var(--ds-raised);
+  color: var(--ds-text);
+  font: inherit;
+  resize: vertical;
+}
+.ed2-scr-cuts {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 160px;
+  overflow-y: auto;
+}
+.ed2-scr-cut {
+  width: 100%;
+  padding: 3px 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: var(--ds-text-12);
+  text-align: left;
+  text-decoration: line-through;
+  cursor: pointer;
 }
 .ed2-danger {
   border-color: var(--ds-danger-line);

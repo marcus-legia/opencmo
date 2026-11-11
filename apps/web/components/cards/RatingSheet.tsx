@@ -144,7 +144,7 @@ export function RatingSheet({ open, onClose }: { open: boolean; onClose: () => v
           <>
             <p>{saved === 0 ? "No rules kept. Your drafts stay as they are." : `${saved} ${saved === 1 ? "rule" : "rules"} saved. Every draft from now on follows ${saved === 1 ? "it" : "them"}.`}</p>
             <div className="v2-actions">
-              <ButtonLink variant="secondary" compact href="/app/library?tab=voice">
+              <ButtonLink variant="secondary" compact href="/app?doc=voice">
                 See your voice
               </ButtonLink>
               <Button variant="primary" compact onClick={() => ref.current?.close()}>

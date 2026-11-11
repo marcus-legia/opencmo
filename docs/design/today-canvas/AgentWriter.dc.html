@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>OpenCMO Writer agent</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#f7f6f3}
+@media (prefers-color-scheme:dark){body{background:#121110}}
+a{color:var(--accent)}a:hover{color:var(--accent-hover)}
+.k{--bg:#f7f6f3;--panel:#ffffff;--raised:#f1efeb;--hover:#ebe8e3;--line:#e7e3dc;--line-2:#d8d2c8;--text:#191816;--muted:#625b52;--subtle:#736c62;--accent:#3b4cca;--accent-hover:#2f3fb0;--accent-ink:#ffffff;--accent-wash:#e9ebfa;--ok:#1e8a5e;--ok-wash:#e3f3ec;--warn:#a86a12;--warn-wash:#f8eedc;--top:#ffffff;
+font-family:Geist,ui-sans-serif,system-ui,sans-serif;color:var(--text);background:var(--bg);min-height:100vh;font-size:13px;line-height:1.45;-webkit-font-smoothing:antialiased}
+@media (prefers-color-scheme:dark){.k{--bg:#121110;--panel:#181715;--raised:#201e1c;--hover:#262421;--line:#2a2825;--line-2:#36332f;--text:#f2efe9;--muted:#a59e93;--subtle:#8a847b;--accent:#8b97ff;--accent-hover:#a8b1ff;--accent-ink:#0e1024;--accent-wash:#22264a;--ok:#4cc497;--ok-wash:#173328;--warn:#e7a948;--warn-wash:#3a2c14;--top:#0e0d0c}}
+.k *{box-sizing:border-box}.k button{font:inherit;color:inherit;cursor:pointer}
+.k svg.i{width:16px;height:16px;flex-shrink:0;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}.k svg.s{width:14px;height:14px}
+.top{height:48px;display:flex;align-items:center;gap:8px;padding:0 12px;border-bottom:1px solid var(--line);background:var(--top)}
+.ib{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:6px;border:0;background:transparent;color:var(--muted)}
+.ib:hover{background:var(--hover);color:var(--text)}
+.pill{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:6px;border:1px solid var(--line);background:transparent;color:var(--muted);font-size:12.5px}
+.meta{font-size:11.5px;color:var(--subtle)}
+.chip{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:999px;background:var(--raised);color:var(--muted);font-size:11.5px;border:1px solid var(--line)}
+.tile{display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:10px;background:var(--raised);border:1px solid var(--line);color:var(--text)}
+.st{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:7px;background:var(--raised);border:1px solid var(--line);color:var(--text);flex-shrink:0}
+.tabs{display:flex;gap:18px;border-bottom:1px solid var(--line);margin:18px 0 0}
+.tabs button{border:0;background:transparent;padding:0 0 10px;color:var(--muted);font-size:13px;font-weight:500;border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button[aria-selected="true"]{color:var(--text);border-color:var(--text)}
+.th{border:1px solid var(--line);border-radius:10px;background:var(--panel);overflow:hidden}
+.th[data-open="true"]{border-color:var(--line-2)}
+.row{display:flex;align-items:center;gap:10px;width:100%;min-height:48px;padding:8px 12px 8px 10px;border:0;background:transparent;text-align:left}
+.ttl{flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13.5px;font-weight:500}
+.kind{color:var(--muted);font-weight:400}
+.badge{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:6px;font-size:11.5px;font-weight:500}
+.b-wait{background:var(--warn-wash);color:var(--warn)}.b-ok{background:var(--ok-wash);color:var(--ok)}.b-new{background:var(--accent-wash);color:var(--accent)}
+.detail{border-top:1px solid var(--line);padding:14px 14px 14px 48px;display:flex;flex-direction:column;gap:12px}
+.post{margin:0;padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--bg);font-size:14.5px;line-height:1.55;white-space:pre-line}
+.beats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.beat{border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--bg)}
+.beat .h{font-size:10.5px;color:var(--subtle);font-family:"Geist Mono",ui-monospace,monospace;text-transform:uppercase;letter-spacing:.04em}
+.slides{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
+.slide{aspect-ratio:4/5;border:1px solid var(--line);border-radius:8px;background:var(--bg);padding:10px;display:flex;flex-direction:column;justify-content:space-between;font-size:12px;line-height:1.35}
+.slide .n{font-family:"Geist Mono",ui-monospace,monospace;font-size:10.5px;color:var(--subtle)}
+.vt{display:inline-flex;gap:2px;padding:2px;border-radius:7px;background:var(--bg);border:1px solid var(--line)}
+.vt button{height:24px;padding:0 9px;border:0;border-radius:5px;background:transparent;color:var(--muted);font-size:12px}
+.vt button[aria-selected="true"]{background:var(--raised);color:var(--text)}
+.primary{height:32px;padding:0 14px;border-radius:7px;border:0;background:var(--accent);color:var(--accent-ink);font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.primary:hover{background:var(--accent-hover)}
+.ghost{height:32px;padding:0 12px;border-radius:7px;border:1px solid var(--line-2);background:transparent;color:var(--text);font-size:13px;display:inline-flex;align-items:center;gap:6px}
+.ghost:hover{background:var(--hover)}
+.skip{height:32px;padding:0 10px;border:0;border-radius:7px;background:transparent;color:var(--muted);font-size:13px}
+.card{border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:14px}
+.day{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--line)}
+.day:last-child{border:0}
+.day .d{width:34px;font-family:"Geist Mono",ui-monospace,monospace;font-size:11px;color:var(--subtle)}
+.dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.cut{display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:6px;background:var(--raised);border:1px solid var(--line);font-size:12px;text-decoration:line-through;color:var(--muted)}
+.ask{display:flex;align-items:center;gap:8px;padding:6px 6px 6px 12px;border:1px solid var(--line-2);border-radius:10px;background:var(--panel)}
+.ask input{flex:1 1 auto;min-width:0;border:0;background:transparent;font:inherit;font-size:13.5px;color:var(--text);outline:none;height:32px}
+.ask input::placeholder{color:var(--subtle)}
+.live{position:relative;display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--ok)}
+</style>
+</helmet>
+<div class="k">
+
+<header class="top">
+  <button type="button" class="pill" style="color:var(--text);gap:8px;border:0;padding:0 8px"><span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:5px;background:var(--accent);color:var(--accent-ink);font-weight:700;font-size:11px">C</span><span style="font-weight:600">Cross Push</span><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></button>
+  <span class="meta">/</span>
+  <a href="Main.dc.html" style="color:var(--muted);text-decoration:none;font-size:12.5px">Agents</a>
+  <span class="meta">/</span>
+  <span style="font-size:12.5px;font-weight:500">Writer</span>
+  <div style="flex:1 1 auto"></div>
+  <a href="Logs.dc.html" class="pill" style="text-decoration:none"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" x2="20" y1="19" y2="19"></line></svg>Logs</a>
+  <button type="button" class="pill"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>Chat</button>
+  <span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:var(--line-2);font-size:12px;font-weight:600">T</span>
+</header>
+
+<div style="display:flex;flex-wrap:wrap;max-width:1320px;margin:0 auto;padding:22px 24px 40px;gap:24px">
+<main style="flex:999 1 600px;min-width:0">
+  <div style="display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap">
+    <span class="tile"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="width:20px;height:20px"><path d="M12 20h9"></path><path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z"></path></svg></span>
+    <div style="flex:1 1 300px;min-width:0">
+      <div style="display:flex;align-items:center;gap:8px"><h1 style="margin:0;font-size:22px;font-weight:600;letter-spacing:-0.4px">Writer</h1><span class="chip"><span class="live"></span>Week 2 plan written Sun 18:00</span></div>
+      <p style="margin:4px 0 8px;color:var(--muted);font-size:13px;max-width:640px">Writes the week from your strategy: X posts, slideshows, and scripts with storyboards for the videos you film. Nothing is built or posted until you approve the words.</p>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><span class="meta">Reads</span><span class="chip">Strategy</span><span class="chip">Content plan</span><span class="chip">Product</span><span class="chip">Your voice</span></div>
+    </div>
+  </div>
+
+  <div class="ask" style="margin-top:18px">
+    <svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="color:var(--subtle)"><path d="M12 20h9"></path><path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z"></path></svg>
+    <label for="ask-writer" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Ask for a post</label>
+    <input id="ask-writer" type="text" placeholder="Ask for a post, a slideshow or a video script">
+    <button type="button" class="pill" style="height:30px">X post<svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></button>
+    <button type="button" class="primary">Write it · 1 credit</button>
+  </div>
+
+  <div class="tabs" role="tablist" aria-label="Writer">
+    <sc-for list="{{tabs}}" as="t" hint-placeholder-count="3">
+      <button type="button" role="tab" aria-selected="{{t.sel}}" onClick="{{t.pick}}">{{t.label}}</button>
+    </sc-for>
+  </div>
+
+  <div style="display:flex;align-items:center;gap:8px;margin:14px 0 10px;flex-wrap:wrap">
+    <span style="font-weight:600">4 waiting for your OK</span><span class="meta">· 3 approved this week, 1 skipped</span>
+    <div style="flex:1 1 auto"></div>
+    <button type="button" class="pill">All kinds<svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></button>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:8px">
+
+    <div class="th" data-open="{{o1}}">
+      <button type="button" class="row" onClick="{{p1}}" aria-expanded="{{o1}}">
+        <span class="st"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4l11.733 16h4.267l-11.733 -16z"></path><path d="M4 20l6.768 -6.768m2.46 -2.46l6.772 -6.772"></path></svg></span>
+        <span class="ttl"><span class="kind">X post · </span>Screenshots are not proof that a creator posted</span>
+        <span class="badge b-wait">Waiting</span>
+        <span class="meta" style="width:64px;text-align:right">Tue 9:30</span>
+      </button>
+      <sc-if value="{{i1}}" hint-placeholder-val="{{ true }}">
+      <div class="detail">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <div class="vt" role="tablist" aria-label="Versions">
+            <sc-for list="{{versions}}" as="v" hint-placeholder-count="3">
+              <button type="button" role="tab" aria-selected="{{v.sel}}" onClick="{{v.pick}}">{{v.label}}</button>
+            </sc-for>
+          </div>
+          <span class="meta">Angle from Strategy: verified delivery · 168 characters</span>
+        </div>
+        <p class="post">{{postText}}</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+          <button type="button" class="skip">Skip</button>
+          <button type="button" class="ghost">Edit</button>
+          <button type="button" class="primary"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>Approve, send to Post</button>
+        </div>
+      </div>
+      </sc-if>
+    </div>
+
+    <div class="th" data-open="{{o2}}">
+      <button type="button" class="row" onClick="{{p2}}" aria-expanded="{{o2}}">
+        <span class="st"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5"></path><rect x="2" y="6" width="14" height="12" rx="2"></rect></svg></span>
+        <span class="ttl"><span class="kind">Script · you film · </span>Post a launch brief in under a minute</span>
+        <span class="badge b-wait">Waiting</span>
+        <span class="meta" style="width:64px;text-align:right">45 s</span>
+      </button>
+      <sc-if value="{{i2}}" hint-placeholder-val="{{ false }}">
+      <div class="detail">
+        <div class="meta">4 beats · storyboard is the script, beat by beat · you film it, then upload the take in the editor</div>
+        <div class="beats">
+          <div class="beat"><div class="h">01 · To camera · 6s</div><div style="margin-top:4px">"Creators keep sending screenshots as proof."</div></div>
+          <div class="beat"><div class="h">02 · Screen · 15s</div><div class="meta" style="margin-top:4px">Show: the brief form</div><div style="margin-top:2px">Fill in the brief, pick three creators.</div></div>
+          <div class="beat"><div class="h">03 · Screen · 14s</div><div class="meta" style="margin-top:4px">Show: the delivered mark</div><div style="margin-top:2px">The live post check marks it delivered.</div></div>
+          <div class="beat"><div class="h">04 · To camera · 10s</div><div style="margin-top:4px">"No commission. Link in bio."</div></div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <a href="Prompter.dc.html" class="ghost" style="text-decoration:none"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><rect width="5" height="5" x="3" y="3" rx="1"></rect><rect width="5" height="5" x="16" y="3" rx="1"></rect><rect width="5" height="5" x="3" y="16" rx="1"></rect><path d="M21 16h-3a2 2 0 0 0-2 2v3"></path><path d="M21 21v.01"></path><path d="M12 7v3a2 2 0 0 1-2 2H7"></path><path d="M3 12h.01"></path><path d="M12 3h.01"></path><path d="M12 16v.01"></path><path d="M16 12h1"></path><path d="M21 12v.01"></path><path d="M12 21v-1"></path></svg>Read on your phone</a>
+          <div style="flex:1 1 auto"></div>
+          <button type="button" class="skip">Not now</button>
+          <button type="button" class="ghost">Edit a beat</button>
+          <button type="button" class="primary"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>Approve the script</button>
+        </div>
+      </div>
+      </sc-if>
+    </div>
+
+    <div class="th" data-open="{{o3}}">
+      <button type="button" class="row" onClick="{{p3}}" aria-expanded="{{o3}}">
+        <span class="st"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"></rect><path d="M3 9h18"></path><path d="M9 21V9"></path></svg></span>
+        <span class="ttl"><span class="kind">Slideshow · 5 slides · </span>Three ways a sponsored post goes missing</span>
+        <span class="badge b-wait">Waiting</span>
+        <span class="meta" style="width:64px;text-align:right">Thu 12:00</span>
+      </button>
+      <sc-if value="{{i3}}" hint-placeholder-val="{{ false }}">
+      <div class="detail">
+        <div class="meta">Words first. Video builds the slides with your Brand Kit after you approve them.</div>
+        <div class="slides">
+          <div class="slide"><span class="n">01</span><span style="font-weight:600;font-size:13px">Three ways a sponsored post goes missing</span></div>
+          <div class="slide"><span class="n">02</span><span>It gets deleted a day later.</span></div>
+          <div class="slide"><span class="n">03</span><span>It goes up on a second account you never see.</span></div>
+          <div class="slide"><span class="n">04</span><span>The screenshot was edited.</span></div>
+          <div class="slide"><span class="n">05</span><span>Check the live post after 48 hours.</span></div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+          <button type="button" class="skip">Skip</button>
+          <button type="button" class="ghost">Edit</button>
+          <button type="button" class="primary"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>Approve, build slides · 2 credits</button>
+        </div>
+      </div>
+      </sc-if>
+    </div>
+
+    <div class="th">
+      <button type="button" class="row">
+        <span class="st"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4l11.733 16h4.267l-11.733 -16z"></path><path d="M4 20l6.768 -6.768m2.46 -2.46l6.772 -6.772"></path></svg></span>
+        <span class="ttl"><span class="kind">X post · </span>We take no commission. Here is why.</span>
+        <span class="badge b-wait">Waiting</span>
+        <span class="meta" style="width:64px;text-align:right">Fri 9:30</span>
+      </button>
+    </div>
+    <div class="th">
+      <button type="button" class="row">
+        <span class="st"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4l11.733 16h4.267l-11.733 -16z"></path><path d="M4 20l6.768 -6.768m2.46 -2.46l6.772 -6.772"></path></svg></span>
+        <span class="ttl"><span class="kind">X post · </span>Small accounts with real replies sell better</span>
+        <span class="badge b-ok">Scheduled</span>
+        <span class="meta" style="width:64px;text-align:right">Mon 9:30</span>
+      </button>
+    </div>
+  </div>
+</main>
+
+<aside style="flex:1 1 300px;max-width:360px;display:flex;flex-direction:column;gap:14px">
+  <section class="card">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px"><h2 style="margin:0;font-size:13px;font-weight:600">Week 2</h2><a href="Calendar.dc.html" style="font-size:11.5px;text-decoration:none">Calendar</a></div>
+    <div class="day"><span class="d">MON</span><span class="dot" style="background:var(--ok)"></span><span style="flex:1">X post</span><span class="meta">posted</span></div>
+    <div class="day"><span class="d">TUE</span><span class="dot" style="background:var(--warn)"></span><span style="flex:1">X post</span><span class="meta">waiting</span></div>
+    <div class="day"><span class="d">WED</span><span class="dot" style="background:var(--warn)"></span><span style="flex:1">Script, you film</span><span class="meta">waiting</span></div>
+    <div class="day"><span class="d">THU</span><span class="dot" style="background:var(--warn)"></span><span style="flex:1">Slideshow</span><span class="meta">waiting</span></div>
+    <div class="day"><span class="d">FRI</span><span class="dot" style="background:var(--warn)"></span><span style="flex:1">X post</span><span class="meta">waiting</span></div>
+  </section>
+  <section class="card">
+    <h2 style="margin:0 0 4px;font-size:13px;font-weight:600">Your voice</h2>
+    <p class="meta" style="margin:0 0 10px;font-size:12px">Writer learns your voice from what you change in its drafts.</p>
+    <div class="meta" style="margin-bottom:6px">Words you cut</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px"><span class="cut">game changer</span><span class="cut">unlock</span><span class="cut">seamless</span><span class="cut">in today's world</span></div>
+    <div class="meta" style="margin-bottom:6px">Rules it keeps</div>
+    <ul style="margin:0;padding-left:18px;font-size:12.5px;line-height:1.6">
+      <li>Under 200 characters on X.</li>
+      <li>One idea per post, no hashtags.</li>
+      <li>Say "we", never "our team".</li>
+    </ul>
+  </section>
+  <section class="card">
+    <h2 style="margin:0 0 6px;font-size:13px;font-weight:600">What it costs</h2>
+    <div style="display:flex;justify-content:space-between;padding:4px 0"><span>Week plan</span><span class="meta">included</span></div>
+    <div style="display:flex;justify-content:space-between;padding:4px 0"><span>Extra post or script</span><span class="meta">1 credit</span></div>
+    <div style="display:flex;justify-content:space-between;padding:4px 0"><span>New version of a draft</span><span class="meta">free</span></div>
+  </section>
+</aside>
+</div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { open: 1, tab: 'week', ver: 0 }; }
+  renderVals() {
+    var self = this, s = this.state;
+    var texts = [
+      'A screenshot is not proof that a creator posted.\nPosts come down a day later. Screenshots get edited.\nCross Push checks the live post on X before it marks a deal delivered.',
+      'We paid a creator, got a screenshot, and the post was gone by Friday.\nNow every deal is checked against the live post on X.',
+      'How do you know the sponsored post is still up?\nWe check the live post, not a screenshot.'
+    ];
+    function row(n) { var o = s.open === n; return { o: o ? 'true' : 'false', i: o, p: function () { self.setState({ open: o ? 0 : n }); } }; }
+    var r1 = row(1), r2 = row(2), r3 = row(3);
+    var tabs = [['week', 'This week'], ['drafts', 'All drafts'], ['voice', 'Voice']].map(function (t) {
+      return { label: t[1], sel: s.tab === t[0] ? 'true' : 'false', pick: function () { self.setState({ tab: t[0] }); } };
+    });
+    var versions = ['Version 1', 'Version 2', 'Version 3'].map(function (l, i) {
+      return { label: l, sel: s.ver === i ? 'true' : 'false', pick: function () { self.setState({ ver: i }); } };
+    });
+    return { tabs: tabs, versions: versions, postText: texts[s.ver], o1: r1.o, i1: r1.i, p1: r1.p, o2: r2.o, i2: r2.i, p2: r2.p, o3: r3.o, i3: r3.i, p3: r3.p };
+  }
+}
+</script>
+</body>
+</html>

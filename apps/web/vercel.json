@@ -1,3 +1,4 @@
 {
-  "installCommand": "cd ../.. && npm ci"
+  "installCommand": "cd ../.. && npm ci",
+  "regions": ["pdx1"]
 }

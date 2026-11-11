@@ -1,4 +1,4 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 
 import { readState, type E2EUser } from "./global-setup";
 
@@ -86,4 +86,43 @@ export async function uploadToEditor(page: Page, file: string): Promise<string> 
 export async function openProject(page: Page, jobId: string): Promise<void> {
   await page.goto(`/app/projects/${jobId}`);
   await waitForReady(page);
+}
+
+/**
+ * The page's scroll width and, when it is wider than the viewport, the deepest elements that stick out past the right
+ * edge: a failing "no sideways scroll" check then names what to fix instead of only a number.
+ */
+export async function sidewaysOverflow(page: Page): Promise<{ width: number; culprits: string[] }> {
+  return page.evaluate(() => {
+    const root = document.documentElement;
+    const limit = root.clientWidth;
+    const culprits: string[] = [];
+    if (root.scrollWidth > limit) {
+      for (const el of Array.from(document.body.querySelectorAll<HTMLElement>("*"))) {
+        const box = el.getBoundingClientRect();
+        if (box.right <= limit + 1 || box.width === 0) continue;
+        if (Array.from(el.children).some((child) => child.getBoundingClientRect().right > limit + 1)) continue;
+        const name = el.tagName.toLowerCase() + (el.className && typeof el.className === "string" ? "." + el.className.trim().split(/\s+/).join(".") : "");
+        culprits.push(`${name} → ${Math.round(box.right)}px`);
+        if (culprits.length >= 8) break;
+      }
+    }
+    return { width: root.scrollWidth, culprits };
+  });
+}
+
+/**
+ * The feed (Main.dc.html) shows a row per waiting card; only the open row holds the real card. Opens the first row that
+ * matches `text` (its "Review" button, or the row itself for the inverted first row) and returns the card.
+ */
+export async function openFeedCard(page: Page, text: string | RegExp): Promise<Locator> {
+  const row = page.getByTestId("approval-queue").locator('[data-testid="feed-row"][data-card-id]').filter({ hasText: text }).first();
+  await expect(row).toBeVisible({ timeout: 60_000 });
+  const card = row.getByTestId("approval-card");
+  if (!(await card.isVisible())) {
+    const review = row.getByRole("button", { name: "Review" });
+    await ((await review.isVisible()) ? review : row.locator("button.row")).click();
+  }
+  await expect(card).toBeVisible();
+  return card;
 }

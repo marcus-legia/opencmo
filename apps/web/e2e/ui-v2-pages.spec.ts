@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 import type { Project } from "../lib/clipping-types";
-import { signIn, state } from "./helpers";
+import { sidewaysOverflow, signIn, state } from "./helpers";
 
 /**
  * Session C's v2 pages (ui-build plan U5–U8). They exist only in a build with NEXT_PUBLIC_OPENCMO_UI=v2,
@@ -10,12 +10,10 @@ import { signIn, state } from "./helpers";
 test.skip(process.env.NEXT_PUBLIC_OPENCMO_UI !== "v2", "v2 pages are built only with NEXT_PUBLIC_OPENCMO_UI=v2");
 
 const PAGES: [string, string][] = [
-  ["/app/analytics", "What worked, and what didn't."],
-  ["/app/brain", "The plan, the orders, what it learned."],
-  ["/app/library", "What your team knows about your business."],
+  ["/app/analytics", "This week"],
   ["/app/research", "What works, with the link."],
   ["/app/writer", "Writer"],
-  ["/app/studio", "Videos, shorts, slides."],
+  ["/app/studio", "Videos"],
   ["/app/sales", "Sales"],
   ["/app/settings", "Settings"],
 ];
@@ -26,18 +24,34 @@ for (const [path, heading] of PAGES) {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(`${path}?sample=1`);
     await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
-    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
-    expect(overflow).toBeLessThanOrEqual(0);
+    const overflow = await sidewaysOverflow(page);
+    expect(overflow.width, `sideways scroll from: ${overflow.culprits.join("; ")}`).toBeLessThanOrEqual(390);
   });
 }
 
-test("Library says who reads each document (CMO review 3, 3.3)", async ({ page }) => {
+test("Brain and Library open as panes of the Context drawer over the feed", async ({ page }) => {
   await signIn(page, state().users.a);
-  await page.goto("/app/library");
-  const cards = page.locator(".scr-doc-card");
-  await expect(cards).toHaveCount(4);
-  for (const card of await cards.all()) await expect(card.getByTestId("doc-used-by")).toHaveText("Used by Planner, Writer, Sales, Research");
-  await expect(page.getByText("Edit it here and every draft after uses it.")).toBeVisible();
+  await page.setViewportSize({ width: 1440, height: 900 });
+  for (const [from, to, title] of [
+    ["/app/brain", "/app?doc=plan", "Plan and orders"],
+    ["/app/brain?tab=memory", "/app?doc=learned", "What it learned"],
+    ["/app/library", "/app?doc=product", "Product"],
+    ["/app/library?tab=voice", "/app?doc=voice", "Voice"],
+    ["/app/library?tab=skills", "/app?doc=skills", "Skills"],
+    ["/app/library?edit=competitors", "/app?doc=competitors&edit=1", "Competitors"],
+  ] as const) {
+    await page.goto(from);
+    // The URL must end with `to` exactly: every regex metacharacter in it escaped, backslash included.
+    await expect(page).toHaveURL(new RegExp(`${to.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`));
+    await expect(page.getByRole("dialog", { name: title })).toBeVisible();
+    await expect(page.getByTestId("v2-dashboard")).toBeAttached();
+  }
+  // The drawer's own list reaches every pane without leaving the feed.
+  await page.getByRole("dialog", { name: "Competitors" }).press("Escape");
+  await page.goto("/app?doc=product");
+  await page.getByRole("button", { name: /^Plan and orders/ }).click();
+  await expect(page).toHaveURL(/\/app\?doc=plan$/);
+  await expect(page.getByRole("dialog", { name: "Plan and orders" })).toContainText("Orders");
 });
 
 test("old project routes redirect to Studio", async ({ page }) => {
@@ -49,8 +63,9 @@ test("old project routes redirect to Studio", async ({ page }) => {
   await expect(page).toHaveURL(new RegExp(`/app/studio\\?item=${id}$`));
   await page.goto(`/app/jobs/${id}`);
   await expect(page).toHaveURL(new RegExp(`/app/studio\\?item=${id}$`));
+  // The Brand Kit is a pane of the Context drawer over the feed (plan 2026-11-10-today-in-place).
   await page.goto("/app/brand");
-  await expect(page).toHaveURL(/\/app\/library\?tab=brand$/);
+  await expect(page).toHaveURL(/\/app\?doc=brand$/);
 });
 
 // Ported from projects-delete.spec.ts: Studio must keep the old page's delete guarantees.
@@ -72,18 +87,24 @@ const project: Project = {
   clips: [],
 };
 
+/** Projects.dc.html: a project opens its drawer, where Delete takes two taps. */
 async function deleteFromMenu(page: import("@playwright/test").Page) {
-  await page.getByRole("button", { name: "More for Remove me" }).click();
-  await page.getByRole("menuitem", { name: "Delete" }).click();
-  await page.getByRole("menuitem", { name: "Delete? Tap again" }).click();
+  await page.locator("button.proj").filter({ hasText: "Remove me" }).click();
+  const drawer = page.getByRole("dialog");
+  await drawer.getByRole("button", { name: "Delete", exact: true }).click();
+  await drawer.getByRole("button", { name: "Delete? Tap again" }).click();
 }
 
 test("Studio deletes an upload only after the second tap and the server's answer", async ({ page }) => {
   await signIn(page, state().users.a);
   let visible = true;
   await page.route("**/api/v1/projects?*", (route) => route.fulfill({ json: { items: visible ? [project] : [], next_cursor: null } }));
+  let deletes = 0;
   await page.route(`**/api/v1/projects/${project.id}`, async (route) => {
+    // The drawer reads the project when it opens; only the second tap deletes.
+    if (route.request().method() === "GET") return route.fulfill({ json: project });
     expect(route.request().method()).toBe("DELETE");
+    deletes += 1;
     visible = false;
     await route.fulfill({ json: { deleted: true } });
   });
@@ -92,7 +113,7 @@ test("Studio deletes an upload only after the second tap and the server's answer
   await expect(page.getByText("Remove me", { exact: true })).toBeVisible();
   await deleteFromMenu(page);
   await expect(page.getByText("Remove me", { exact: true })).toHaveCount(0);
-  await expect(page.getByText(/Nothing here yet/)).toBeVisible();
+  expect(deletes).toBe(1);
 });
 
 test("a delayed search response cannot bring a deleted upload back", async ({ page }) => {
@@ -112,7 +133,7 @@ test("a delayed search response cannot bring a deleted upload back", async ({ pa
     }
     await route.fulfill({ json: { items: [project], next_cursor: null } });
   });
-  await page.route(`**/api/v1/projects/${project.id}`, (route) => route.fulfill({ json: { deleted: true } }));
+  await page.route(`**/api/v1/projects/${project.id}`, (route) => route.fulfill({ json: route.request().method() === "GET" ? project : { deleted: true } }));
 
   await page.goto("/app/studio?kind=upload");
   await expect(page.getByText("Remove me", { exact: true })).toBeVisible();

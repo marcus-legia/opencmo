@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>OpenCMO Logs drawer</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#f7f6f3}
+@media (prefers-color-scheme:dark){body{background:#121110}}
+a{color:var(--accent)}a:hover{color:var(--accent-hover)}
+.k{--bg:#f7f6f3;--panel:#ffffff;--raised:#f1efeb;--hover:#ebe8e3;--line:#e7e3dc;--line-2:#d8d2c8;--text:#191816;--muted:#625b52;--subtle:#736c62;--accent:#3b4cca;--accent-hover:#2f3fb0;--accent-ink:#ffffff;--accent-wash:#e9ebfa;--ok:#1e8a5e;--ok-wash:#e3f3ec;--warn:#a86a12;--warn-wash:#f8eedc;--bad:#b4362c;--bad-wash:#f9e6e3;--top:#ffffff;--scrim:rgba(25,24,22,.28);
+font-family:Geist,ui-sans-serif,system-ui,sans-serif;color:var(--text);background:var(--bg);min-height:100vh;font-size:13px;line-height:1.45;-webkit-font-smoothing:antialiased}
+@media (prefers-color-scheme:dark){.k{--bg:#121110;--panel:#181715;--raised:#201e1c;--hover:#262421;--line:#2a2825;--line-2:#36332f;--text:#f2efe9;--muted:#a59e93;--subtle:#8a847b;--accent:#8b97ff;--accent-hover:#a8b1ff;--accent-ink:#0e1024;--accent-wash:#22264a;--ok:#4cc497;--ok-wash:#173328;--warn:#e7a948;--warn-wash:#3a2c14;--bad:#f08a7e;--bad-wash:#3d1c18;--top:#0e0d0c;--scrim:rgba(0,0,0,.5)}}
+.k *{box-sizing:border-box}.k button{font:inherit;color:inherit;cursor:pointer}
+.k svg.i{width:16px;height:16px;flex-shrink:0;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}.k svg.s{width:14px;height:14px}
+.top{height:48px;display:flex;align-items:center;gap:8px;padding:0 12px;border-bottom:1px solid var(--line);background:var(--top)}
+.ib{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:6px;border:0;background:transparent;color:var(--muted)}
+.ib:hover{background:var(--hover);color:var(--text)}
+.pill{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:6px;border:1px solid var(--line);background:transparent;color:var(--muted);font-size:12.5px}
+.pill[aria-pressed="true"]{background:var(--raised);color:var(--text);border-color:var(--line-2)}
+.meta{font-size:11.5px;color:var(--subtle)}
+.mono{font-family:"Geist Mono",ui-monospace,monospace}
+.ghostrow{height:46px;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
+.seg{display:inline-flex;gap:2px;padding:2px;border-radius:8px;background:var(--bg);border:1px solid var(--line);flex-wrap:wrap}
+.seg button{height:26px;padding:0 10px;border-radius:6px;border:0;background:transparent;color:var(--muted);font-size:12.5px;font-weight:500}
+.seg button[aria-selected="true"]{background:var(--raised);color:var(--text);box-shadow:0 0 0 1px var(--line-2)}
+.ev{border-bottom:1px solid var(--line)}
+.evr{display:flex;align-items:center;gap:10px;width:100%;min-height:44px;padding:8px 20px;border:0;background:transparent;text-align:left}
+.evr:hover{background:var(--hover)}
+.st{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;flex-shrink:0}
+.s-ok{background:var(--ok-wash);color:var(--ok)}.s-run{background:var(--accent-wash);color:var(--accent)}.s-bad{background:var(--bad-wash);color:var(--bad)}.s-wait{background:var(--warn-wash);color:var(--warn)}
+.ag{display:inline-flex;align-items:center;height:20px;padding:0 7px;border-radius:5px;background:var(--raised);border:1px solid var(--line);font-size:11px;color:var(--muted);flex-shrink:0}
+.steps{margin:0 20px 12px 50px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg);display:flex;flex-direction:column;gap:6px}
+.step{display:flex;gap:10px;font-size:12.5px}
+.step .t{width:58px;flex-shrink:0;color:var(--subtle)}
+.ledger{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:0 20px 14px 50px}
+.ledger div{border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--panel)}
+.ghost{height:30px;padding:0 12px;border-radius:7px;border:1px solid var(--line-2);background:transparent;color:var(--text);font-size:12.5px;display:inline-flex;align-items:center;gap:6px}
+.live{position:relative;display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent)}
+.live::after{content:"";position:absolute;inset:-3px;border-radius:50%;background:var(--accent);opacity:.35;animation:ping 2.2s cubic-bezier(0,0,.2,1) infinite}
+@keyframes ping{75%,100%{transform:scale(2);opacity:0}}
+</style>
+</helmet>
+<div class="k">
+
+<header class="top">
+  <button type="button" class="pill" style="color:var(--text);gap:8px;border:0;padding:0 8px"><span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:5px;background:var(--accent);color:var(--accent-ink);font-weight:700;font-size:11px">C</span><span style="font-weight:600">Cross Push</span><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></button>
+  <div style="flex:1 1 auto"></div>
+  <span class="pill" style="cursor:default">212 credits</span>
+  <button type="button" class="pill" aria-pressed="true"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" x2="20" y1="19" y2="19"></line></svg>Logs</button>
+  <span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:var(--line-2);font-size:12px;font-weight:600">T</span>
+</header>
+
+<div style="position:relative;min-height:calc(100vh - 48px);display:flex;justify-content:flex-end;flex-wrap:wrap">
+
+  <div aria-hidden="true" style="position:absolute;inset:0;padding:24px;display:flex;flex-direction:column;gap:8px;max-width:820px">
+    <div style="height:28px;width:260px;border-radius:6px;background:var(--raised)"></div>
+    <div style="height:16px;width:420px;border-radius:6px;background:var(--raised);margin-bottom:16px"></div>
+    <div class="ghostrow"></div><div class="ghostrow"></div><div class="ghostrow"></div><div class="ghostrow"></div>
+  </div>
+  <div aria-hidden="true" style="position:absolute;inset:0;background:var(--scrim)"></div>
+
+  <section aria-label="Logs" style="position:relative;flex:0 1 600px;min-width:0;background:var(--panel);border-left:1px solid var(--line);display:flex;flex-direction:column;box-shadow:-12px 0 32px rgba(0,0,0,.18)">
+    <div style="height:52px;display:flex;align-items:center;gap:8px;padding:0 12px 0 20px;border-bottom:1px solid var(--line)">
+      <svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="color:var(--muted)"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" x2="20" y1="19" y2="19"></line></svg>
+      <span style="font-weight:600;font-size:14px">Logs</span>
+      <span class="meta">· what your CMO did, and what it cost</span>
+      <div style="flex:1 1 auto"></div>
+      <a href="Main.dc.html" class="ib" aria-label="Close"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></a>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:8px;padding:12px 20px;border-bottom:1px solid var(--line);flex-wrap:wrap">
+      <div class="seg" role="tablist" aria-label="Agent">
+        <sc-for list="{{filters}}" as="f" hint-placeholder-count="5">
+          <button type="button" role="tab" aria-selected="{{f.sel}}" onClick="{{f.pick}}">{{f.label}}</button>
+        </sc-for>
+      </div>
+      <div style="flex:1 1 auto"></div>
+      <button type="button" class="pill" aria-pressed="{{failOnly}}" onClick="{{toggleFail}}">Only problems</button>
+    </div>
+
+    <div style="display:flex;gap:16px;padding:10px 20px;border-bottom:1px solid var(--line);flex-wrap:wrap">
+      <span><b style="font-weight:600">38</b> <span class="meta">credits spent this week</span></span>
+      <span><b style="font-weight:600">6</b> <span class="meta">refunded</span></span>
+      <span><b style="font-weight:600">1</b> <span class="meta">running now</span></span>
+    </div>
+
+    <div style="flex:1 1 auto;overflow:auto">
+      <div class="meta" style="padding:12px 20px 4px;text-transform:uppercase;letter-spacing:.05em;font-size:10.5px">Today</div>
+      <sc-for list="{{events}}" as="e" hint-placeholder-count="6">
+        <div class="ev">
+          <button type="button" class="evr" onClick="{{e.pick}}" aria-expanded="{{e.open}}">
+            <span class="{{e.scls}}"><sc-if value="{{e.ok}}" hint-placeholder-val="{{ true }}"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true" style="width:12px;height:12px"><path d="M20 6 9 17l-5-5"></path></svg></sc-if><sc-if value="{{e.bad}}" hint-placeholder-val="{{ false }}"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true" style="width:12px;height:12px"><path d="M12 8v4"></path><path d="M12 16h.01"></path></svg></sc-if><sc-if value="{{e.run}}" hint-placeholder-val="{{ false }}"><span class="live"></span></sc-if></span>
+            <span class="mono meta" style="width:40px">{{e.time}}</span>
+            <span class="ag">{{e.agent}}</span>
+            <span style="flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{e.what}}</span>
+            <span class="mono meta" style="min-width:52px;text-align:right">{{e.cost}}</span>
+          </button>
+          <sc-if value="{{e.isOpen}}" hint-placeholder-val="{{ false }}">
+            <div class="ledger">
+              <div><div class="meta">Held</div><div class="mono" style="font-size:13px">{{e.held}}</div></div>
+              <div><div class="meta">Spent</div><div class="mono" style="font-size:13px">{{e.spent}}</div></div>
+              <div><div class="meta">Back to you</div><div class="mono" style="font-size:13px">{{e.back}}</div></div>
+            </div>
+            <div class="steps">
+              <sc-for list="{{e.steps}}" as="s" hint-placeholder-count="3">
+                <div class="step"><span class="t mono">{{s.t}}</span><span>{{s.x}}</span></div>
+              </sc-for>
+            </div>
+            <sc-if value="{{e.bad}}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;gap:8px;margin:0 20px 14px 50px"><button type="button" class="ghost">Try again · {{e.held}}</button><button type="button" class="ghost">Ask your CMO why</button></div>
+            </sc-if>
+          </sc-if>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+</div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { f: 'All', open: 'e3', fail: false }; }
+  renderVals() {
+    var self = this, s = this.state;
+    var data = [
+      { id: 'e1', st: 'run', time: '10:42', agent: 'Video', what: 'Building the slideshow "Three ways a sponsored post goes missing"', cost: '2 cr', held: '2 cr', spent: 'running', back: '0 cr', steps: [{ t: '10:41', x: 'You approved 5 slides. 2 credits held.' }, { t: '10:42', x: 'Laying out slides with your Brand Kit.' }] },
+      { id: 'e2', st: 'ok', time: '09:30', agent: 'Post', what: 'Posted to @xpushapp: "Small accounts with real replies sell better"', cost: '0 cr', held: '0 cr', spent: '0 cr', back: '0 cr', steps: [{ t: '09:30', x: 'Posted on X, the way you approved it.' }, { t: '09:31', x: 'Live post checked.' }] },
+      { id: 'e3', st: 'bad', time: '08:12', agent: 'Video', what: 'Post image for "We take no commission" was blocked', cost: '0 cr', held: '3 cr', spent: '0 cr', back: '3 cr', steps: [{ t: '08:11', x: 'Prompt passed moderation. 3 credits held.' }, { t: '08:12', x: 'The finished image failed the review before delivery.' }, { t: '08:12', x: 'Nothing was delivered. 3 credits went back to you.' }] },
+      { id: 'e4', st: 'ok', time: '08:10', agent: 'Sales', what: 'Scanned Reddit, X and Hacker News: 11 threads, 3 kept', cost: '5 cr', held: '5 cr', spent: '5 cr', back: '0 cr', steps: [{ t: '08:05', x: 'Searched 4 places for the problem you solve.' }, { t: '08:09', x: 'Scored 11 threads, 8 below your bar.' }, { t: '08:10', x: 'Drafted 3 replies for you to post yourself.' }] },
+      { id: 'e5', st: 'ok', time: '07:00', agent: 'CMO', what: 'Morning email sent: 4 drafts and 3 threads wait for you', cost: '0 cr', held: '0 cr', spent: '0 cr', back: '0 cr', steps: [{ t: '07:00', x: 'Digest sent to your email.' }] },
+      { id: 'e6', st: 'ok', time: '06:58', agent: 'Writer', what: 'Learned a rule: keep X posts under 200 characters', cost: '0 cr', held: '0 cr', spent: '0 cr', back: '0 cr', steps: [{ t: '06:58', x: 'From the 3 longer drafts you skipped. Undo it in Context.' }] }
+    ];
+    var list = data.filter(function (e) { return (s.f === 'All' || e.agent === s.f) && (!s.fail || e.st === 'bad'); });
+    var events = list.map(function (e) {
+      var o = s.open === e.id;
+      return Object.assign({}, e, { scls: 'st s-' + e.st, ok: e.st === 'ok', bad: e.st === 'bad', run: e.st === 'run', open: o ? 'true' : 'false', isOpen: o, pick: function () { self.setState({ open: o ? null : e.id }); } });
+    });
+    var filters = ['All', 'CMO', 'Writer', 'Video', 'Post', 'Sales'].map(function (l) {
+      return { label: l, sel: s.f === l ? 'true' : 'false', pick: function () { self.setState({ f: l }); } };
+    });
+    return { events: events, filters: filters, failOnly: s.fail ? 'true' : 'false', toggleFail: function () { self.setState({ fail: !s.fail }); } };
+  }
+}
+</script>
+</body>
+</html>
