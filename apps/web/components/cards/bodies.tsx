@@ -24,6 +24,8 @@ export function PostBody({
   draft,
   onDraft,
   onPick,
+  onRewrite,
+  rewriting,
 }: {
   body: Body<"post">;
   cardId: string;
@@ -32,6 +34,10 @@ export function PostBody({
   onDraft: (text: string) => void;
   /** Reports the text on screen, so Approve sends what the founder saw. */
   onPick: (text: string) => void;
+  /** "Rewrite for <platform>" (D4): one paid rewrite for that platform; absent when the card cannot take one. */
+  onRewrite?: (platform: Platform) => void;
+  /** The platforms whose rewrite is being written now. */
+  rewriting?: ReadonlySet<string>;
 }) {
   const [platform, setPlatform] = useState<Platform>(body.platforms[0]?.platform ?? "x");
   const [version, setVersion] = useState(0);
@@ -99,7 +105,55 @@ export function PostBody({
         {body.why ? <span>Why: {body.why}</span> : null}
         {fold ? <span>The first {fold} characters show before “more” on a phone.</span> : null}
       </div>
+      {body.targets && body.targets.length ? <PostTargets targets={body.targets} onRewrite={editing ? undefined : onRewrite} rewriting={rewriting} /> : null}
     </>
+  );
+}
+
+/** Rewrite price, as SQL `cmo_job_price('repurpose_post')` holds it before the model runs. */
+export const REWRITE_CREDITS = 1;
+
+/**
+ * Where the core post goes (daily core drafts D3): one line of platforms, then each platform's own rewrite when the
+ * founder asked for one (D4). A rewrite goes out on that platform only, after its own schedule card.
+ */
+function PostTargets({
+  targets,
+  onRewrite,
+  rewriting,
+}: {
+  targets: NonNullable<Body<"post">["targets"]>;
+  onRewrite?: (platform: Platform) => void;
+  rewriting?: ReadonlySet<string>;
+}) {
+  const several = targets.length > 1;
+  return (
+    <div className="v2-card-targets" data-testid="post-targets">
+      <p className="v2-card-meta">
+        <span>
+          Goes to {targets.map((t) => PLATFORM_LABEL[t.platform]).join(" · ")}
+          {several ? ": one post for every platform" : ""}
+        </span>
+      </p>
+      {targets.map((t) =>
+        t.variant ? (
+          <details key={t.platform} className="v2-card-variant">
+            <summary>{PLATFORM_LABEL[t.platform]} gets its own version</summary>
+            <FoldedText text={t.variant} fold={null} />
+            <p className="v2-card-meta">It goes out on {PLATFORM_LABEL[t.platform]} after you approve its time card.</p>
+          </details>
+        ) : null,
+      )}
+      {several && onRewrite ? (
+        <div className="v2-actions" role="group" aria-label="Rewrite for one platform">
+          {targets.map((t) => (
+            <Button key={t.platform} compact variant="quiet" disabled={rewriting?.has(t.platform)} onClick={() => onRewrite(t.platform)}>
+              {rewriting?.has(t.platform) ? `Rewriting for ${PLATFORM_LABEL[t.platform]}…` : `${t.variant ? "Rewrite again" : "Rewrite"} for ${PLATFORM_LABEL[t.platform]} · ${REWRITE_CREDITS} credit`}
+            </Button>
+          ))}
+        </div>
+      ) : null}
+    </div>
   );
 }
 

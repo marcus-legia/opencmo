@@ -12,7 +12,7 @@ the schedule card component, the `approvals_autopilot` trigger, `lib/cmo/writer/
 
 - [x] Task 4: Threads chain, long X posts, autopilot. Waits on nothing.
 - [x] Task 6: caption with every video script. Waits on nothing.
-- [ ] Task 7: repurpose on demand. **Waits on A's Task 3** (fan-out slots per target) — check `A.md`.
+- [x] Task 7: repurpose on demand. **Waits on A's Task 3** (fan-out slots per target) — check `A.md`.
 - [ ] Task 9: photo post. **Waits on A's Task 5** (`schedule_propose` with Facebook; your migration redeclares it after A's).
 - [ ] Whole-branch code review once every box in `A.md` and here is ticked: run `/code-review` (high) on the PR's diff
   against `main`, fix what it finds in one round, re-review the fixes once, and list what is left in the PR.
@@ -51,3 +51,9 @@ Each task: tests first, commit, push (see README). Tick the box in this file in 
   per target on the post card, the variant shown on the card, and the rule that a slot carrying a variant never rides
   on the post card's approval (`schedule_take_proposal`), so no rewrite goes out unseen. No button exists until then,
   so no variant can be made.
+- **Task 7, second half (done by the session that took over A's and B's remaining work, 2026-11-12):** the post card
+  lists its targets and each current rewrite (`withPostTargets` in `lib/screens/schedule-enrich.ts`, read at load like
+  the script caption, so `approval_snapshot` and its hash are untouched), a "Rewrite for <platform> · 1 credit" button
+  per target when the post goes to two or more, and `20270120045000_variant_take`: a slot posting a rewrite never takes
+  the post card's approved time, so the rewrite shows on its own schedule card (`307_variant_take`). A core post's card
+  shows the core profile's limit (3,000) instead of its first target's.

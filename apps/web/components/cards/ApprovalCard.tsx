@@ -10,7 +10,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { useShellState } from "@/components/shell-v2/ShellState";
-import { ApiError } from "@/components/clipping/api";
+import { ApiError, api, jsonBody } from "@/components/clipping/api";
 import { Button, ButtonLink } from "@/components/ui";
 import { intentFor } from "@/lib/departments/publish/intent";
 import { chainFor } from "@/lib/departments/publish/split";
@@ -172,6 +172,27 @@ export function ApprovalCard({
   const postYourself =
     card.body.kind === "post" && connected !== null && postPlatform !== undefined && !connected.has(postPlatform) && !card.body.platforms.some((p) => p.thread);
   const postText = () => (editing ? draft.trim() : shown);
+
+  // "Rewrite for <platform>" (D4): the price is on the button and held before the model runs (`repurpose_post`).
+  const [rewriting, setRewriting] = useState<ReadonlySet<string>>(new Set());
+  const postItem = card.body.kind === "post" ? card.body.itemId : undefined;
+  const canRewrite = card.body.kind === "post" && card.status === "waiting" && !!postItem && !card.body.platforms.some((p) => p.thread);
+  async function rewrite(platform: string) {
+    if (sample) return toast("Sample card: nothing was rewritten or charged.");
+    if (!postItem || rewriting.has(platform)) return;
+    setRewriting((now) => new Set(now).add(platform));
+    try {
+      await api(`/cmo/items/${encodeURIComponent(postItem)}/repurpose`, jsonBody({ platform }));
+      toast(`Rewriting it for ${PLATFORM_LABEL[platform as keyof typeof PLATFORM_LABEL] ?? platform}. It shows on this card in about a minute.`);
+    } catch (error) {
+      setRewriting((now) => {
+        const next = new Set(now);
+        next.delete(platform);
+        return next;
+      });
+      toast(error instanceof ApiError ? error.message : "Something went wrong. Please try again.");
+    }
+  }
 
   async function copyAndOpenText(platform: string, text: string) {
     const target = isPublishPlatform(platform) ? intentFor(platform, text) : null;
@@ -444,7 +465,16 @@ export function ApprovalCard({
       {open ? (
         <div id={bodyId} className="v2-card-body">
           {card.body.kind === "post" ? (
-            <PostBody body={card.body} cardId={card.id} editing={editing} draft={draft} onDraft={setDraft} onPick={setShown} />
+            <PostBody
+              body={card.body}
+              cardId={card.id}
+              editing={editing}
+              draft={draft}
+              onDraft={setDraft}
+              onPick={setShown}
+              onRewrite={canRewrite ? (platform) => void rewrite(platform) : undefined}
+              rewriting={rewriting}
+            />
           ) : card.body.kind === "reply" ? (
             <ReplyBody body={card.body} />
           ) : card.body.kind === "goal" ? (

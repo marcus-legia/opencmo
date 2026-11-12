@@ -14309,6 +14309,11 @@ begin
   if coalesce(current_setting('opencmo.posted_self', true), '') = 'on' then
     return 'none';
   end if;
+  -- A rewrite for this platform was not on the post card (daily core drafts D4): the founder sees it on its own
+  -- schedule card before it goes out, so this slot does not ride on the post's approval.
+  if public.post_variant_text(p_d.ref_id, p_platform) is not null then
+    return 'none';
+  end if;
   -- The approved time is used once, for the post's first slot on the platform; a slot asked again later (missed,
   -- expired, a Retry past its window) gets a new time on a card, as before.
   if exists (select 1 from public.schedule_slots where deliverable_id = p_d.id and platform = p_platform) then

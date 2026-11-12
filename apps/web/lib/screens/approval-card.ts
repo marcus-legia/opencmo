@@ -82,6 +82,17 @@ const PostBody = z.object({
       timezone: z.string().max(64),
     })
     .optional(),
+  // --- targets (daily core drafts D3, D4; 2026-11-12) ---
+  /** The calendar item: the Rewrite button's address. Absent on a post card made outside the calendar (older cards). */
+  itemId: z.string().optional(),
+  /**
+   * Every platform the core post goes to, added when the card loads. `variant`: the platform's own rewrite, current
+   * with the core text, which its slot posts instead (a schedule card shows it before it goes out).
+   */
+  targets: z
+    .array(z.object({ platform: PlatformSchema.extract(["x", "threads", "linkedin", "facebook"]), variant: z.string().max(25000).nullable() }))
+    .max(4)
+    .optional(),
 });
 
 const ReplyBody = z.object({

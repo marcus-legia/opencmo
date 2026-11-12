@@ -129,6 +129,7 @@ function build(row: ApprovalRow): Built | null {
           checks: [],
           why: clip(str(s.rationale), 200) || null,
           ...timed,
+          ...(row.ref_kind === "content_item" ? { itemId: row.ref_id } : {}),
         },
       };
     }
