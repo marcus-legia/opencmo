@@ -154,6 +154,7 @@ insert into allowed values
   ('save_editor_document(uuid,integer,jsonb,jsonb)'),
   ('save_editor_skill(text,text,text)'),
   ('save_marketing_document(text,jsonb,uuid)'),
+  ('save_posting_plan(jsonb)'),
   ('save_scene_code(text)'),
   ('schedule_change(uuid,text,jsonb)'),
   ('schedule_mark_posted(uuid)'),

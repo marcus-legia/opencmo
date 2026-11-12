@@ -13187,6 +13187,54 @@ $$;
 
 
 --
+-- Name: save_posting_plan(jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.save_posting_plan(p_plan jsonb) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_key text;
+  v_val jsonb;
+begin
+  if p_plan is null or jsonb_typeof(p_plan) <> 'object'
+     or jsonb_typeof(p_plan->'text') is distinct from 'object' or jsonb_typeof(p_plan->'video') is distinct from 'object'
+     or (select count(*) from jsonb_object_keys(p_plan)) <> 2 then
+    raise exception 'The posting plan needs a text and a video section.' using errcode = '22023';
+  end if;
+
+  if (select array_agg(k order by k) from jsonb_object_keys(p_plan->'text') k) is distinct from array['linkedin', 'threads', 'x'] then
+    raise exception 'Posts a day are set for X, Threads and LinkedIn.' using errcode = '22023';
+  end if;
+  for v_key, v_val in select * from jsonb_each(p_plan->'text') loop
+    if jsonb_typeof(v_val) <> 'number' or (v_val #>> '{}')::numeric <> trunc((v_val #>> '{}')::numeric)
+       or (v_val #>> '{}')::numeric not between 0 and 3 then
+      raise exception 'Posts a day must be between 0 and 3.' using errcode = '22023';
+    end if;
+  end loop;
+
+  if (select array_agg(k order by k) from jsonb_object_keys(p_plan->'video') k) is distinct from array['instagram', 'tiktok', 'youtube'] then
+    raise exception 'Videos a week are set for TikTok, Instagram and YouTube.' using errcode = '22023';
+  end if;
+  for v_key, v_val in select * from jsonb_each(p_plan->'video') loop
+    if jsonb_typeof(v_val) <> 'number' or (v_val #>> '{}')::numeric <> trunc((v_val #>> '{}')::numeric)
+       or (v_val #>> '{}')::numeric not between 0 and 7 then
+      raise exception 'Videos a week must be between 0 and 7.' using errcode = '22023';
+    end if;
+  end loop;
+
+  update public.profiles set posting_plan = p_plan where id = v_user;
+  if not found then
+    raise exception 'Profile not found.' using errcode = 'P0002';
+  end if;
+  return p_plan;
+end;
+$$;
+
+
+--
 -- Name: save_scene_code(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -17127,6 +17175,7 @@ CREATE TABLE public.profiles (
     autopilot_platforms text[] DEFAULT '{}'::text[] NOT NULL,
     autopilot_hours smallint DEFAULT 12 NOT NULL,
     autopilot_note text,
+    posting_plan jsonb,
     CONSTRAINT profiles_autopilot_hours_check CHECK ((autopilot_hours = ANY (ARRAY[6, 12, 24]))),
     CONSTRAINT profiles_autopilot_note_check CHECK ((char_length(autopilot_note) <= 200)),
     CONSTRAINT profiles_autopilot_platforms_check CHECK ((autopilot_platforms <@ ARRAY['x'::text, 'threads'::text, 'linkedin'::text])),
