@@ -33,7 +33,7 @@ import type { ResearchScreen } from "./research";
 import type { SalesScreen } from "./sales";
 import type { ScreenData, ScreenName } from "./registry";
 import type { ScheduleScreen } from "./schedule";
-import type { SettingsScreen } from "./settings";
+import { AUTOPILOT_HOURS, AUTOPILOT_PLATFORMS, type SettingsScreen } from "./settings";
 import type { StudioItem, StudioScreen, TeamStep } from "./studio";
 import { videoSteps, type VideoStepRow } from "./video-steps";
 import type { WriterScreen } from "./writer";
@@ -622,6 +622,14 @@ async function settings({ supabase, userId }: LoadContext): Promise<Partial<Sett
     weeklyCreditBudget: async () => (await prof).weekly_credit_budget,
     timezone: async () => (await prof).timezone,
     digestHour: async () => (await prof).digest_hour,
+    // Its own read: `profile()` feeds every screen, and must not fail on a database that has not had this migration.
+    autopilot: async () => {
+      const r = await supabase.from("profiles").select("autopilot_platforms, autopilot_hours, autopilot_note").eq("id", userId).maybeSingle();
+      if (r.error || !r.data) throw new Error(`profiles: ${r.error?.message ?? "missing"}`);
+      const p = r.data as { autopilot_platforms: string[] | null; autopilot_hours: number | null; autopilot_note: string | null };
+      const hours = AUTOPILOT_HOURS.find((h) => h === p.autopilot_hours) ?? 12;
+      return { platforms: AUTOPILOT_PLATFORMS.filter((id) => (p.autopilot_platforms ?? []).includes(id)), hours, note: p.autopilot_note };
+    },
     plan: async () => {
       const [p, balance] = await Promise.all([prof, supabase.rpc("credit_balance", { p_user_id: userId })]);
       const name = p.plan.charAt(0).toUpperCase() + p.plan.slice(1);

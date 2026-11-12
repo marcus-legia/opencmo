@@ -34,7 +34,7 @@ import { useConnectedPlatforms } from "./connected";
 import { openScript } from "./open-script";
 import { blockedReason, editCaption, type Decision } from "./decide";
 import { renderAgain, saveSlideText, slidesHref } from "./slides";
-import { NUMERAL, cardHead, headNote, type DraftReason } from "./labels";
+import { NUMERAL, autoLabel, cardHead, headNote, type DraftReason } from "./labels";
 import { ReasonChips } from "./ReasonChips";
 import { approveBlocked, formatWhen, fromLocalInput, sameOptions, savedOptions, toLocalInput } from "./schedule";
 
@@ -480,6 +480,12 @@ export function ApprovalCard({
           {proposed ? (
             <p className="v2-card-meta" data-testid="post-when">
               {postWhen(proposed)}
+            </p>
+          ) : null}
+          {card.autoAt && card.status === "waiting" ? (
+            <p className="v2-card-state is-decided_elsewhere" data-testid="post-auto">
+              <b>Autopilot</b>
+              <span>{autoLabel(card.autoAt)}. Edit or skip it before then; Approve sends it to the schedule now.</span>
             </p>
           ) : null}
           {foot ? <div className="v2-card-meta">{foot}</div> : null}

@@ -43,6 +43,13 @@ function untilLabel(iso: string, now: number): string {
   return minutes < 60 ? `expires in ${minutes} min` : `expires in ${Math.round(minutes / 60)} h`;
 }
 
+/** "Goes out on its own in 5 h": how long the founder has to change an autopilot post. */
+export function autoLabel(iso: string, now = Date.now()): string {
+  const minutes = Math.round((new Date(iso).getTime() - now) / 60_000);
+  if (minutes <= 0) return "Goes out on its own within the hour";
+  return `Goes out on its own in ${minutes < 60 ? `${minutes} min` : `${Math.round(minutes / 60)} h`}`;
+}
+
 /** Right side of the head: "Thu 09:10", "score 78 / 100", "expires in 3 h". */
 export function headNote(card: ApprovalCard, now = Date.now()): string | null {
   const body = card.body;

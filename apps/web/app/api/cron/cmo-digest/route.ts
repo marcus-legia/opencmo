@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
+import { cmoPausedEverywhere } from "@/lib/cmo/pause";
 import { cronAuthorized } from "@/lib/cron-auth";
 import { localClock } from "@/lib/cmo/digest";
 import { readAll } from "@/lib/cmo/jobs/progress-run";
@@ -27,6 +28,13 @@ export async function GET(request: NextRequest) {
   // Cards held past a day's budget (P6 A4) come back first, so the morning digest names them.
   const released = await admin.rpc("approval_release_held", { p_limit: 500 });
   if (released.error) console.warn("[cron] cmo-digest: held cards not released", released.error.message);
+  // Autopilot (owner, 2026-11-12): posts whose review window is over are approved for their founders, each through
+  // the founder's own `approval_decide`. Not while the CMO is paused everywhere.
+  if (!cmoPausedEverywhere()) {
+    const auto = await admin.rpc("approval_auto_decide", { p_limit: 200 });
+    if (auto.error) console.error("[cron] cmo-digest: autopilot did not run", auto.error.message);
+    else if (auto.data) console.log(`[cron] cmo-digest: autopilot approved ${auto.data} posts`);
+  }
   const send = emailSender();
   const now = new Date();
   type Profile = { id: string; email: string | null; timezone: string; digest_hour: number };

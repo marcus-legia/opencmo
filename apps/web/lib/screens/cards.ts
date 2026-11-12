@@ -22,7 +22,7 @@ import { salesNeeds, salesRuleKind, type Department, type ScorePart } from "./co
 
 /** The columns of `approvals` the app reads (RLS: the founder's own). */
 export const APPROVAL_COLUMNS =
-  "id, kind, department, ref_kind, ref_id, status, snapshot, content_hash, price_credits, post_at, account, expires_at, created_at, decided_at, decided_via";
+  "id, kind, department, ref_kind, ref_id, status, snapshot, content_hash, price_credits, post_at, account, expires_at, created_at, decided_at, decided_via, auto_at";
 
 export type ApprovalRow = {
   id: string;
@@ -40,6 +40,8 @@ export type ApprovalRow = {
   created_at: string;
   decided_at: string | null;
   decided_via: ApprovalCard["decidedVia"];
+  /** Autopilot: when an untouched post card is approved for the founder; absent on rows read before it existed. */
+  auto_at?: string | null;
 };
 
 const str = (v: unknown, fallback = ""): string => (typeof v === "string" ? v : fallback);
@@ -382,11 +384,12 @@ export function approvalToCard(row: ApprovalRow, now = new Date()): ApprovalCard
     expiresAt: ts(row.expires_at),
     decidedAt: ts(row.decided_at),
     decidedVia: row.decided_via,
+    autoAt: row.status === "waiting" ? ts(row.auto_at ?? null) : null,
     contentHash: row.content_hash,
     problem: expired
       ? { kind: "expired", text: "This card expired. A new one will ask again." }
       : elsewhere
-        ? { kind: "decided_elsewhere", text: row.decided_via === "mcp" ? "You decided this through your Claude." : "You decided this on another device." }
+        ? { kind: "decided_elsewhere", text: row.decided_via === "auto" ? "It went out without asking: nobody changed it in its review window." : row.decided_via === "mcp" ? "You decided this through your Claude." : "You decided this on another device." }
         : null,
   };
 }

@@ -47,6 +47,12 @@ too expensive to lead. The AI CMO makes value at a small cost, so it leads.
 - **Assist, never act.** Anything that goes out (posts, replies) runs only after the user
   approves it, on their own account. Never add automatic liking, following, commenting,
   multiple accounts or fake engagement. Sales has no post button.
+- **Autopilot is the one exception, and it is narrow** (owner, 2026-11-12). A founder may turn it on per platform
+  (X, Threads, LinkedIn) for single posts on an account they connected: the post's card says when it goes out, they
+  can edit or skip it until then (6, 12 or 24 hours), and an untouched card is approved for them. Off by default,
+  paid plans only. It never covers Reddit or any other reply, threads, videos, a brief the founder wrote in the chat,
+  or anything that spends credits beyond the draft; three skips in a row turn it off. The approval runs through the
+  founder's own `approval_decide` (`approval_auto_decide`), never a second path. Do not widen it without the owner.
 - **Video must be the user's own.** Upload is the only way in. There is no link import and no
   clipping tool that pulls from outside video (removed 2026-10-20: payment providers forbid
   clipping tools and content downloaders); do not bring either back.
