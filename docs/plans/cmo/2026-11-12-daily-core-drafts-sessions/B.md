@@ -97,7 +97,8 @@ cannot run the Supabase stack, so there is no signed-in app here): the page fram
 the app are not in them. The planner panel is in `shots-A/`.
 
 `core-post.png`, `rewrite-result.png`, `fan-out.png`, `threads-chain.png`, `x-thread-button.png`, `x-thread-card.png`,
-`script-caption.png`, `photo-post-panel.png`.
+`script-caption.png`, `photo-post-panel.png`, `planner.png` (with the Facebook Page row; the steppers' buttons are not drawn
+on the preview page).
 
 Seen while taking them, not fixed: a schedule card's one-post preview (`.v2-card-draft`) shows a post's paragraphs run
 together; the chain and post cards keep them.
