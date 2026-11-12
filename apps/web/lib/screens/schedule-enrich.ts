@@ -148,6 +148,7 @@ export async function enrichScheduleCards(supabase: SupabaseClient, userId: stri
         avatarUrl: (b.accountId ? avatar.get(b.accountId) : null) ?? null,
         preview: { ...b.preview, videoUrl: render ? signed.get(render) ?? null : null },
         state: slot ? slotState(slot) : b.state,
+        ...(slot?.status === "failed" && slot.error?.code === "too_long" && b.where.platform === "x" ? { canThread: true } : {}),
         publishedUrl: slot?.status === "published" && slot.external_url?.startsWith("https://") ? slot.external_url : null,
         tiktok:
           creator && creator.privacyLevels.length > 0

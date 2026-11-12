@@ -106,6 +106,37 @@ async function main() {
   }
   assert.equal(fakePublishCount(), before, "no refused slot posted");
 
+  // A free X account refuses a long post: the card gets a sentence to act on and the thread button, not X's words.
+  {
+    const long = "A long post about one true thing. ".repeat(18).trim();
+    const refusing = (message: string): PublishAdapter => ({
+      ...adapter,
+      publish: async () => ({ status: "failed", externalId: null, url: null, error: { code: "invalid", message, retryable: false } }),
+    });
+    const longSlot = (options: FiredSlot["options"] = { ai_label: false }) =>
+      fired({ options, snapshot: snapshot({ text: long, options }), current: { content_hash: HASH, text: long, title: null, clip_id: null } });
+    const run = async (slot: FiredSlot, message: string) => {
+      const { d, updates } = deps([slot], { adapter: refusing(message) });
+      await runPublishPost(d, SLOT);
+      return updates[0] as Extract<PublishStatusUpdate, { status: "failed" }>;
+    };
+    const tooLong = await run(longSlot(), "X refused the post: Tweet text is too long (612 characters, limit 280)");
+    assert.deepEqual(tooLong.error, { code: "too_long", message: "Your X account takes 280 characters per post. Post it as a thread, or turn on X Premium.", retryable: true });
+    // Another refusal of the same post keeps its own words; so does a short post, and a post already sent as a thread.
+    assert.equal((await run(longSlot(), "X refused the post: duplicate content")).error.code, "invalid");
+    assert.equal((await run(fired(), "X refused the post: too long")).error.code, "invalid");
+    assert.equal((await run(longSlot({ ai_label: false, as_thread: true }), "X refused the post: too long")).error.code, "invalid");
+    // Too long even for a thread: no button, a sentence that says to shorten it.
+    const huge = "word ".repeat(2000).trim();
+    const hugeSlot = fired({ snapshot: snapshot({ text: huge.slice(0, 5000) }), current: { content_hash: HASH, text: huge, title: null, clip_id: null } });
+    const h = await run(hugeSlot, "X refused the post: text exceeds the character limit");
+    assert.equal(h.error.code, "invalid");
+    assert.match(h.error.message, /too long for a thread/);
+    // The founder's "Post as a thread" reaches the adapter as the slot's field; on another platform it is dropped.
+    assert.deepEqual(platformFields("x", { as_thread: true }), { platform: "x", aiGenerated: false, asThread: true });
+    assert.deepEqual(platformFields("threads", { as_thread: true }), { platform: "threads", aiGenerated: false });
+  }
+
   // Not ours to touch: cancelled, paused or settled slots are skipped without a status change.
   for (const status of ["cancelled", "waiting", "published"]) {
     const { d, updates } = deps([fired({ status })]);

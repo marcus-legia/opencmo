@@ -10,7 +10,7 @@ the schedule card component, the `approvals_autopilot` trigger, `lib/cmo/writer/
 
 **Order and waits:**
 
-- [ ] Task 4: Threads chain, long X posts, autopilot. Waits on nothing.
+- [x] Task 4: Threads chain, long X posts, autopilot. Waits on nothing.
 - [ ] Task 6: caption with every video script. Waits on nothing.
 - [ ] Task 7: repurpose on demand. **Waits on A's Task 3** (fan-out slots per target) — check `A.md`.
 - [ ] Task 9: photo post. **Waits on A's Task 5** (`schedule_propose` with Facebook; your migration redeclares it after A's).
@@ -23,3 +23,20 @@ the schedule card component, the `approvals_autopilot` trigger, `lib/cmo/writer/
   owner with SendUserFile too.
 
 Each task: tests first, commit, push (see README). Tick the box in this file in the task's own commit.
+
+## Notes for A and the owner
+
+- **Task 4, what differs from the plan.** The X failure is carried by the error code `too_long` (new in
+  `PUBLISH_ERROR_CODES`), not a `retry: "as_thread"` field: `publish_status` keeps only `code`, `message` and
+  `retryable`. "Post as a thread" sets the slot's new option `as_thread` through `set_options`, so a new card shows the
+  cut posts and the founder approves them (nothing goes out that was not seen). A thread is offered up to 25 posts.
+- **Small edits in A's files** (one or two lines each, keep them on a conflict): `lib/departments/publish/types.ts`
+  (`too_long` code, `asThread` on the non-TikTok platform fields) and `accounts.ts` (`too_long` → 422).
+- **Autopilot and targets.** `post_is_threads_chain` also reads `body.targets`: a core post over 500 characters whose
+  targets include `threads` gets no `auto_at` on any platform, because approving it also schedules the Threads chain.
+- **Not verified against Zernio:** `threadItems` for Threads (the plan's shape; the repo's notes confirm it for X only)
+  and the words of X's "too long" refusal. `zernio.com` is not reachable from the cloud session. The matcher is
+  `saysTooLong` in `publish/split.ts`; check both on a real account before the owner's test.
+- **Local database.** Docker cannot pull the Supabase image here, so pgTAP ran on a plain Postgres 16 with a small
+  shim for `auth`, `storage` and the roles. `182_*` fails its second case there with and without this branch (default
+  grants differ); CI's run is the authoritative one.

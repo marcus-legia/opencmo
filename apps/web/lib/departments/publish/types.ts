@@ -44,7 +44,14 @@ export const PlatformFieldsSchema = z.discriminatedUnion("platform", [
       aiGenerated: z.boolean(),
     })
     .strict(),
-  z.object({ platform: z.enum(["x", "threads", "linkedin", "youtube", "instagram"]), aiGenerated: z.boolean() }).strict(),
+  z
+    .object({
+      platform: z.enum(["x", "threads", "linkedin", "youtube", "instagram"]),
+      aiGenerated: z.boolean(),
+      /** X only: the founder asked for a long post as a thread, after a free account refused it as one post. */
+      asThread: z.boolean().optional(),
+    })
+    .strict(),
 ]);
 export type PlatformFields = z.infer<typeof PlatformFieldsSchema>;
 
@@ -115,6 +122,8 @@ export const PUBLISH_ERROR_CODES = [
   "not_found",
   /** The post breaks a platform rule (length, media, a field). Retrying the same post fails again. */
   "invalid",
+  /** X refused the text as too long for the account (no X Premium). The card offers "Post as a thread". */
+  "too_long",
   /** Too many requests, or the platform's daily limit (TikTok's 429). */
   "rate_limited",
   /** Zernio or the platform is down, or timed out. The fallback card offers copy + open. */

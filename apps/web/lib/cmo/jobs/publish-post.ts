@@ -19,6 +19,7 @@
  * `PublishPostDeps` so the rules are checked without a database (`publish-post.check.ts`).
  */
 
+import { MAX_THREAD_PARTS, X_FREE_LIMIT, X_TOO_LONG, X_TOO_LONG_FOR_THREAD, chainFor, postLength, saysTooLong } from "@/lib/departments/publish/split";
 import { ScheduleOptionsSchema, type ScheduleOptions, type ScheduleSnapshot } from "@/lib/screens/approval-card";
 import {
   PlatformFieldsSchema,
@@ -115,7 +116,8 @@ export function platformFields(platform: PublishSlot["platform"], options: Sched
       aiGenerated,
     });
   }
-  return { platform, aiGenerated };
+  // Only X has a thread to ask for; the key on another platform's slot is ignored, not posted.
+  return platform === "x" && o.as_thread === true ? { platform, aiGenerated, asThread: true } : { platform, aiGenerated };
 }
 
 /**
@@ -162,6 +164,20 @@ export function adapterInput(slot: FiredSlot, mediaUrl: string | null, mediaType
       fields: platformFields(slot.platform, slot.options),
     },
   };
+}
+
+/**
+ * A long X post refused for its length (a free account): the card gets a sentence the founder can act on and, through
+ * the `too_long` code, a "Post as a thread" button, never the platform's raw words. Anything else is left as it was.
+ */
+export function xTooLong(result: PublishResult, deliverable: PublishDeliverable, slot: PublishSlot): PublishResult {
+  if (result.status !== "failed" || result.error.code !== "invalid" || slot.platform !== "x" || deliverable.thread) return result;
+  if (slot.fields.platform === "x" && slot.fields.asThread) return result;
+  if (postLength(deliverable.text.trim()) <= X_FREE_LIMIT || !saysTooLong(result.error.message)) return result;
+  const parts = chainFor("x", deliverable.text, true)?.length ?? 0;
+  return parts <= MAX_THREAD_PARTS
+    ? { ...result, error: { code: "too_long", message: X_TOO_LONG, retryable: true } }
+    : { ...result, error: { code: "invalid", message: X_TOO_LONG_FOR_THREAD, retryable: false } };
 }
 
 function resultUpdate(result: PublishResult): PublishStatusUpdate {
@@ -238,7 +254,7 @@ export async function runPublishPost(deps: PublishPostDeps, slotId: string): Pro
   }
   let result: PublishResult;
   try {
-    result = await deps.adapter.publish(input.deliverable, input.slot);
+    result = xTooLong(await deps.adapter.publish(input.deliverable, input.slot), input.deliverable, input.slot);
   } catch (error) {
     // The slot is `publishing`: anything that is not an answer from the platform settles it, so it never sits there
     // until it reads "unconfirmed" for a post that was never sent.

@@ -164,6 +164,33 @@ async function main() {
     assert.deepEqual(yt.platforms[0]!.platformSpecificData, { title: "Half the editing time", containsSyntheticMedia: false });
     const x = postBody({ ...post, kind: "post", media: [] }, { ...slot, platform: "x", fields: { platform: "x", aiGenerated: false } }) as { platforms: object[] };
     assert.deepEqual(x.platforms[0], { platform: "twitter", accountId: ACC });
+
+    // A Threads post over 500 characters goes out as a chain, the image on its first part; 500 or under is one post.
+    type Chain = { content?: string; mediaItems?: unknown; platforms: { platform: string; platformSpecificData?: { threadItems: { content: string; mediaItems?: unknown }[] } }[] };
+    const long = `${"One sentence that fills the post up. ".repeat(24)}`.trim();
+    assert.ok([...long].length > 800 && [...long].length <= 1000);
+    const image = [{ url: "https://media.zernio.com/temp/1_a.png", contentType: "image/png" as const }];
+    const threadsSlot = { ...slot, platform: "threads" as const, fields: { platform: "threads" as const, aiGenerated: false } };
+    const chain = postBody({ ...post, kind: "post", text: long, media: image }, threadsSlot) as Chain;
+    const items = chain.platforms[0]!.platformSpecificData!.threadItems;
+    assert.equal(items.length, 2);
+    assert.ok(items.every((item) => [...item.content].length <= 500));
+    assert.equal(items.map((item) => item.content).join(" "), long);
+    assert.deepEqual(items.map((item) => Boolean(item.mediaItems)), [true, false]);
+    assert.equal(chain.mediaItems, undefined);
+    const short = postBody({ ...post, kind: "post", text: "x".repeat(500), media: [] }, threadsSlot) as Chain;
+    assert.equal(short.platforms[0]!.platformSpecificData, undefined);
+    // X takes a long post as one (X Premium); a thread only when the founder asked for one after a refusal.
+    const xSlot = { ...slot, platform: "x" as const, fields: { platform: "x" as const, aiGenerated: false } };
+    const one = postBody({ ...post, kind: "post", text: long, media: [] }, xSlot) as Chain;
+    assert.equal(one.platforms[0]!.platformSpecificData, undefined);
+    assert.equal(one.content, long);
+    const asked = postBody({ ...post, kind: "post", text: long, media: [] }, { ...xSlot, fields: { ...xSlot.fields, asThread: true } }) as Chain;
+    assert.ok(asked.platforms[0]!.platformSpecificData!.threadItems.length >= 4);
+    assert.ok(asked.platforms[0]!.platformSpecificData!.threadItems.every((item) => [...item.content].length <= 280));
+    // A video's caption is never cut into a chain.
+    const caption = postBody({ ...post, text: long }, { ...slot, platform: "threads", fields: { platform: "threads", aiGenerated: false } }) as Chain;
+    assert.equal(caption.platforms[0]!.platformSpecificData, undefined);
   }
 
   // Publish: published now, retried once on a 5xx with the same key, pending → accepted, refused → failed.

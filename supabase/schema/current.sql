@@ -2369,6 +2369,10 @@ begin
   if new.kind = 'post' and new.status in ('waiting', 'held') then
     begin
       new.auto_at := public.post_autopilot_at(new.user_id, new.ref_kind, new.ref_id, new.snapshot);
+      -- An edit raises a new card, so the length is asked again each time the words change.
+      if new.auto_at is not null and public.post_is_threads_chain(new.ref_id, new.snapshot) then
+        new.auto_at := null;
+      end if;
     exception when others then
       -- The card matters more than its countdown: it is raised as an ordinary card.
       raise warning 'autopilot for card of % failed: %', new.ref_id, sqlerrm;
@@ -10032,6 +10036,22 @@ $_$;
 
 
 --
+-- Name: post_is_threads_chain(uuid, jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.post_is_threads_chain(p_item uuid, p_snapshot jsonb) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select char_length(btrim(coalesce(p_snapshot->>'text', ''), E' \t\n\r')) > 500
+    and (p_snapshot->'proposed'->>'platform' = 'threads'
+      or public.platform_profile_id(p_snapshot->>'platform') = 'threads'
+      or exists (select 1 from public.content_items c
+                 where c.id = p_item and jsonb_typeof(c.body->'targets') = 'array' and c.body->'targets' ? 'threads'));
+$$;
+
+
+--
 -- Name: post_proposal(uuid, text, uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -13833,10 +13853,15 @@ begin
     raise exception 'The platform settings are malformed.' using errcode = '22023';
   end if;
   for v_key, v_value in select key, value from jsonb_each(p_new) loop
-    if v_key not in ('privacy', 'allow_comment', 'allow_duet', 'allow_stitch', 'brand_organic', 'brand_content', 'ai_label') then
+    if v_key not in ('privacy', 'allow_comment', 'allow_duet', 'allow_stitch', 'brand_organic', 'brand_content', 'ai_label',
+                     'as_thread') then
       raise exception 'Unknown platform setting "%".', left(v_key, 40) using errcode = '22023';
     end if;
-    if v_key <> 'ai_label' and p_platform <> 'tiktok' then
+    if v_key = 'as_thread' then
+      if p_platform <> 'x' then
+        raise exception 'Posting as a thread is only for X.' using errcode = '22023';
+      end if;
+    elsif v_key <> 'ai_label' and p_platform <> 'tiktok' then
       raise exception 'That setting is only for TikTok.' using errcode = '22023';
     end if;
     if v_key = 'privacy' then

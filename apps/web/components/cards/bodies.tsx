@@ -7,6 +7,8 @@ import { Button, Tabs, Toggle } from "@/components/ui";
 import type { CardBody, ScheduleOptions } from "@/lib/screens/approval-card";
 import { DEPARTMENT_LABEL, PLATFORM_LABEL, type Platform } from "@/lib/screens/common";
 
+import { THREADS_LIMIT, X_FREE_LIMIT, chainFor } from "@/lib/departments/publish/split";
+
 import { CaptionList, charCount, type SaveCaption } from "./captions";
 import { joinSlideText, slideTextProblem, splitSlideText } from "./slides";
 import { formatSeconds } from "./labels";
@@ -102,7 +104,21 @@ export function PostBody({
 }
 
 /** An X thread (P6 W4): one numbered post per row, each with its own length; X shows them in this order. */
-function ThreadPosts({ posts, limit, why }: { posts: string[]; limit: number; why: string | null }) {
+function ThreadPosts({
+  posts,
+  limit,
+  why,
+  note,
+  onCopy,
+}: {
+  posts: string[];
+  limit: number;
+  why: string | null;
+  /** What the row of posts is: an X thread by default, a Threads chain on a schedule card. */
+  note?: string;
+  /** Copy and open (no connected account): each post gets its own Copy button, in the order they are posted. */
+  onCopy?: (post: string, index: number) => void;
+}) {
   return (
     <>
       <ol className="v2-card-thread" aria-label={`Thread of ${posts.length} posts`} data-testid="thread-posts">
@@ -114,15 +130,22 @@ function ThreadPosts({ posts, limit, why }: { posts: string[]; limit: number; wh
                 {i + 1}
               </span>
               <p className="v2-card-text">{post}</p>
-              <span className={`v2-chip ${length > limit ? "is-stuck" : "is-posted"}`}>
-                {length}/{limit}
+              <span className="v2-card-thread-side">
+                <span className={`v2-chip ${length > limit ? "is-stuck" : "is-posted"}`}>
+                  {length}/{limit}
+                </span>
+                {onCopy ? (
+                  <Button variant="quiet" compact onClick={() => onCopy(post, i)} aria-label={`Copy post ${i + 1}`}>
+                    Copy
+                  </Button>
+                ) : null}
               </span>
             </li>
           );
         })}
       </ol>
       <div className="v2-card-meta">
-        <span>{posts.length} posts, posted as one thread on X.</span>
+        <span>{note ?? `${posts.length} posts, posted as one thread on X.`}</span>
         {why ? <span>Why: {why}</span> : null}
       </div>
     </>
@@ -501,6 +524,7 @@ export function ScheduleBody({
   options,
   onOptions,
   editable,
+  onCopyPart,
 }: {
   body: Body<"schedule">;
   cardId: string;
@@ -508,8 +532,12 @@ export function ScheduleBody({
   onOptions: (options: ScheduleOptions) => void;
   /** Null when the fields may be changed now, else why not. */
   editable: string | null;
+  /** Copy and open of a chain: copies one part. */
+  onCopyPart?: (post: string, index: number) => void;
 }) {
   const platform = PLATFORM_LABEL[body.where.platform];
+  // A post longer than the platform takes is shown as the parts that go out (`publish/split.ts` cuts both).
+  const chain = !body.preview.videoUrl && !body.preview.title && body.preview.text ? chainFor(body.where.platform, body.preview.text, body.options.as_thread === true) : null;
   const tiktok = body.mode === "publish" && body.where.platform === "tiktok" ? body.tiktok : null;
   const aiLabel = body.mode === "publish" && AI_LABEL_PLATFORMS.has(body.where.platform);
   const set = (patch: Partial<ScheduleOptions>) => onOptions({ ...options, ...patch });
@@ -523,7 +551,19 @@ export function ScheduleBody({
           <video src={body.preview.videoUrl} controls preload="metadata" playsInline />
         </div>
       ) : null}
-      {body.preview.title || body.preview.text ? (
+      {chain ? (
+        <ThreadPosts
+          posts={chain}
+          limit={body.where.platform === "threads" ? THREADS_LIMIT : X_FREE_LIMIT}
+          why={null}
+          note={
+            body.mode === "publish"
+              ? `Longer than one ${platform} post: it goes out as ${chain.length} posts in a row, cut here, every word kept.`
+              : `Longer than one ${platform} post: post the first part, then reply to it with each next one.`
+          }
+          onCopy={body.mode === "intent" ? onCopyPart : undefined}
+        />
+      ) : body.preview.title || body.preview.text ? (
         <div className="v2-card-draft">
           {body.preview.title ? <b>{body.preview.title}</b> : null}
           {body.preview.title && body.preview.text ? <br /> : null}

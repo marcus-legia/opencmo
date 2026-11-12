@@ -79,6 +79,7 @@ export async function disconnectAccount(deps: AccountsDeps, id: string): Promise
 export function publishErrorStatus(error: PublishError): number {
   switch (error.code) {
     case "invalid":
+    case "too_long":
       return 422;
     case "not_found":
       return 404;

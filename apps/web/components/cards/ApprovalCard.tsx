@@ -13,6 +13,7 @@ import { useShellState } from "@/components/shell-v2/ShellState";
 import { ApiError } from "@/components/clipping/api";
 import { Button, ButtonLink } from "@/components/ui";
 import { intentFor } from "@/lib/departments/publish/intent";
+import { chainFor } from "@/lib/departments/publish/split";
 import { isPublishPlatform } from "@/lib/departments/publish/types";
 import { PRIMARY_ACTION, type ApprovalCard as Card, type Caption, type ScheduleOptions } from "@/lib/screens/approval-card";
 import { PLATFORM_LABEL } from "@/lib/screens/common";
@@ -188,7 +189,15 @@ export function ApprovalCard({
    */
   async function copyAndOpen(body: Extract<Card["body"], { kind: "schedule" }>) {
     if (sample) return toast("Sample card: nothing was copied or opened.");
-    return copyAndOpenText(body.where.platform, body.preview.text ?? "");
+    // A chain opens with its first part in the composer; the card's Copy buttons give the rest.
+    const text = body.preview.text ?? "";
+    return copyAndOpenText(body.where.platform, chainFor(body.where.platform, text)?.[0] ?? text);
+  }
+
+  async function copyPart(post: string, index: number) {
+    if (sample) return toast("Sample card: nothing was copied.");
+    const ok = navigator.clipboard ? await navigator.clipboard.writeText(post).then(() => true, () => false) : false;
+    toast(ok ? `Post ${index + 1} copied.` : "Copy did not work here. Select the post and copy it yourself.");
   }
 
   async function saveSlide(index: number, heading: string, words: string): Promise<boolean> {
@@ -373,6 +382,13 @@ export function ApprovalCard({
         if (body.state === "unconfirmed")
           return [{ label: "It went out", variant: "primary", checks: "posted", run: () => void run({ action: "posted" }) }, changeTime, ...declineAction];
         // A failed post keeps its card open with the reason while its window lasts (A1); Retry posts it now.
+        // A free X account refused a long post: Retry would fail the same way, so the card offers the thread instead.
+        if (body.state === "failed" && body.canThread && !body.options.as_thread)
+          return [
+            { label: "Post as a thread", variant: "primary", checks: "set_options", run: () => void run({ action: "set_options", options: { ...body.options, as_thread: true } }) },
+            changeTime,
+            ...declineAction,
+          ];
         if (card.problem?.kind === "failed" || body.state === "failed") return [{ label: "Retry", variant: "primary", checks: "retry", run: () => void run({ action: "retry" }) }, changeTime, ...declineAction];
         if (!sameOptions(options, body.options))
           return [
@@ -455,7 +471,7 @@ export function ApprovalCard({
           ) : card.body.kind === "slideshow" ? (
             <SlideshowBody body={card.body} cardId={card.id} editable={captionsBlocked} edited={slideEdited} onSaveSlide={saveSlide} onSaveCaption={saveCaption} />
           ) : card.body.kind === "schedule" ? (
-            <ScheduleBody body={card.body} cardId={card.id} options={options} onOptions={setOptions} editable={blocked ?? (busy ? "Wait for the decision to finish." : card.body.state === "failed" || card.body.state === "no_account" || card.body.state === "unconfirmed" ? "It posts as you approved it; change the time to start again." : null)} />
+            <ScheduleBody body={card.body} cardId={card.id} options={options} onOptions={setOptions} onCopyPart={(post, index) => void copyPart(post, index)} editable={blocked ?? (busy ? "Wait for the decision to finish." : card.body.state === "failed" || card.body.state === "no_account" || card.body.state === "unconfirmed" ? "It posts as you approved it; change the time to start again." : null)} />
           ) : card.body.kind === "plan" ? (
             <PlanBody
               body={card.body}

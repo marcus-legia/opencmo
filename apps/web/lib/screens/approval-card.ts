@@ -385,6 +385,8 @@ export const ScheduleOptionsSchema = z
     brand_organic: z.boolean().optional(),
     brand_content: z.boolean().optional(),
     ai_label: z.boolean().optional(),
+    /** X only: a post too long for the account goes out as a thread, cut by code (`publish/split.ts`). */
+    as_thread: z.boolean().optional(),
   })
   .strict();
 export type ScheduleOptions = z.infer<typeof ScheduleOptionsSchema>;
@@ -470,6 +472,8 @@ const ScheduleBody = z.object({
    * `unconfirmed` is a post Zernio took but never confirmed (the founder checks; never a blind Retry).
    */
   state: z.enum(["waiting", "failed", "missed", "no_account", "unconfirmed"]),
+  /** X refused the post as too long for the account (the slot's error is `too_long`): the card offers a thread. */
+  canThread: z.boolean().optional(),
   /** The live post, once it went out. */
   publishedUrl: z.url().nullable(),
 });

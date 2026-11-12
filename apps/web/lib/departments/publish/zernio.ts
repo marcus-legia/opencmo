@@ -12,6 +12,7 @@ import { createHash, randomUUID } from "node:crypto";
 
 import { PLATFORM_LABEL } from "@/lib/screens/common";
 
+import { chainFor } from "./split";
 import {
   PublishDeliverableSchema,
   PublishError,
@@ -126,6 +127,21 @@ export function postBody(deliverable: PublishDeliverable, slot: PublishSlot): Js
         platform: SLUG[slot.platform],
         accountId: slot.zernioAccountId,
         platformSpecificData: { threadItems: deliverable.thread.map((content, i) => ({ content, ...(i === 0 && media.length ? { mediaItems: media } : {}) })) },
+      }],
+      publishNow: true,
+      metadata: { opencmoSlotId: slot.id, opencmoDeliverableId: deliverable.id },
+    };
+  }
+  // A Threads post over 500 characters goes out as a chain, and a long X post as a thread when the founder asked for
+  // one: the same `threadItems`, cut by code so every approved word is posted, in order.
+  const chain = deliverable.kind === "post" ? chainFor(slot.platform, deliverable.text, slot.fields.platform === "x" && slot.fields.asThread === true) : null;
+  if (chain && chain.length > 1) {
+    return {
+      content: deliverable.text,
+      platforms: [{
+        platform: SLUG[slot.platform],
+        accountId: slot.zernioAccountId,
+        platformSpecificData: { threadItems: chain.map((content, i) => ({ content, ...(i === 0 && media.length ? { mediaItems: media } : {}) })) },
       }],
       publishNow: true,
       metadata: { opencmoSlotId: slot.id, opencmoDeliverableId: deliverable.id },
