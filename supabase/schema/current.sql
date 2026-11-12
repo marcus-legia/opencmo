@@ -4985,7 +4985,12 @@ begin
       p_user, p_run, v_item->>'department', left(v_item->>'platform', 20), v_day,
       left(v_item->>'idea', 300), left(coalesce(v_item->>'reason', ''), 300),
       coalesce(v_item->>'department' = 'post' and jsonb_typeof(v_item->'image') = 'boolean' and (v_item->>'image')::boolean, false),
-      case when v_targets is null then '{}'::jsonb else jsonb_build_object('targets', v_targets) end
+      case
+        when v_targets is null then '{}'::jsonb
+        when jsonb_typeof(v_item->'slot') = 'number' and (v_item->>'slot')::numeric in (0, 1, 2)
+          then jsonb_build_object('targets', v_targets, 'slot', (v_item->>'slot')::int)
+        else jsonb_build_object('targets', v_targets)
+      end
     );
     v_count := v_count + 1;
   end loop;
@@ -5692,7 +5697,10 @@ begin
   end if;
   if p_item is not null then
     update public.content_items
-    set status = 'in_review', body = p_body, priority = coalesce(p_priority, 'medium'), run_id = p_run, updated_at = now()
+    set status = 'in_review',
+        body = (p_body - 'targets' - 'slot')
+          || jsonb_strip_nulls(jsonb_build_object('targets', body->'targets', 'slot', body->'slot')),
+        priority = coalesce(p_priority, 'medium'), run_id = p_run, updated_at = now()
     where id = p_item and user_id = p_user and status in ('planned', 'drafting')
     returning * into v_row;
     if not found then
@@ -5702,7 +5710,7 @@ begin
     insert into public.content_items (user_id, run_id, department, platform, day, idea, status, priority, body)
     values (p_user, p_run, 'post', v_platform, current_date,
             left(coalesce(nullif(p_idea, ''), 'Post for ' || case when v_post then v_profile->>'label' else 'X' end), 300),
-            'in_review', coalesce(p_priority, 'medium'), p_body)
+            'in_review', coalesce(p_priority, 'medium'), p_body - 'targets' - 'slot')
     returning * into v_row;
   end if;
   return v_row;
@@ -9932,9 +9940,10 @@ CREATE FUNCTION public.platform_profile(p_id text) RETURNS jsonb
     SET search_path TO 'public'
     AS $$
   select case p_id
-    when 'x' then '{"kind": "post", "limit": 280, "title": null, "hashtags": 0, "label": "X"}'::jsonb
+    when 'x' then '{"kind": "post", "limit": 25000, "title": null, "hashtags": 0, "label": "X"}'::jsonb
     when 'threads' then '{"kind": "post", "limit": 500, "title": null, "hashtags": 0, "label": "Threads"}'::jsonb
     when 'linkedin' then '{"kind": "post", "limit": 3000, "title": null, "hashtags": 0, "label": "LinkedIn"}'::jsonb
+    when 'core' then '{"kind": "core", "limit": 3000, "title": null, "hashtags": 0, "label": "Post"}'::jsonb
     when 'instagram_caption' then '{"kind": "caption", "limit": 2200, "title": null, "hashtags": 5, "label": "Instagram caption"}'::jsonb
     when 'tiktok_caption' then '{"kind": "caption", "limit": 2200, "title": null, "hashtags": 5, "label": "TikTok caption"}'::jsonb
     when 'youtube' then '{"kind": "youtube", "limit": 5000, "title": 100, "hashtags": 3, "label": "YouTube title and description"}'::jsonb
@@ -10204,6 +10213,23 @@ begin
   return (p_body->'proposed'->>'at')::timestamptz;
 end;
 $_$;
+
+
+--
+-- Name: post_targets(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.post_targets(p_item uuid) RETURNS text[]
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select case
+    when jsonb_typeof(c.body->'targets') = 'array' and jsonb_array_length(c.body->'targets') > 0
+      then array(select t from jsonb_array_elements_text(c.body->'targets') with ordinality as u(t, o) order by o)
+    else array_remove(array[public.platform_profile_id(c.platform)], null)
+  end
+  from public.content_items c where c.id = p_item
+$$;
 
 
 --
@@ -13389,6 +13415,7 @@ declare
   v_slots jsonb[];
   v_n integer;
   v_most integer;
+  v_old_text jsonb;
 begin
   if p_plan is null or jsonb_typeof(p_plan) <> 'object'
      or jsonb_typeof(p_plan->'text') is distinct from 'object' or jsonb_typeof(p_plan->'video') is distinct from 'object'
@@ -13416,9 +13443,13 @@ begin
     end if;
   end loop;
 
+  select posting_plan->'text' into v_old_text from public.profiles where id = v_user for update;
   update public.profiles set posting_plan = p_plan where id = v_user;
   if not found then
     raise exception 'Profile not found.' using errcode = 'P0002';
+  end if;
+  if v_old_text is not distinct from p_plan->'text' then
+    return p_plan;
   end if;
 
   -- The day's slots as `dayTargets` builds them: slot i goes to every platform (in X, Threads, LinkedIn order) whose
@@ -13431,13 +13462,17 @@ begin
   v_n := coalesce(array_length(v_slots, 1), 0);
   if v_n > 0 then
     update public.content_items c
+    -- body.slot stays the planner's: a retarget that caps two posts onto one slot must not tie them for the next save.
     set body = c.body || jsonb_build_object('targets', v_slots[least(r.rank, v_n)]),
         platform = public.platform_profile(v_slots[least(r.rank, v_n)]->>0)->>'label',
         updated_at = now()
     from (
-      select id, row_number() over (partition by day order by created_at, id)::int as rank
+      select id, row_number() over (
+               partition by day
+               order by case when jsonb_typeof(body->'slot') = 'number' then (body->>'slot')::numeric end nulls last, created_at, id
+             )::int as rank
       from public.content_items
-      where user_id = v_user and department = 'post' and status = 'planned' and day >= current_date
+      where user_id = v_user and department = 'post' and status = 'planned' and day > current_date
     ) r
     where c.id = r.id;
   end if;
@@ -14132,9 +14167,11 @@ begin
     return 0;
   end if;
   if v_d.kind = 'post' and v_d.ref_kind = 'content_item' then
-    -- Writer stores the calendar's label ("X", "Threads", "LinkedIn"); slots use the platform's id.
-    select array_agg(public.platform_profile_id(platform)) into v_platforms from public.content_items
-    where id = v_d.ref_id and status = 'approved' and public.platform_profile_id(platform) in ('x', 'threads', 'linkedin');
+    -- Every platform of the post's slot (Writer's old items: the one platform of their label).
+    select array(select t from unnest(public.post_targets(c.id)) with ordinality as u(t, o)
+                 where t in ('x', 'threads', 'linkedin') order by o)
+      into v_platforms
+    from public.content_items c where c.id = v_d.ref_id and c.status = 'approved';
   elsif v_d.kind in ('short', 'slideshow', 'video') and v_d.ref_kind = 'clip' then
     select array_agg(p) into v_platforms from unnest(array['tiktok', 'instagram', 'youtube']) p
     where exists (select 1 from public.content_items c
@@ -14149,7 +14186,8 @@ begin
       and status = 'failed' and (window_ends_at > now() or error->>'code' = 'unconfirmed'));
     continue when (select count(*) from public.schedule_slots where deliverable_id = v_d.id and platform = v_platform)
       >= (v_rules->>'maxProposals')::integer;
-    -- The post card carried its time (cmo-review-3 1.2): approving the post approved it, so no schedule card asks.
+    -- The post card carried its time (cmo-review-3 1.2) for its first platform: approving the post approved it, so no
+    -- schedule card asks. The other targets get a card each.
     v_taken := 'none';
     if v_d.kind = 'post' then
       v_taken := public.schedule_take_proposal(v_d, v_platform);
@@ -14160,6 +14198,7 @@ begin
     end if;
     v_at := public.schedule_pick_time(v_d.user_id, v_platform, v_d.id);
     continue when v_at is null;
+    v_account := null;
     select id into v_account from public.social_accounts
     where user_id = v_d.user_id and platform = v_platform and status = 'connected';
     -- TikTok's posting guidelines: the founder picks the audience and turns on each interaction and disclosure;

@@ -49,10 +49,10 @@ export const LOOPS: Loop[] = [
     // Monday's post is the new plan's: `plan_week` queues its drafts when the calendar is written (`queueDueDrafts`).
     // A draft queued here beside the plan ran before the plan existed, wrote a post from no item, and left the
     // plan's Monday post for Tuesday.
-    name: "daily-x-draft",
+    name: "daily-post-draft",
     cadence: "daily, when a post is due",
     when: (s) => Boolean(s.duePost),
-    run: () => ({ loop: "daily-x-draft", kind: "post_draft", input: { source: "schedule" } }),
+    run: () => ({ loop: "daily-post-draft", kind: "post_draft", input: { source: "schedule" } }),
   },
   {
     name: "reddit-listening",

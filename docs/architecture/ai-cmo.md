@@ -45,7 +45,7 @@ The owner's sketch of 2026-11-08, top to bottom. Words are written before anythi
 | # | Step | What happens | Built in |
 |---|---|---|---|
 | 1 | Business information | The CMO reads the website and writes the four documents | `lib/cmo/onboard.ts`, `site.ts`, `documents.ts` |
-| 2 | Writer | The week plan, post drafts (text for X, Threads, LinkedIn; slides for TikTok, Instagram), video briefs; every word through no-ai-slop | `plan-week.ts`, `draft-post.ts`, `draft-thread.ts`, `write_slides`, `write_video_brief`, `lib/cmo/platforms.ts` |
+| 2 | Writer | The week plan from the founder's posting plan, one core post per slot for every platform it picked, video scripts with captions, video briefs; every word through no-ai-slop | `plan-week.ts`, `draft-post.ts`, `draft-thread.ts`, `write_slides`, `write_video_brief`, `lib/cmo/platforms.ts` |
 | 3 | Approval 1 | The founder approves the plan and the words | `approvals` |
 | 4 | Video | Built from the approved words, with the Brand Kit: slideshow, post image, short clips cut from a finished edit of the founder's own video. The editor is where the founder fine-tunes by hand, at the end | `lib/departments/studio/{slideshow,shorts}`, `lib/brand.ts`, the editor |
 | 5 | Approval 2 | The founder approves what was made | `approvals` |
@@ -55,9 +55,17 @@ Three lanes share the departments:
 
 | Lane | Steps |
 |---|---|
-| Post · caption | week order (`plan_week`) → angle (research) → draft (`post_draft`, Writer + checker) → approve post → time slot (`schedule_slots`, schedule card) → post (Zernio, or the intent link) → metrics (`pull_metrics`) |
+| Post · caption | week order (`plan_week`) → angle (research) → draft (`post_draft`, Writer + checker; one core post per slot) → approve post → one time slot per target (`schedule_slots`, schedule card) → post (Zernio, or the intent link) → metrics (`pull_metrics`) |
 | Video · slideshow · short | week order → brief or slide text (Writer) → build (Studio order, look check) → approve (`finished_video`, `slideshow`, `shorts_batch`) → captions (`write_caption`) → time slot → post → metrics. Only shorts and slideshows get slots (TikTok, Instagram, YouTube); a finished long video is not scheduled (`schedule_propose`) |
 | Sales | scan order (`sales_scan`) → Reddit thread (ScrapeCreators) → subreddit rules → reply draft (sales + checker) → approve (`reply` card on `opportunities`) → founder replies by hand (no post button) → outcome (`jobs/reply-outcomes.ts`) |
+
+**Posting plan and fan-out (owner, 2026-11-12).** The founder ticks the platforms and sets posts a day per platform
+(`profiles.posting_plan`, `save_posting_plan`, `lib/cmo/posting-plan.ts`). The week plan writes one post item per daily
+slot, with the slot's platforms in `body.targets`. The daily loop (`daily-post-draft`, `lib/cmo/schedule.ts`) drafts one
+run per due item, at most three a day: a slot with two or more targets gets one **core post** (`core` in
+`packages/contracts/platforms.json`, 3,000 characters), a one-target slot is written for its platform. Approving the
+post makes one schedule slot per target (`post_targets`, `schedule_propose`): `publish` with a connected account, else
+copy and open. X takes long posts (25,000, X Premium); a Threads post over 500 characters goes out as a chain.
 
 Loop: metrics, the founder's edits and winning posts → `cmo_memories`, `cmo_lessons`, `cmo_corrections` and voice
 notes → next week's plan.

@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 
 import { PLATFORMS } from "../screens/common";
 
-import { PLATFORM_LABELS, PROFILES, PROFILE_KINDS, PlatformProfileSchema, countHashtags, profileIdOf, profileOf } from "./platforms";
+import { PLATFORM_LABELS, PROFILES, PROFILE_KINDS, PlatformProfileSchema, countHashtags, postProfile, profileIdOf, profileOf } from "./platforms";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..");
 
@@ -31,27 +31,45 @@ check("the JSON schema has the zod schema's enums and fields", () => {
   type Def = { required: string[]; properties: Record<string, { enum?: string[] }> };
   const schema = JSON.parse(readFileSync(join(ROOT, "packages", "contracts", "platforms.schema.json"), "utf8")) as { $defs: { profile: Def } };
   const def = schema.$defs.profile;
-  assert.deepEqual(def.properties.platform!.enum, [...PLATFORMS]);
+  // null is the core post's: it goes to every platform the planner picked, so it names none.
+  assert.deepEqual(def.properties.platform!.enum, [...PLATFORMS, null]);
   assert.deepEqual(def.properties.kind!.enum, [...PROFILE_KINDS]);
   const fields = Object.keys(PlatformProfileSchema.shape);
   assert.deepEqual([...def.required].sort(), [...fields].sort());
   assert.deepEqual(Object.keys(def.properties).sort(), [...fields].sort());
 });
 
-check("ids are unique and the six profiles are there", () => {
+check("ids are unique and the seven profiles are there", () => {
   const ids = PROFILES.map((p) => p.id);
   assert.equal(new Set(ids).size, ids.length);
-  assert.deepEqual([...ids].sort(), ["instagram_caption", "linkedin", "threads", "tiktok_caption", "x", "youtube"]);
+  assert.deepEqual([...ids].sort(), ["core", "instagram_caption", "linkedin", "threads", "tiktok_caption", "x", "youtube"]);
+});
+
+check("the core post names no platform, and only it", () => {
+  for (const p of PROFILES) assert.equal(p.platform === null, p.kind === "core", `${p.id}: platform`);
+  const core = profileOf("core")!;
+  assert.deepEqual([core.label, core.limit, core.visibleBeforeMore, core.hashtags], ["Post", 3000, 140, 0]);
+  assert.equal(PlatformProfileSchema.safeParse({ ...profileOf("x")!, platform: null }).success, false, "a platform post names its platform");
+});
+
+check("one post for 2+ targets is the core post; one target is written for its platform", () => {
+  assert.equal(postProfile("X", ["x", "linkedin"]).id, "core");
+  assert.equal(postProfile("Threads", ["threads", "linkedin", "x"]).id, "core");
+  assert.equal(postProfile("LinkedIn", ["linkedin"]).id, "linkedin");
+  assert.equal(postProfile("Threads").id, "threads", "an old item without targets keeps its platform");
+  assert.equal(postProfile("X", []).id, "x");
+  assert.equal(postProfile("core").id, "core", "the MCP inbox reads the core profile back from its <platform> block");
 });
 
 check("product rules: no hashtags in posts, a title only for YouTube, the marker inside the limit", () => {
   for (const p of PROFILES) {
-    if (p.kind === "post") assert.equal(p.hashtags, 0, `${p.id}: hashtags only on videos`);
+    if (p.kind === "post" || p.kind === "core") assert.equal(p.hashtags, 0, `${p.id}: hashtags only on videos`);
     assert.equal(p.title !== null, p.kind === "youtube", `${p.id}: title`);
     if (p.visibleBeforeMore !== null) assert.ok(p.visibleBeforeMore < p.limit, `${p.id}: visibleBeforeMore`);
   }
   const x = PROFILES.find((p) => p.id === "x")!;
-  assert.equal(x.limit, 280, "X stays at 280");
+  // D6 (owner, 2026-11-12): most founders have X Premium; a free account's refusal is handled at publish time.
+  assert.equal(x.limit, 25000, "X takes a long post");
 });
 
 check("hashtags are counted the way platforms count them", () => {
@@ -98,7 +116,8 @@ check("SQL's platform_profile_id() maps the same labels to the same profiles", (
   assert.ok(found, "platform_profile_id not found in any migration");
   assert.deepEqual(Object.fromEntries([...found].sort()), Object.fromEntries(Object.entries(PLATFORM_LABELS).sort()));
   for (const id of new Set(Object.values(PLATFORM_LABELS))) assert.ok(profileOf(id), `${id} is a profile`);
-  for (const p of PROFILES) assert.equal(profileIdOf(p.id), p.id, `${p.id} maps to itself`);
+  // `core` is never a calendar label: an item's platform stays its first target's.
+  for (const p of PROFILES) assert.equal(profileIdOf(p.id), p.kind === "core" ? null : p.id, `${p.id} maps to itself`);
   assert.equal(profileIdOf(" X "), "x");
   assert.equal(profileIdOf("LinkedIn"), "linkedin");
   assert.equal(profileIdOf("Reddit"), null);

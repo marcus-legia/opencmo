@@ -99,7 +99,9 @@ function build(row: ApprovalRow): Built | null {
       // `cmo_decide_post` decides it (every post before P3 was for X).
       const named = profileOf(profileIdOf(str(s.platform)) ?? "x");
       const profile = named && named.kind === "post" ? named : profileOf("x");
-      if (!profile) return null;
+      // A post profile always names its platform; only `core` does not (`PlatformProfileSchema`).
+      if (!profile?.platform) return null;
+      const platform = profile.platform;
       const text = str(s.text);
       // Clipped to the contract: one long version or rationale must not fail the card (and with it the whole queue).
       const versions = [text, ...strings(s.alternates)].filter(Boolean).slice(0, 3).map((v) => clip(v, 3000));
@@ -117,7 +119,7 @@ function build(row: ApprovalRow): Built | null {
           kind: "post",
           platforms: [
             {
-              platform: profile.platform,
+              platform,
               versions: versions.length ? versions : [str(s.idea)],
               limit: profile.limit,
               visibleBeforeMore: profile.visibleBeforeMore,

@@ -13,10 +13,10 @@ import { briefRequest } from "@/lib/departments/studio/video";
 
 import { AGENT_SPECS, CAPTION_WRITERS, POST_WRITERS } from "../agents/registry";
 import { checkPost } from "../jobs/check-post";
-import { postProfile, REVIEW_SYSTEM } from "../jobs/draft-post";
+import { REVIEW_SYSTEM } from "../jobs/draft-post";
+import { postProfile } from "../platforms";
 import { memoryStore } from "../jobs/memory-store";
 import { drainCmoQueue } from "../jobs/runner";
-import { duePerPlatform } from "../schedule";
 import { isoDay, type ItemRow } from "../jobs/types";
 import { stockPatterns } from "../jobs/eval/style";
 import { CAPTION_PROFILES, countHashtags, POST_PROFILES, profileOf } from "../platforms";
@@ -240,7 +240,9 @@ async function postChecks() {
   const long = `${"Late invoices are a process problem. ".repeat(11).trim()}`;
   assert.ok([...long].length > 280 && [...long].length <= 500);
   assert.deepEqual(checkPostFor(long, threads, rules), [], "Threads takes 500 characters");
-  assert.ok(checkPostFor(long, x, rules)[0]?.includes("X allows 280"));
+  // D6 (2026-11-12): X takes a long post (X Premium); a free account's refusal is handled at publish time.
+  assert.deepEqual(checkPostFor(long, x, rules), [], "X takes a long post");
+  assert.ok(checkPostFor("Late invoices. ".repeat(1800), x, rules)[0]?.includes("X allows 25000"));
   assert.deepEqual(checkPostFor(`${long}\n\n${long}\n\n${long}`, linkedin, rules), [], "LinkedIn takes 3,000");
   assert.ok(checkPostFor(long.repeat(9), linkedin, rules)[0]?.includes("LinkedIn allows 3000"));
   assert.ok(checkPostFor("Ship it #buildinpublic", linkedin, rules).some((issue) => issue.includes("hashtag")), "no hashtags on any post profile");
@@ -248,9 +250,6 @@ async function postChecks() {
   assert.deepEqual(moreAdvice(`Late invoices are a process.\n\n${long}`, linkedin), [], "a short first line lands before the cut");
   assert.deepEqual(moreAdvice(long, threads), [], "Threads shows the whole post");
 
-  // The schedule drafts one post per platform a tick, the oldest first: an X backlog never crowds out the others.
-  const due = [{ id: "x-old", platform: "X" }, { id: "x-older", platform: "x" }, { id: "x-today", platform: "Twitter" }, { id: "t", platform: "Threads" }, { id: "l", platform: "LinkedIn" }, { id: "unknown", platform: null }];
-  assert.deepEqual(duePerPlatform(due).map((d) => d.id), ["x-old", "t", "l"]);
 
   // A Threads item through the founder's Claude: its own agent, the <platform> block first, X's prefix.
   process.env.OPENCMO_AGENT_FAKE = "1";
@@ -267,7 +266,7 @@ async function postChecks() {
   assert.equal(onThreads.request.system, onX.request.system, "one cached prefix for every post profile");
   assert.deepEqual([profileFromPrompt(onThreads.request.prompt), profileFromPrompt(onX.request.prompt)], ["threads", "x"]);
   assert.match(onThreads.request.title, /today's Threads post/);
-  // A 400-character version is a Threads post, never an X one.
+  // A 400-character version fits Threads, and X too since X takes long posts (D6).
   const answer = { versions: [{ text: long, angle: "long" }, { text: "Reminders on day 3, 7 and 14.", angle: "short" }], rationale: "r" };
   mem.submit(onThreads.id, "draft_post", answer);
   mem.submit(onX.id, "draft_post", answer);
@@ -276,7 +275,18 @@ async function postChecks() {
   const xCard = mem.items.find((i) => i.id === "x1")!;
   assert.equal(threadsCard.status, "in_review");
   assert.deepEqual([threadsCard.body.text, threadsCard.body.alternates], [long, ["Reminders on day 3, 7 and 14."]]);
-  assert.deepEqual([xCard.body.text, xCard.body.alternates], ["Reminders on day 3, 7 and 14.", []], "the long version is dropped on X");
+  assert.deepEqual([xCard.body.text, xCard.body.alternates], [long, ["Reminders on day 3, 7 and 14."]], "X keeps the long version");
+
+  // A slot for two platforms is one core post (D3): the core profile, and the draft keeps the planner's targets.
+  const core = memoryStore(docs, []);
+  core.items.push({ ...item("X", "c1"), body: { targets: ["x", "linkedin"], slot: 0 } });
+  core.enqueue("post_draft", { brain: "claude", item_id: "c1" });
+  await drainCmoQueue(core.store);
+  assert.equal(profileFromPrompt(core.inbox[0]!.request.prompt), "core", "two targets: the core profile");
+  core.submit(core.inbox[0]!.id, "draft_post", answer);
+  await drainCmoQueue(core.store);
+  const coreCard = core.items.find((i) => i.id === "c1")!;
+  assert.deepEqual([coreCard.status, coreCard.body.targets, coreCard.body.slot], ["in_review", ["x", "linkedin"], 0], "the draft keeps its targets");
 
   // W2: the founder's rules first, then their voice notes (newest, weightiest), then documents; the prefix is the same
   // whatever the founder's notes say; voice notes are not read twice through the general memories.

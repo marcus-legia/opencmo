@@ -1,13 +1,13 @@
 {
   "$schema": "./platforms.schema.json",
-  "$comment": "Platform profiles (writer.md §7). Limits carry headroom. No links anywhere, no hashtags in posts. Change a number here and in the latest migration's platform_profile(); check:contracts compares them.",
+  "$comment": "Platform profiles (writer.md §7). core: one post for every platform the planner picked for its slot (2026-11-12). Limits carry headroom. No links anywhere, no hashtags in posts. Change a number here and in the latest migration's platform_profile(); check:contracts compares them.",
   "profiles": [
     {
       "id": "x",
       "label": "X",
       "platform": "x",
       "kind": "post",
-      "limit": 280,
+      "limit": 25000,
       "title": null,
       "visibleBeforeMore": null,
       "hashtags": 0,
@@ -37,6 +37,18 @@
       "hashtags": 0,
       "links": false,
       "tone": "Longer, short paragraphs, the first line before the cut (about 140 characters on a phone, 210 on a desktop). A real story or lesson with its details. No \"I'm excited to announce\", no one-line paragraphs stacked for drama, no moral at the end."
+    },
+    {
+      "id": "core",
+      "label": "Post",
+      "platform": null,
+      "kind": "core",
+      "limit": 3000,
+      "title": null,
+      "visibleBeforeMore": 140,
+      "hashtags": 0,
+      "links": false,
+      "tone": "A post of substance that stands on its own on X, LinkedIn and Facebook: the plain true line first, short paragraphs, one real story or lesson with its details. It may be long; it never pads."
     },
     {
       "id": "instagram_caption",

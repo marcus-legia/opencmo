@@ -139,10 +139,9 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
     },
     postingPlan: async () => posting.plan ?? defaultPostingPlan(zernio.accounts.map((a) => a.platform)),
     async queueDueDrafts(run) {
-      const seen = new Set<string>();
-      const due = items.filter((i) => i.run_id === run.id && i.department === "post" && i.status === "planned" && i.day <= isoDay())
-        .filter((i) => (seen.has(i.platform.toLowerCase()) ? false : (seen.add(i.platform.toLowerCase()), true)));
-      for (const item of due) enqueue("post_draft", { source: "schedule", loop: "daily-x-draft", item_id: item.id, ...(run.input.brain === "claude" ? { brain: "claude" } : {}) });
+      // As `enqueueDueDrafts`: one run per due item, at most three a day.
+      const due = items.filter((i) => i.run_id === run.id && i.department === "post" && i.status === "planned" && i.day <= isoDay()).slice(0, 3);
+      for (const item of due) enqueue("post_draft", { source: "schedule", loop: "daily-post-draft", item_id: item.id, ...(run.input.brain === "claude" ? { brain: "claude" } : {}) });
       return due.length;
     },
     async variantSource(_u, itemId) {
@@ -161,7 +160,9 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
         item = { id: id(), run_id: runId, department: "post", platform: "x", day: isoDay(), idea, reason: "", status: "planned", priority, body: {}, final_text: null, external_url: null, decided_at: null, published_at: null, created_at: new Date().toISOString() };
         items.push(item);
       }
-      Object.assign(item, { status: "in_review", body, priority, run_id: runId });
+      // As `cmo_save_draft`: the draft keeps the planner's targets and slot, so the post still goes to every platform.
+      const kept = Object.fromEntries(Object.entries(item.body).filter(([k]) => k === "targets" || k === "slot"));
+      Object.assign(item, { status: "in_review", body: { ...body, ...kept }, priority, run_id: runId });
       return item;
     },
     seenUrls: async () => new Set(opps.map((o) => o.url)),
