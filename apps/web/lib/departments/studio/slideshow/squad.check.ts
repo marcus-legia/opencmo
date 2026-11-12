@@ -33,7 +33,7 @@ assert.equal(slideOps(five, []).every((op) => !("background" in op)), true, "no 
 assert.equal(stillsRequestId("clip-1", "a".repeat(64)), "c5fefb54-7e90-51cd-9ac4-92a93266c4bf");
 assert.equal(renderRequestId("clip-1", "a".repeat(64)), "fcaa4fef-d43d-50cb-94bb-4d642160ce72");
 
-assert.deepEqual(STUDIO_ACCESS.buildSlideshow, ["brain"], "only the brain's order builds a slideshow");
+assert.ok(!("buildSlideshow" in STUDIO_ACCESS), "the CMO no longer builds a slideshow (D7, 2026-11-12)");
 assert.deepEqual(STUDIO_ACCESS.buildPostImage, ["brain"], "only the brain's order builds a post image");
 assert.deepEqual(["x", "youtube", "linkedin", "tiktok_caption"].map(postImageAspect), ["16:9", "16:9", "1:1", "9:16"]);
 

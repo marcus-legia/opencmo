@@ -42,7 +42,7 @@ const LATE_MS = 24 * HOUR;
  * Kinds the Planner can plan around: the orders of calendar items (posts, Reddit, a video, a slideshow). Other kinds
  * (captions, metrics, research) are retried by their own loop or follow the order they serve.
  */
-export const REPLANNABLE: ReadonlySet<string> = new Set(["post_draft", "sales_scan", "build_video", "build_slideshow"]);
+export const REPLANNABLE: ReadonlySet<string> = new Set(["post_draft", "sales_scan", "build_video"]);
 
 /**
  * One order's state. `price` is what the order's kind costs (`cmo_job_price`); an order that needs credits and was

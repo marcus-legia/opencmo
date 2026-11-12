@@ -17270,20 +17270,8 @@ begin
       select sum(budget_credits - spent_credits) from public.work_orders
       where parent_id = v_root.id and status not in ('done', 'failed', 'cancelled')), 0);
     v_due := (v_item.day + interval '23 hours 59 minutes') at time zone 'UTC';
-    -- A slideshow (cmo-review B2.3): Writer writes the slides, then the Slideshow squad builds them
-    -- (`work_orders_brief_rules` copies the slides into the order; `studio_orders_claim` starts it when they are done).
+    -- A slideshow is the founder's own photos now (D7, 2026-11-12): an old plan's Slideshow item orders nothing.
     if v_item.department = 'video' and v_item.platform = 'Slideshow' then
-      v_price := public.cmo_job_price('write_slides');
-      v_brief := public.work_order_create(p_user, v_week, v_root.id, 'write_slides',
-        left('Slides for “' || v_item.idea || '”', 200),
-        jsonb_build_object('objective', v_item.idea, 'reason', coalesce(v_item.reason, ''),
-          'done_when', 'Studio has the slides for this slideshow.'),
-        least(v_price, greatest(v_free, 0)), v_due, '{}', 'loop');
-      perform public.work_order_create(p_user, v_week, v_root.id, 'build_slideshow', v_item.idea,
-        jsonb_build_object('idea', v_item.idea, 'aspect', '9:16', 'platform', 'TikTok',
-          'done_when', 'The founder approved the slideshow.'),
-        0, v_due, array[v_brief.id], 'loop', v_item.id);
-      perform public.writer_order_start(v_brief, jsonb_build_object('idea', v_item.idea, 'reason', coalesce(v_item.reason, '')));
       continue;
     end if;
     if v_item.department = 'video' then

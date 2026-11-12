@@ -19,7 +19,7 @@ import { BRIEF_ASPECTS, SlideSchema, type VideoBrief } from "@/lib/cmo/writer/ty
 export const STUDIO_CALLERS = ["brain", "assistant", "mcp", "ui"] as const;
 export type StudioCaller = (typeof STUDIO_CALLERS)[number];
 
-export const STUDIO_ENTRIES = ["plan", "decide", "buildVideo", "cutShorts", "markFinished", "renderShort", "buildSlideshow", "buildPostImage"] as const;
+export const STUDIO_ENTRIES = ["plan", "decide", "buildVideo", "cutShorts", "markFinished", "renderShort", "buildPostImage"] as const;
 export type StudioEntry = (typeof STUDIO_ENTRIES)[number];
 
 /**
@@ -37,7 +37,6 @@ export const STUDIO_ACCESS: Record<StudioEntry, readonly StudioCaller[]> = {
   cutShorts: ["brain", "ui"],
   markFinished: ["ui"],
   renderShort: ["brain"],
-  buildSlideshow: ["brain"],
   buildPostImage: ["brain"],
 };
 
@@ -214,8 +213,6 @@ export interface StudioAdapter {
   markFinished(clipId: string, hash: string): Promise<MarkedFinished>;
   /** Queue `render_document` for a short's own edit, with no editor open and no founder session. */
   renderShort(shortClipId: string): Promise<RenderedShort>;
-  /** Brain only: a slideshow edit from Writer's slides, its MP4 and PNG set queued; the card comes when both are done. */
-  buildSlideshow(brief: SlideshowBrief): Promise<BuiltSlideshow>;
   /** Brain only: an image for a post, from a frame or a captured page; SQL writes the deliverable when it is rendered. */
   buildPostImage(brief: PostImageBrief): Promise<BuiltPostImage>;
 }

@@ -1,6 +1,7 @@
 /**
- * The Slideshow squad (P5 B3, `studio.md` §7): Writer's slides → Reviewer (code) → Visuals → Builder (slide ops, Brand
- * Kit) → MP4 and PNG set from one revision. SQL raises the one card when both renders are done.
+ * Slideshow renders (P5 B3, `studio.md` §7). The CMO no longer builds a slideshow from Writer's slides (owner,
+ * 2026-11-12, D7: a slideshow is the founder's own photos); what is left renders the slideshow edits already made
+ * again after a text edit (`/api/v1/studio/[clipId]/slideshow-render`), and the helpers the post image and the evals use.
  *
  * Nothing here spends credits (owner, 2026-10-30): visuals are the founder's captured pages or the Brand Kit
  * background, and an AI image is the founder's own `/image`. Text is always a layer. Every write is the founder's own
@@ -10,17 +11,14 @@
 import { slideSpans, type ClipDocument } from "@opencmo/clip-doc";
 import { activeScene, CAPTURE_SRC_PREFIX, SLIDE_LAYERS, SLIDE_SECONDS, SLIDE_TEXT_MAX } from "@opencmo/editor-core";
 
-import { clipContext } from "@/lib/api/clips";
 import { firstRow, rpcOrThrow } from "@/lib/api/handler";
-import { defaultBrandKit } from "@/lib/brand";
 import type { Slide } from "@/lib/cmo/writer/types";
-import { applyToClip, readEditorProject } from "@/lib/editor/apply";
+import { readEditorProject } from "@/lib/editor/apply";
 import { exportPlan, startDocumentExport } from "@/lib/editor/export";
-import { ensureProject } from "@/lib/editor/project";
 import { wakeWorker } from "@/lib/modal";
 
 import { renderRequestId, requestIdFrom } from "../render";
-import { SlideshowBriefSchema, type BuiltSlideshow, type SlideshowBrief, type StudioContext } from "../types";
+import type { StudioContext } from "../types";
 
 /** Writer's own checks hold the facts and the words to avoid; this is what the frame holds, on any brief. */
 export function reviewSlides(slides: readonly Slide[]): string[] {
@@ -93,40 +91,4 @@ export async function renderSlideshow(supabase: StudioContext["supabase"], userI
   await wakeWorker({ task_id: stills.id });
   const prefix = `${userId}/${clipId}/${stills.id}`;
   return { mp4TaskId: mp4.id, stillsTaskId: stills.id, slides: cardSlides(project.document, prefix), mp4Path: `${userId}/${clipId}/${mp4.id}.mp4`, pngSetPath: `${prefix}.zip` };
-}
-
-async function readyCaptures(ctx: StudioContext, wanted: number): Promise<string[]> {
-  const { data, error } = await ctx.supabase.from("page_captures").select("id").eq("status", "ready").order("created_at", { ascending: false }).limit(wanted);
-  if (error) throw new Error(`page_captures read: ${error.message}`);
-  return ((data ?? []) as { id: string }[]).map((row) => row.id);
-}
-
-export async function buildSlideshow(ctx: StudioContext, input: SlideshowBrief): Promise<BuiltSlideshow> {
-  const brief = SlideshowBriefSchema.parse(input);
-  const issues = reviewSlides(brief.slides);
-  if (issues.length) return { kind: "invalid", message: issues.slice(0, 3).join(" ") };
-
-  // One edit per order: a retry after a failed render reuses it (and its slides) instead of making another.
-  const clipId = await rpcOrThrow<string>(ctx.supabase, "create_slideshow", { p_name: brief.idea.slice(0, 60), p_aspect: brief.aspect, p_order: ctx.orderId ?? null });
-  const context = await clipContext(ctx.supabase, clipId);
-  // Nobody opens this edit before the render, so the project the editor would create is made here.
-  const existing = await ensureProject(ctx.supabase, context, clipId);
-  if (!slideSpans(existing.document).length) {
-    const kit = await defaultBrandKit(ctx.supabase);
-    // Brand last: its logo must sit on top of the slides, and it recolours what they drew.
-    const ops = [...slideOps(brief.slides, await readyCaptures(ctx, brief.slides.length)), ...(kit ? [{ op: "apply_brand", kit: kit.kit, frame: false }] : [])];
-    await applyToClip(ctx.supabase, context, clipId, ops, { checkpoint: null });
-  }
-
-  const render = await renderSlideshow(ctx.supabase, ctx.userId, clipId);
-  const card = { title: brief.idea.slice(0, 200), aspect: brief.aspect, slides: render.slides, mp4_path: render.mp4Path, png_set_path: render.pngSetPath };
-  await rpcOrThrow(ctx.supabase, "studio_slideshow_rendering", {
-    p_order_id: ctx.orderId ?? null,
-    p_clip_id: clipId,
-    p_input: { idea: brief.idea, aspect: brief.aspect },
-    p_card: card,
-    p_mp4_task: render.mp4TaskId,
-    p_stills_task: render.stillsTaskId,
-  });
-  return { kind: "rendering", clipId, mp4TaskId: render.mp4TaskId, stillsTaskId: render.stillsTaskId };
 }
