@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 
 import { createFakePublishAdapter, fakeAccountId, fakePublishCount, resetFakePublish } from "@/lib/departments/publish/fake";
 import { publishDeps } from "@/lib/departments/publish/job";
-import type { PublishAdapter } from "@/lib/departments/publish/types";
+import type { PublishAdapter, PublishDeliverable } from "@/lib/departments/publish/types";
 import type { ScheduleSnapshot } from "@/lib/screens/approval-card";
 
 import { platformFields, runPublishPost, type FiredSlot, type MediaUpload, type PublishPostDeps, type PublishStatusUpdate } from "./publish-post";
@@ -72,6 +72,7 @@ async function main() {
       exportFor: async () => ({ object: "u/c/t.mp4", bytes: 1234, contentType: "video/mp4" as const }),
       media: async () => ({ state: "none" }),
       startMedia: async () => "task-1",
+      photoUrls: async (objects) => objects.map((o) => ({ url: `https://storage.example/${o}?token=t`, contentType: "image/jpeg" as const })),
       status: async (_id, u) => void updates.push(u),
       ...extra,
     };
@@ -85,6 +86,25 @@ async function main() {
     assert.equal(updates[0]!.status, "published");
     await runPublishPost(deps([fired()]).d, SLOT);
     assert.equal(fakePublishCount(), 1);
+  }
+
+  // A photo post (D7): every approved photo goes, in order, as a signed link; nothing is uploaded first.
+  {
+    const photos = ["u/p/1.jpg", "u/p/2.jpg", "u/p/3.jpg"];
+    let sent: PublishDeliverable | null = null;
+    const watching = { ...adapter, publish: async (deliverable: PublishDeliverable, slot: Parameters<typeof adapter.publish>[1]) => ((sent = deliverable), adapter.publish(deliverable, slot)) };
+    const slot = fired({
+      platform: "instagram",
+      snapshot: snapshot({ deliverable_kind: "photo_post", platform: "instagram", text: "Demo day.", photos }),
+      current: { content_hash: HASH, text: "Demo day.", title: null, clip_id: null, photos },
+    });
+    const { d } = deps([slot], { adapter: watching, startMedia: async () => assert.fail("a photo post uploads nothing") });
+    assert.equal((await runPublishPost(d, SLOT)).kind, "done");
+    assert.deepEqual((sent as PublishDeliverable | null)?.media.map((m) => m.url), photos.map((o) => `https://storage.example/${o}?token=t`), "every photo, in order");
+    // A photo that is gone fails the slot with a sentence the founder can act on.
+    const { d: short, updates } = deps([slot], { photoUrls: async () => [] });
+    await runPublishPost(short, SLOT);
+    assert.match(updates[0]!.status === "failed" ? updates[0]!.error.message : "", /photo of this post is missing/);
   }
 
   // Refusals: nothing reaches the adapter.

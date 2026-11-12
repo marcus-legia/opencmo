@@ -198,6 +198,9 @@ export function supabaseStore(admin: BaseClient): CmoStore {
     async saveVariant(userId, runId, itemId, platform, text, gen) {
       await rpc("cmo_save_variant", { p_user: userId, p_run: runId, p_item: itemId, p_platform: platform, p_text: text, p_gen: gen });
     },
+    async savePhotoCaption(userId, runId, postId, caption) {
+      await rpc("cmo_save_photo_caption", { p_user: userId, p_run: runId, p_id: postId, p_caption: caption });
+    },
     async saveDraft(userId, runId, itemId, idea, body, priority) {
       const row = one<ItemRow>(
         await rpc("cmo_save_draft", { p_user: userId, p_run: runId, p_item: itemId, p_idea: idea, p_body: body, p_priority: priority }),

@@ -13,6 +13,7 @@ import { PLATFORM_LABEL, type SlotStatus } from "@/lib/screens/common";
 import type { ApprovalCard as Card } from "@/lib/screens/approval-card";
 import type { ScheduleScreen } from "@/lib/screens/schedule";
 
+import { PhotoPostPanel } from "./PhotoPostPanel";
 import { PostingPlanPanel } from "./PostingPlanPanel";
 import { useDecide } from "./useDecide";
 
@@ -202,6 +203,7 @@ export function CalendarView() {
             onSaved={reload}
           />
         ) : null}
+        {data ? <PhotoPostPanel accounts={data.accounts} live={state.status === "ready" && state.live.postingPlan} onScheduled={reload} /> : null}
 
         {state.status === "error" ? <div className="meta">{state.message}</div> : null}
         {state.status === "loading" ? <div className="meta">Loading the week…</div> : null}

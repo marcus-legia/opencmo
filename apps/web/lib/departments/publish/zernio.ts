@@ -148,6 +148,19 @@ export function postBody(deliverable: PublishDeliverable, slot: PublishSlot): Js
     };
   }
   const data = platformData(deliverable, slot);
+  // A photo post on TikTok (D7) is Photo Mode: Zernio reads the photo settings from a top-level `tiktokSettings`
+  // (docs.zernio.com/platforms/tiktok/posts, read 2026-11-12); the caption is its description, as TikTok's title
+  // takes only 90 characters. Instagram and Threads make a carousel from the images alone.
+  if (deliverable.kind === "photo_post" && slot.platform === "tiktok" && data) {
+    return {
+      ...(deliverable.text.trim() ? { content: deliverable.text } : {}),
+      mediaItems: media,
+      platforms: [{ platform: SLUG[slot.platform], accountId: slot.zernioAccountId }],
+      tiktokSettings: { ...data, mediaType: "photo", photoCoverIndex: 0, description: deliverable.text },
+      publishNow: true,
+      metadata: { opencmoSlotId: slot.id, opencmoDeliverableId: deliverable.id },
+    };
+  }
   return {
     ...(deliverable.text.trim() ? { content: deliverable.text } : {}),
     mediaItems: media,

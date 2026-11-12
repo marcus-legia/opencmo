@@ -10,7 +10,7 @@
 import { runPublishPost, type ExportFile, type FiredSlot, type MediaUpload, type PublishPostDeps, type PublishStatusUpdate } from "@/lib/cmo/jobs/publish-post";
 import { Deferred, type JobContext, type JobOutput } from "@/lib/cmo/jobs/runner";
 
-import type { PublishAdapter } from "./types";
+import type { PublishAdapter, PublishMedia } from "./types";
 
 type Rpc = (name: string, args: Record<string, unknown>) => PromiseLike<{ data: unknown; error: { message: string; code?: string } | null }>;
 
@@ -20,8 +20,17 @@ const UPLOAD_POLL_SECONDS = 30;
 
 type SlotRead = Omit<FiredSlot, "status"> & { status: string; export: ExportFile | null; media: MediaUpload };
 
+/** A photo's type from its name, as `reserve_upload` let it in (JPEG, PNG or WebP). */
+export function photoType(object: string): PublishMedia["contentType"] | null {
+  const ext = object.toLowerCase().split(".").pop();
+  return ext === "jpg" || ext === "jpeg" ? "image/jpeg" : ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : null;
+}
+
+/** Signs the founder's photos for the platform to fetch: an hour covers Zernio's fetch at `publishNow`. */
+export type SignPhotos = (objects: string[]) => Promise<{ object: string; url: string | null }[]>;
+
 /** `PublishPostDeps` over A2's service-role RPCs. */
-export function publishDeps(rpc: Rpc, adapter: PublishAdapter, userId: string, orderId: string): PublishPostDeps {
+export function publishDeps(rpc: Rpc, adapter: PublishAdapter, userId: string, orderId: string, sign?: SignPhotos): PublishPostDeps {
   const call = async <T>(name: string, args: Record<string, unknown>): Promise<T> => {
     const { data, error } = await rpc(name, { ...args, p_user: userId, p_order: orderId });
     if (error) throw new Error(`${name}: ${error.message}`);
@@ -52,6 +61,15 @@ export function publishDeps(rpc: Rpc, adapter: PublishAdapter, userId: string, o
     media: async (slotId) => (last?.id === slotId ? last.media : (await read(slotId)).media),
     startMedia: async (slotId, file, presigned) =>
       call<string>("publish_media_queue", { p_slot: slotId, p_object: file.object, p_upload_url: presigned.uploadUrl, p_public_url: presigned.publicUrl }),
+    // Only the run's own founder's photos: each object is under their folder (SQL checked it when it was saved).
+    photoUrls: async (objects) => {
+      if (!sign || objects.some((o) => !o.startsWith(`${userId}/`))) return [];
+      const signed = await sign(objects);
+      return signed.flatMap((s) => {
+        const type = photoType(s.object);
+        return s.url?.startsWith("https://") && type ? [{ url: s.url, contentType: type }] : [];
+      });
+    },
     status: (slotId, update) => setStatus(slotId, update),
   };
 
@@ -76,7 +94,12 @@ export async function publishPost(ctx: JobContext): Promise<JobOutput> {
   // Loaded here, not at the top: the runner's checks import every job without a database or a posting service.
   const [{ createAdminClient }, { publishAdapter }] = await Promise.all([import("@/lib/supabase/admin"), import("./adapter")]);
   const admin = createAdminClient();
-  const deps = publishDeps((name, args) => admin.rpc(name, args), publishAdapter(), ctx.run.user_id, orderId);
+  const sign: SignPhotos = async (objects) => {
+    const { data, error } = await admin.storage.from("photos").createSignedUrls(objects, 3600);
+    if (error) throw new Error(`photos: ${error.message}`);
+    return objects.map((object, i) => ({ object, url: data?.[i]?.signedUrl ?? null }));
+  };
+  const deps = publishDeps((name, args) => admin.rpc(name, args), publishAdapter(), ctx.run.user_id, orderId, sign);
   const outcome = await ctx.step("publish", "Posting at the approved time", () => runPublishPost(deps, slotId), (o) =>
     o.kind === "done" ? `Post ${o.status}` : o.kind === "waiting" ? o.text : `Skipped: ${o.reason}`,
   );

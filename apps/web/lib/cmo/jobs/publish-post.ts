@@ -28,6 +28,7 @@ import {
   type PlatformFields,
   type PresignedMedia,
   type PublishAdapter,
+  type PublishMedia,
   type PublishDeliverable,
   type PublishErrorInfo,
   type PublishResult,
@@ -52,7 +53,7 @@ export type FiredSlot = {
   /** The approved card's snapshot. */
   snapshot: ScheduleSnapshot | null;
   /** `schedule_content(deliverable, platform)` now: what would go out if posted this second. */
-  current: { content_hash: string; text: string | null; title: string | null; clip_id: string | null; image?: ScheduleSnapshot["image"]; thread?: string[] } | null;
+  current: { content_hash: string; text: string | null; title: string | null; clip_id: string | null; image?: ScheduleSnapshot["image"]; thread?: string[]; photos?: string[] } | null;
 };
 
 /** The finished export of the slot's edit at the approved document, if one is rendered. */
@@ -83,6 +84,11 @@ export type PublishPostDeps = {
   media(slotId: string): Promise<MediaUpload>;
   /** Queues `publish_media` for this slot with the presigned URL; returns the task id. */
   startMedia(slotId: string, file: ExportFile, presigned: PresignedMedia): Promise<string>;
+  /**
+   * A photo post's photos (D7) as links the platform can fetch now: short-lived signed URLs of the founder's own
+   * uploads. They go straight to Zernio, without the `publish_media` upload a video needs.
+   */
+  photoUrls(objects: string[]): Promise<PublishMedia[]>;
   /** A2's `publish_status(slot_id, status, external_id, url, error)`. */
   status(slotId: string, update: PublishStatusUpdate): Promise<void>;
 };
@@ -142,7 +148,7 @@ export function refusal(slot: FiredSlot, now: Date): PublishStatusUpdate | null 
 const wholeSeconds = (iso: string) => Math.floor(Date.parse(iso) / 1000);
 
 /** The approved content → the adapter's deliverable and slot. */
-export function adapterInput(slot: FiredSlot, mediaUrl: string | null, mediaType: MediaType = "video/mp4"): { deliverable: PublishDeliverable; slot: PublishSlot } {
+export function adapterInput(slot: FiredSlot, mediaUrl: string | null, mediaType: MediaType = "video/mp4", photos: PublishMedia[] = []): { deliverable: PublishDeliverable; slot: PublishSlot } {
   const s = slot.snapshot!;
   if (!isPublishPlatform(slot.platform)) throw new PublishError("invalid", "This platform cannot be posted to.", false);
   return {
@@ -151,7 +157,7 @@ export function adapterInput(slot: FiredSlot, mediaUrl: string | null, mediaType
       kind: s.deliverable_kind,
       text: slot.current?.text ?? "",
       title: slot.platform === "youtube" ? (slot.current?.title ?? null) : null,
-      media: mediaUrl ? [{ url: mediaUrl, contentType: mediaType }] : [],
+      media: photos.length ? photos : mediaUrl ? [{ url: mediaUrl, contentType: mediaType }] : [],
       // P6 W4: a thread is in the approved content's hash (`schedule_content`), so it goes out as approved.
       ...(slot.platform === "x" && slot.current?.thread?.length ? { thread: slot.current.thread } : {}),
     },
@@ -205,6 +211,27 @@ export async function runPublishPost(deps: PublishPostDeps, slotId: string): Pro
     return settle(fail("not_found", "The account for this post is no longer connected. Connect it again in Settings, then retry."), "failed");
   }
 
+  // A photo post (D7): the approved photos, in order, from signed links; nothing to upload first.
+  const approvedPhotos = slot.snapshot!.photos;
+  if (approvedPhotos?.length) {
+    let photos: PublishMedia[];
+    try {
+      photos = await deps.photoUrls(approvedPhotos);
+    } catch {
+      return settle(fail("unavailable", "Your photos could not be read just now. Retry in a minute.", true), "failed");
+    }
+    if (photos.length !== approvedPhotos.length) {
+      return settle(fail("invalid", "A photo of this post is missing. Open the photo post, upload it again and schedule it again."), "failed");
+    }
+    let input: ReturnType<typeof adapterInput>;
+    try {
+      input = adapterInput(slot, null, undefined, photos);
+    } catch {
+      return settle(fail("invalid", "This post is missing a setting the platform needs. Open its card and approve it again."), "failed");
+    }
+    return finish(input);
+  }
+
   const clipId = slot.snapshot!.clip_id;
   // A post's image goes up the same way as a video, as the approved card's still (P5 F12).
   const image = clipId ? undefined : slot.snapshot!.image;
@@ -252,14 +279,18 @@ export async function runPublishPost(deps: PublishPostDeps, slotId: string): Pro
     // A card without a field the platform requires (TikTok's privacy or comment toggle) never gets a default.
     return settle(fail("invalid", "This post is missing a setting the platform needs. Open its card and approve it again."), "failed");
   }
-  let result: PublishResult;
-  try {
-    result = xTooLong(await deps.adapter.publish(input.deliverable, input.slot), input.deliverable, input.slot);
-  } catch (error) {
-    // The slot is `publishing`: anything that is not an answer from the platform settles it, so it never sits there
-    // until it reads "unconfirmed" for a post that was never sent.
-    console.error("[publish] adapter threw", error instanceof Error ? error.message : error);
-    return settle(fail("unavailable", "Something went wrong before it was sent. Retry posts it again.", true), "failed");
+  return finish(input);
+
+  async function finish(input: ReturnType<typeof adapterInput>): Promise<PublishPostOutcome> {
+    let result: PublishResult;
+    try {
+      result = xTooLong(await deps.adapter.publish(input.deliverable, input.slot), input.deliverable, input.slot);
+    } catch (error) {
+      // The slot is `publishing`: anything that is not an answer from the platform settles it, so it never sits there
+      // until it reads "unconfirmed" for a post that was never sent.
+      console.error("[publish] adapter threw", error instanceof Error ? error.message : error);
+      return settle(fail("unavailable", "Something went wrong before it was sent. Retry posts it again.", true), "failed");
+    }
+    return settle(resultUpdate(result), result.status === "published" ? "published" : result.status === "accepted" ? "accepted" : "failed");
   }
-  return settle(resultUpdate(result), result.status === "published" ? "published" : result.status === "accepted" ? "accepted" : "failed");
 }

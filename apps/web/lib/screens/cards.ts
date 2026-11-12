@@ -329,7 +329,12 @@ function build(row: ApprovalRow): Built | null {
       if (!parsed.success) return null;
       const v = parsed.data;
       const where = PLATFORM_NAME[v.platform];
-      const what = v.deliverable_kind === "post" ? firstSentence(v.text ?? "").head || "Your post" : v.title || firstSentence(v.text ?? "").head || "Your short";
+      const what =
+        v.deliverable_kind === "post"
+          ? firstSentence(v.text ?? "").head || "Your post"
+          : v.deliverable_kind === "photo_post"
+            ? `Your ${v.photos?.length ?? 0} photos: ${firstSentence(v.text ?? "").head || "no caption"}`
+            : v.title || firstSentence(v.text ?? "").head || "Your short";
       return {
         title: clip(`${what} · ${where}${v.handle ? ` ${v.handle}` : ""}`, 300),
         summary: v.last_error

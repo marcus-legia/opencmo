@@ -13,7 +13,7 @@ the schedule card component, the `approvals_autopilot` trigger, `lib/cmo/writer/
 - [x] Task 4: Threads chain, long X posts, autopilot. Waits on nothing.
 - [x] Task 6: caption with every video script. Waits on nothing.
 - [x] Task 7: repurpose on demand. **Waits on A's Task 3** (fan-out slots per target) — check `A.md`.
-- [ ] Task 9: photo post. **Waits on A's Task 5** (`schedule_propose` with Facebook; your migration redeclares it after A's).
+- [x] Task 9: photo post. **Waits on A's Task 5** (`schedule_propose` with Facebook; your migration redeclares it after A's).
 - [ ] Whole-branch code review once every box in `A.md` and here is ticked: run `/code-review` (high) on the PR's diff
   against `main`, fix what it finds in one round, re-review the fixes once, and list what is left in the PR.
 - [ ] Screenshots for the owner, in `shots-B/` and in the PR description: the planner panel (X, Threads, LinkedIn,
@@ -57,3 +57,8 @@ Each task: tests first, commit, push (see README). Tick the box in this file in 
   per target when the post goes to two or more, and `20270120045000_variant_take`: a slot posting a rewrite never takes
   the post card's approved time, so the rewrite shows on its own schedule card (`307_variant_take`). A core post's card
   shows the core profile's limit (3,000) instead of its first target's.
+- **Task 9 (done by the session that took over, 2026-11-12):** `photo_posts` + private `photos` bucket (TUS with a
+  reservation), `photo_post_*` RPCs (TikTok ≤ 35, Instagram/Threads ≤ 20, connected account required), slots per
+  platform, photos sent as 1-hour signed URLs (no `publish_media`), TikTok Photo Mode in a top-level `tiktokSettings`
+  (docs.zernio.com, not yet tried on a real account), `photo_caption` job (1 credit). Looked at in the browser: upload
+  and the panel work locally. Not done: retention cleanup of the `photos` bucket, the whole-branch review, screenshots.

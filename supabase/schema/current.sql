@@ -3427,7 +3427,7 @@ CREATE TABLE public.cmo_runs (
     CONSTRAINT cmo_runs_credits_check CHECK ((credits >= 0)),
     CONSTRAINT cmo_runs_error_check CHECK ((char_length(error) <= 500)),
     CONSTRAINT cmo_runs_input_check CHECK (((jsonb_typeof(input) = 'object'::text) AND (octet_length((input)::text) <= 4096))),
-    CONSTRAINT cmo_runs_kind_check CHECK ((kind = ANY (ARRAY['onboard'::text, 'plan_week'::text, 'post_draft'::text, 'sales_scan'::text, 'competitor_research'::text, 'pull_metrics'::text, 'summarize_memory'::text, 'review_week'::text, 'write_caption'::text, 'write_video_brief'::text, 'write_slides'::text, 'publish_post'::text, 'niche_video_research'::text, 'distill_ratings'::text, 'repurpose_post'::text]))),
+    CONSTRAINT cmo_runs_kind_check CHECK ((kind = ANY (ARRAY['onboard'::text, 'plan_week'::text, 'post_draft'::text, 'sales_scan'::text, 'competitor_research'::text, 'pull_metrics'::text, 'summarize_memory'::text, 'review_week'::text, 'write_caption'::text, 'write_video_brief'::text, 'write_slides'::text, 'publish_post'::text, 'niche_video_research'::text, 'distill_ratings'::text, 'repurpose_post'::text, 'photo_caption'::text]))),
     CONSTRAINT cmo_runs_output_check CHECK (((output IS NULL) OR ((jsonb_typeof(output) = 'object'::text) AND (octet_length((output)::text) <= 16384)))),
     CONSTRAINT cmo_runs_status_check CHECK ((status = ANY (ARRAY['queued'::text, 'running'::text, 'done'::text, 'failed'::text]))),
     CONSTRAINT cmo_runs_steps_check CHECK (((jsonb_typeof(steps) = 'array'::text) AND (octet_length((steps)::text) <= 16384)))
@@ -4615,6 +4615,7 @@ CREATE FUNCTION public.cmo_job_daily_limit(p_kind text) RETURNS integer
     -- cmo-review-3 2.2: one rating round a day (`cmo_rate_drafts`), with room for a retry.
     when 'distill_ratings' then 2
     when 'repurpose_post' then 20
+    when 'photo_caption' then 20
     else 0 end
 $$;
 
@@ -4630,6 +4631,7 @@ CREATE FUNCTION public.cmo_job_price(p_kind text) RETURNS integer
     when 'competitor_research' then 2 when 'pull_metrics' then 0 when 'summarize_memory' then 0 when 'review_week' then 0
     when 'write_caption' then 1 when 'write_video_brief' then 1 when 'write_slides' then 1 when 'publish_post' then 0 when 'niche_video_research' then 2
     when 'repurpose_post' then 1
+    when 'photo_caption' then 1
     else 0 end
 $$;
 
@@ -5905,6 +5907,53 @@ begin
   update public.content_items set status = 'published', published_at = now(), updated_at = now()
   where user_id = p_user and department = 'sales' and status = 'planned' and day <= current_date;
   return v_count;
+end;
+$$;
+
+
+--
+-- Name: photo_posts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.photo_posts (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    photos text[] DEFAULT '{}'::text[] NOT NULL,
+    caption text DEFAULT ''::text NOT NULL,
+    platforms text[] DEFAULT '{}'::text[] NOT NULL,
+    status text DEFAULT 'draft'::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT photo_posts_caption_check CHECK ((char_length(caption) <= 2200)),
+    CONSTRAINT photo_posts_photos_check CHECK ((cardinality(photos) <= 35)),
+    CONSTRAINT photo_posts_platforms_check CHECK ((platforms <@ ARRAY['tiktok'::text, 'instagram'::text, 'threads'::text])),
+    CONSTRAINT photo_posts_status_check CHECK ((status = ANY (ARRAY['draft'::text, 'scheduled'::text, 'cancelled'::text])))
+);
+
+
+--
+-- Name: cmo_save_photo_caption(uuid, uuid, uuid, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_save_photo_caption(p_user uuid, p_run uuid, p_id uuid, p_caption text) RETURNS public.photo_posts
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_row public.photo_posts;
+  v_text text := btrim(coalesce(p_caption, ''), E' \t\n\r');
+begin
+  if not exists (select 1 from public.cmo_runs where id = p_run and user_id = p_user and kind = 'photo_caption') then
+    raise exception 'Run not found.' using errcode = 'P0002';
+  end if;
+  perform public.caption_check('instagram_caption', v_text, null);
+  update public.photo_posts set caption = v_text, updated_at = now()
+  where id = p_id and user_id = p_user and status = 'draft'
+  returning * into v_row;
+  if not found then
+    raise exception 'This photo post can no longer take a caption.' using errcode = 'P0001';
+  end if;
+  return v_row;
 end;
 $$;
 
@@ -8341,7 +8390,7 @@ begin
   -- Posting is ordered only by Schedule, for a slot whose card the founder approved.
   -- The schedule's own jobs are free and spend provider money (the planner model, ScrapeCreators): only the schedule
   -- queues them (enqueue_cmo_run_for), never a direct call (review R5).
-  if p_kind in ('publish_post', 'review_week', 'pull_metrics', 'summarize_memory', 'distill_ratings', 'repurpose_post') then
+  if p_kind in ('publish_post', 'review_week', 'pull_metrics', 'summarize_memory', 'distill_ratings', 'repurpose_post', 'photo_caption') then
     raise exception 'Unknown task.' using errcode = '22023';
   end if;
   return public.cmo_enqueue(public.require_user(), p_kind, p_input);
@@ -9821,6 +9870,171 @@ begin
     perform public.cmo_plan_required();
   end if;
   return new;
+end;
+$$;
+
+
+--
+-- Name: photo_post_caption(uuid, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.photo_post_caption(p_id uuid, p_notes text) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_row public.photo_posts;
+  v_run public.cmo_runs;
+begin
+  select * into v_row from public.photo_posts where id = p_id and user_id = v_user;
+  if not found then
+    raise exception 'Photo post not found.' using errcode = 'P0002';
+  end if;
+  if v_row.status <> 'draft' then
+    raise exception 'This photo post is already scheduled.' using errcode = 'P0001';
+  end if;
+  if char_length(btrim(coalesce(p_notes, ''))) not between 3 and 1000 then
+    raise exception 'Say in a few words what the photos show (3 to 1,000 characters).' using errcode = '22023';
+  end if;
+  v_run := public.cmo_enqueue(v_user, 'photo_caption',
+    jsonb_build_object('photo_post_id', p_id, 'notes', btrim(p_notes), 'photos', cardinality(v_row.photos)));
+  return jsonb_build_object('run_id', v_run.id, 'status', v_run.status, 'credits', v_run.credits);
+end;
+$$;
+
+
+--
+-- Name: photo_post_check(integer, text[]); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.photo_post_check(p_count integer, p_platforms text[]) RETURNS void
+    LANGUAGE plpgsql IMMUTABLE
+    SET search_path TO 'public'
+    AS $$
+begin
+  if 'tiktok' = any (p_platforms) and p_count > 35 then
+    raise exception 'TikTok takes up to 35 photos.' using errcode = '22023';
+  end if;
+  if 'instagram' = any (p_platforms) and p_count > 20 then
+    raise exception 'Instagram takes up to 20 photos.' using errcode = '22023';
+  end if;
+  if 'threads' = any (p_platforms) and p_count > 20 then
+    raise exception 'Threads takes up to 20 photos.' using errcode = '22023';
+  end if;
+  if p_count > 35 then
+    raise exception 'A photo post has 35 photos at most.' using errcode = '22023';
+  end if;
+  if not (coalesce(p_platforms, '{}') <@ array['tiktok', 'instagram', 'threads']) then
+    raise exception 'A photo post goes to TikTok, Instagram or Threads.' using errcode = '22023';
+  end if;
+end;
+$$;
+
+
+--
+-- Name: photo_post_create(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.photo_post_create() RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_id uuid;
+begin
+  -- Drafts left open are reused rather than piled up: at most five at a time.
+  if (select count(*) from public.photo_posts where user_id = v_user and status = 'draft') >= 5 then
+    raise exception 'Finish or remove a photo post you started before making another.' using errcode = 'P0001';
+  end if;
+  insert into public.photo_posts (user_id) values (v_user) returning id into v_id;
+  return v_id;
+end;
+$$;
+
+
+--
+-- Name: photo_post_save(uuid, text[], text, text[]); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.photo_post_save(p_id uuid, p_photos text[], p_caption text, p_platforms text[]) RETURNS public.photo_posts
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'storage'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_row public.photo_posts;
+  v_photos text[] := coalesce(p_photos, '{}');
+  v_platforms text[] := array(select distinct p from unnest(coalesce(p_platforms, '{}')) p order by p);
+begin
+  select * into v_row from public.photo_posts where id = p_id and user_id = v_user for update;
+  if not found then
+    raise exception 'Photo post not found.' using errcode = 'P0002';
+  end if;
+  if v_row.status <> 'draft' then
+    raise exception 'This photo post is already scheduled.' using errcode = 'P0001';
+  end if;
+  perform public.photo_post_check(cardinality(v_photos), v_platforms);
+  if (select count(distinct p) from unnest(v_photos) p) <> cardinality(v_photos) then
+    raise exception 'The same photo is in the post twice.' using errcode = '22023';
+  end if;
+  if exists (select 1 from unnest(v_photos) p
+             where p not like v_user::text || '/' || p_id::text || '/%'
+                or not exists (select 1 from storage.objects o where o.bucket_id = 'photos' and o.name = p)) then
+    raise exception 'A photo is missing. Upload it again.' using errcode = '22023';
+  end if;
+  if char_length(coalesce(p_caption, '')) > 2200 then
+    raise exception 'A caption is 2,200 characters at most.' using errcode = '22023';
+  end if;
+  update public.photo_posts set photos = v_photos, caption = coalesce(p_caption, ''), platforms = v_platforms, updated_at = now()
+  where id = p_id returning * into v_row;
+  return v_row;
+end;
+$$;
+
+
+--
+-- Name: photo_post_schedule(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.photo_post_schedule(p_id uuid) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_row public.photo_posts;
+  v_platform text;
+  v_d uuid;
+begin
+  select * into v_row from public.photo_posts where id = p_id and user_id = v_user for update;
+  if not found then
+    raise exception 'Photo post not found.' using errcode = 'P0002';
+  end if;
+  if v_row.status <> 'draft' then
+    raise exception 'This photo post is already scheduled.' using errcode = 'P0001';
+  end if;
+  if cardinality(v_row.photos) = 0 then
+    raise exception 'Add at least one photo.' using errcode = '22023';
+  end if;
+  if cardinality(v_row.platforms) = 0 then
+    raise exception 'Pick at least one platform.' using errcode = '22023';
+  end if;
+  perform public.photo_post_check(cardinality(v_row.photos), v_row.platforms);
+  -- The caption rules of a video caption: 1 to 2,200 characters, five hashtags at most, no link.
+  perform public.caption_check('instagram_caption', v_row.caption, null);
+  foreach v_platform in array v_row.platforms loop
+    if not exists (select 1 from public.social_accounts where user_id = v_user and platform = v_platform and status = 'connected') then
+      raise exception 'Connect your % account first: photos go out only from a connected account.',
+        public.schedule_platform_label(v_platform) using errcode = 'P0001';
+    end if;
+  end loop;
+  update public.photo_posts set status = 'scheduled', updated_at = now() where id = p_id;
+  insert into public.deliverables (user_id, order_id, kind, ref_kind, ref_id, status)
+  values (v_user, (public.work_order_week_root(v_user)).id, 'photo_post', 'photo_post', p_id, 'decided')
+  returning id into v_d;
+  return public.schedule_propose(v_d);
 end;
 $$;
 
@@ -11730,6 +11944,8 @@ begin
       or (p_bucket = 'billing_checkout' and p_limit = 20 and p_window_seconds = 3600)
       or (p_bucket = 'billing_portal' and p_limit = 20 and p_window_seconds = 3600)
       or (p_bucket = 'uploads' and p_limit = 30 and p_window_seconds = 3600)
+      -- A photo post's photos (20270120060000): up to 35 in one post, one reservation each.
+      or (p_bucket = 'photo-uploads' and p_limit = 120 and p_window_seconds = 3600)
       or (p_bucket = 'jobs' and p_limit = 10 and p_window_seconds = 3600)
       or (p_bucket = 'retry' and p_limit = 20 and p_window_seconds = 3600)
       or (p_bucket = 'project-write' and p_limit = 60 and p_window_seconds = 3600)
@@ -12761,7 +12977,20 @@ declare
   v_row public.upload_reservations;
   v_parts text[] := string_to_array(coalesce(p_object_name, ''), '/');
 begin
-  if p_bucket not in ('sources', 'media', 'exports') or p_size is null or p_size <= 0
+  -- A photo of a photo post (20270120060000): a JPEG, PNG or WebP of 10 MB at most, under the founder's draft.
+  if p_bucket = 'photos' then
+    if p_size is null or p_size <= 0 or p_size > 10485760
+       or coalesce(p_content_type, '') not in ('image/jpeg', 'image/png', 'image/webp') then
+      raise exception 'Use a JPEG, PNG or WebP photo of 10 MB at most.' using errcode = '22023';
+    end if;
+    if p_project_id is null or array_length(v_parts, 1) <> 3 or v_parts[1] is distinct from v_user::text
+       or v_parts[2] is distinct from p_project_id::text
+       or not exists (select 1 from public.photo_posts where id = p_project_id and user_id = v_user and status = 'draft') then
+      raise exception 'Photo post not found.' using errcode = 'P0002';
+    end if;
+    -- The post is in the path; `upload_reservations.project_id` points at jobs, so the reservation names none.
+    p_project_id := null;
+  elsif p_bucket not in ('sources', 'media', 'exports') or p_size is null or p_size <= 0
      or p_size > 2147483648 or coalesce(p_content_type, '') not like 'video/%' then
     raise exception 'That video cannot be uploaded.' using errcode = '22023';
   end if;
@@ -12814,7 +13043,7 @@ begin
   select coalesce(sum(coalesce((o.metadata->>'size')::bigint, 0)), 0), count(*)
     into v_bytes, v_objects
     from storage.objects o
-    where o.bucket_id in ('sources', 'media', 'exports')
+    where o.bucket_id in ('sources', 'media', 'exports', 'photos')
       and (storage.foldername(o.name))[1] = v_user::text;
   select v_bytes + coalesce(sum(r.declared_size), 0), v_objects + count(*)
     into v_bytes, v_objects
@@ -13817,6 +14046,11 @@ begin
         || case when v_thread is not null then jsonb_build_object('thread', v_thread) else '{}'::jsonb end))
       || case when v_image is not null then jsonb_build_object('image', v_image) else '{}'::jsonb end
       || case when v_thread is not null then jsonb_build_object('thread', v_thread) else '{}'::jsonb end;
+  elsif v_d.ref_kind = 'photo_post' then
+    -- The caption and the photos in the founder's order; both are in the hash, so a change after approval refuses it.
+    return (select jsonb_build_object('clip_id', null, 'text', p.caption, 'title', null, 'photos', to_jsonb(p.photos),
+        'content_hash', public.approval_hash(jsonb_build_object('text', p.caption, 'photos', to_jsonb(p.photos))))
+      from public.photo_posts p where p.id = v_d.ref_id);
   elsif v_d.ref_kind = 'clip' then
     select public.editor_document_hash(document) into v_doc from public.editor_projects where clip_id = v_d.ref_id;
     select body->>'text', body->>'title' into v_text, v_title
@@ -14177,6 +14411,10 @@ begin
                  where t in ('x', 'threads', 'linkedin', 'facebook') order by o)
       into v_platforms
     from public.content_items c where c.id = v_d.ref_id and c.status = 'approved';
+  elsif v_d.kind = 'photo_post' and v_d.ref_kind = 'photo_post' then
+    -- The founder's own photos (D7): every platform they picked, each from its connected account.
+    select array(select p from unnest(platforms) p where p in ('tiktok', 'instagram', 'threads') order by p) into v_platforms
+    from public.photo_posts where id = v_d.ref_id and user_id = v_d.user_id and status = 'scheduled';
   elsif v_d.kind in ('short', 'slideshow', 'video') and v_d.ref_kind = 'clip' then
     select array_agg(p) into v_platforms from unnest(array['tiktok', 'instagram', 'youtube']) p
     where exists (select 1 from public.content_items c
@@ -14278,10 +14516,10 @@ CREATE TABLE public.deliverables (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     parent_id uuid,
     post_id uuid,
-    CONSTRAINT deliverables_kind_check CHECK ((kind = ANY (ARRAY['post'::text, 'caption'::text, 'video'::text, 'short'::text, 'slideshow'::text, 'image'::text, 'reply'::text, 'insight'::text, 'metric'::text]))),
+    CONSTRAINT deliverables_kind_check CHECK ((kind = ANY (ARRAY['post'::text, 'caption'::text, 'video'::text, 'short'::text, 'slideshow'::text, 'image'::text, 'reply'::text, 'insight'::text, 'metric'::text, 'photo_post'::text]))),
     CONSTRAINT deliverables_parent_check CHECK (((parent_id IS NULL) OR (kind = 'caption'::text))),
     CONSTRAINT deliverables_post_image_check CHECK (((post_id IS NOT NULL) = (kind = 'image'::text))),
-    CONSTRAINT deliverables_ref_kind_check CHECK ((ref_kind = ANY (ARRAY['content_item'::text, 'opportunity'::text, 'insight'::text, 'clip'::text]))),
+    CONSTRAINT deliverables_ref_kind_check CHECK ((ref_kind = ANY (ARRAY['content_item'::text, 'opportunity'::text, 'insight'::text, 'clip'::text, 'photo_post'::text]))),
     CONSTRAINT deliverables_status_check CHECK ((status = ANY (ARRAY['ready'::text, 'waiting_founder'::text, 'decided'::text])))
 );
 
@@ -16245,7 +16483,7 @@ begin
   select * into v_limits from public.plan_usage_limits(v_plan);
   select coalesce(sum(coalesce((metadata->>'size')::bigint, 0)), 0), count(*)
     into v_bytes, v_objects from storage.objects
-    where bucket_id in ('sources','media','exports')
+    where bucket_id in ('sources','media','exports','photos')
       and (storage.foldername(name))[1] = v_user::text;
   return jsonb_build_object('bytes', v_bytes, 'limit', v_limits.stored_bytes,
     'objects', v_objects, 'objectLimit', v_limits.stored_objects);
@@ -18327,7 +18565,7 @@ CREATE TABLE public.storage_deletions (
     attempts integer DEFAULT 0 NOT NULL,
     queued_at timestamp with time zone DEFAULT now() NOT NULL,
     deferred_at timestamp with time zone,
-    CONSTRAINT storage_deletions_bucket_check CHECK ((bucket = ANY (ARRAY['clips'::text, 'sources'::text, 'renders'::text, 'media'::text, 'exports'::text, 'brand'::text, 'captures'::text]))),
+    CONSTRAINT storage_deletions_bucket_check CHECK ((bucket = ANY (ARRAY['clips'::text, 'sources'::text, 'renders'::text, 'media'::text, 'exports'::text, 'brand'::text, 'photos'::text]))),
     CONSTRAINT storage_deletions_path_check CHECK (((path <> ''::text) AND (path !~~ '%..%'::text)))
 );
 
@@ -18386,8 +18624,8 @@ CREATE TABLE public.upload_reservations (
     status text DEFAULT 'reserved'::text NOT NULL,
     expires_at timestamp with time zone DEFAULT (now() + '00:30:00'::interval) NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT upload_reservations_bucket_check CHECK ((bucket = ANY (ARRAY['sources'::text, 'media'::text, 'exports'::text]))),
-    CONSTRAINT upload_reservations_content_type_check CHECK ((content_type ~~ 'video/%'::text)),
+    CONSTRAINT upload_reservations_bucket_check CHECK ((bucket = ANY (ARRAY['sources'::text, 'media'::text, 'exports'::text, 'photos'::text]))),
+    CONSTRAINT upload_reservations_content_type_check CHECK (((content_type ~~ 'video/%'::text) OR ((bucket = 'photos'::text) AND (content_type = ANY (ARRAY['image/jpeg'::text, 'image/png'::text, 'image/webp'::text]))))),
     CONSTRAINT upload_reservations_declared_size_check CHECK (((declared_size > 0) AND (declared_size <= '2147483648'::bigint))),
     CONSTRAINT upload_reservations_status_check CHECK ((status = ANY (ARRAY['reserved'::text, 'consumed'::text])))
 );
@@ -19112,6 +19350,14 @@ ALTER TABLE ONLY public.orphan_scan_cursors
 
 ALTER TABLE ONLY public.page_captures
     ADD CONSTRAINT page_captures_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: photo_posts photo_posts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.photo_posts
+    ADD CONSTRAINT photo_posts_pkey PRIMARY KEY (id);
 
 
 --
@@ -19985,6 +20231,13 @@ CREATE INDEX page_captures_task_idx ON public.page_captures USING btree (task_id
 --
 
 CREATE INDEX page_captures_user_recent_idx ON public.page_captures USING btree (user_id, created_at DESC);
+
+
+--
+-- Name: photo_posts_user_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX photo_posts_user_idx ON public.photo_posts USING btree (user_id, created_at DESC);
 
 
 --
@@ -21335,6 +21588,14 @@ ALTER TABLE ONLY public.page_captures
 
 
 --
+-- Name: photo_posts photo_posts_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.photo_posts
+    ADD CONSTRAINT photo_posts_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
 -- Name: post_metrics post_metrics_item_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -22084,6 +22345,12 @@ ALTER TABLE public.orphan_scan_cursors ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.page_captures ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: photo_posts; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.photo_posts ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: post_metrics; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -22267,6 +22534,13 @@ CREATE POLICY "read own order usage" ON public.work_order_usage FOR SELECT TO au
 --
 
 CREATE POLICY "read own page captures" ON public.page_captures FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
+
+
+--
+-- Name: photo_posts read own photo posts; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "read own photo posts" ON public.photo_posts FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
 
 
 --

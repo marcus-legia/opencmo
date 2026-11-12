@@ -416,7 +416,7 @@ export const ScheduleSnapshotSchema = z.object({
   kind: z.literal("schedule"),
   slot_id: z.string(),
   deliverable_id: z.string(),
-  deliverable_kind: z.enum(["post", "video", "short", "slideshow"]),
+  deliverable_kind: z.enum(["post", "video", "short", "slideshow", "photo_post"]),
   platform: PlatformSchema.exclude(["reddit"]),
   /** `intent`: no connected account for the platform, so the founder copies and opens it themselves. */
   mode: z.enum(["publish", "intent"]),
@@ -441,6 +441,8 @@ export const ScheduleSnapshotSchema = z.object({
   image: z.object({ clip_id: z.string(), object: z.string().max(500), bytes: z.number().int().positive().nullable() }).optional(),
   /** An X thread (P6 W4): its 5 to 8 posts, the first being `text`; part of `content_hash`. Absent for a single post. */
   thread: z.array(z.string().max(280)).min(5).max(8).optional(),
+  /** A photo post (D7): the founder's photos in order (`photos` bucket objects), part of `content_hash`. */
+  photos: z.array(z.string().max(500)).min(1).max(35).optional(),
 });
 export type ScheduleSnapshot = z.infer<typeof ScheduleSnapshotSchema>;
 

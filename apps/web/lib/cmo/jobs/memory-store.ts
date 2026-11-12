@@ -31,6 +31,8 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
   const videos: VideoSource[] = [];
   /** One platform's rewrite of a post (`post_variants`). */
   const variants: { runId: string; itemId: string; platform: string; text: string; gen: Record<string, unknown> }[] = [];
+  /** Photo posts' captions, by post id. */
+  const photoCaptions = new Map<string, string>();
   const captions: { runId: string; clipId: string; profile: string; text: string; title: string | null; gen: Record<string, unknown>; edited: boolean }[] = [];
   const lessons: Lesson[] = [];
   const goals: Goal[] = [];
@@ -148,6 +150,9 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
       const item = items.find((i) => i.id === itemId && i.department === "post" && (i.status === "in_review" || i.status === "approved"));
       return item && typeof item.body.text === "string" ? { text: item.body.text, platform: item.platform } : null;
     },
+    async savePhotoCaption(_u, _run, postId, caption) {
+      photoCaptions.set(postId, caption);
+    },
     async saveVariant(_u, runId, itemId, platform, text, gen) {
       const at = variants.findIndex((v) => v.itemId === itemId && v.platform === platform);
       const row = { runId, itemId, platform, text, gen };
@@ -263,5 +268,5 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
     runs.push(run);
     return run;
   };
-  return { store, posting, runs, items, opps, rules, salesSettings, mentions, insights, niche, metrics, zernio, replies, lessons, goals, results, enqueue, inbox, submit, voice, videos, captions, variants, ratings, ratingRules };
+  return { store, posting, runs, items, opps, rules, salesSettings, mentions, insights, niche, metrics, zernio, replies, lessons, goals, results, enqueue, inbox, submit, voice, videos, captions, variants, photoCaptions, ratings, ratingRules };
 }

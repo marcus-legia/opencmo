@@ -72,7 +72,7 @@ export type PublishMedia = z.infer<typeof PublishMediaSchema>;
 export const PublishDeliverableSchema = z
   .object({
     id: z.uuid(),
-    kind: z.enum(["post", "video", "short", "slideshow"]),
+    kind: z.enum(["post", "video", "short", "slideshow", "photo_post"]),
     text: z.string().max(10000),
     /** YouTube's title; null elsewhere. */
     title: z.string().min(1).max(100).nullable(),
@@ -85,7 +85,7 @@ export const PublishDeliverableSchema = z
       .optional(),
   })
   .strict()
-  .refine((d) => d.kind === "post" || d.media.length > 0, { message: "A video, short or slideshow needs its media." })
+  .refine((d) => d.kind === "post" || d.media.length > 0, { message: "A video, short, slideshow or photo post needs its media." })
   .refine((d) => !d.thread || (d.kind === "post" && d.thread[0] === d.text), { message: "A thread is a post whose first post is its text." })
   .refine((d) => d.text.trim().length > 0 || d.media.length > 0, { message: "Nothing to post." });
 export type PublishDeliverable = z.infer<typeof PublishDeliverableSchema>;

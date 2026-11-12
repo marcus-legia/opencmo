@@ -49,6 +49,7 @@ const KIND_LABEL: Record<CmoJobKind, string> = {
   publish_post: "Scheduled post",
   distill_ratings: "Rules from your ratings",
   repurpose_post: "Post rewrite",
+  photo_caption: "Photo caption",
 };
 
 /** Longest a poll waits inside one request: Modal cuts web requests at 150 s. */

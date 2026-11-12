@@ -170,6 +170,16 @@ async function main() {
     const fb = postBody({ ...post, kind: "post", media: [], text: "x".repeat(4000) }, { ...slot, platform: "facebook", fields: { platform: "facebook", aiGenerated: false } }) as { content: string; platforms: object[] };
     assert.deepEqual([fb.platforms[0], fb.content.length], [{ platform: "facebook", accountId: ACC }, 4000], "a long Facebook post goes as one");
 
+    // A photo post (D7): every photo as an image, in order; TikTok gets Photo Mode in a top-level `tiktokSettings`.
+    const photos = [1, 2, 3].map((i) => ({ url: `https://storage.example/p/${i}.jpg`, contentType: "image/jpeg" as const }));
+    const photoPost = { ...post, kind: "photo_post" as const, text: "Demo day, in three photos.", media: photos };
+    const tt = postBody(photoPost, slot) as { mediaItems: unknown; platforms: object[]; tiktokSettings: Record<string, unknown> };
+    assert.deepEqual(tt.mediaItems, photos.map((p) => ({ url: p.url, type: "image" })), "every photo as an image");
+    assert.deepEqual(tt.platforms, [{ platform: "tiktok", accountId: ACC }]);
+    assert.deepEqual([tt.tiktokSettings.mediaType, tt.tiktokSettings.photoCoverIndex, tt.tiktokSettings.description, tt.tiktokSettings.privacyLevel], ["photo", 0, "Demo day, in three photos.", "SELF_ONLY"]);
+    const ig = postBody(photoPost, { ...slot, platform: "instagram", fields: { platform: "instagram", aiGenerated: false } }) as { mediaItems: unknown[]; tiktokSettings?: unknown };
+    assert.deepEqual([ig.mediaItems.length, "tiktokSettings" in ig], [3, false], "an Instagram carousel is the images alone");
+
     // A Threads post over 500 characters goes out as a chain, the image on its first part; 500 or under is one post.
     type Chain = { content?: string; mediaItems?: unknown; platforms: { platform: string; platformSpecificData?: { threadItems: { content: string; mediaItems?: unknown }[] } }[] };
     const long = `${"One sentence that fills the post up. ".repeat(24)}`.trim();

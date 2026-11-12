@@ -10,6 +10,7 @@ import type { z } from "zod";
 
 import { competitorResearch } from "./competitor-research";
 import { distillRatings } from "./distill-ratings";
+import { photoCaption } from "./photo-caption";
 import { repurposePost } from "./repurpose-post";
 import { nicheVideoResearch } from "./niche-video-research";
 import { draftPost } from "./draft-post";
@@ -113,6 +114,8 @@ export const JOBS: Record<CmoJobKind, Job> = {
   distill_ratings: distillRatings,
   // Daily core drafts D4: only the founder's Rewrite button queues it (SQL `repurpose_post`), for one post and platform.
   repurpose_post: repurposePost,
+  // Daily core drafts D7: only the founder's "Write the caption" on a photo post queues it (SQL `photo_post_caption`).
+  photo_caption: photoCaption,
 };
 
 /** The run was claimed again by another worker (its lease ran out): stop quietly and write nothing more. */

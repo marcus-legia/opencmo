@@ -78,7 +78,7 @@ export function PostingPlanPanel({ initial, accounts, live, onSaved }: { initial
         <h2 style={{ margin: "0", fontSize: "15px", fontWeight: "600" }}>Posting plan</h2>
         <span className="meta">{live ? "Saved as you change it. The week plan follows it." : "Sample plan: changes stay on this page."}</span>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "4px 24px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "4px 24px" }}>
         {TEXT_PLATFORMS.map((id) => (
           <Row key={id} name={TEXT_LABEL[id]} unit="posts a day" value={plan.text[id]} max={TEXT_MAX} connected={connected(id)} onChange={(n) => set("text", id, n)} />
         ))}
