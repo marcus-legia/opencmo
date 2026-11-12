@@ -68,7 +68,7 @@ Only the **Planner** and the **Reviewer** call a model. Everything else is code.
 
 | Component | Does | Calls a model | Built in |
 |---|---|---|---|
-| Triggers | clock (Modal daily 00:05 UTC, hourly digest, every minute) · founder (chat, buttons, approvals) · founder's Claude (MCP) · events (a deliverable's status changed) | — | `modal_app.py`, SQL triggers |
+| Triggers | clock (Modal hourly schedule from each founder's 06:00, hourly digest, every minute) · founder (chat, buttons, approvals) · founder's Claude (MCP) · events (a deliverable's status changed) | — | `modal_app.py`, SQL triggers |
 | Planner | `plan_week`, replan, chat orders; writes the plan and a tree of work order briefs | yes | `jobs/plan-week.ts`, `work_orders_plan_week` |
 | Reviewer | `review_week`, `summarize_memory`; measures the goal, writes lessons, proposes the next goal | yes | `jobs/review-week.ts`, `summarize-memory.ts` |
 | Task ledger | goal (`cmo_goals`), plan (calendar), facts (documents, last week's results, open questions) | no | `cmo_goals`, `content_items` |
@@ -89,7 +89,7 @@ muscle, **Vercel** is where the brain thinks, and the **browser** is only the sc
 approves. Closing the browser stops nothing the brain does.
 
 ```
-00:05 UTC daily   Modal cmo_schedule ──GET──▶ Vercel /api/cron/cmo        loops due today → rows in the queue
+hourly, at :05    Modal cmo_schedule ──GET──▶ Vercel /api/cron/cmo        loops due today → rows in the queue
 every hour        Modal cmo_digest   ──GET──▶ Vercel /api/cron/cmo-digest  the morning digest in each founder's timezone
 every minute      Modal sweep()      ──POST─▶ Vercel /api/internal/cmo/run  once per waiting order (≤ 10)
                                                answers 202, works in after(): claim with a lease, run steps,
@@ -135,7 +135,7 @@ when a row is waiting: idle costs nothing, a crash resumes from the last logged 
 | Sunday | `summarize_memory`, `review_week`, `competitor_research` when handles exist | yes | free, free, 2 | `loops.ts` |
 | Monday | `plan_week` → the plan card + the work order tree (one order per calendar item, children per department: brief → Studio order → shorts → captions); `niche_video_research` once a week when the plan has a new video item, and the briefs wait on it; the drafts of the plan's posts due that day are queued when the calendar is written (`queueDueDrafts`) | once | as priced; research 2 | `work_orders_plan_week`, `20261231110000_p5_niche_research.sql` |
 | Every day | progress check over the tree; only a stuck order costs a model call (one replan) | rarely | free | `jobs/progress.ts` |
-| Every day, when due | `post_draft`, `sales_scan`, `pull_metrics` (loops), one run per loop a day however often the cron is called (`schedule.ts`); `write_caption`, `write_video_brief`, `write_slides` and Studio orders (from the work order tree and event rules) | yes | per kind | `loops.ts`, `work_orders`, `studio-orders.ts` |
+| Every day, when due | `post_draft`, `sales_scan`, `pull_metrics` (loops), one run per loop a day however often the cron is called (`schedule.ts`); a planned post or scan more than two days late is dropped (`cmo_expire_planned`); `write_caption`, `write_video_brief`, `write_slides` and Studio orders (from the work order tree and event rules) | yes | per kind | `loops.ts`, `work_orders`, `studio-orders.ts` |
 | Any time | event rules; founder orders from chat or MCP land under the week's root | no | free | SQL triggers |
 | Every morning, founder's time | digest: what waits on you, what the brain did, today's plan | no (template) | free | `lib/cmo/digest.ts` |
 

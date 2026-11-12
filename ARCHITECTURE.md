@@ -352,7 +352,7 @@ second copy of them, so the backend stays TypeScript. TypeScript and Python meet
 dispatches; CMO jobs stay TypeScript and run on Vercel, in parallel:
 
 ```
-Modal cmo_schedule  (00:05 UTC daily) ──GET──▶ /api/cron/cmo           enqueue the loops due today
+Modal cmo_schedule  (hourly, at :05)   ──GET──▶ /api/cron/cmo           enqueue the loops due, from each founder's morning
 Modal cmo_digest    (every hour)      ──GET──▶ /api/cron/cmo-digest    the morning digest in each founder's timezone
 Modal sweep()       (every minute)    ──POST─▶ /api/internal/cmo/run   ×N, one per claimable run (max 10)
                                                 also: due schedule slots, Studio steps, stuck turns and credit jobs

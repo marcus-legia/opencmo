@@ -13,10 +13,36 @@ import { socialReaderReady } from "@/lib/cmo/social/reddit";
  * Reads every user's state and enqueues the loops due today (`lib/cmo/loops.ts`). Only enqueues:
  * the runs are dispatched to `/api/internal/cmo/run` by Modal's `sweep()`, in parallel.
  *
- * Called once a day, and safe to call again the same day: a loop that already has a run today (UTC) is skipped
- * (`queuedToday`), whatever became of that run. `enqueue_cmo_run_for` alone only merges runs still queued or running,
- * so a retry of the cron after a timeout used to plan the week and charge for it a second time.
+ * Called every hour. A founder's loops are queued from their morning on (`loopHour`), once: a loop that already has a
+ * run today (UTC) is skipped (`queuedToday`), whatever became of that run. `enqueue_cmo_run_for` alone only merges
+ * runs still queued or running, so a second call used to plan the week and charge for it again. An hour that failed
+ * is made up by the next one.
  */
+
+/** The founder's local hour by which the day's drafts are being written. */
+export const MORNING_HOUR = 6;
+
+/**
+ * The UTC hour from which a founder's loops are queued: the first hour of the UTC day when it is 06:00 or later where
+ * they are. The calendar's day is a UTC date (`current_date`), so the day's work cannot start before 00:00 UTC: east
+ * of UTC+6 that is already their morning (07:00 in Vietnam, as before), and west of UTC it is 06:00 local instead of
+ * the afternoon before. An unknown timezone counts as UTC+6 or east (hour 0, the old behaviour).
+ */
+export function loopHour(timezone: string | null | undefined, now = new Date()): number {
+  const midnight = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  let parts: Intl.DateTimeFormatPart[];
+  try {
+    parts = new Intl.DateTimeFormat("en-CA", { timeZone: timezone || "UTC", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hourCycle: "h23" }).formatToParts(midnight);
+  } catch {
+    return 0;
+  }
+  const part = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  const hour = Number(part("hour"));
+  // Already the same date at 00:00 UTC: east of UTC (or on it). Otherwise it is still yesterday evening there.
+  const east = `${part("year")}-${part("month")}-${part("day")}` === isoDay(0, now);
+  return east ? Math.max(0, MORNING_HOUR - hour) : 24 - hour + MORNING_HOUR;
+}
+
 /** Posts drafted for one founder in a day: one run per due item (X, Threads, LinkedIn), the oldest first. */
 const POST_RUNS_A_DAY = 3;
 const DRAFT_LOOP = "daily-x-draft";
@@ -115,15 +141,31 @@ async function paidUsers(admin: SupabaseClient, users: string[]): Promise<Set<st
   return out;
 }
 
-export async function enqueueDueLoops(admin: SupabaseClient): Promise<{ users: number; queued: number; inbox: number }> {
-  const today = isoDay();
-  const weekday = new Date().getUTCDay();
+/** Each founder's timezone (`profiles.timezone`), read in chunks: one filter with every id is a URL PostgREST refuses. */
+async function timezones(admin: SupabaseClient, users: string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  for (let i = 0; i < users.length; i += 200) {
+    const { data, error } = await admin.from("profiles").select("id, timezone").in("id", users.slice(i, i + 200));
+    if (error) throw new Error(`profiles: ${error.message}`);
+    for (const row of (data ?? []) as { id: string; timezone: string | null }[]) out.set(row.id, row.timezone ?? "UTC");
+  }
+  return out;
+}
+
+/** `users`: the founders whose morning has come; `waiting`: those whose loops a later hour queues. */
+export async function enqueueDueLoops(admin: SupabaseClient, now = new Date()): Promise<{ users: number; waiting: number; queued: number; inbox: number }> {
+  const today = isoDay(0, now);
+  const weekday = now.getUTCDay();
 
   // Every read is paged: PostgREST answers at most 1000 rows, and past that founders silently lost their loops.
   const rows = await readAll<{ user_id: string; kind: string; body: Record<string, unknown> }>((from, to) =>
     admin.from("marketing_documents_latest").select("user_id, kind, body").in("kind", ["product", "competitors"]).order("user_id").order("kind").range(from, to),
   );
-  const users = [...new Set(rows.filter((r) => r.kind === "product").map((r) => r.user_id))];
+  const everyone = [...new Set(rows.filter((r) => r.kind === "product").map((r) => r.user_id))];
+  const zones = await timezones(admin, everyone);
+  const users = everyone.filter((user) => loopHour(zones.get(user), now) <= now.getUTCHours());
+  const waiting = everyone.length - users.length;
+  if (!users.length) return { users: 0, waiting, queued: 0, inbox: 0 };
   const handles = new Map<string, number>();
   for (const row of rows.filter((r) => r.kind === "competitors")) {
     const list = Array.isArray(row.body.competitors) ? (row.body.competitors as { x_handle?: unknown }[]) : [];
@@ -142,7 +184,7 @@ export async function enqueueDueLoops(admin: SupabaseClient): Promise<{ users: n
   )) {
     dueBy.set(row.user_id, [...(dueBy.get(row.user_id) ?? []), row]);
   }
-  const since = new Date(Date.now() - 14 * 86_400_000).toISOString();
+  const since = new Date(now.getTime() - 14 * 86_400_000).toISOString();
   const publishedBy = count(await readAll((from, to) =>
     admin.from("content_items").select("user_id").eq("status", "published").eq("department", "post").gte("published_at", since).order("id").range(from, to),
   ));
@@ -150,7 +192,7 @@ export async function enqueueDueLoops(admin: SupabaseClient): Promise<{ users: n
   const connectedBy = count(await readAll((from, to) => admin.from("social_accounts").select("user_id").eq("status", "connected").order("id").range(from, to)));
   const repliesBy = count(await readAll((from, to) =>
     admin.from("cmo_draft_outcomes").select("user_id").eq("department", "sales").eq("action", "replied").is("outcome_checked_at", null)
-      .lte("decided_at", new Date(Date.now() - 3 * 86_400_000).toISOString()).order("id").range(from, to),
+      .lte("decided_at", new Date(now.getTime() - 3 * 86_400_000).toISOString()).order("id").range(from, to),
   ));
   const socialReader = socialReaderReady();
   const modes = await brainModes(admin, users);
@@ -216,5 +258,5 @@ export async function enqueueDueLoops(admin: SupabaseClient): Promise<{ users: n
       }
     }),
   );
-  return { users: users.length, queued, inbox };
+  return { users: users.length, waiting, queued, inbox };
 }

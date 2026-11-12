@@ -12,17 +12,18 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 /**
- * The CMO's daily schedule. Modal's `cmo_schedule` cron calls this at 00:05 UTC (7:05 in
- * Vietnam), right after midnight UTC so the calendar's "today" (a UTC date, like
- * `current_date`) matches the user's morning.
+ * The CMO's schedule. Modal's `cmo_schedule` cron calls this every hour, at :05.
  *
- * Only enqueues the loops due today. Running them is not done here: Modal's `sweep()` sees the
- * queued runs within a minute and calls `/api/internal/cmo/run` once per run, so every run gets
- * its own function instead of one 300 s function walking every user.
+ * Each call enqueues the loops of the founders whose morning has come (`schedule.ts` `loopHour`) and who have no run
+ * of that loop today, so an hour that failed is made up by the next. Running them is not done here: Modal's `sweep()`
+ * sees the queued runs within a minute and calls `/api/internal/cmo/run` once per run, so every run gets its own
+ * function instead of one 300 s function walking every user.
  *
- * Afterwards it runs the progress check over every week's order tree (`progress-run.ts`: code only, at most one
- * replan per founder) and labels yesterday's edited approvals (`classify-edits.ts`), capped so it stays a small
- * part of this call; a failure in either never fails the schedule.
+ * Before that it drops the planned posts and scans more than two days late (`cmo_expire_planned`), so a missed day
+ * does not push every later post back. Once a day, in the first hour (UTC), it also runs the progress check over
+ * every week's order tree (`progress-run.ts`: code only, at most one replan per founder) and labels yesterday's
+ * edited approvals (`classify-edits.ts`), capped so it stays a small part of this call. A failure in any of the
+ * three never fails the schedule.
  */
 export async function GET(request: NextRequest) {
   if (!cronAuthorized(request.headers.get("authorization"), "cmo")) {
@@ -30,6 +31,10 @@ export async function GET(request: NextRequest) {
   }
   if (cmoPausedEverywhere()) return NextResponse.json({ paused: true });
   const admin = createAdminClient(AbortSignal.timeout((maxDuration - 10) * 1000));
+  const expired = await admin.rpc("cmo_expire_planned").then(({ data, error }) => {
+    if (error) console.error("[cron] cmo expire planned", error.message);
+    return error ? null : (data as number);
+  });
   let loops;
   try {
     loops = await enqueueDueLoops(admin);
@@ -37,6 +42,7 @@ export async function GET(request: NextRequest) {
     console.error("[cron] cmo", error);
     return NextResponse.json({ error: "Could not read users." }, { status: 500 });
   }
+  if (new Date().getUTCHours() !== 0) return NextResponse.json({ ...loops, expired });
   const progress = await runProgressCheck(admin).catch((error) => {
     console.error("[cron] cmo progress check", error);
     return null;
@@ -47,5 +53,5 @@ export async function GET(request: NextRequest) {
         return null;
       })
     : null;
-  return NextResponse.json({ ...loops, progress, edits });
+  return NextResponse.json({ ...loops, expired, progress, edits });
 }

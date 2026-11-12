@@ -18,6 +18,7 @@ import { buildDigest, loadDigestInput } from "@/lib/cmo/digest";
 import { emailSender } from "@/lib/notify/email";
 import { drainCmoQueue } from "@/lib/cmo/jobs/runner";
 import { supabaseStore } from "@/lib/cmo/jobs/store";
+import { isoDay } from "@/lib/cmo/jobs/types";
 import { enqueueDueLoops } from "@/lib/cmo/schedule";
 import { clientFor } from "@/lib/mcp/auth";
 
@@ -77,8 +78,8 @@ export async function run(): Promise<void> {
   assert.equal(brain.data.week.credits.budget, 80, "the week holds the weekly budget");
   step(`plan_week wrote the tree: ${orders.length} orders (${orders.filter((o) => o.department === "writer").length} Writer, ${orders.filter((o) => o.department === "sales").length} Sales)`);
 
-  // The 00:05 schedule enqueues today's post, linked to its order; the Reddit scan is started by hand.
-  await enqueueDueLoops(admin);
+  // The schedule (run for the whole day) enqueues today's post, linked to its order; the Reddit scan is started by hand.
+  await enqueueDueLoops(admin, new Date(`${isoDay()}T23:05:00Z`));
   const { data: draftRun } = await admin.from("cmo_runs").select("input").eq("user_id", userId).eq("kind", "post_draft").single();
   const link = (draftRun as { input: { order_id?: string; item_id?: string } }).input;
   assert.ok(link.order_id && link.item_id, "the schedule links the draft run to its order and calendar item");
