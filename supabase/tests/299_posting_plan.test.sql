@@ -23,14 +23,14 @@ select is((select posting_plan from public.profiles where id = 'e2990000-0000-40
 set local role authenticated;
 set local request.jwt.claims = '{"sub":"e2990000-0000-4000-8000-00000000000a"}';
 
-select lives_ok($$ select public.save_posting_plan('{"text":{"x":2,"threads":1,"linkedin":0},"video":{"tiktok":3,"instagram":0,"youtube":7}}'::jsonb) $$, 'a valid plan is saved');
-select throws_ok($$ select public.save_posting_plan('{"text":{"x":4,"threads":1,"linkedin":0},"video":{"tiktok":0,"instagram":0,"youtube":0}}'::jsonb) $$,
+select lives_ok($$ select public.save_posting_plan('{"text":{"x":2,"threads":1,"linkedin":0,"facebook":0},"video":{"tiktok":3,"instagram":0,"youtube":7}}'::jsonb) $$, 'a valid plan is saved');
+select throws_ok($$ select public.save_posting_plan('{"text":{"x":4,"threads":1,"linkedin":0,"facebook":0},"video":{"tiktok":0,"instagram":0,"youtube":0}}'::jsonb) $$,
   '22023', 'Posts a day must be between 0 and 3.', 'four posts a day is refused');
-select throws_ok($$ select public.save_posting_plan('{"text":{"x":1,"threads":1,"linkedin":0},"video":{"tiktok":8,"instagram":0,"youtube":0}}'::jsonb) $$,
+select throws_ok($$ select public.save_posting_plan('{"text":{"x":1,"threads":1,"linkedin":0,"facebook":0},"video":{"tiktok":8,"instagram":0,"youtube":0}}'::jsonb) $$,
   '22023', 'Videos a week must be between 0 and 7.', 'eight videos a week is refused');
-select throws_ok($$ select public.save_posting_plan('{"text":{"x":1,"threads":1,"linkedin":0,"myspace":1},"video":{"tiktok":0,"instagram":0,"youtube":0}}'::jsonb) $$,
+select throws_ok($$ select public.save_posting_plan('{"text":{"x":1,"threads":1,"linkedin":0,"facebook":0,"myspace":1},"video":{"tiktok":0,"instagram":0,"youtube":0}}'::jsonb) $$,
   '22023', null, 'an unknown platform is refused');
-select throws_ok($$ select public.save_posting_plan('{"text":{"x":1.5,"threads":1,"linkedin":0},"video":{"tiktok":0,"instagram":0,"youtube":0}}'::jsonb) $$,
+select throws_ok($$ select public.save_posting_plan('{"text":{"x":1.5,"threads":1,"linkedin":0,"facebook":0},"video":{"tiktok":0,"instagram":0,"youtube":0}}'::jsonb) $$,
   '22023', null, 'half a post is refused');
 
 reset role;
@@ -62,7 +62,7 @@ where user_id = 'e2990000-0000-4000-8000-00000000000a' and idea = 'Drafted alrea
 
 set local role authenticated;
 set local request.jwt.claims = '{"sub":"e2990000-0000-4000-8000-00000000000a"}';
-select lives_ok($$ select public.save_posting_plan('{"text":{"x":0,"threads":1,"linkedin":1},"video":{"tiktok":0,"instagram":0,"youtube":0}}'::jsonb) $$, 'a new plan is saved');
+select lives_ok($$ select public.save_posting_plan('{"text":{"x":0,"threads":1,"linkedin":1,"facebook":0},"video":{"tiktok":0,"instagram":0,"youtube":0}}'::jsonb) $$, 'a new plan is saved');
 reset role;
 
 select is((select string_agg(idea || '=' || platform || ' ' || (body->>'targets'), ', ' order by idea) from public.content_items
@@ -79,7 +79,7 @@ select is((select body from public.content_items where user_id = 'e2990000-0000-
 -- Slots of different width: the rank follows body.slot, not the insert order, on every save.
 set local role authenticated;
 set local request.jwt.claims = '{"sub":"e2990000-0000-4000-8000-00000000000a"}';
-select lives_ok($$ select public.save_posting_plan('{"text":{"x":2,"threads":1,"linkedin":0},"video":{"tiktok":0,"instagram":0,"youtube":0}}'::jsonb) $$, 'X 2 + Threads 1 is saved');
+select lives_ok($$ select public.save_posting_plan('{"text":{"x":2,"threads":1,"linkedin":0,"facebook":0},"video":{"tiktok":0,"instagram":0,"youtube":0}}'::jsonb) $$, 'X 2 + Threads 1 is saved');
 reset role;
 select is((select string_agg(idea || '=' || (body->>'targets') || '/' || (body->>'slot'), ', ' order by idea) from public.content_items
   where user_id = 'e2990000-0000-4000-8000-00000000000a' and day = current_date + 1 and department = 'post'),
@@ -89,7 +89,7 @@ select is((select string_agg(idea || '=' || (body->>'targets') || '/' || (body->
 update public.content_items set body = body || '{"targets": ["linkedin"]}' where user_id = 'e2990000-0000-4000-8000-00000000000a' and idea = 'Second slot';
 set local role authenticated;
 set local request.jwt.claims = '{"sub":"e2990000-0000-4000-8000-00000000000a"}';
-select lives_ok($$ select public.save_posting_plan('{"text":{"x":2,"threads":1,"linkedin":0},"video":{"tiktok":1,"instagram":0,"youtube":0}}'::jsonb) $$, 'a video-only change is saved');
+select lives_ok($$ select public.save_posting_plan('{"text":{"x":2,"threads":1,"linkedin":0,"facebook":0},"video":{"tiktok":1,"instagram":0,"youtube":0}}'::jsonb) $$, 'a video-only change is saved');
 reset role;
 select is((select body->>'targets' from public.content_items where user_id = 'e2990000-0000-4000-8000-00000000000a' and idea = 'Second slot'),
   '["linkedin"]', 'a video-only change leaves every post''s targets alone');

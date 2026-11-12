@@ -39,10 +39,10 @@ check("the JSON schema has the zod schema's enums and fields", () => {
   assert.deepEqual(Object.keys(def.properties).sort(), [...fields].sort());
 });
 
-check("ids are unique and the seven profiles are there", () => {
+check("ids are unique and the eight profiles are there", () => {
   const ids = PROFILES.map((p) => p.id);
   assert.equal(new Set(ids).size, ids.length);
-  assert.deepEqual([...ids].sort(), ["core", "instagram_caption", "linkedin", "threads", "tiktok_caption", "x", "youtube"]);
+  assert.deepEqual([...ids].sort(), ["core", "facebook", "instagram_caption", "linkedin", "threads", "tiktok_caption", "x", "youtube"]);
 });
 
 check("the core post names no platform, and only it", () => {

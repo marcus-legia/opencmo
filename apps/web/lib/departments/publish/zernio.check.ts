@@ -102,6 +102,8 @@ async function main() {
     assert.deepEqual(await createZernioAdapter({ apiKey: "k", fetch: f }).accounts("prof_1"), [
       { zernioAccountId: "acc_x", platform: "x", handle: "founder", avatarUrl: "https://pbs.twimg.com/a.jpg" },
       { zernioAccountId: "acc_tt", platform: "tiktok", handle: "Founder", avatarUrl: null },
+      // A Facebook Page (D9, 2026-11-12): the founder picked the Page in Zernio's connect flow.
+      { zernioAccountId: "acc_fb", platform: "facebook", handle: "page", avatarUrl: null },
     ]);
   }
 
@@ -164,6 +166,9 @@ async function main() {
     assert.deepEqual(yt.platforms[0]!.platformSpecificData, { title: "Half the editing time", containsSyntheticMedia: false });
     const x = postBody({ ...post, kind: "post", media: [] }, { ...slot, platform: "x", fields: { platform: "x", aiGenerated: false } }) as { platforms: object[] };
     assert.deepEqual(x.platforms[0], { platform: "twitter", accountId: ACC });
+    // A Facebook Page post: Zernio's slug is ours and the Page is the account, no page id in the body.
+    const fb = postBody({ ...post, kind: "post", media: [], text: "x".repeat(4000) }, { ...slot, platform: "facebook", fields: { platform: "facebook", aiGenerated: false } }) as { content: string; platforms: object[] };
+    assert.deepEqual([fb.platforms[0], fb.content.length], [{ platform: "facebook", accountId: ACC }, 4000], "a long Facebook post goes as one");
 
     // A Threads post over 500 characters goes out as a chain, the image on its first part; 500 or under is one post.
     type Chain = { content?: string; mediaItems?: unknown; platforms: { platform: string; platformSpecificData?: { threadItems: { content: string; mediaItems?: unknown }[] } }[] };

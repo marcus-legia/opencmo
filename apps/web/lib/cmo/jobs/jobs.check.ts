@@ -49,7 +49,7 @@ async function main() {
   // model only fills ideas. Slot i of a day targets every platform whose count is above i.
   const today = new Date(Date.UTC(2026, 9, 5));
   const plan = (text: Partial<PostingPlan["text"]>, video: Partial<PostingPlan["video"]> = {}): PostingPlan => ({
-    text: { x: 0, threads: 0, linkedin: 0, ...text },
+    text: { x: 0, threads: 0, linkedin: 0, facebook: 0, ...text },
     video: { tiktok: 0, instagram: 0, youtube: 0, ...video },
   });
   const post = (day_offset: number, idea: string, slot?: number) => ({ day_offset, department: "post" as const, platform: "X", idea, reason: "r", ...(slot === undefined ? {} : { slot }) });

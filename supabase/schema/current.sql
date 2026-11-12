@@ -2706,7 +2706,7 @@ CREATE FUNCTION public.best_time_posts(p_user uuid) RETURNS TABLE(item_id uuid, 
   from r, public.published_items(p_user, now() - make_interval(days => (r.j->>'windowDays')::integer)) p
   join latest l on l.item_id = p.item_id
   where l.views is not null
-    and public.slot_platform_of(p.platform) in ('x', 'threads', 'linkedin', 'tiktok', 'youtube', 'instagram')
+    and public.slot_platform_of(p.platform) in ('x', 'threads', 'linkedin', 'facebook', 'tiktok', 'youtube', 'instagram')
     and p.published_at <= now() - make_interval(hours => (r.j->>'settleHours')::integer)
 $$;
 
@@ -4666,7 +4666,7 @@ $$;
 CREATE FUNCTION public.cmo_mark_posted(p_id uuid, p_url text DEFAULT NULL::text) RETURNS public.content_items
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
-    AS $$
+    AS $_$
 declare
   v_user uuid := public.require_user();
   v_row public.content_items;
@@ -4687,6 +4687,8 @@ begin
     elsif v_profile = 'linkedin'
       and v_url !~ '^https://(www\.)?linkedin\.com/(posts/[A-Za-z0-9_%.-]{1,255}|feed/update/urn:li:(activity|share|ugcPost):[0-9]{1,25})' then
       raise exception 'Paste the link to your post on LinkedIn, like https://www.linkedin.com/feed/update/urn:li:activity:123.' using errcode = '22023';
+    elsif v_profile = 'facebook' and v_url !~ '^https://(www\.|m\.)?facebook\.com/[A-Za-z0-9_./?=&%-]{1,255}$' then
+      raise exception 'Paste the link to your post on Facebook, like https://www.facebook.com/yourpage/posts/123.' using errcode = '22023';
     elsif v_profile = 'x' and v_url !~ '^https://(www\.)?(x|twitter)\.com/[A-Za-z0-9_]{1,15}/status/[0-9]{1,25}' then
       raise exception 'Paste the link to your post on X, like https://x.com/you/status/123.' using errcode = '22023';
     end if;
@@ -4698,7 +4700,7 @@ begin
   on conflict do nothing;
   return v_row;
 end;
-$$;
+$_$;
 
 
 --
@@ -9943,6 +9945,7 @@ CREATE FUNCTION public.platform_profile(p_id text) RETURNS jsonb
     when 'x' then '{"kind": "post", "limit": 25000, "title": null, "hashtags": 0, "label": "X"}'::jsonb
     when 'threads' then '{"kind": "post", "limit": 500, "title": null, "hashtags": 0, "label": "Threads"}'::jsonb
     when 'linkedin' then '{"kind": "post", "limit": 3000, "title": null, "hashtags": 0, "label": "LinkedIn"}'::jsonb
+    when 'facebook' then '{"kind": "post", "limit": 5000, "title": null, "hashtags": 0, "label": "Facebook"}'::jsonb
     when 'core' then '{"kind": "core", "limit": 3000, "title": null, "hashtags": 0, "label": "Post"}'::jsonb
     when 'instagram_caption' then '{"kind": "caption", "limit": 2200, "title": null, "hashtags": 5, "label": "Instagram caption"}'::jsonb
     when 'tiktok_caption' then '{"kind": "caption", "limit": 2200, "title": null, "hashtags": 5, "label": "TikTok caption"}'::jsonb
@@ -9964,6 +9967,7 @@ CREATE FUNCTION public.platform_profile_id(p_label text) RETURNS text
     when 'twitter' then 'x'
     when 'threads' then 'threads'
     when 'linkedin' then 'linkedin'
+    when 'facebook' then 'facebook'
     when 'instagram' then 'instagram_caption'
     when 'instagram_caption' then 'instagram_caption'
     when 'reels' then 'instagram_caption'
@@ -10156,7 +10160,7 @@ declare
   v_account public.social_accounts;
 begin
   -- The same platforms `schedule_propose` gives a slot to.
-  if v_platform is null or v_platform not in ('x', 'threads', 'linkedin') then
+  if v_platform is null or v_platform not in ('x', 'threads', 'linkedin', 'facebook') then
     return null;
   end if;
   v_at := public.schedule_pick_time(p_user, v_platform, null, p_item);
@@ -10186,7 +10190,7 @@ declare
   v_p jsonb := p_body->'proposed';
   v_publish boolean := v_p->>'mode' = 'publish';
 begin
-  if public.post_proposed_at(p_body) is null or v_p->>'platform' not in ('x', 'threads', 'linkedin')
+  if public.post_proposed_at(p_body) is null or v_p->>'platform' not in ('x', 'threads', 'linkedin', 'facebook')
      or v_p->>'mode' not in ('publish', 'intent') then
     return null;
   end if;
@@ -10438,8 +10442,8 @@ CREATE FUNCTION public.posting_plan_targets(p_targets jsonb) RETURNS jsonb
     AS $$
   select case
     when jsonb_typeof(p_targets) = 'array'
-      and jsonb_array_length(p_targets) between 1 and 3
-      and (select bool_and(jsonb_typeof(t) = 'string' and t #>> '{}' in ('x', 'threads', 'linkedin')) from jsonb_array_elements(p_targets) t)
+      and jsonb_array_length(p_targets) between 1 and 4
+      and (select bool_and(jsonb_typeof(t) = 'string' and t #>> '{}' in ('x', 'threads', 'linkedin', 'facebook')) from jsonb_array_elements(p_targets) t)
       and (select count(distinct t) from jsonb_array_elements(p_targets) t) = jsonb_array_length(p_targets)
     then p_targets
     else null end
@@ -11056,7 +11060,7 @@ CREATE TABLE public.schedule_slots (
     CONSTRAINT schedule_slots_jitter_seconds_check CHECK (((jitter_seconds >= '-240'::integer) AND (jitter_seconds <= 240))),
     CONSTRAINT schedule_slots_mode_check CHECK ((mode = ANY (ARRAY['publish'::text, 'intent'::text]))),
     CONSTRAINT schedule_slots_options_check CHECK (((jsonb_typeof(options) = 'object'::text) AND (octet_length((options)::text) <= 1024))),
-    CONSTRAINT schedule_slots_platform_check CHECK ((platform = ANY (ARRAY['x'::text, 'threads'::text, 'linkedin'::text, 'tiktok'::text, 'youtube'::text, 'instagram'::text]))),
+    CONSTRAINT schedule_slots_platform_check CHECK ((platform = ANY (ARRAY['x'::text, 'threads'::text, 'linkedin'::text, 'facebook'::text, 'tiktok'::text, 'youtube'::text, 'instagram'::text]))),
     CONSTRAINT schedule_slots_status_check CHECK ((status = ANY (ARRAY['proposed'::text, 'waiting'::text, 'due'::text, 'reminded'::text, 'publishing'::text, 'published'::text, 'missed'::text, 'failed'::text, 'cancelled'::text])))
 );
 
@@ -13423,8 +13427,8 @@ begin
     raise exception 'The posting plan needs a text and a video section.' using errcode = '22023';
   end if;
 
-  if (select array_agg(k order by k) from jsonb_object_keys(p_plan->'text') k) is distinct from array['linkedin', 'threads', 'x'] then
-    raise exception 'Posts a day are set for X, Threads and LinkedIn.' using errcode = '22023';
+  if (select array_agg(k order by k) from jsonb_object_keys(p_plan->'text') k) is distinct from array['facebook', 'linkedin', 'threads', 'x'] then
+    raise exception 'Posts a day are set for X, Threads, LinkedIn and Facebook.' using errcode = '22023';
   end if;
   for v_key, v_val in select * from jsonb_each(p_plan->'text') loop
     if jsonb_typeof(v_val) <> 'number' or (v_val #>> '{}')::numeric <> trunc((v_val #>> '{}')::numeric)
@@ -13454,9 +13458,10 @@ begin
 
   -- The day's slots as `dayTargets` builds them: slot i goes to every platform (in X, Threads, LinkedIn order) whose
   -- count is above i.
-  v_most := greatest((p_plan->'text'->>'x')::int, (p_plan->'text'->>'threads')::int, (p_plan->'text'->>'linkedin')::int);
+  v_most := greatest((p_plan->'text'->>'x')::int, (p_plan->'text'->>'threads')::int, (p_plan->'text'->>'linkedin')::int,
+    (p_plan->'text'->>'facebook')::int);
   v_slots := array(
-    select (select jsonb_agg(p order by o) from unnest(array['x', 'threads', 'linkedin']) with ordinality as u(p, o)
+    select (select jsonb_agg(p order by o) from unnest(array['x', 'threads', 'linkedin', 'facebook']) with ordinality as u(p, o)
             where (p_plan->'text'->>p)::int > i)
     from generate_series(0, v_most - 1) i order by i);
   v_n := coalesce(array_length(v_slots, 1), 0);
@@ -14138,7 +14143,7 @@ CREATE FUNCTION public.schedule_platform_label(p_platform text) RETURNS text
     LANGUAGE sql IMMUTABLE
     SET search_path TO 'public'
     AS $$
-  select case p_platform when 'x' then 'X' when 'threads' then 'Threads' when 'linkedin' then 'LinkedIn'
+  select case p_platform when 'x' then 'X' when 'threads' then 'Threads' when 'linkedin' then 'LinkedIn' when 'facebook' then 'Facebook'
     when 'tiktok' then 'TikTok' when 'instagram' then 'Instagram' when 'youtube' then 'YouTube' else p_platform end
 $$;
 
@@ -14169,7 +14174,7 @@ begin
   if v_d.kind = 'post' and v_d.ref_kind = 'content_item' then
     -- Every platform of the post's slot (Writer's old items: the one platform of their label).
     select array(select t from unnest(public.post_targets(c.id)) with ordinality as u(t, o)
-                 where t in ('x', 'threads', 'linkedin') order by o)
+                 where t in ('x', 'threads', 'linkedin', 'facebook') order by o)
       into v_platforms
     from public.content_items c where c.id = v_d.ref_id and c.status = 'approved';
   elsif v_d.kind in ('short', 'slideshow', 'video') and v_d.ref_kind = 'clip' then
@@ -14255,7 +14260,7 @@ $$;
 CREATE FUNCTION public.schedule_rules() RETURNS jsonb
     LANGUAGE sql IMMUTABLE
     SET search_path TO 'public'
-    AS $$ select '{"minGapHours": 3, "windowMinutes": 15, "leadMinutes": 30, "horizonDays": 14, "maxProposals": 3, "jitterSeconds": 240, "platforms": {"x": {"times": ["09:00"], "dailyCap": 5}, "threads": {"times": ["09:00", "12:00"], "dailyCap": 2}, "linkedin": {"times": ["16:00"], "dailyCap": 1}, "tiktok": {"times": ["09:00", "13:00"], "dailyCap": 2}, "instagram": {"times": ["09:00"], "dailyCap": 1}, "youtube": {"times": ["16:00", "19:00"], "dailyCap": 2}}}'::jsonb $$;
+    AS $$ select '{"minGapHours": 3, "windowMinutes": 15, "leadMinutes": 30, "horizonDays": 14, "maxProposals": 3, "jitterSeconds": 240, "platforms": {"x": {"times": ["09:00"], "dailyCap": 5}, "threads": {"times": ["09:00", "12:00"], "dailyCap": 2}, "linkedin": {"times": ["16:00"], "dailyCap": 1}, "facebook": {"times": ["09:00", "13:00"], "dailyCap": 2}, "tiktok": {"times": ["09:00", "13:00"], "dailyCap": 2}, "instagram": {"times": ["09:00"], "dailyCap": 1}, "youtube": {"times": ["16:00", "19:00"], "dailyCap": 2}}}'::jsonb $$;
 
 
 --
@@ -14963,7 +14968,7 @@ CREATE TABLE public.social_accounts (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT social_accounts_avatar_url_check CHECK (((avatar_url ~ '^https://'::text) AND (char_length(avatar_url) <= 1000))),
     CONSTRAINT social_accounts_handle_check CHECK (((char_length(handle) >= 1) AND (char_length(handle) <= 100))),
-    CONSTRAINT social_accounts_platform_check CHECK ((platform = ANY (ARRAY['x'::text, 'threads'::text, 'linkedin'::text, 'tiktok'::text, 'youtube'::text, 'instagram'::text]))),
+    CONSTRAINT social_accounts_platform_check CHECK ((platform = ANY (ARRAY['x'::text, 'threads'::text, 'linkedin'::text, 'facebook'::text, 'tiktok'::text, 'youtube'::text, 'instagram'::text]))),
     CONSTRAINT social_accounts_provider_check CHECK ((provider = 'zernio'::text)),
     CONSTRAINT social_accounts_status_check CHECK ((status = ANY (ARRAY['connected'::text, 'disconnected'::text, 'error'::text]))),
     CONSTRAINT social_accounts_zernio_account_id_check CHECK (((char_length(zernio_account_id) >= 1) AND (char_length(zernio_account_id) <= 100)))
@@ -17418,7 +17423,7 @@ CREATE TABLE public.account_metrics (
     CONSTRAINT account_metrics_followers_check CHECK ((followers >= 0)),
     CONSTRAINT account_metrics_handle_check CHECK (((char_length(handle) >= 1) AND (char_length(handle) <= 100))),
     CONSTRAINT account_metrics_impressions_check CHECK ((impressions >= 0)),
-    CONSTRAINT account_metrics_platform_check CHECK ((platform = ANY (ARRAY['x'::text, 'threads'::text, 'linkedin'::text, 'tiktok'::text, 'youtube'::text, 'instagram'::text]))),
+    CONSTRAINT account_metrics_platform_check CHECK ((platform = ANY (ARRAY['x'::text, 'threads'::text, 'linkedin'::text, 'facebook'::text, 'tiktok'::text, 'youtube'::text, 'instagram'::text]))),
     CONSTRAINT account_metrics_posts_check CHECK ((posts >= 0)),
     CONSTRAINT account_metrics_video_views_check CHECK ((video_views >= 0))
 );
@@ -17611,7 +17616,7 @@ CREATE TABLE public.best_slots (
     computed_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT best_slots_hour_check CHECK (((hour >= 0) AND (hour <= 23))),
     CONSTRAINT best_slots_median_views_per_hour_check CHECK ((median_views_per_hour >= (0)::double precision)),
-    CONSTRAINT best_slots_platform_check CHECK ((platform = ANY (ARRAY['x'::text, 'threads'::text, 'linkedin'::text, 'tiktok'::text, 'youtube'::text, 'instagram'::text]))),
+    CONSTRAINT best_slots_platform_check CHECK ((platform = ANY (ARRAY['x'::text, 'threads'::text, 'linkedin'::text, 'facebook'::text, 'tiktok'::text, 'youtube'::text, 'instagram'::text]))),
     CONSTRAINT best_slots_posts_check CHECK ((posts >= 1))
 );
 

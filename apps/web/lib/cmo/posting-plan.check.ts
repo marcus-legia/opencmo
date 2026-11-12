@@ -19,12 +19,12 @@ function check(label: string, run: () => void): void {
 const zeroVideo = { tiktok: 0, instagram: 0, youtube: 0 };
 
 check("post i targets every platform whose count is above i", () => {
-  const plan: PostingPlan = { text: { x: 2, threads: 1, linkedin: 1 }, video: zeroVideo };
+  const plan: PostingPlan = { text: { x: 2, threads: 1, linkedin: 1, facebook: 0 }, video: zeroVideo };
   assert.deepEqual(dayTargets(plan), [["x", "threads", "linkedin"], ["x"]]);
 });
 
 check("all zero gives no posts", () => {
-  const plan: PostingPlan = { text: { x: 0, threads: 0, linkedin: 0 }, video: zeroVideo };
+  const plan: PostingPlan = { text: { x: 0, threads: 0, linkedin: 0, facebook: 0 }, video: zeroVideo };
   assert.deepEqual(dayTargets(plan), []);
 });
 

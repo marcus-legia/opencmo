@@ -20,7 +20,7 @@ export const SILENT_HIGH_DAYS = 2;
 export const SILENT_CRITICAL_DAYS = 7;
 
 /** Platforms a Today row can name: the ones the founder posts on by hand or through publishing. */
-export const TODAY_PLATFORMS = ["x", "threads", "linkedin", "tiktok", "youtube", "instagram"] as const;
+export const TODAY_PLATFORMS = ["x", "threads", "linkedin", "facebook", "tiktok", "youtube", "instagram"] as const;
 export type TodayPlatform = (typeof TODAY_PLATFORMS)[number];
 
 export const TODAY_REASONS = ["failed_post", "silent", "expiring", "setup", "first_run", "waiting"] as const;
@@ -103,6 +103,7 @@ export const PLATFORM_LABEL: Record<TodayPlatform, string> = {
   x: "X",
   threads: "Threads",
   linkedin: "LinkedIn",
+  facebook: "Facebook",
   tiktok: "TikTok",
   youtube: "YouTube",
   instagram: "Instagram",

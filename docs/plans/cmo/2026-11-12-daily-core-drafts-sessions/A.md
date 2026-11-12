@@ -13,7 +13,7 @@ Plan: [`../2026-11-12-daily-core-drafts-plan.md`](../2026-11-12-daily-core-draft
 - [x] Task 1: posting plan (`fda79fce`)
 - [x] Task 2: planner screen and week plan
 - [x] Task 3: core post + fan-out + Rules-and-docs block
-- [ ] Task 5: Facebook Page (with ruling 1)
+- [x] Task 5: Facebook Page (with ruling 1)
 - [ ] Task 8: remove `build_slideshow`
 
 Screenshots: `shots-A/`.
@@ -27,3 +27,11 @@ Screenshots: `shots-A/`.
   (`lib/screens/cards.ts`), so a core post whose first target is Threads shows Threads' 500 limit; and the card clips
   each version at 3,000 characters, under X's new 25,000. The `p6-acceptance.e2e.ts` step ("one cron day, one card,
   three schedule cards") is not written; `300_post_targets` covers the fan-out in SQL.
+
+## Notes (Task 5)
+
+- Zernio (docs.zernio.com/platforms/facebook, read 2026-11-12): slug `facebook`, the founder picks the Page in the
+  connect flow, a post sends only `platform` and `accountId`. "Personal profiles cannot post through the API."
+- Facebook gets its own writer agent (`facebook_writer`) and default slots 09:00 and 13:00 (a placeholder: the Buffer
+  study in `schedule-defaults.json` has no Facebook figure used here). Autopilot stays off for Facebook.
+- A plan saved before Facebook joined reads `facebook` as 0; `save_posting_plan` now needs all four counts.

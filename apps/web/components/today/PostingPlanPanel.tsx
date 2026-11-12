@@ -7,7 +7,7 @@ import { ApiError, api, jsonBody } from "@/components/clipping/api";
 import { TEXT_PLATFORMS, VIDEO_PLATFORMS, dayTargets, type PostingPlan } from "@/lib/cmo/posting-plan";
 import type { ScheduleScreen } from "@/lib/screens/schedule";
 
-const TEXT_LABEL: Record<(typeof TEXT_PLATFORMS)[number], string> = { x: "X", threads: "Threads", linkedin: "LinkedIn" };
+const TEXT_LABEL: Record<(typeof TEXT_PLATFORMS)[number], string> = { x: "X", threads: "Threads", linkedin: "LinkedIn", facebook: "Facebook Page" };
 const VIDEO_LABEL: Record<(typeof VIDEO_PLATFORMS)[number], string> = { tiktok: "TikTok", instagram: "Instagram", youtube: "YouTube" };
 const TEXT_MAX = 3;
 const VIDEO_MAX = 7;

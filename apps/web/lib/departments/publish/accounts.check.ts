@@ -58,6 +58,11 @@ async function main() {
   assert.deepEqual(done, { kind: "connected", platform: "tiktok", handle: "fake_tiktok" });
   assert.equal(rows.size, 1);
 
+  // A Facebook Page connects the same way (D9, 2026-11-12).
+  const page = new URL(await connectUrl(me, "facebook", "http://127.0.0.1:3000/api/v1/accounts/callback"));
+  assert.deepEqual(await finishConnect(me, page.searchParams), { kind: "connected", platform: "facebook", handle: "fake_facebook" });
+  assert.equal(rows.size, 2);
+
   // A forged callback: someone else's account id, or the right id under another platform, is never stored.
   const other = { adapter, store: memoryStore().store, userId: "user-2" };
   const otherProfile = await ensureProfile(other);
@@ -67,7 +72,7 @@ async function main() {
   const wrongPlatform = new URLSearchParams({ platform: "x", accountId: fakeAccountId(p1, "tiktok") });
   assert.equal((await finishConnect(me, wrongPlatform)).kind, "refused");
   assert.equal((await finishConnect(me, new URLSearchParams({ platform: "reddit", accountId: "a" }))).kind, "refused");
-  assert.equal(rows.size, 1);
+  assert.equal(rows.size, 2, "nothing forged was stored");
 
   // Zernio's own error text never reaches the page.
   const failed = await finishConnect(me, new URLSearchParams({ platform: "linkedin", error: "access_denied", error_message: "<script>x</script>" }));

@@ -17,6 +17,8 @@ import { cx, Panel } from "../parts";
 
 type Account = SettingsScreen["accounts"][number];
 
+export const FACEBOOK_NOTE = "Facebook posts only to a Page you manage. For your personal profile, the card gives you copy and open.";
+
 export const ACCOUNTS_PANEL_ID = "settings-connected-accounts";
 
 const SAMPLE = "These are sample accounts: nothing connects from here.";
@@ -93,6 +95,8 @@ export function AccountsPanel({ accounts: given, live }: { accounts: Account[]; 
         <div className="scr-accounts">
           {accounts.map((a) => {
             const name = PLATFORM_LABEL[a.platform];
+            // Meta's API posts only to a Page the founder manages (D9): the button and the line say so.
+            const action = a.platform === "facebook" ? "Facebook Page" : name;
             const waiting = busy === a.id;
             return (
               <div key={a.id} className={cx("scr-account", a.status === "reconnect" && "is-stuck")} data-testid="settings-account" data-platform={a.platform}>
@@ -102,6 +106,9 @@ export function AccountsPanel({ accounts: given, live }: { accounts: Account[]; 
                     <b>{name}</b>
                     {a.handle ? ` · ${a.handle}` : ""}
                     {a.status === "reconnect" ? <span className="scr-status is-stuck scr-account-note">Stopped working: connect it again</span> : null}
+                    {a.platform === "facebook" && a.status === "not_connected" ? (
+                      <span className="scr-small scr-muted scr-account-note">{FACEBOOK_NOTE}</span>
+                    ) : null}
                   </span>
                 </span>
                 {confirming === a.id ? (
@@ -128,7 +135,7 @@ export function AccountsPanel({ accounts: given, live }: { accounts: Account[]; 
                     title={live ? undefined : SAMPLE}
                     onClick={() => void connect(a)}
                   >
-                    {waiting ? "Opening…" : `${a.status === "reconnect" ? "Reconnect" : "Connect"} ${name}`}
+                    {waiting ? "Opening…" : `${a.status === "reconnect" ? "Reconnect" : "Connect"} ${action}`}
                   </Button>
                 )}
               </div>

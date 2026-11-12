@@ -33,6 +33,7 @@ const CHANS = [
   { id: "all", label: "All", platforms: null },
   { id: "x", label: "X", platforms: ["x"] },
   { id: "linkedin", label: "LinkedIn", platforms: ["linkedin"] },
+  { id: "facebook", label: "Facebook", platforms: ["facebook"] },
   { id: "video", label: "Video", platforms: ["tiktok", "youtube", "instagram"] },
   { id: "threads", label: "Threads", platforms: ["threads"] },
 ] as const;

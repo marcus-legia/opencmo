@@ -54,7 +54,7 @@ for (const text of ["We moved the app to Next.js and Node.js.", "Our #1 rule is 
 
 // No AI Slop is a skill read by the writer, the checker, sales and CMO chat; its plain stock patterns are also a code
 // gate (lib/cmo/slop.ts, checked in slop.check.ts).
-assert.deepEqual([...CMO_SKILLS["no-ai-slop"].agents].sort(), ["brief_writer", "checker", "cmo", "director", "instagram_writer", "linkedin_writer", "onboarding", "planner", "research", "sales", "shorts", "slides_writer", "threads_writer", "tiktok_writer", "writer", "x_writer", "youtube_writer"]);
+assert.deepEqual([...CMO_SKILLS["no-ai-slop"].agents].sort(), ["brief_writer", "checker", "cmo", "director", "facebook_writer", "instagram_writer", "linkedin_writer", "onboarding", "planner", "research", "sales", "shorts", "slides_writer", "threads_writer", "tiktok_writer", "writer", "x_writer", "youtube_writer"]);
 assert.match(CMO_SKILLS["no-ai-slop"].license, /MIT — Copyright \(c\) 2026 Peter Yang/);
 for (const agent of ["x_writer", "checker", "sales", "cmo"] as const) assert.ok(skillIndex(agent).includes("- no-ai-slop:"), `${agent} lists no-ai-slop`);
 assert.ok(REVIEW_SYSTEM.includes('<skill name="no-ai-slop">') && /reads like AI wrote it/.test(REVIEW_SYSTEM), "the checker fails a draft that reads as AI");
@@ -67,7 +67,7 @@ const postSkill = CMO_SKILLS["post"].body;
 for (const taught of ["isn't what you think", "is wrong. Here's why:", "the last post sums up", "1-2 hashtags", "link in reply", "I was wrong about [", "Do this instead:", "a question, a takeaway"]) {
   assert.ok(!postSkill.includes(taught), `the post skill does not teach: ${taught}`);
 }
-assert.deepEqual([...CMO_SKILLS["post"].agents].sort(), ["checker", "cmo", "linkedin_writer", "threads_writer", "x_writer"], "one post skill for every post writer");
+assert.deepEqual([...CMO_SKILLS["post"].agents].sort(), ["checker", "cmo", "facebook_writer", "linkedin_writer", "threads_writer", "x_writer"], "one post skill for every post writer");
 
 // The eval's stock-pattern measure: catches the old fake drafts, passes the new ones and plain posts.
 assert.deepEqual(stockPatterns("Most founders skip this: polite reminders get invoices paid."), ["faux_insight", "colon_reveal"]);

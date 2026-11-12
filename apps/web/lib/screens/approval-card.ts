@@ -72,7 +72,7 @@ const PostBody = z.object({
    */
   proposed: z
     .object({
-      platform: PlatformSchema.extract(["x", "threads", "linkedin"]),
+      platform: PlatformSchema.extract(["x", "threads", "linkedin", "facebook"]),
       at: iso,
       /** `publish`: from the connected account; `intent`: at that time the founder gets the post to copy and open. */
       mode: z.enum(["publish", "intent"]),

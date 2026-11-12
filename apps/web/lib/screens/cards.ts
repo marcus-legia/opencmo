@@ -65,7 +65,7 @@ type PostBody = Extract<ApprovalCard["body"], { kind: "post" }>;
 function proposedOf(v: unknown): Pick<PostBody, "proposed"> {
   if (!v || typeof v !== "object") return {};
   const p = v as Record<string, unknown>;
-  const platform = p.platform === "x" || p.platform === "threads" || p.platform === "linkedin" ? p.platform : null;
+  const platform = p.platform === "x" || p.platform === "threads" || p.platform === "linkedin" || p.platform === "facebook" ? p.platform : null;
   const mode = p.mode === "publish" || p.mode === "intent" ? p.mode : null;
   if (!platform || !mode || typeof p.at !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(p.at)) return {};
   return {
@@ -81,7 +81,7 @@ function proposedOf(v: unknown): Pick<PostBody, "proposed"> {
   };
 }
 
-const PLATFORM_NAME = { x: "X", threads: "Threads", linkedin: "LinkedIn", tiktok: "TikTok", youtube: "YouTube", instagram: "Instagram" } as const;
+const PLATFORM_NAME = { x: "X", threads: "Threads", linkedin: "LinkedIn", facebook: "Facebook", tiktok: "TikTok", youtube: "YouTube", instagram: "Instagram" } as const;
 
 type CaptionRow = { caption_id: string; clip_id: string; profile: string; text: string; title: string | null };
 

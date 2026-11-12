@@ -27,7 +27,7 @@
         "id": { "type": "string", "pattern": "^[a-z][a-z_]{0,19}$", "description": "Stored in content_items.platform and cmo_draft_outcomes.platform (20 characters at most)." },
         "label": { "type": "string", "minLength": 1, "maxLength": 40, "description": "What the cards call it." },
         "platform": {
-          "enum": ["x", "threads", "linkedin", "tiktok", "youtube", "instagram", "reddit", null],
+          "enum": ["x", "threads", "linkedin", "facebook", "tiktok", "youtube", "instagram", "reddit", null],
           "description": "The account it goes out on (lib/screens/common.ts PLATFORMS); null only for the core kind, which goes to every platform the planner picked."
         },
         "kind": {

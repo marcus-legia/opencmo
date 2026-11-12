@@ -5,9 +5,9 @@ from __future__ import annotations
 from opencmo import platforms
 
 
-def test_seven_profiles_with_unique_ids():
+def test_eight_profiles_with_unique_ids():
     ids = [p.id for p in platforms.profiles()]
-    assert sorted(ids) == ["core", "instagram_caption", "linkedin", "threads", "tiktok_caption", "x", "youtube"]
+    assert sorted(ids) == ["core", "facebook", "instagram_caption", "linkedin", "threads", "tiktok_caption", "x", "youtube"]
 
 
 def test_only_the_core_post_names_no_platform():

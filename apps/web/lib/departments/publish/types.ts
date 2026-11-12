@@ -13,7 +13,7 @@ import { z } from "zod";
 import type { Platform } from "@/lib/screens/common";
 
 /** The platforms posted through Zernio (F1's connect buttons). Reddit is never posted: Sales has no post button. */
-export const PUBLISH_PLATFORMS = ["x", "threads", "linkedin", "tiktok", "youtube", "instagram"] as const satisfies readonly Platform[];
+export const PUBLISH_PLATFORMS = ["x", "threads", "linkedin", "facebook", "tiktok", "youtube", "instagram"] as const satisfies readonly Platform[];
 export const PublishPlatformSchema = z.enum(PUBLISH_PLATFORMS);
 export type PublishPlatform = z.infer<typeof PublishPlatformSchema>;
 
@@ -46,7 +46,7 @@ export const PlatformFieldsSchema = z.discriminatedUnion("platform", [
     .strict(),
   z
     .object({
-      platform: z.enum(["x", "threads", "linkedin", "youtube", "instagram"]),
+      platform: z.enum(["x", "threads", "linkedin", "facebook", "youtube", "instagram"]),
       aiGenerated: z.boolean(),
       /** X only: the founder asked for a long post as a thread, after a free account refused it as one post. */
       asThread: z.boolean().optional(),

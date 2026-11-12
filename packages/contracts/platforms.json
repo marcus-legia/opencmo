@@ -39,6 +39,18 @@
       "tone": "Longer, short paragraphs, the first line before the cut (about 140 characters on a phone, 210 on a desktop). A real story or lesson with its details. No \"I'm excited to announce\", no one-line paragraphs stacked for drama, no moral at the end."
     },
     {
+      "id": "facebook",
+      "label": "Facebook",
+      "platform": "facebook",
+      "kind": "post",
+      "limit": 5000,
+      "title": null,
+      "visibleBeforeMore": 480,
+      "hashtags": 0,
+      "links": false,
+      "tone": "Warmer than LinkedIn, a story told to people who know you; short paragraphs. The first lines before \"See more\" carry it."
+    },
+    {
       "id": "core",
       "label": "Post",
       "platform": null,

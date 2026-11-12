@@ -36,7 +36,7 @@ const PUBLISH_TIMEOUT_MS = 120_000;
 const MAX_UPLOAD_BYTES = 2 * 1024 ** 3;
 
 /** Zernio names X `twitter`; every other platform keeps our id. */
-const SLUG: Record<PublishPlatform, string> = { x: "twitter", threads: "threads", linkedin: "linkedin", tiktok: "tiktok", youtube: "youtube", instagram: "instagram" };
+const SLUG: Record<PublishPlatform, string> = { x: "twitter", threads: "threads", linkedin: "linkedin", facebook: "facebook", tiktok: "tiktok", youtube: "youtube", instagram: "instagram" };
 const FROM_SLUG = new Map(Object.entries(SLUG).map(([ours, theirs]) => [theirs, ours as PublishPlatform]));
 
 export const fromZernioSlug = (slug: string): PublishPlatform | null => FROM_SLUG.get(slug) ?? null;

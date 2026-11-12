@@ -5,8 +5,8 @@ import { z } from "zod";
  * SQL keeps the same bounds in `save_posting_plan` (`profiles.posting_plan`, null = use the default).
  */
 
-// Text platforms the CMO writes a daily core post for. Facebook joins when its account and publishing exist.
-export const TEXT_PLATFORMS = ["x", "threads", "linkedin"] as const;
+// Text platforms the CMO writes a daily core post for, in slot order. Facebook is a Page (D9, 2026-11-12).
+export const TEXT_PLATFORMS = ["x", "threads", "linkedin", "facebook"] as const;
 export const VIDEO_PLATFORMS = ["tiktok", "instagram", "youtube"] as const;
 
 export type TextPlatform = (typeof TEXT_PLATFORMS)[number];
@@ -18,7 +18,8 @@ export type PostingPlan = {
 };
 
 function counts<K extends string>(keys: readonly K[], max: number) {
-  const count = z.number().int().min(0).max(max);
+  // A plan saved before Facebook joined has no `facebook`: it reads as 0, not as an unset plan.
+  const count = z.number().int().min(0).max(max).default(0);
   return z.object(Object.fromEntries(keys.map((k) => [k, count])) as Record<K, typeof count>);
 }
 

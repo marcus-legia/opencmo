@@ -55,6 +55,7 @@ export const PLATFORM_LABELS: Readonly<Record<string, string>> = {
   twitter: "x",
   threads: "threads",
   linkedin: "linkedin",
+  facebook: "facebook",
   instagram: "instagram_caption",
   instagram_caption: "instagram_caption",
   reels: "instagram_caption",
