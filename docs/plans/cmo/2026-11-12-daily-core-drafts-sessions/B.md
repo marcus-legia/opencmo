@@ -16,7 +16,7 @@ the schedule card component, the `approvals_autopilot` trigger, `lib/cmo/writer/
 - [x] Task 9: photo post. **Waits on A's Task 5** (`schedule_propose` with Facebook; your migration redeclares it after A's).
 - [x] Whole-branch code review once every box in `A.md` and here is ticked: run `/code-review` (high) on the PR's diff
   against `main`, fix what it finds in one round, re-review the fixes once, and list what is left in the PR.
-- [ ] Screenshots for the owner, in `shots-B/` and in the PR description: the planner panel (X, Threads, LinkedIn,
+- [x] Screenshots for the owner, in `shots-B/` and in the PR description: the planner panel (X, Threads, LinkedIn,
   Facebook, TikTok rows), a day's core post card with its targets, the schedule cards it fans out to, a Threads chain
   preview, the X "Post as a thread" failure card, a script card with its caption, the Rewrite for LinkedIn button and
   its result, the photo post panel. Use sample data if no live account; say so under each image. Send them to the
@@ -89,3 +89,15 @@ Each task: tests first, commit, push (see README). Tick the box in this file in 
   of X's "too long" refusal, photo carousels. Check on a real account before the owner's test.
 - pgTAP ran on a local Postgres 16 shim; nine older test files cannot run there (table grants the shim lacks). CI's run is
   the authoritative one.
+
+## Screenshots (`shots-B/`, 2026-11-12)
+
+All eight are **sample data**, rendered from the real card components on a throwaway preview page (the cloud session
+cannot run the Supabase stack, so there is no signed-in app here): the page frame and the filled primary button of
+the app are not in them. The planner panel is in `shots-A/`.
+
+`core-post.png`, `rewrite-result.png`, `fan-out.png`, `threads-chain.png`, `x-thread-button.png`, `x-thread-card.png`,
+`script-caption.png`, `photo-post-panel.png`.
+
+Seen while taking them, not fixed: a schedule card's one-post preview (`.v2-card-draft`) shows a post's paragraphs run
+together; the chain and post cards keep them.
