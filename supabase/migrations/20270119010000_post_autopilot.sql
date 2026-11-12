@@ -280,6 +280,7 @@ begin
 end;
 $$;
 
+revoke all on function public.autopilot_min_window() from public, anon, authenticated;
 revoke all on function public.post_autopilot_at(uuid, text, uuid, jsonb) from public, anon, authenticated;
 revoke all on function public.post_autopilot_still_on(public.approvals) from public, anon, authenticated;
 revoke all on function public.approval_auto_decide(integer) from public, anon, authenticated;
