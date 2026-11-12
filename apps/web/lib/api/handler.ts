@@ -24,10 +24,12 @@ import { NextResponse, type NextRequest } from "next/server";
 import type { z } from "zod";
 
 import { errorFields, logEvent } from "../log";
+import { authWithin } from "../supabase/auth-timeout";
 import { createServerClient } from "../supabase/server";
-import { claimsUser } from "../supabase/user";
+import { authUnavailable, checkedUser } from "../supabase/user";
 import {
   ApiError,
+  AUTH_UNAVAILABLE,
   GENERIC_ERROR,
   NOT_SIGNED_IN,
   TOO_MANY,
@@ -204,11 +206,18 @@ export async function handleApi<Schema extends z.ZodType | undefined = undefined
       if (options.auth !== false) {
         // Reads trust the verified JWT; a write also asks Auth, so a banned or deleted account cannot spend credits or
         // change anything while its last access token lives (up to an hour). One round trip, beside the database.
-        let signedIn = await claimsUser(supabase);
+        //
+        // Auth not answering is not "signed out". The request is still refused (nothing runs unchecked), but with a
+        // 503: "Please sign in again" during an Auth incident sent founders to a sign-in that was down too.
+        const checked = await checkedUser(supabase);
+        let signedIn = checked.user;
+        let unavailable = checked.unavailable;
         if (signedIn && WRITE_METHODS.has(request.method)) {
-          const { data, error } = await supabase.auth.getUser();
-          signedIn = error || !data.user ? null : { id: data.user.id, email: data.user.email ?? null };
+          const { data, error } = await authWithin(() => supabase.auth.getUser());
+          unavailable = authUnavailable(error);
+          signedIn = error || !data?.user ? null : { id: data.user.id, email: data.user.email ?? null };
         }
+        if (!signedIn && unavailable) return refused(request, user.id, 503, AUTH_UNAVAILABLE);
         if (!signedIn) return errorResponse(401, NOT_SIGNED_IN);
         user = { id: signedIn.id, email: signedIn.email ?? undefined };
       }

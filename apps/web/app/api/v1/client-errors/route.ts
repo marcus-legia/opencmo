@@ -4,6 +4,7 @@ import { z } from "zod";
 import { withApi, type RouteContext } from "@/lib/api/handler";
 import { clientIp, createIpLimiter } from "@/lib/api/ip-limit";
 import { logEvent } from "@/lib/log";
+import { claimsUser } from "@/lib/supabase/user";
 
 const Body = z.object({
   kind: z.enum(["error", "unhandledrejection", "boundary", "global-boundary", "reported"]),
@@ -19,10 +20,11 @@ const overLimit = createIpLimiter(30, 60_000);
 // Public, because the landing and login pages can break for people who are not signed in. Same-origin writes only
 // (`withApi`), and all it can do is add a capped line to the log.
 const report = withApi({ auth: false, body: Body, maxBodyBytes: 16 * 1024 }, async ({ body, supabase, request }) => {
-  const { data } = await supabase.auth.getUser().catch(() => ({ data: { user: null } }));
+  // Who it happened to, from the cookie's verified JWT: no trip to Auth for a log line.
+  const user = await claimsUser(supabase).catch(() => null);
   logEvent("error", "client_error", {
     ...body,
-    user: data.user?.id,
+    user: user?.id,
     userAgent: request.headers.get("user-agent")?.slice(0, 300),
   });
   return new NextResponse(null, { status: 204 });

@@ -27,11 +27,11 @@ test("nút Google xin OAuth với callback đúng", async ({ page }) => {
 
 test("callback: huỷ ở Google hay thiếu mã thì về /login có câu lỗi", async ({ page }) => {
   await page.goto("/auth/callback?error=access_denied&error_description=cancelled");
-  await expect(page).toHaveURL(/\/login\?error=huy/);
+  await expect(page).toHaveURL(/\/login\?error=cancelled/);
   await expect(page.locator(".auth-error")).toHaveText("Sign-in was cancelled.");
 
   await page.goto("/auth/callback");
-  await expect(page).toHaveURL(/\/login\?error=thieu-ma/);
+  await expect(page).toHaveURL(/\/login\?error=no-code/);
   await expect(page.locator(".auth-error")).toContainText("Google did not finish");
 });
 

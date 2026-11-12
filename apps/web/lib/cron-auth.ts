@@ -3,12 +3,11 @@ import "server-only";
 import { timingSafeEqual } from "node:crypto";
 
 /**
- * So bearer token theo thời gian hằng.
+ * Compares a bearer token in constant time.
  *
- * `!==` trên chuỗi dừng ở byte đầu tiên khác nhau, nên thời gian trả lời rò ra
- * đúng bao nhiêu ký tự đầu đã đúng — đoán được từng byte một. Độ dài so trước
- * vì `timingSafeEqual` ném khi lệch độ dài — và độ dài của secret không phải bí
- * mật đáng giữ.
+ * `!==` on strings stops at the first byte that differs, so the answer's timing leaks how many leading characters
+ * were right, one byte at a time. Lengths are compared first because `timingSafeEqual` throws when they differ, and
+ * a secret's length is not worth hiding.
  */
 export function bearerMatches(header: string | null, secret: string): boolean {
   if (!header) return false;
@@ -18,18 +17,24 @@ export function bearerMatches(header: string | null, secret: string): boolean {
 }
 
 /**
- * Cron route chạy bằng service role: đóng khi THIẾU secret trên production,
- * không chỉ khi sai secret. Bỏ trống chỉ chấp nhận lúc chạy local.
+ * The one rule of every route a machine calls with a shared secret (the crons, the CMO runner, cleanup): closed when
+ * the secret is MISSING in production, not only when it is wrong. `.env.example` leaves these empty, and "unset means
+ * open" would put a service-role endpoint on production after one forgotten line. Empty is accepted only locally.
  */
-export function cronAuthorized(authorization: string | null, label: string): boolean {
-  const secret = process.env.CRON_SECRET;
+export function secretAuthorized(authorization: string | null, name: string, label: string, env: NodeJS.ProcessEnv = process.env): boolean {
+  const secret = env[name];
   if (!secret) {
-    if (process.env.NODE_ENV === "production") {
-      console.error(`[cron] ${label}: thiếu CRON_SECRET — từ chối`);
+    if (env.NODE_ENV === "production") {
+      console.error(`[cron] ${label}: ${name} is missing, refusing so the endpoint stays closed`);
       return false;
     }
-    console.warn(`[cron] ${label}: không có CRON_SECRET — chỉ chấp nhận vì đang chạy local`);
+    console.warn(`[cron] ${label}: no ${name}, accepted only because this is a local run`);
     return true;
   }
   return bearerMatches(authorization, secret);
+}
+
+/** The CMO's crons and its run route, with `CRON_SECRET` (Modal holds it). */
+export function cronAuthorized(authorization: string | null, label: string): boolean {
+  return secretAuthorized(authorization, "CRON_SECRET", label);
 }

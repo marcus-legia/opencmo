@@ -1,6 +1,8 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+import { authWithin } from "./auth-timeout";
+
 /**
  * Làm mới phiên đăng nhập trên mỗi request.
  *
@@ -54,7 +56,11 @@ export async function updateSession(request: NextRequest) {
 
   // `getClaims` refreshes an expired access token (writing the new cookies through `setAll`) and then verifies the JWT
   // locally against the project's public key: no round trip to Auth on every request (lib/supabase/user.ts).
-  const { data, error } = await supabase.auth.getClaims();
+  //
+  // Under a time limit: with Auth down, a token that needs a refresh held every request here for up to 30 seconds
+  // (`lib/supabase/auth-timeout.ts`). Past it the request goes on as signed out: a gated page shows the sign-in form,
+  // and the API answers 503 from its own check.
+  const { data, error } = await authWithin(() => supabase.auth.getClaims());
   const signedIn = !error && !!data?.claims?.sub;
 
   // Chặn ở đây thay vì trong từng trang: quên một trang là lộ một trang.
