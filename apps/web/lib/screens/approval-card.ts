@@ -434,9 +434,6 @@ export const PublishAtSchema = z.iso
   .datetime({ offset: true })
   .refine((value) => !/\.\d/.test(value), "Pick a time to the minute (no fractions of a second).");
 
-/** `approvals.ref_kind` of a schedule card; `ref_id` is the slot. */
-export const SCHEDULE_REF_KIND = "schedule_slot" as const;
-
 const ScheduleBody = z.object({
   kind: z.literal("schedule"),
   slotId: z.string(),
@@ -574,20 +571,6 @@ export const PRIMARY_ACTION: Record<CardKind, string> = {
  * card is approved. The card keeps its id and gets a new hash, so a tab showing the old words is refused.
  */
 export const CAPTION_ACTION = "edit_caption";
-
-/**
- * Studio actions (`approval_decide`, A1), named as `components/cards/decide.ts` sends them: redo one keyframe on a
- * contact sheet, cancel a script or a price (releases any hold), send back a finished video or a shorts batch.
- * Editing a beat (`edit {beat, text}`) re-plans the script and raises a new card.
- */
-export const STUDIO_ACTIONS: Record<"script" | "price" | "finished_video" | "shorts_batch" | "slideshow", readonly string[]> = {
-  script: ["approve", "edit", "cancel"],
-  price: ["approve", "redo", "cancel"],
-  finished_video: ["approve", "send_back"],
-  shorts_batch: ["approve", "send_back"],
-  /** P5: rendered before the card, so approving runs nothing; text edits go through the Slides view. */
-  slideshow: ["approve", "send_back"],
-};
 
 /**
  * Schedule actions (`approval_decide`, P4 A1). `approve` and `retry` take the card as it is; `change_time {publish_at}`,

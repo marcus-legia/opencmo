@@ -27,7 +27,7 @@ Ways in, on purpose:
   2. `sweep()` — a cron every minute: the reconciler puts jobs whose lease ran out back in the queue, then picks
      up what is still queued. This is the safety net, not the main path.
      It also dispatches queued AI CMO runs to the web app (`_dispatch_cmo`).
-  3. `cmo_schedule()` and `cleanup()` — daily crons that call the web app's cron routes.
+  3. `cmo_schedule()` (hourly) and `cleanup()` (daily) — crons that call the web app's cron routes.
      Modal is the only scheduler; `apps/web/vercel.json` has no crons.
   4. `wake` — the MCP server (`mcp_app.py`, its own app) asks for an early `sweep()` with a
      token that can do nothing else.
@@ -643,14 +643,14 @@ def _dispatch_cmo() -> None:
         log.warning("AI CMO dispatch failed; next sweep tries again", exc_info=True)
 
 
-# Two retries: one failed call skipped every founder's loops for the day, and cmo_enqueue merges a retry into the run
-# already queued, so retrying is safe (review R6).
-@app.function(secrets=[secret], schedule=modal.Cron("5 0 * * *"), timeout=330, retries=modal.Retries(max_retries=2, initial_delay=60.0))
+# Hourly: the web route queues each founder's loops from their own morning, once a day (`schedule.ts`), so a founder
+# in California gets the day's drafts at 06:00 there, not the afternoon before. A call that fails is retried, and
+# the next hour makes up whatever is still missing; neither queues a loop twice.
+@app.function(secrets=[secret], schedule=modal.Cron("5 * * * *"), timeout=330, retries=modal.Retries(max_retries=2, initial_delay=60.0))
 def cmo_schedule() -> None:
-    """Enqueue the AI CMO loops due today (00:05 UTC, right after the calendar's day starts).
+    """Enqueue the AI CMO loops due now (every hour at :05; the first of the day right after the calendar's day starts).
 
-    Only enqueues; `sweep()` dispatches the runs. Once a day on purpose: the loops are daily, and
-    enqueuing again after a run finished would run it twice.
+    Only enqueues; `sweep()` dispatches the runs.
     """
     from opencmo.worker import cmo_dispatch
 

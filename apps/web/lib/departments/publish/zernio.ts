@@ -38,7 +38,6 @@ const MAX_UPLOAD_BYTES = 2 * 1024 ** 3;
 const SLUG: Record<PublishPlatform, string> = { x: "twitter", threads: "threads", linkedin: "linkedin", tiktok: "tiktok", youtube: "youtube", instagram: "instagram" };
 const FROM_SLUG = new Map(Object.entries(SLUG).map(([ours, theirs]) => [theirs, ours as PublishPlatform]));
 
-export const zernioSlug = (p: PublishPlatform) => SLUG[p];
 export const fromZernioSlug = (slug: string): PublishPlatform | null => FROM_SLUG.get(slug) ?? null;
 
 type Fetch = typeof fetch;

@@ -137,9 +137,9 @@ html[data-ui="v2"] body { background: var(--v2-paper); -webkit-font-smoothing: a
 .v2 :is(button, a, input, select, textarea, summary, [tabindex]):focus-visible { outline-color: var(--v2-brand); }
 
 /* Labels: the v2 frames set them in uppercase mono; the canvas uses small sentence-case sans. Numbers stay mono. */
-.v2 :is(.v2-mono, .scr .scr-mono, .v2-panel-title, .v2-panel-link, .v2-rail-heading, .v2-hub-label, .v2-card-head,
+.v2 :is(.v2-mono, .scr .scr-mono, .v2-panel-title, .v2-panel-link, .v2-hub-label, .v2-card-head,
   .v2-card-options legend, .v2-card-edit-label, .v2-card-state b, .v2-card-captions-head, .v2-back, .v2-table th,
-  .v2-teamlist-clear, .v2-log-who, .v2-rail-status, .scr-pill, .v2-sample, .v2-tabbar-item, .v2-tabstrip-chat,
+  .v2-teamlist-clear, .v2-log-who, .scr-pill, .v2-sample, .v2-tabbar-item, .v2-tabstrip-chat,
   .scr .scr-on-dark-link) {
   font-family: var(--v2-sans);
   letter-spacing: 0;
@@ -267,20 +267,7 @@ html[data-ui="v2"] body { background: var(--v2-paper); -webkit-font-smoothing: a
 /* ---------- 3. shell ---------- */
 
 /* rail · panel · chat, under one top bar. The chat moved to the right (canvas Main.dc.html): the work leads. */
-.v2-shell.is-cols {
-  grid-template-rows: var(--v2-top) minmax(0, 1fr);
-  grid-template-columns: var(--v2-col-rail, 216px) 1px minmax(480px, 1fr) 1px var(--v2-col-chat, 400px);
-  background: var(--v2-paper);
-}
 /* Hiding the panel (the chat takes its space) is a desktop layout: below 1100 px the chat is a drawer, so the page stays. */
-@media (min-width: 1100px) {
-  .v2-shell.is-cols[data-panel="hidden"] { grid-template-columns: var(--v2-col-rail, 216px) 1px minmax(0, 1fr); }
-  .v2-shell.is-cols[data-panel="hidden"] .v2-main,
-  .v2-shell.is-cols[data-panel="hidden"] .v2-main + .v2-sash { display: none; }
-}
-.v2-shell.is-cols :is(.v2-rail, .v2-main, .v2-chatcol) { height: calc(100vh - var(--v2-top)); }
-.v2-shell.is-cols .v2-rail { background: var(--v2-paper2); padding: 10px 8px; gap: 12px; }
-.v2-shell.is-cols .v2-chatcol { background: var(--v2-paper2); }
 .v2 .v2-sash { background: var(--v2-line); }
 .v2 .v2-sash:hover, :root[data-v2-resizing] .v2 .v2-sash:active { background: var(--v2-brand); }
 
@@ -314,25 +301,6 @@ html[data-ui="v2"] body { background: var(--v2-paper); -webkit-font-smoothing: a
 .td-top .v2-tabstrip-hide { display: none; }
 
 /* rail */
-.v2 .v2-rail-group { gap: 1px; }
-.v2 .v2-rail-heading { padding: 0 8px 4px; font-size: 11.5px; font-weight: 500; color: var(--v2-ink3); }
-.v2 .v2-rail-item { min-height: 32px; padding: 0 8px; border-radius: 7px; color: var(--v2-ink2); font-size: 13px; }
-.v2-shell.is-cols .v2-rail-item { align-items: center; padding: 5px 8px; min-height: 32px; }
-.v2 .v2-rail-item:hover { background: var(--v2-hover); color: var(--v2-ink); }
-.v2 .v2-rail-item[aria-current="page"] { background: var(--v2-paper3); color: var(--v2-ink); box-shadow: inset 0 0 0 1px var(--v2-line); }
-.v2-shell.is-cols .v2-rail-icon { display: block; color: currentColor; }
-.v2 .v2-rail-status { font-size: 11px; font-weight: 400; color: var(--v2-ink3); }
-.v2 .v2-rail-status.is-waiting { color: var(--v2-waiting); }
-.v2 .v2-rail-status.is-live::before { border-radius: 50%; background: var(--v2-ok); animation: none; }
-.v2 .v2-rail-status.is-stuck::before { border-radius: 50%; }
-.v2 .v2-rail-item[aria-current="page"] .v2-rail-status { color: var(--v2-ink3); }
-.v2 .v2-rail-count { background: var(--v2-brand); color: var(--v2-brand-ink); font-family: var(--v2-sans); }
-.v2 .v2-rail-foot { padding-top: 8px; background: var(--v2-paper2); border-top-color: var(--v2-line); }
-.v2 .v2-rail-toggle { border-radius: 7px; }
-.v2 .v2-rail-toggle:hover { background: var(--v2-hover); }
-.v2-rail-top { justify-content: flex-end; }
-:root[data-v2-rail="collapsed"] .v2-shell.is-cols .v2-rail-item[data-flag]::after { border-radius: 50%; background: var(--v2-waiting); }
-:root[data-v2-rail="collapsed"] .v2-shell.is-cols .v2-rail-item[data-flag="stuck"]::after { background: var(--v2-stuck); }
 
 /* Logs drawer (canvas Logs.dc.html) */
 .td-drawer-scrim { position: fixed; inset: var(--v2-top) 0 0 0; z-index: 60; background: var(--v2-scrim); }
@@ -359,17 +327,12 @@ html[data-ui="v2"] body { background: var(--v2-paper); -webkit-font-smoothing: a
 
 /* Compact (761–1099 px): no rail sash, chat as a drawer from the right. */
 @media (min-width: 761px) and (max-width: 1099px) {
-  .v2-shell.is-cols, .v2-shell.is-cols[data-panel="hidden"] { grid-template-columns: 56px minmax(0, 1fr); }
-  .v2-shell.is-cols[data-chat="open"] .v2-chatcol { top: var(--v2-top); left: auto; right: 0; width: min(400px, calc(100vw - 57px)); height: auto; border-right: 0; border-left: 1px solid var(--v2-line); }
-  .v2-shell.is-cols[data-chat="open"] .v2-chat-scrim { inset: var(--v2-top) 0 0 0; background: var(--v2-scrim); }
   .td-top .v2-tabstrip-tabs { display: none; }
 }
 /* Phone: the top bar shrinks to brand, credits and the menu; the tab bar at the bottom navigates. */
 @media (max-width: 760px) {
   .td-top { position: sticky; top: 0; z-index: 20; }
   .td-top :is(.v2-tabstrip, .td-sep, .td-hide-phone) { display: none; }
-  .v2-shell.is-cols :is(.v2-rail, .v2-main, .v2-chatcol) { height: auto; }
-  .v2-shell.is-cols[data-chat="open"] .v2-chatcol { height: auto; }
   .v2 .v2-tabbar { background: var(--v2-paper2); border-top-color: var(--v2-line); }
   .v2 .v2-tabbar-item { font-size: 10.5px; }
   .v2 .v2-tabbar-item[aria-current="page"] { color: var(--v2-brand-deep); }

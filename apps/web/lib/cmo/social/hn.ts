@@ -42,11 +42,6 @@ export class HnBudget {
   }
 }
 
-/** The seam Sales and Research call; tests and evals pass recorded responses through it. */
-export type HnSource = {
-  search(query: string, budget: HnBudget): Promise<HnThread[]>;
-};
-
 // ----------------------------------------------------------------- search
 
 export const HN_BASE = "https://hn.algolia.com/api/v1";
@@ -153,8 +148,6 @@ export async function searchHn(query: string, budget: HnBudget, opts: { recentDa
 }
 
 /** The default source: Algolia search. Tests and evals pass their own. */
-export const algoliaHn: HnSource = { search: (query, budget) => searchHn(query, budget) };
-
 // ----------------------------------------------------------------- one discussion (P6 R3)
 
 /** A comment in a discussion, flattened: its own id, plain text and how many direct replies it has. */

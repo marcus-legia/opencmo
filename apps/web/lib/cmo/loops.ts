@@ -1,11 +1,11 @@
 /**
- * Các vòng lặp của CMO (H5, theo skill marketing-loops của marketingskills): MỖI vòng khai báo
- * nhịp, điều kiện chạy, việc thả vào hàng đợi và input. Cron (`/api/cron/cmo`) chỉ đọc trạng thái
- * rồi hỏi bảng này — thêm/bớt vòng là sửa một chỗ, có check thuần (không DB).
+ * The CMO's loops (H5, after the marketing-loops skill of marketingskills): each one declares its cadence, when it
+ * runs, the job it queues and that job's input. The cron (`/api/cron/cmo`) only reads state and asks this table, so
+ * adding or dropping a loop is one edit here, with a pure check (no database).
  *
- * Luật chung (marketing-loops): tự soạn được, tự ĐĂNG thì không — mọi kết quả thành thẻ chờ duyệt.
- * Idempotent ở tầng DB: `cmo_enqueue` trả lượt đang chờ thay vì tạo mới, và chặn theo trần ngày.
- * Vòng tốn credit chỉ chạy khi người dùng đã đặt ý định (mục trên lịch), trừ W7 mỗi tuần.
+ * The rule of every loop (marketing-loops): the CMO may draft on its own, never post. Every result is a card that
+ * waits for approval. A loop runs once a day per founder (`schedule.ts` `queuedToday`), and one that spends credits
+ * runs only when the founder set the intent (an item on the calendar), except W7 once a week.
  */
 
 import type { CmoJobKind } from "./jobs/types";
@@ -16,15 +16,15 @@ export type LoopState = {
   /** The X and Reddit items due today (the first of each); `id` is the calendar item, for linking its work order. */
   duePost: { idea: string; id?: string } | null;
   dueSales: { idea: string; id?: string } | null;
-  /** Đã có handle X của đối thủ trong Competitor Analysis. */
+  /** Competitors in Competitor Analysis that have an X handle. */
   competitorHandles: number;
-  /** Bài đã đăng trong 14 ngày (để đo số). */
+  /** Posts published in the last 14 days (to measure). */
   publishedRecently: number;
   /** Accounts connected through Zernio (P6 A1): their numbers need no social reader. */
   connectedAccounts?: number;
   /** Replies marked "replied" three or more days ago and not checked yet (P6 A3). */
   repliesDue?: number;
-  /** Server có khoá ScrapeCreators (hoặc bản giả). */
+  /** The server has a ScrapeCreators key (or the fake). */
   socialReader: boolean;
   /**
    * The account has a plan or credits left (`cmo_require_paid`). An unpaid account had its free first run at
@@ -46,9 +46,12 @@ export const LOOPS: Loop[] = [
     run: () => ({ loop: "weekly-plan", kind: "plan_week", input: { source: "schedule" } }),
   },
   {
+    // Monday's post is the new plan's: `plan_week` queues its drafts when the calendar is written (`queueDueDrafts`).
+    // A draft queued here beside the plan ran before the plan existed, wrote a post from no item, and left the
+    // plan's Monday post for Tuesday.
     name: "daily-x-draft",
-    cadence: "daily, when an X item is due (and every Monday)",
-    when: (s) => Boolean(s.duePost) || s.weekday === 1,
+    cadence: "daily, when a post is due",
+    when: (s) => Boolean(s.duePost),
     run: () => ({ loop: "daily-x-draft", kind: "post_draft", input: { source: "schedule" } }),
   },
   {

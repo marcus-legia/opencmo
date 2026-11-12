@@ -458,7 +458,7 @@ Blocks should show: "This request goes against our content policy. Change it and
 - [ ] J10 · P1 · `/app/research`, `/app/analytics`, `/app/library` tabs (business, brand, voice, skills) load with real data.
 - [ ] J11 · P1 · `/app/inbox`, `/app/inbox/[id]` on a phone.
 - [ ] J12 · P1 · Settings: weekly budget, timezone, digest hour, off switch. They persist and take effect.
-- [ ] J13 · P2 · Nightly schedule at 00:05 UTC: new work appears next morning.
+- [ ] J13 · P2 · Hourly schedule: new work appears from 06:00 in the founder's timezone (00:05 UTC for UTC+6 and east).
 
 ### K. Post
 
@@ -555,7 +555,7 @@ Sign in as B and use A's IDs. Every one of these should fail.
 - [ ] P02 · P1 · Exports from A, 12+ queued → they wait and all finish (#150, cap 10 containers). Spread it out so real users aren't held up.
 - [ ] P03 · P1 · Close the tab mid-job → finishes. `probe_media` doesn't stick on "Checking video…".
 - [ ] P04 · P2 · Only with no other users active: stop a container mid-job → requeued in about 2–3 min, same clip ID; after 3 interruptions, "Processing was interrupted too many times." with a full refund.
-- [ ] P05 · P1 · Cron evidence: new runs of `sweep` (every minute), `cmo_schedule` (00:05 UTC), `cmo_digest` (hourly at :02), `cleanup` (03:00 UTC) in Modal. These don't appear in Vercel's crons.
+- [ ] P05 · P1 · Cron evidence: new runs of `sweep` (every minute), `cmo_schedule` (hourly at :05), `cmo_digest` (hourly at :02), `cleanup` (03:00 UTC) in Modal. These don't appear in Vercel's crons.
 - [ ] P06 · P1 · Explainer: `/explain` and `add_explainer` render in budget, with no garbled text.
 - [ ] P07 · P2 · A long job's peak memory, from Modal metrics: under the 2 GB budget.
 

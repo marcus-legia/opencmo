@@ -209,5 +209,17 @@ export async function planWeek(ctx: JobContext): Promise<JobOutput> {
   const saved = await ctx.step("write_calendar", "Saving your calendar", () => store.planWeek(run.user_id, run.id, items), (n) =>
     `${n} items in your calendar`,
   );
+  // The schedule's plan is written on the day its first posts are due: their drafts start now. Left to tomorrow's
+  // schedule, Monday's post was drafted on Tuesday and pushed each later post of the week back a day. A plan the
+  // founder asked for (chat, replan) queues nothing: they did not ask for a draft.
+  if (run.input.source === "schedule" && saved > 0) {
+    await ctx.step(
+      "queue_drafts",
+      "Sending today's posts to Writer",
+      // The calendar is saved: a draft that could not be queued waits for tomorrow's schedule, the plan stands.
+      () => store.queueDueDrafts(run).catch((error) => (console.error(`[cmo] plan_week ${run.id}: drafts not queued`, error), 0)),
+      (n) => (n ? `Writer is drafting today's ${n === 1 ? "post" : `${n} posts`}` : "No post is due today"),
+    );
+  }
   return { items: saved };
 }

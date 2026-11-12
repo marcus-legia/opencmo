@@ -56,9 +56,14 @@ export async function brainMode(supabase: SupabaseClient, userId: string): Promi
 export async function brainModes(admin: SupabaseClient, userIds: string[]): Promise<Map<string, BrainMode>> {
   const out = new Map<string, BrainMode>();
   if (!userIds.length) return out;
-  const { data, error } = await admin.from("profiles").select("id, credit_balance").in("id", userIds);
-  if (error) throw new Error(`profiles: ${error.message}`);
-  const balance = new Map(((data ?? []) as { id: string; credit_balance: number }[]).map((p) => [p.id, Number(p.credit_balance)]));
+  // In chunks: every founder's id in one filter is a URL PostgREST refuses past a few hundred ids, and an answer cut
+  // at 1000 rows read the missing founders as out of credits.
+  const balance = new Map<string, number>();
+  for (let i = 0; i < userIds.length; i += 200) {
+    const { data, error } = await admin.from("profiles").select("id, credit_balance").in("id", userIds.slice(i, i + 200));
+    if (error) throw new Error(`profiles: ${error.message}`);
+    for (const p of (data ?? []) as { id: string; credit_balance: number }[]) balance.set(p.id, Number(p.credit_balance));
+  }
   const up = providersUp();
   const forced = forcedClaude();
   for (const id of userIds) out.set(id, decideBrain({ credits: balance.get(id) ?? 0, providersUp: up, forced }));

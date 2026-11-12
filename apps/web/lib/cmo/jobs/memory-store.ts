@@ -130,6 +130,13 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
       }
       return plan.length;
     },
+    async queueDueDrafts(run) {
+      const seen = new Set<string>();
+      const due = items.filter((i) => i.run_id === run.id && i.department === "post" && i.status === "planned" && i.day <= isoDay())
+        .filter((i) => (seen.has(i.platform.toLowerCase()) ? false : (seen.add(i.platform.toLowerCase()), true)));
+      for (const item of due) enqueue("post_draft", { source: "schedule", loop: "daily-x-draft", item_id: item.id, ...(run.input.brain === "claude" ? { brain: "claude" } : {}) });
+      return due.length;
+    },
     async saveDraft(_u, runId, itemId, idea, body, priority) {
       let item = itemId ? items.find((i) => i.id === itemId) : undefined;
       if (!item) {

@@ -13,12 +13,6 @@
 
 import { z } from "zod";
 
-/**
- * When the check runs (owner, 2026-10-31, `studio.md` §12 #6): only before a card. Draft renders in the
- * editor are never checked, so they stay as fast as before and cost nothing extra.
- */
-export const LOOK_CHECK_RULE = "before_card" as const;
-
 /** At most this many frames per file, the `look` endpoint's own cap (`look.py` `MAX_TIMES`). */
 export const LOOK_MAX_FRAMES = 12;
 

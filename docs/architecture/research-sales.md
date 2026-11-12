@@ -39,7 +39,7 @@ State: ✅ done · 🟡 partial · ❌ not built.
 | Rare product mentions | `sales-scan.ts` (`recentMentions`, `waitingMentions`) | about 1 reply in 10 may name the product; past it, help only | ✅ |
 | Decisions | `cmo_decide_opportunity` | replied or dismissed; dismiss reason → memory; outcome row | ✅ |
 | Reply outcomes | `jobs/reply-outcomes.ts` | a few days after "replied", re-reads the thread for answers or votes | ✅ |
-| A card before a scan | `lib/agent/cmo-tools.ts` (`create_task`), `components/screens/sales/SalesScreen.tsx` | a price card in the chat and behind "Scan now"; nothing is held before Approve | ✅ S3.5–S3.6 |
+| A card before a scan | `lib/agent/cmo-tools.ts` (`create_task`), `components/today/AgentSales.tsx` | a price card in the chat and behind "Scan now"; nothing is held before Approve | ✅ S3.5–S3.6 |
 | Data terms (R0) | — | ScrapeCreators' and Reddit's terms for a paid product | ❌ owner |
 | New lead types ([spec](../plans/cmo/2026-10-31-sales-finder-spec.md) F1–F10) | — | wait on R0 | ❌ |
 

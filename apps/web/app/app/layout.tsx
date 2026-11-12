@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { WebShell } from "@/components/clipping/web/WebShell";
-import { COLUMNS_BOOT } from "@/components/shell-v2/columns";
 import { TODAY_COLUMNS_BOOT } from "@/components/today/columns-boot";
 import { TimezoneSync } from "@/components/shell/TimezoneSync";
 import { ShellV2 } from "@/components/shell-v2/ShellV2";
@@ -63,7 +62,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (UI_V2) {
     return (
       <>
-        <script dangerouslySetInnerHTML={{ __html: RAIL_BOOT + THEME_BOOT + COLUMNS_BOOT + TODAY_COLUMNS_BOOT + "document.documentElement.dataset.ui='v2';" }} />
+        <script dangerouslySetInnerHTML={{ __html: RAIL_BOOT + THEME_BOOT + TODAY_COLUMNS_BOOT + "document.documentElement.dataset.ui='v2';" }} />
         {/* Every v2 screen sets its text in Geist; without this the browser finds the font only after the CSS. */}
         <link rel="preload" href="/fonts/geist.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
         <TimezoneSync />

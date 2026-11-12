@@ -62,8 +62,8 @@ export async function run(userId: string) {
   const mode = await call("get_mode", {}, ctx);
   assert.equal((mode.structuredContent as { brain: string }).brain, "claude", text(mode));
 
-  // The 00:05 cron, then Modal's sweep.
-  const cron = await enqueueDueLoops(admin);
+  // The hourly cron (run for the whole day), then Modal's sweep.
+  const cron = await enqueueDueLoops(admin, new Date(`${isoDay()}T23:05:00Z`));
   assert.ok(cron.inbox >= 2, `the cron sent the X draft and the Reddit scan to the inbox (${JSON.stringify(cron)})`);
   const store = supabaseStore(admin);
   const drain = () => drainCmoQueue(store, { budgetMs: 60_000 });

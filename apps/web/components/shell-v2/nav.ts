@@ -50,17 +50,6 @@ export const NAV_MORE: NavEntry[] = [
   { screen: "brain", label: "Brain", href: "/app/brain", segments: ["brain"] },
 ];
 
-/** The editor comes last: where the founder fine-tunes their own video by hand. */
-export const NAV_MAKE: NavEntry[] = [{ screen: null, label: "Editor", href: "/app/editor", segments: ["editor", "video"] }];
-
 export const NAV_SETTINGS: NavEntry = { screen: "settings", label: "Settings", href: "/app/settings", segments: ["settings", "billing"] };
-
-/** Screens whose page works today whatever their v2 data says, so they are never hidden. */
-const ALWAYS: ReadonlySet<ScreenName> = new Set(["dashboard", "settings"]);
-
-export function isShown(entry: NavEntry, hideSample: boolean, available: Partial<Record<ScreenName, boolean>>): boolean {
-  if (!entry.screen || !hideSample || ALWAYS.has(entry.screen)) return true;
-  return available[entry.screen] === true;
-}
 
 export const isCurrent = (entry: NavEntry, segment: string | null) => entry.segments.includes(segment);
