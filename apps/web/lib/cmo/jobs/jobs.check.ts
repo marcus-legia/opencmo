@@ -64,6 +64,7 @@ async function main() {
   const two = toPlanItems({ items: [] }, plan({ x: 2, threads: 1 }), { today, docs });
   assert.equal(two.length, 14);
   assert.deepEqual(two.slice(0, 2).map((p) => [p.platform, p.targets]), [["X", ["x", "threads"]], ["X", ["x"]]]);
+  assert.deepEqual(two.slice(0, 4).map((p) => p.slot), [0, 1, 0, 1], "each post keeps its slot's index in the day, the retarget's order");
   assert.deepEqual(toPlanItems({ items: [post(0, "Anything")] }, plan({ threads: 1 }), { today, docs }).map((p) => [p.platform, p.targets]).slice(0, 1), [["Threads", ["threads"]]], "the label is the first target's");
   assert.deepEqual(toPlanItems({ items: [post(0, "Anything", 0)] }, plan({}), { today, docs }), [], "a plan with every count at 0 writes no post");
 
@@ -93,6 +94,7 @@ async function main() {
     const posts = followed.items.filter((i) => i.department === "post");
     assert.equal(posts.length, 7, "seven post items");
     assert.ok(posts.every((i) => JSON.stringify(i.body.targets) === '["x","linkedin"]'), "each with body.targets = [x, linkedin]");
+    assert.ok(posts.every((i) => i.body.slot === 0), "and body.slot = 0, as cmo_plan_week writes it");
     assert.equal(followed.items.filter((i) => i.department === "video" && i.platform === "TikTok").length, 2, "two TikTok scripts");
     assert.ok(!followed.items.some((i) => i.platform === "Slideshow"), "no slideshow");
     const silent = memoryStore(docs);

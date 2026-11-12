@@ -125,6 +125,7 @@ export function toPlanItems(plan: Plan, posting: PostingPlan, opts: { today?: Da
       department: "post",
       platform,
       targets: slot.targets,
+      slot: slot.slot,
       day: isoDay(slot.day_offset, today),
       idea: (item && text(item.idea)) || fill?.idea.slice(0, 300) || `Post for ${platform}`,
       reason: item ? text(item.reason) : `From your pillar "${fill!.pillar}".`,

@@ -160,8 +160,11 @@ export type ItemRow = {
 };
 
 /** `image`: a post that gets an image from the Post image squad once the founder approves it (C3). */
-/** `targets`: posts only, the platform ids one core post goes to (the posting plan's slot); `platform` is the first one's label. */
-export type PlanItem = { department: "post" | "sales" | "video"; platform: string; day: string; idea: string; reason: string; image?: boolean; targets?: string[] };
+/**
+ * `targets`: posts only, the platform ids one core post goes to (the posting plan's slot); `platform` is the first one's
+ * label. `slot`: that slot's index within its day, so saving a new plan retargets each post by it (`save_posting_plan`).
+ */
+export type PlanItem = { department: "post" | "sales" | "video"; platform: string; day: string; idea: string; reason: string; image?: boolean; targets?: string[]; slot?: number };
 
 export type Documents = Partial<Record<DocumentKind, Record<string, unknown>>>;
 

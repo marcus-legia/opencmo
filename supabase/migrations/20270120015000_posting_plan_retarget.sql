@@ -4,10 +4,15 @@
 --    (`body.targets`, ids from `dayTargets` in apps/web/lib/cmo/posting-plan.ts); `platform` stays the first target's
 --    label so readers that know only `platform` keep working. A week at the plan's top (3 posts a day, 3 x 7 video
 --    scripts, a Reddit item a day) is 49 items, so the limit moves from 30 to 60.
--- 2. `save_posting_plan` retargets the founder's posts that are still only planned (not drafted) from today on: a
---    post takes the new plan's slot of its rank within its day; past the new number of slots it takes the last slot
---    (platforms that are still on), so nothing the founder wrote into the calendar is deleted. With every count at 0
---    there is no slot to take: the posts stay as they are until the next week plan replaces them.
+--    It also keeps the slot's index within its day (`body.slot`): the rows of one call share `created_at`, so without it
+--    the retarget below would order a day's posts at random and reshuffle their platforms on every save.
+-- 2. `save_posting_plan` retargets the founder's posts that are still only planned (not drafted) after today (a post due
+--    today may have its draft running): a post takes the new plan's slot of its rank within its day (by `body.slot`,
+--    then `created_at, id` for rows written before it); past the new number of slots it takes the last slot (platforms
+--    that are still on), so nothing the founder wrote into the calendar is deleted. With every count at 0 there is no
+--    slot to take: the posts stay as they are until the next week plan replaces them. A save that leaves the text
+--    section as it was (a video-only change) retargets nothing. `body.slot` is never rewritten here, so the order
+--    stays the planner's across any number of saves.
 --
 -- Redeclares both functions of 20270120010000 / 20270112030000; their grants are kept by `create or replace`.
 
@@ -52,7 +57,12 @@ begin
       p_user, p_run, v_item->>'department', left(v_item->>'platform', 20), v_day,
       left(v_item->>'idea', 300), left(coalesce(v_item->>'reason', ''), 300),
       coalesce(v_item->>'department' = 'post' and jsonb_typeof(v_item->'image') = 'boolean' and (v_item->>'image')::boolean, false),
-      case when v_targets is null then '{}'::jsonb else jsonb_build_object('targets', v_targets) end
+      case
+        when v_targets is null then '{}'::jsonb
+        when jsonb_typeof(v_item->'slot') = 'number' and (v_item->>'slot')::numeric in (0, 1, 2)
+          then jsonb_build_object('targets', v_targets, 'slot', (v_item->>'slot')::int)
+        else jsonb_build_object('targets', v_targets)
+      end
     );
     v_count := v_count + 1;
   end loop;
@@ -79,6 +89,7 @@ declare
   v_slots jsonb[];
   v_n integer;
   v_most integer;
+  v_old_text jsonb;
 begin
   if p_plan is null or jsonb_typeof(p_plan) <> 'object'
      or jsonb_typeof(p_plan->'text') is distinct from 'object' or jsonb_typeof(p_plan->'video') is distinct from 'object'
@@ -106,9 +117,13 @@ begin
     end if;
   end loop;
 
+  select posting_plan->'text' into v_old_text from public.profiles where id = v_user for update;
   update public.profiles set posting_plan = p_plan where id = v_user;
   if not found then
     raise exception 'Profile not found.' using errcode = 'P0002';
+  end if;
+  if v_old_text is not distinct from p_plan->'text' then
+    return p_plan;
   end if;
 
   -- The day's slots as `dayTargets` builds them: slot i goes to every platform (in X, Threads, LinkedIn order) whose
@@ -121,13 +136,17 @@ begin
   v_n := coalesce(array_length(v_slots, 1), 0);
   if v_n > 0 then
     update public.content_items c
+    -- body.slot stays the planner's: a retarget that caps two posts onto one slot must not tie them for the next save.
     set body = c.body || jsonb_build_object('targets', v_slots[least(r.rank, v_n)]),
         platform = public.platform_profile(v_slots[least(r.rank, v_n)]->>0)->>'label',
         updated_at = now()
     from (
-      select id, row_number() over (partition by day order by created_at, id)::int as rank
+      select id, row_number() over (
+               partition by day
+               order by case when jsonb_typeof(body->'slot') = 'number' then (body->>'slot')::numeric end nulls last, created_at, id
+             )::int as rank
       from public.content_items
-      where user_id = v_user and department = 'post' and status = 'planned' and day >= current_date
+      where user_id = v_user and department = 'post' and status = 'planned' and day > current_date
     ) r
     where c.id = r.id;
   end if;
