@@ -5,20 +5,18 @@ import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 /**
- * Đăng nhập bằng Google — một cú bấm, không email, không mật khẩu.
+ * Sign in with Google: one press, no email, no password.
  *
- * Vì sao bỏ magic link: mỗi lượt đăng nhập phải rời app đi tìm thư, thư hay rơi vào spam, và
- * link mở nhầm trình duyệt là không có phiên. OAuth đi PKCE qua `/auth/callback` — cùng route cũ
- * đổi `code` lấy phiên và chặn `next` ra ngoài miền.
+ * Why not a magic link: every sign-in meant leaving the app to find a mail that often sat in spam, and a link opened
+ * in another browser had no session. OAuth goes through PKCE to `/auth/callback`, which trades the `code` for a
+ * session and keeps `next` on this site.
  */
 export function LoginForm({
   nextUrl,
-  sourceUrl,
   siteUrl,
 }: {
   nextUrl?: string;
-  sourceUrl?: string;
-  /** Website nhập ở hero landing — onboarding CMO đọc nó sau khi đăng nhập. */
+  /** The website typed in the landing page's hero: the CMO's onboarding reads it after sign-in. */
   siteUrl?: string;
 }) {
   const [busy, setBusy] = useState(false);
@@ -30,14 +28,13 @@ export function LoginForm({
 
     const target = new URL("/auth/callback", process.env.NEXT_PUBLIC_SITE_URL || window.location.origin);
     target.searchParams.set("next", nextUrl || "/app");
-    if (sourceUrl) target.searchParams.set("url", sourceUrl);
     if (siteUrl) target.searchParams.set("site", siteUrl);
 
     const { error } = await createClient().auth.signInWithOAuth({
       provider: "google",
       options: { redirectTo: target.toString() },
     });
-    // Thành công thì trình duyệt đã rời trang sang Google; chỉ còn nhánh lỗi chạy tới đây.
+    // On success the browser has already left for Google; only the error branch gets here.
     if (error) {
       setError("Could not reach Google sign-in. Please try again.");
       setBusy(false);

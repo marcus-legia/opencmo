@@ -27,6 +27,8 @@ export class ApiError extends Error {
 
 export const GENERIC_ERROR = "Something went wrong. Please try again.";
 export const NOT_SIGNED_IN = "Please sign in again.";
+/** Auth did not answer: the session may be fine, so the caller is not told to sign in again. */
+export const AUTH_UNAVAILABLE = "We could not check your sign-in just now. Try again in a moment.";
 export const TOO_MANY = "Too many requests. Try again in a minute.";
 
 /** Hình dạng lỗi PostgREST trả về qua supabase-js. */

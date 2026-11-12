@@ -25,22 +25,6 @@ import blogRedirects from "./content/blog/redirects.json";
  * Environment variables are read INSIDE `headers()`, not in the module body: `next start` loads `.env.local` after
  * requiring the config file, so reading them outside gives empty strings and the CSP blocks our own Supabase.
  */
-/**
- * Host của trình phát YouTube.
- *
- * `default-src 'self'` chặn iframe, nên thiếu `frame-src` thì ô video im lặng
- * không hiện — không có lỗi nào ngoài một dòng trong console. Và `iframe_api`
- * nạp tiếp một script từ `s.ytimg.com`, nên thiếu host đó thì iframe hiện lên
- * nhưng thanh chọn đoạn không biết video dài bao nhiêu.
- *
- * Liệt kê đúng ba host, không wildcard: CSP của app này viết theo những thứ nó
- * THẬT SỰ nạp, và một wildcard là chỗ để thứ khác lẫn vào sau này.
- */
-
-const YOUTUBE_FRAME = "https://www.youtube-nocookie.com https://www.youtube.com";
-const YOUTUBE_SCRIPT = "https://www.youtube.com https://s.ytimg.com";
-const YOUTUBE_THUMBS = "https://i.ytimg.com";
-
 function securityHeaders(): { key: string; value: string }[] {
   const supabaseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").replace(/\/$/, "");
   const host = supabaseUrl.replace(/^https?:\/\//, "");
@@ -61,20 +45,17 @@ function securityHeaders(): { key: string; value: string }[] {
     "form-action 'self'",
     "frame-ancestors 'none'",
     "object-src 'none'",
-    `script-src 'self' 'unsafe-inline' ${YOUTUBE_SCRIPT}${
-      process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""
-    }`,
+    `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""}`,
     "style-src 'self' 'unsafe-inline'",
     `connect-src 'self' ${origins} https://*.sentry.io`.replace(/\s+/g, " "),
     `media-src 'self' blob: ${httpOrigins}`.replace(/\s+/g, " ").trim(),
-    // `i.ytimg.com` là ảnh bìa YouTube. Màn xử lý hiện nó ngay khi job bắt
-    // đầu: clip đầu tiên phải mất một phút mới có, và một phút nhìn chữ
-    // "Reading your video…" là một phút người dùng nghĩ máy đang treo.
-    `img-src 'self' data: blob: ${YOUTUBE_THUMBS} ${httpOrigins}`.replace(/\s+/g, " ").trim(),
+    `img-src 'self' data: blob: ${httpOrigins}`.replace(/\s+/g, " ").trim(),
     // Font phục vụ ở `/fonts/` (chép từ `packages/clip-media` lúc build) — cùng origin, không cần host ngoài.
     "font-src 'self'",
     "worker-src 'self' blob:",
-    `frame-src ${YOUTUBE_FRAME}`,
+    // Nothing is framed: the YouTube player went with link import (2026-10-20), and its hosts with it. A third-party
+    // host in `script-src` is a way around the policy for whoever finds a script to load from it.
+    "frame-src 'none'",
   ].join("; ");
 
   return [

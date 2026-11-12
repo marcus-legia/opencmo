@@ -16,24 +16,34 @@ import { z } from "zod";
 
 import { apiErrorFromPostgrest } from "./errors";
 import { MAX_BODY_BYTES, handleApi, type SupabaseClient } from "./handler";
+import { AUTH_TIMED_OUT, authWithin } from "../supabase/auth-timeout";
+import { authUnavailable } from "../supabase/user";
 
 type FakeUser = { id: string; email: string } | null;
 
 const SIGNED_IN: FakeUser = { id: "user-1", email: "a@test.local" };
 
+/** `down`: Supabase Auth does not answer, for the JWT check (`claims`) or for the lookup a write makes (`user`). */
 function fakeClient(
-  { user = SIGNED_IN, rateLimit = true }: { user?: FakeUser; rateLimit?: boolean } = {},
+  { user = SIGNED_IN, rateLimit = true, down }: { user?: FakeUser; rateLimit?: boolean; down?: "claims" | "user" } = {},
 ): SupabaseClient {
+  const outage = { name: "AuthRetryableFetchError", message: "fetch failed", status: 0 };
   return {
     auth: {
-      getClaims: async () => ({
-        data: user ? { claims: { sub: user.id, email: user.email } } : null,
-        error: user ? null : { message: "no session" },
-      }),
-      getUser: async () => ({
-        data: { user },
-        error: user ? null : { message: "no session" },
-      }),
+      getClaims: async () =>
+        down === "claims"
+          ? { data: null, error: outage }
+          : {
+              data: user ? { claims: { sub: user.id, email: user.email } } : null,
+              error: user ? null : { message: "no session" },
+            },
+      getUser: async () =>
+        down === "user"
+          ? { data: { user: null }, error: outage }
+          : {
+              data: { user },
+              error: user ? null : { message: "no session" },
+            },
     },
     rpc: async (name: string) =>
       name === "rate_limit_hit"
@@ -72,6 +82,36 @@ async function main(): Promise<void> {
     const res = await handleApi({}, ok, request("GET"), fakeClient({ user: null }));
     assert.equal(res.status, 401);
     assert.deepEqual(await res.json(), { detail: "Please sign in again." });
+  });
+
+  await check("Auth down on a read: 503 and try again, not sign in again", async () => {
+    const res = await handleApi({}, ok, request("GET"), fakeClient({ down: "claims" }));
+    assert.equal(res.status, 503);
+    assert.deepEqual(await res.json(), { detail: "We could not check your sign-in just now. Try again in a moment." });
+  });
+
+  await check("Auth down on a write: refused with 503, the handler never runs", async () => {
+    let ran = false;
+    const res = await handleApi({}, async () => ((ran = true), { ok: true }), request("POST"), fakeClient({ down: "user" }));
+    assert.equal(res.status, 503);
+    assert.equal(ran, false);
+  });
+
+  await check("Auth that never answers is cut off, not waited on", async () => {
+    const hung = () => new Promise<never>(() => undefined);
+    const started = Date.now();
+    assert.deepEqual(await authWithin(hung, 50), { data: null, error: AUTH_TIMED_OUT });
+    assert.ok(Date.now() - started < 1000, "the limit, not the 30 s retry loop");
+    assert.equal(authUnavailable(AUTH_TIMED_OUT), true, "a timeout reads as unavailable");
+    const answer = { data: { user: null }, error: null };
+    assert.equal(await authWithin(async () => answer, 50), answer, "an answer in time is passed through");
+  });
+
+  await check("a write by an account Auth no longer knows is still 401", async () => {
+    const client = fakeClient();
+    (client.auth as unknown as { getUser: () => Promise<unknown> }).getUser = async () => ({ data: { user: null }, error: { name: "AuthApiError", status: 403, message: "User is banned" } });
+    const res = await handleApi({}, ok, request("POST"), client);
+    assert.equal(res.status, 401);
   });
 
   await check("POST từ site khác bị chặn trước cả khi đọc phiên", async () => {

@@ -1,5 +1,6 @@
 import { cache } from "react";
 
+import { authWithin } from "./auth-timeout";
 import { createServerClient } from "./server";
 
 export type SignedInUser = { id: string; email: string | null };
@@ -17,10 +18,29 @@ type Client = Awaited<ReturnType<typeof createServerClient>>;
  * read or write gets more than the token already allows.
  */
 export async function claimsUser(supabase: Client): Promise<SignedInUser | null> {
-  const { data, error } = await supabase.auth.getClaims();
+  return (await checkedUser(supabase)).user;
+}
+
+/**
+ * True when Supabase Auth could not answer (a network failure, a timeout, a 5xx), as opposed to answering "this is
+ * not a session". supabase-js marks the first kind `AuthRetryableFetchError`; an API error carries its HTTP status.
+ */
+export function authUnavailable(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const { name, status } = error as { name?: unknown; status?: unknown };
+  return name === "AuthRetryableFetchError" || (typeof status === "number" && status >= 500);
+}
+
+/**
+ * `claimsUser`, and whether "nobody" only means Auth could not be asked: the token needed a refresh, or the public
+ * key was not cached yet, while Auth was down. A page treats both as signed out; the API tells the caller to try
+ * again instead of to sign in again (`lib/api/handler.ts`).
+ */
+export async function checkedUser(supabase: Client): Promise<{ user: SignedInUser | null; unavailable: boolean }> {
+  const { data, error } = await authWithin(() => supabase.auth.getClaims());
   const claims = data?.claims;
-  if (error || !claims?.sub) return null;
-  return { id: claims.sub, email: typeof claims.email === "string" && claims.email ? claims.email : null };
+  if (error || !claims?.sub) return { user: null, unavailable: authUnavailable(error) };
+  return { user: { id: claims.sub, email: typeof claims.email === "string" && claims.email ? claims.email : null }, unavailable: false };
 }
 
 /** `claimsUser` once per request: the layout and the page ask the same question. */

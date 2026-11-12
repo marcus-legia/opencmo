@@ -4,52 +4,45 @@ import { safeNext } from "@/lib/auth/next";
 import { createServerClient } from "@/lib/supabase/server";
 
 /**
- * Chuyển hướng bằng `Location` TƯƠNG ĐỐI.
+ * Redirects with a RELATIVE `Location`.
  *
- * Vì sao không ghép `request.nextUrl.origin`: thuộc tính đó KHÔNG đọc header
- * `Host`. Chạy `next start` sau một proxy — hoặc chỉ cần phục vụ trên
- * `127.0.0.1` — thì nó trả về `http://localhost:<port>`. Cookie phiên vừa được
- * ghi cho host thật, rồi redirect sang `localhost` là sang một origin khác:
- * trình duyệt không gửi cookie theo, `/app` thấy chưa đăng nhập và đá ngược về
- * `/login`. Đăng nhập hỏng mà không in ra một dòng lỗi nào — đúng kiểu lỗi im
- * lặng đắt nhất. Location tương đối để trình duyệt tự giải theo host thật.
+ * Why not `request.nextUrl.origin`: it does NOT read the `Host` header. Under `next start` behind a proxy, or just
+ * served on `127.0.0.1`, it answers `http://localhost:<port>`. The session cookie was just written for the real host,
+ * and a redirect to `localhost` is another origin: the browser sends no cookie, `/app` sees nobody and bounces back to
+ * `/login`. Sign-in breaks without one line of error. A relative Location lets the browser resolve the real host.
  */
 function redirectTo(path: string): NextResponse {
   return new NextResponse(null, { status: 303, headers: { location: path } });
 }
 
 /**
- * Đích của Google OAuth (PKCE). Đổi `code` lấy phiên rồi chuyển tiếp vào app.
+ * Where Google OAuth (PKCE) lands. Trades the `code` for a session, then goes on into the app.
  *
- * Route handler chứ không phải Server Component: chỉ ở đây mới ghi được cookie
- * phiên đăng nhập.
+ * A route handler, not a Server Component: only here can the session cookie be written.
  */
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
   const code = searchParams.get("code");
-  const url = searchParams.get("url");
   const site = searchParams.get("site");
 
-  // Người dùng bấm huỷ ở màn Google: Supabase gửi `error`, không có `code`.
+  // The person pressed Cancel on Google's screen: Supabase sends `error` and no `code`.
   if (searchParams.get("error")) {
-    return redirectTo("/login?error=huy");
+    return redirectTo("/login?error=cancelled");
   }
   if (!code) {
-    return redirectTo("/login?error=thieu-ma");
+    return redirectTo("/login?error=no-code");
   }
 
   const supabase = await createServerClient();
   const { error } = await supabase.auth.exchangeCodeForSession(code);
 
   if (error) {
-    return redirectTo("/login?error=link-het-han");
+    return redirectTo("/login?error=expired");
   }
 
   // `next` is untrusted user input; `safeNext` keeps it on this site (security fixes plan, fix 3).
   const target = new URL(safeNext(searchParams.get("next")), "http://redirect.invalid");
-  if (url) target.searchParams.set("url", url);
-  // A website typed in the hero goes to `/app` (AI CMO), where W0 Onboarding reads it. Never fold it
-  // into `url`: `url` is a video link, and the app would start a clip job from it.
+  // A website typed in the hero goes to `/app` (AI CMO), where W0 Onboarding reads it.
   if (site) target.searchParams.set("site", site);
   return redirectTo(`${target.pathname}${target.search}`);
 }

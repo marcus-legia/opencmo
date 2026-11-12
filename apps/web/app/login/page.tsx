@@ -8,22 +8,22 @@ import { LoginForm } from "@/components/LoginForm";
 
 export const metadata: Metadata = { title: "Sign in", robots: { index: false, follow: true } };
 
-/** Lỗi do `/auth/callback` gắn vào URL → câu tiếng Anh cho người dùng. */
+/** The error `/auth/callback` puts in the URL → the sentence the person reads. */
 const ERRORS: Record<string, string> = {
-  "thieu-ma": "Google did not finish signing you in. Please try again.",
-  "link-het-han": "That sign-in expired. Please try again.",
-  "huy": "Sign-in was cancelled.",
+  "no-code": "Google did not finish signing you in. Please try again.",
+  "expired": "That sign-in expired. Please try again.",
+  "cancelled": "Sign-in was cancelled.",
 };
 
 /**
- * Đăng nhập bằng Google — không mật khẩu, không magic link (đổi 09/10/2026).
+ * Sign in with Google: no password, no magic link (changed 2026-10-09).
  *
- * Vì sao: một cú bấm là vào app; không có form quên mật khẩu, không có thư phải đi tìm.
+ * Why: one press and you are in; no forgot-password form, no mail to go and find.
  */
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ url?: string; site?: string; next?: string; error?: string }>;
+  searchParams: Promise<{ site?: string; next?: string; error?: string }>;
 }) {
   const params = await searchParams;
 
@@ -45,9 +45,8 @@ export default async function LoginPage({
         </p>
       ) : null}
 
-      {/* Website (landing) hoặc link video (trong app) đi cùng qua đây, để sau
-          khi đăng nhập họ không phải gõ lại. */}
-      <LoginForm nextUrl={params.next} sourceUrl={params.url} siteUrl={params.site} />
+      {/* The website typed on the landing page rides along, so it is not typed again after sign-in. */}
+      <LoginForm nextUrl={params.next} siteUrl={params.site} />
         </section>
       </div>
       <p className="auth-footer">OpenCMO · The AI CMO for founders.</p>
