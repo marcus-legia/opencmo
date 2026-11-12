@@ -71,6 +71,7 @@ export function PostingPlanPanel({ initial, accounts, live, onSaved }: { initial
   return (
     <section
       aria-label="Posting plan"
+      id="posting-plan"
       data-testid="posting-plan"
       style={{ border: "1px solid var(--line)", borderRadius: "10px", background: "var(--panel)", padding: "12px 14px", marginBottom: "14px" }}
     >
