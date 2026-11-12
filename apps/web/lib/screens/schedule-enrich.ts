@@ -90,7 +90,24 @@ function withPostTimezone(card: ApprovalCard, timezone: string): ApprovalCard {
   return { ...card, body: { ...card.body, proposed: { ...card.body.proposed, timezone } } };
 }
 
-export async function enrichScheduleCards(supabase: SupabaseClient, userId: string, cards: ApprovalCard[]): Promise<ApprovalCard[]> {
+/** A founder's script card gets the caption written with the script, from its order (read under RLS). */
+async function withScriptCaptions(supabase: SupabaseClient, cards: ApprovalCard[]): Promise<ApprovalCard[]> {
+  const ids = cards.flatMap((c) => (c.body.kind === "script" && c.body.forFounder ? [c.body.stepId] : []));
+  if (!ids.length) return cards;
+  const { data } = await supabase.from("work_orders").select("id, brief").in("id", ids);
+  const captions = new Map(
+    ((data ?? []) as { id: string; brief: { caption?: unknown } | null }[]).flatMap((row) =>
+      typeof row.brief?.caption === "string" && row.brief.caption.trim() ? [[row.id, row.brief.caption.trim().slice(0, 2200)] as const] : [],
+    ),
+  );
+  return cards.map((card) => {
+    const caption = card.body.kind === "script" ? captions.get(card.body.stepId) : undefined;
+    return caption && card.body.kind === "script" ? { ...card, body: { ...card.body, caption } } : card;
+  });
+}
+
+export async function enrichScheduleCards(supabase: SupabaseClient, userId: string, given: ApprovalCard[]): Promise<ApprovalCard[]> {
+  const cards = await withScriptCaptions(supabase, given);
   const schedule = cards.filter((c) => c.body.kind === "schedule");
   if (!schedule.length) {
     if (!cards.some((c) => c.body.kind === "post" && c.body.proposed)) return cards;

@@ -339,6 +339,9 @@ html[data-ui="v2"] body { background: var(--v2-paper); }
 .v2-card-thread li { display: grid; grid-template-columns: 24px 1fr auto; gap: 8px; align-items: start; padding: 10px 0; }
 .v2-card-thread li + li { border-top: 1px solid var(--v2-line); }
 .v2-card-thread .v2-card-text { margin: 0; }
+.v2-card-caption { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border: 1px dashed var(--v2-line2); font-size: 13px; }
+.v2-card-caption-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.v2-card-caption .v2-card-text { margin: 0; white-space: pre-wrap; }
 .v2-card-thread-side { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
 .v2-card-thread-n { font: 500 11px var(--v2-mono); color: var(--v2-ink2); padding-top: 3px; }
 @media (max-width: 480px) {

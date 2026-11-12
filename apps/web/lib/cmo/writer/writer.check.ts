@@ -190,6 +190,7 @@ async function writerChecks() {
 
   // Video brief: exactly three hooks, facts from the documents, parsed into Studio's type.
   const brief = { objective: "Show how Paylane chases a late invoice", angle: "Show it working", hooks: ["Your invoice is late.", "Paylane sends the reminder.", "Stop chasing invoices."], keyPoints: ["Plans start at $12/month"], cta: "Try Paylane", seconds: 30, aspect: "9:16", rationale: "r", learnedFrom: [],
+    caption: "Your invoice is late.\n\nPaylane sends the reminder on the day it is due.\n\n#freelance #invoicing",
     storyboard: [
       { say: "Your invoice is late.", show: "You, to camera", shot: "talking_head", seconds: 5 },
       { say: "Paylane sends the reminder for you, on the day it is due.", show: "Paylane's reminder screen", shot: "screen", seconds: 15 },
@@ -198,6 +199,14 @@ async function writerChecks() {
   const b = await createWriter({ think: scripted([brief]).think, agentFor: () => "x_writer", canFix: false }).draft("video_brief", null, { idea: "Late invoices" }, ctx);
   assert.deepEqual([b.brief.hooks.length, b.brief.cta, b.brief.seconds], [3, "Try Paylane", 30]);
   assert.equal(VideoBriefSchema.parse(b.brief).objective, brief.objective, "Studio's buildVideo takes it as is");
+  // The caption is written with the script, in the same call: there, short enough, five hashtags at most, no link.
+  assert.equal(b.brief.caption, brief.caption);
+  const briefWith = (caption: string) => createWriter({ think: scripted([{ ...brief, caption }]).think, agentFor: () => "x_writer", canFix: false }).draft("video_brief", null, { idea: "x" }, ctx);
+  await assert.rejects(briefWith("  "), /no caption/);
+  await assert.rejects(briefWith(`Your invoice is late. ${"#a #b #c #d #e #f"}`), /6 hashtags; it takes at most 5/);
+  await assert.rejects(briefWith("Your invoice is late. See https://paylane.example/pricing"), /caption has a link/);
+  await assert.rejects(briefWith(`Your invoice is late. ${"It is late. ".repeat(200)}`), /caption: /);
+  await assert.rejects(briefWith("Paylane has helped 9,000 freelancers get paid."), /9,000/);
   await assert.rejects(createWriter({ think: scripted([{ ...brief, hooks: ["One"] }]).think, agentFor: () => "x_writer", canFix: false }).draft("video_brief", null, { idea: "x" }, ctx), /1 hooks; a brief has 3/);
   await assert.rejects(createWriter({ think: scripted([{ ...brief, storyboard: brief.storyboard.slice(0, 2) }]).think, agentFor: () => "x_writer", canFix: false }).draft("video_brief", null, { idea: "x" }, ctx), /2 beats; a script has 3 to 8/);
   await assert.rejects(createWriter({ think: scripted([{ ...brief, seconds: 60 }]).think, agentFor: () => "x_writer", canFix: false }).draft("video_brief", null, { idea: "x" }, ctx), /beats run 30 s; the video is 60 s/);
@@ -316,7 +325,8 @@ async function studioChecks() {
   const out = b.output as { brief: unknown; reason: string };
   const parsed = VideoBriefSchema.parse(out.brief);
   assert.deepEqual([parsed.hooks.length, parsed.seconds, parsed.aspect, Boolean(parsed.cta), typeof out.reason], [3, 30, "9:16", true, "string"]);
-  assert.deepEqual(Object.keys(out.brief as object).sort(), ["angle", "aspect", "cta", "hooks", "keyPoints", "objective", "seconds", "storyboard"], "the keys SQL copies into the order");
+  assert.deepEqual(Object.keys(out.brief as object).sort(), ["angle", "aspect", "caption", "cta", "hooks", "keyPoints", "objective", "seconds", "storyboard"], "the keys SQL copies into the order");
+  assert.ok(parsed.caption.length > 0 && parsed.caption.length <= 2200 && countHashtags(parsed.caption) <= 5, "the fake script comes with its caption");
   assert.deepEqual((b.output as { sources: string[] }).sources, [], "no niche research, no sources");
   // P5 F8: with niche research the brief cites its videos, and only URLs the research read.
   const nicheRun = memoryStore(docs, []);

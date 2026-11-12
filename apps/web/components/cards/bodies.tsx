@@ -299,7 +299,26 @@ export function ScriptBody({
         {body.aspect ? <span>{body.aspect}</span> : null}
         {body.nextPriceCredits !== null ? <span>Whole video: {body.nextPriceCredits} credits</span> : null}
       </div>
+      {body.caption ? <CopyCaption caption={body.caption} /> : null}
     </>
+  );
+}
+
+/** The caption written with a script: shown under it with Copy, for the day the founder posts the video. */
+function CopyCaption({ caption }: { caption: string }) {
+  const [copied, setCopied] = useState<boolean | null>(null);
+  const copy = async () => setCopied(navigator.clipboard ? await navigator.clipboard.writeText(caption).then(() => true, () => false) : false);
+  return (
+    <div className="v2-card-caption" data-testid="script-caption">
+      <div className="v2-card-caption-head">
+        <b>Caption to post with the video</b>
+        <Button variant="quiet" compact onClick={() => void copy()}>
+          {copied ? "Copied" : "Copy"}
+        </Button>
+      </div>
+      <p className="v2-card-text">{caption}</p>
+      {copied === false ? <p className="v2-muted">Copy did not work here. Select the caption and copy it yourself.</p> : null}
+    </div>
   );
 }
 

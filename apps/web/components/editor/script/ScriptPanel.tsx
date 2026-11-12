@@ -273,6 +273,24 @@ export function ScriptPanel({
             );
           })}
         </ol>
+        {script.caption ? (
+          <div className="ed2-scr-caption" data-testid="script-caption">
+            <div className="ed2-scr-caption-head">
+              <span className="ed2-scr-label">Caption to post with the video</span>
+              <button
+                type="button"
+                className="ed2-btn"
+                onClick={() => {
+                  const done = navigator.clipboard ? navigator.clipboard.writeText(script.caption).then(() => true, () => false) : Promise.resolve(false);
+                  void done.then((ok) => setNote(ok ? "Caption copied." : "Copy did not work here. Select the caption and copy it yourself."));
+                }}
+              >
+                Copy
+              </button>
+            </div>
+            <p>{script.caption}</p>
+          </div>
+        ) : null}
       </div>
       {cuts.length ? (
         <footer className="ed2-trn-foot" data-testid="script-keep">

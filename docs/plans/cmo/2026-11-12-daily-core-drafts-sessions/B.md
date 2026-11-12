@@ -11,7 +11,7 @@ the schedule card component, the `approvals_autopilot` trigger, `lib/cmo/writer/
 **Order and waits:**
 
 - [x] Task 4: Threads chain, long X posts, autopilot. Waits on nothing.
-- [ ] Task 6: caption with every video script. Waits on nothing.
+- [x] Task 6: caption with every video script. Waits on nothing.
 - [ ] Task 7: repurpose on demand. **Waits on A's Task 3** (fan-out slots per target) — check `A.md`.
 - [ ] Task 9: photo post. **Waits on A's Task 5** (`schedule_propose` with Facebook; your migration redeclares it after A's).
 - [ ] Whole-branch code review once every box in `A.md` and here is ticked: run `/code-review` (high) on the PR's diff
@@ -40,3 +40,7 @@ Each task: tests first, commit, push (see README). Tick the box in this file in 
 - **Local database.** Docker cannot pull the Supabase image here, so pgTAP ran on a plain Postgres 16 with a small
   shim for `auth`, `storage` and the roles. `182_*` fails its second case there with and without this branch (default
   grants differ); CI's run is the authoritative one.
+- **Task 6 needed a migration the README did not number:** `20270120027000_script_caption` (pgTAP `306_script_caption`).
+  `work_orders_brief_rules` copies named keys from Writer's brief onto the order, so `caption` is added there. **A:** if
+  Task 8 redefines `work_orders_brief_rules`, start from this version or the caption is lost. The script card reads the
+  caption from the order when it loads (`schedule-enrich.ts`), so `approval_snapshot` is untouched.

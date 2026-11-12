@@ -15,6 +15,8 @@ export type Script = {
   title: string;
   hooks: string[];
   beats: ScriptBeat[];
+  /** The caption written with the script, to post with the recorded video; empty for a script written before captions. */
+  caption: string;
   version: string;
   clipId: string;
 };
@@ -22,6 +24,7 @@ export type Script = {
 const BriefSchema = z.object({
   hooks: z.array(z.string()).max(3).catch([]),
   storyboard: z.array(ScriptBeatSchema).min(1),
+  caption: z.string().max(2200).catch(""),
 });
 
 /** The latest script whose edit is this clip, read under RLS; null when the edit did not come from a script. */
@@ -43,6 +46,7 @@ export async function scriptForClip(supabase: SupabaseClient, clipId: string): P
     title: data.title ?? "Your script",
     hooks: brief.data.hooks,
     beats: brief.data.storyboard,
+    caption: brief.data.caption,
     version: data.updated_at,
     clipId,
   };

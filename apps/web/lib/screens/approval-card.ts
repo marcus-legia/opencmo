@@ -281,6 +281,11 @@ const ScriptBody = z.object({
   nextPriceCredits: z.number().int().min(0).nullable(),
   /** A script the founder records (owner, 2026-11-09): free, and approving it opens the editor. `stepId` is its order. */
   forFounder: z.boolean().default(false),
+  /**
+   * The caption written with the script, read from its order when the card loads (`schedule-enrich.ts`): the founder
+   * posts it with the video they record. Not part of what the card approves; the editor's Script tab has it too.
+   */
+  caption: z.string().max(2200).optional(),
 });
 
 const PriceBody = z.object({

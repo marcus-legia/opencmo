@@ -51,6 +51,9 @@ export const SCRIPT_BEATS = { min: 3, max: 8 } as const;
  * The video brief: what Writer hands Studio before a video (`write_video_brief`) and what Studio's
  * `buildVideo` takes. One type for both sides; the Director writes the script from it and invents no facts.
  */
+/** A script's caption: TikTok's and Instagram's limit, and the most hashtags any of the video platforms takes. */
+export const SCRIPT_CAPTION = { max: 2200, hashtags: 5 } as const;
+
 export const VideoBriefSchema = z.object({
   /** What the video should achieve: "show founders how a slash command makes a demo video". */
   objective: z.string().trim().min(3).max(300),
@@ -68,6 +71,11 @@ export const VideoBriefSchema = z.object({
   voice: z.string().trim().max(40).optional(),
   /** The script and storyboard the founder records (the week plan's video item); empty for an AI video's brief. */
   storyboard: z.array(ScriptBeatSchema).max(SCRIPT_BEATS.max).default([]),
+  /**
+   * The caption the founder posts with the recorded video (owner, 2026-11-12): written with the script, hashtags at
+   * its end. Empty for a brief written before that, and for an AI video's brief.
+   */
+  caption: z.string().trim().max(SCRIPT_CAPTION.max).default(""),
 });
 export type VideoBrief = z.infer<typeof VideoBriefSchema>;
 
@@ -82,6 +90,8 @@ export type VideoSource = {
   /** What is said in the video (transcript text), cut to what fits the prompt. */
   transcript: string;
   seconds: number;
+  /** The caption written with the script this edit was recorded from: the first draft the platform caption starts from. */
+  scriptCaption?: string;
 };
 
 /** The work order per kind. Every text in it is the founder's plan or their own video, never outside text. */
@@ -192,6 +202,7 @@ export const VideoBriefDraftSchema = z.object({
   aspect: z.enum(BRIEF_ASPECTS),
   rationale: z.string().describe("One sentence: why this video now"),
   learnedFrom: z.array(z.string()).describe("URLs of the niche videos whose hooks or format this brief adapts, copied exactly; empty when none"),
+  caption: z.string().describe("The caption posted with the video: the hook as its first line, then what the video shows, then up to five hashtags; no link"),
   storyboard: z
     .array(
       z.object({

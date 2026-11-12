@@ -16714,7 +16714,10 @@ begin
           update public.work_orders
           set brief = brief || jsonb_strip_nulls(jsonb_build_object('objective', v_brief->'objective', 'angle', v_brief->'angle',
                 'hooks', v_brief->'hooks', 'cta', v_brief->'cta', 'seconds', v_brief->'seconds', 'aspect', v_brief->'aspect',
-                'storyboard', v_brief->'storyboard', 'sources', v_sources, 'brief_from', 'writer')),
+                'storyboard', v_brief->'storyboard', 'sources', v_sources, 'brief_from', 'writer',
+                -- The caption written with the script (owner, 2026-11-12); one that is too long is left out, the script stays.
+                'caption', case when jsonb_typeof(v_brief->'caption') = 'string'
+                                 and char_length(v_brief->>'caption') between 1 and 2200 then v_brief->'caption' end)),
               updated_at = now()
           where id = new.id;
           -- The plan dropped its item while it was being written: no card for a video the founder removed.
