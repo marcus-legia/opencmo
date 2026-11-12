@@ -3427,7 +3427,7 @@ CREATE TABLE public.cmo_runs (
     CONSTRAINT cmo_runs_credits_check CHECK ((credits >= 0)),
     CONSTRAINT cmo_runs_error_check CHECK ((char_length(error) <= 500)),
     CONSTRAINT cmo_runs_input_check CHECK (((jsonb_typeof(input) = 'object'::text) AND (octet_length((input)::text) <= 4096))),
-    CONSTRAINT cmo_runs_kind_check CHECK ((kind = ANY (ARRAY['onboard'::text, 'plan_week'::text, 'post_draft'::text, 'sales_scan'::text, 'competitor_research'::text, 'pull_metrics'::text, 'summarize_memory'::text, 'review_week'::text, 'write_caption'::text, 'write_video_brief'::text, 'write_slides'::text, 'publish_post'::text, 'niche_video_research'::text, 'distill_ratings'::text]))),
+    CONSTRAINT cmo_runs_kind_check CHECK ((kind = ANY (ARRAY['onboard'::text, 'plan_week'::text, 'post_draft'::text, 'sales_scan'::text, 'competitor_research'::text, 'pull_metrics'::text, 'summarize_memory'::text, 'review_week'::text, 'write_caption'::text, 'write_video_brief'::text, 'write_slides'::text, 'publish_post'::text, 'niche_video_research'::text, 'distill_ratings'::text, 'repurpose_post'::text]))),
     CONSTRAINT cmo_runs_output_check CHECK (((output IS NULL) OR ((jsonb_typeof(output) = 'object'::text) AND (octet_length((output)::text) <= 16384)))),
     CONSTRAINT cmo_runs_status_check CHECK ((status = ANY (ARRAY['queued'::text, 'running'::text, 'done'::text, 'failed'::text]))),
     CONSTRAINT cmo_runs_steps_check CHECK (((jsonb_typeof(steps) = 'array'::text) AND (octet_length((steps)::text) <= 16384)))
@@ -4614,6 +4614,7 @@ CREATE FUNCTION public.cmo_job_daily_limit(p_kind text) RETURNS integer
     when 'write_caption' then 20 when 'write_video_brief' then 5 when 'write_slides' then 10 when 'publish_post' then 100 when 'niche_video_research' then 2
     -- cmo-review-3 2.2: one rating round a day (`cmo_rate_drafts`), with room for a retry.
     when 'distill_ratings' then 2
+    when 'repurpose_post' then 20
     else 0 end
 $$;
 
@@ -4628,6 +4629,7 @@ CREATE FUNCTION public.cmo_job_price(p_kind text) RETURNS integer
   select case p_kind when 'plan_week' then 1 when 'post_draft' then 1 when 'sales_scan' then 5
     when 'competitor_research' then 2 when 'pull_metrics' then 0 when 'summarize_memory' then 0 when 'review_week' then 0
     when 'write_caption' then 1 when 'write_video_brief' then 1 when 'write_slides' then 1 when 'publish_post' then 0 when 'niche_video_research' then 2
+    when 'repurpose_post' then 1
     else 0 end
 $$;
 
@@ -4983,12 +4985,7 @@ begin
       p_user, p_run, v_item->>'department', left(v_item->>'platform', 20), v_day,
       left(v_item->>'idea', 300), left(coalesce(v_item->>'reason', ''), 300),
       coalesce(v_item->>'department' = 'post' and jsonb_typeof(v_item->'image') = 'boolean' and (v_item->>'image')::boolean, false),
-      case
-        when v_targets is null then '{}'::jsonb
-        when jsonb_typeof(v_item->'slot') = 'number' and (v_item->>'slot')::numeric in (0, 1, 2)
-          then jsonb_build_object('targets', v_targets, 'slot', (v_item->>'slot')::int)
-        else jsonb_build_object('targets', v_targets)
-      end
+      case when v_targets is null then '{}'::jsonb else jsonb_build_object('targets', v_targets) end
     );
     v_count := v_count + 1;
   end loop;
@@ -5941,6 +5938,76 @@ begin
   return true;
 end;
 $_$;
+
+
+--
+-- Name: post_variants; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.post_variants (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    item_id uuid NOT NULL,
+    platform text NOT NULL,
+    text text NOT NULL,
+    source_hash text NOT NULL,
+    run_id uuid,
+    gen jsonb DEFAULT '{}'::jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT post_variants_gen_check CHECK (((jsonb_typeof(gen) = 'object'::text) AND (octet_length((gen)::text) <= 1024))),
+    CONSTRAINT post_variants_platform_check CHECK ((platform = ANY (ARRAY['x'::text, 'threads'::text, 'linkedin'::text, 'facebook'::text]))),
+    CONSTRAINT post_variants_text_check CHECK (((char_length(text) >= 1) AND (char_length(text) <= 25000)))
+);
+
+
+--
+-- Name: cmo_save_variant(uuid, uuid, uuid, text, text, jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_save_variant(p_user uuid, p_run uuid, p_item uuid, p_platform text, p_text text, p_gen jsonb DEFAULT '{}'::jsonb) RETURNS public.post_variants
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_item public.content_items;
+  v_text text := btrim(coalesce(p_text, ''), E' \t\n\r');
+  v_limit integer := (public.platform_profile(p_platform)->>'limit')::integer;
+  v_row public.post_variants;
+begin
+  if not exists (select 1 from public.cmo_runs r where r.id = p_run and r.user_id = p_user and r.kind = 'repurpose_post') then
+    raise exception 'Run not found.' using errcode = 'P0002';
+  end if;
+  select * into v_item from public.content_items
+  where id = p_item and user_id = p_user and department = 'post' for update;
+  if not found then
+    raise exception 'Post not found.' using errcode = 'P0002';
+  end if;
+  if v_item.status not in ('in_review', 'approved') then
+    raise exception 'This post can no longer be rewritten.' using errcode = 'P0001';
+  end if;
+  if public.thread_valid(v_item.body) then
+    raise exception 'A thread cannot be rewritten for another platform.' using errcode = 'P0001';
+  end if;
+  if public.platform_profile(p_platform)->>'kind' is distinct from 'post' or v_limit is null
+     or not (p_platform = any (public.post_variant_platforms(v_item))) then
+    raise exception 'This post does not go to that platform.' using errcode = '22023';
+  end if;
+  if v_text = '' or char_length(v_text) > least(v_limit, 25000) then
+    raise exception 'The rewrite must be between 1 and % characters.', least(v_limit, 25000) using errcode = '22023';
+  end if;
+  if p_gen is not null and (jsonb_typeof(p_gen) <> 'object' or octet_length(p_gen::text) > 1024) then
+    raise exception 'This rewrite is not valid.' using errcode = '22023';
+  end if;
+  insert into public.post_variants (user_id, item_id, platform, text, source_hash, run_id, gen)
+  values (p_user, p_item, p_platform, v_text, public.post_core_hash(v_item.body->>'text'), p_run, coalesce(p_gen, '{}'::jsonb))
+  on conflict (item_id, platform) do update
+  set text = excluded.text, source_hash = excluded.source_hash, run_id = excluded.run_id, gen = excluded.gen, updated_at = now()
+  returning * into v_row;
+  perform public.schedule_variant_changed(p_item, p_platform);
+  return v_row;
+end;
+$$;
 
 
 --
@@ -8264,7 +8331,7 @@ begin
   -- Posting is ordered only by Schedule, for a slot whose card the founder approved.
   -- The schedule's own jobs are free and spend provider money (the planner model, ScrapeCreators): only the schedule
   -- queues them (enqueue_cmo_run_for), never a direct call (review R5).
-  if p_kind in ('publish_post', 'review_week', 'pull_metrics', 'summarize_memory', 'distill_ratings') then
+  if p_kind in ('publish_post', 'review_week', 'pull_metrics', 'summarize_memory', 'distill_ratings', 'repurpose_post') then
     raise exception 'Unknown task.' using errcode = '22023';
   end if;
   return public.cmo_enqueue(public.require_user(), p_kind, p_input);
@@ -10041,6 +10108,16 @@ $_$;
 
 
 --
+-- Name: post_core_hash(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.post_core_hash(p_text text) RETURNS text
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO 'public'
+    AS $$ select md5(coalesce(p_text, '')) $$;
+
+
+--
 -- Name: post_is_threads_chain(uuid, jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -10127,6 +10204,34 @@ begin
   return (p_body->'proposed'->>'at')::timestamptz;
 end;
 $_$;
+
+
+--
+-- Name: post_variant_platforms(public.content_items); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.post_variant_platforms(p_item public.content_items) RETURNS text[]
+    LANGUAGE sql STABLE
+    SET search_path TO 'public'
+    AS $$
+  select case when jsonb_typeof(p_item.body->'targets') = 'array' and jsonb_array_length(p_item.body->'targets') > 0
+    then array(select jsonb_array_elements_text(p_item.body->'targets'))
+    else array[public.platform_profile_id(p_item.platform)] end;
+$$;
+
+
+--
+-- Name: post_variant_text(uuid, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.post_variant_text(p_item uuid, p_platform text) RETURNS text
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select v.text from public.post_variants v join public.content_items c on c.id = v.item_id
+  where v.item_id = p_item and v.platform = p_platform and c.user_id = v.user_id
+    and v.source_hash = public.post_core_hash(c.body->>'text') and public.thread_valid(c.body) is not true;
+$$;
 
 
 --
@@ -12258,6 +12363,43 @@ $$;
 
 
 --
+-- Name: repurpose_post(uuid, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.repurpose_post(p_item uuid, p_platform text) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_item public.content_items;
+  v_run public.cmo_runs;
+begin
+  select * into v_item from public.content_items where id = p_item and user_id = v_user and department = 'post';
+  if not found then
+    raise exception 'Post not found.' using errcode = 'P0002';
+  end if;
+  if v_item.status not in ('in_review', 'approved') then
+    raise exception 'This post can no longer be rewritten.' using errcode = 'P0001';
+  end if;
+  if public.thread_valid(v_item.body) then
+    raise exception 'A thread cannot be rewritten for another platform.' using errcode = 'P0001';
+  end if;
+  if coalesce(btrim(v_item.body->>'text'), '') = '' then
+    raise exception 'This post has no text to rewrite.' using errcode = 'P0001';
+  end if;
+  if p_platform is null or public.platform_profile(p_platform)->>'kind' is distinct from 'post'
+     or not (p_platform = any (public.post_variant_platforms(v_item))) then
+    raise exception 'This post does not go to that platform.' using errcode = '22023';
+  end if;
+  v_run := public.cmo_enqueue(v_user, 'repurpose_post', jsonb_build_object('item_id', v_item.id, 'platform', p_platform));
+  return jsonb_build_object('run_id', v_run.id, 'status', v_run.status, 'credits', v_run.credits, 'item_id', v_item.id,
+    'platform', p_platform);
+end;
+$$;
+
+
+--
 -- Name: request_document_export(uuid, uuid, uuid, integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -13247,7 +13389,6 @@ declare
   v_slots jsonb[];
   v_n integer;
   v_most integer;
-  v_old_text jsonb;
 begin
   if p_plan is null or jsonb_typeof(p_plan) <> 'object'
      or jsonb_typeof(p_plan->'text') is distinct from 'object' or jsonb_typeof(p_plan->'video') is distinct from 'object'
@@ -13275,13 +13416,9 @@ begin
     end if;
   end loop;
 
-  select posting_plan->'text' into v_old_text from public.profiles where id = v_user for update;
   update public.profiles set posting_plan = p_plan where id = v_user;
   if not found then
     raise exception 'Profile not found.' using errcode = 'P0002';
-  end if;
-  if v_old_text is not distinct from p_plan->'text' then
-    return p_plan;
   end if;
 
   -- The day's slots as `dayTargets` builds them: slot i goes to every platform (in X, Threads, LinkedIn order) whose
@@ -13294,17 +13431,13 @@ begin
   v_n := coalesce(array_length(v_slots, 1), 0);
   if v_n > 0 then
     update public.content_items c
-    -- body.slot stays the planner's: a retarget that caps two posts onto one slot must not tie them for the next save.
     set body = c.body || jsonb_build_object('targets', v_slots[least(r.rank, v_n)]),
         platform = public.platform_profile(v_slots[least(r.rank, v_n)]->>0)->>'label',
         updated_at = now()
     from (
-      select id, row_number() over (
-               partition by day
-               order by case when jsonb_typeof(body->'slot') = 'number' then (body->>'slot')::numeric end nulls last, created_at, id
-             )::int as rank
+      select id, row_number() over (partition by day order by created_at, id)::int as rank
       from public.content_items
-      where user_id = v_user and department = 'post' and status = 'planned' and day > current_date
+      where user_id = v_user and department = 'post' and status = 'planned' and day >= current_date
     ) r
     where c.id = r.id;
   end if;
@@ -13606,6 +13739,7 @@ declare
   v_image_clip uuid;
   v_image jsonb;
   v_thread jsonb;
+  v_variant text;
 begin
   select * into v_d from public.deliverables where id = p_deliverable;
   if not found then
@@ -13614,6 +13748,12 @@ begin
   if v_d.ref_kind = 'content_item' then
     select coalesce(body->>'text', ''), case when public.thread_valid(body) then body->'thread' end
     into v_text, v_thread from public.content_items where id = v_d.ref_id;
+    -- The founder had the post rewritten for this platform: its slot there carries the rewrite, the others the core.
+    v_variant := public.post_variant_text(v_d.ref_id, p_platform);
+    if v_variant is not null then
+      v_text := v_variant;
+      v_thread := null;
+    end if;
     -- The post's newest image (P5 B4), as its cover still of the image's document as it is now. Only a post with an
     -- image carries the key, so the hash of a post without one is what it was before P5.
     select i.ref_id into v_image_clip from public.deliverables i
@@ -14203,6 +14343,31 @@ CREATE FUNCTION public.schedule_timezone(p_user uuid) RETURNS text
     LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO 'public'
     AS $$ select coalesce((select timezone from public.profiles where id = p_user), 'UTC') $$;
+
+
+--
+-- Name: schedule_variant_changed(uuid, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.schedule_variant_changed(p_item uuid, p_platform text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_slot public.schedule_slots;
+begin
+  for v_slot in
+    select s.* from public.schedule_slots s join public.deliverables d on d.id = s.deliverable_id
+    where d.ref_kind = 'content_item' and d.ref_id = p_item and s.platform = p_platform and s.status in ('proposed', 'waiting')
+    for update of s
+  loop
+    if v_slot.status = 'waiting' then
+      update public.schedule_slots set status = 'proposed', updated_at = now() where id = v_slot.id;
+    end if;
+    perform public.approval_raise(v_slot.user_id, 'schedule_slot', v_slot.id);
+  end loop;
+end;
+$$;
 
 
 --
@@ -18921,6 +19086,22 @@ ALTER TABLE ONLY public.post_metrics
 
 
 --
+-- Name: post_variants post_variants_item_platform_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.post_variants
+    ADD CONSTRAINT post_variants_item_platform_key UNIQUE (item_id, platform);
+
+
+--
+-- Name: post_variants post_variants_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.post_variants
+    ADD CONSTRAINT post_variants_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: product_events product_events_kind_ref_id_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -19781,6 +19962,13 @@ CREATE INDEX post_metrics_item_idx ON public.post_metrics USING btree (item_id, 
 --
 
 CREATE INDEX post_metrics_user_idx ON public.post_metrics USING btree (user_id, measured_at DESC);
+
+
+--
+-- Name: post_variants_user_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX post_variants_user_idx ON public.post_variants USING btree (user_id);
 
 
 --
@@ -21126,6 +21314,22 @@ ALTER TABLE ONLY public.post_metrics
 
 
 --
+-- Name: post_variants post_variants_item_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.post_variants
+    ADD CONSTRAINT post_variants_item_id_fkey FOREIGN KEY (item_id) REFERENCES public.content_items(id) ON DELETE CASCADE;
+
+
+--
+-- Name: post_variants post_variants_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.post_variants
+    ADD CONSTRAINT post_variants_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
 -- Name: product_events product_events_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -21849,6 +22053,12 @@ ALTER TABLE public.page_captures ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.post_metrics ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: post_variants; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.post_variants ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: product_events; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -22020,6 +22230,13 @@ CREATE POLICY "read own order usage" ON public.work_order_usage FOR SELECT TO au
 --
 
 CREATE POLICY "read own page captures" ON public.page_captures FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
+
+
+--
+-- Name: post_variants read own post variants; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "read own post variants" ON public.post_variants FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
 
 
 --

@@ -137,6 +137,7 @@ insert into allowed values
   ('refund_media_captions_from_task()'),
   ('register_media_asset(uuid,text,text,uuid)'),
   ('rename_blank_edit(uuid,text)'),
+  ('repurpose_post(uuid,text)'),
   ('request_stills_export(uuid,uuid,uuid)'),
   ('sales_settings_save(text[],jsonb)'),
   ('rename_project(uuid,text)'),

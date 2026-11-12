@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { DIRECTOR } from "@/lib/agent/create-video";
 import { WRITER } from "@/lib/agent/motion-guide";
 import { SYSTEM_PROMPT } from "@/lib/agent/prompt";
+import { REPURPOSE_SYSTEM } from "@/lib/cmo/jobs/repurpose-post";
 import { CAPTION_SYSTEM, SLIDES_SYSTEM, VIDEO_BRIEF_SYSTEM, YOUTUBE_SYSTEM } from "@/lib/cmo/writer/prompts";
 import { CLIP_EDITOR } from "@/lib/departments/studio/shorts/squad";
 
@@ -28,6 +29,7 @@ const prompts: Record<string, string> = {
   "YouTube writer": YOUTUBE_SYSTEM,
   "Video brief writer": VIDEO_BRIEF_SYSTEM,
   "Slides writer": SLIDES_SYSTEM,
+  "Repurpose writer": REPURPOSE_SYSTEM,
 };
 for (const [name, prompt] of Object.entries(prompts)) assert.ok(prompt.includes(guide), `${name} carries no-ai-slop`);
 

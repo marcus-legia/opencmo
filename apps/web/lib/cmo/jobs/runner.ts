@@ -10,6 +10,7 @@ import type { z } from "zod";
 
 import { competitorResearch } from "./competitor-research";
 import { distillRatings } from "./distill-ratings";
+import { repurposePost } from "./repurpose-post";
 import { nicheVideoResearch } from "./niche-video-research";
 import { draftPost } from "./draft-post";
 import { LlmError } from "./llm-error";
@@ -110,6 +111,8 @@ export const JOBS: Record<CmoJobKind, Job> = {
   niche_video_research: nicheVideoResearch,
   // cmo-review-3 2.2: only `cmo_rate_drafts` queues it, for one round of the founder's ratings.
   distill_ratings: distillRatings,
+  // Daily core drafts D4: only the founder's Rewrite button queues it (SQL `repurpose_post`), for one post and platform.
+  repurpose_post: repurposePost,
 };
 
 /** The run was claimed again by another worker (its lease ran out): stop quietly and write nothing more. */

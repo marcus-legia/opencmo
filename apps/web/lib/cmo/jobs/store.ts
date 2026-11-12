@@ -183,6 +183,21 @@ export function supabaseStore(admin: BaseClient): CmoStore {
       const [queued] = await enqueueDueDrafts(admin, run.user_id, (data ?? []) as { id: string; platform: string | null }[], { claude: run.input.brain === "claude" });
       return queued;
     },
+    async variantSource(userId, itemId) {
+      const { data, error } = await admin
+        .from("content_items")
+        .select("platform, body")
+        .eq("id", itemId)
+        .eq("user_id", userId)
+        .eq("department", "post")
+        .in("status", ["in_review", "approved"])
+        .maybeSingle<{ platform: string; body: { text?: unknown } | null }>();
+      if (error) throw new Error(`variant source: ${error.message}`);
+      return data && typeof data.body?.text === "string" ? { text: data.body.text, platform: data.platform } : null;
+    },
+    async saveVariant(userId, runId, itemId, platform, text, gen) {
+      await rpc("cmo_save_variant", { p_user: userId, p_run: runId, p_item: itemId, p_platform: platform, p_text: text, p_gen: gen });
+    },
     async saveDraft(userId, runId, itemId, idea, body, priority) {
       const row = one<ItemRow>(
         await rpc("cmo_save_draft", { p_user: userId, p_run: runId, p_item: itemId, p_idea: idea, p_body: body, p_priority: priority }),

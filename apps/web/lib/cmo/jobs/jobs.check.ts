@@ -690,6 +690,35 @@ async function main() {
   assert.equal(eventLine({ ...rule, before_status: "active", after_status: "rejected", before: "Help first." }), "Rule turned off: “Help first.”");
   assert.equal(eventLine({ correction_id: null, field: "avoid", before_status: null, after_status: null, before: null, after: ["hype", "synergy"] }), "Words to avoid: hype, synergy");
 
+  // Daily core drafts D4: a rewrite for one platform saves one variant within that platform's limit, and nothing else
+  // about the post changes; a post that is gone, or a platform that takes no post, spends nothing.
+  {
+    const rep = memoryStore(docs);
+    rep.enqueue("post_draft");
+    await drainCmoQueue(rep.store);
+    const post = rep.items.find((i) => i.department === "post" && i.status === "in_review")!;
+    const core = String(post.body.text);
+    const run = rep.enqueue("repurpose_post", { item_id: post.id, platform: "linkedin" });
+    await drainCmoQueue(rep.store);
+    assert.equal(run.status, "done", `repurpose run (${run.error})`);
+    assert.equal(rep.variants.length, 1, "one variant");
+    const variant = rep.variants[0]!;
+    assert.deepEqual([variant.itemId, variant.platform], [post.id, "linkedin"]);
+    assert.ok(variant.text.length > 0 && [...variant.text].length <= 3000, "within LinkedIn's limit");
+    assert.equal(String(post.body.text), core, "the core post is untouched");
+    const again = rep.enqueue("repurpose_post", { item_id: post.id, platform: "linkedin" });
+    await drainCmoQueue(rep.store);
+    assert.equal(again.status, "done");
+    assert.equal(rep.variants.length, 1, "a second rewrite replaces the first");
+    const gone = rep.enqueue("repurpose_post", { item_id: "00000000-0000-4000-8000-00000000dead", platform: "linkedin" });
+    await drainCmoQueue(rep.store);
+    assert.deepEqual([gone.status, (gone.output as { refund?: boolean } | null)?.refund], ["done", true], "a post that is gone refunds");
+    const bad = rep.enqueue("repurpose_post", { item_id: post.id, platform: "tiktok_caption" });
+    await drainCmoQueue(rep.store);
+    assert.equal(bad.status, "failed", "a caption profile is not a post platform");
+    assert.equal(rep.variants.length, 1);
+  }
+
   // The chips are the same list in the card, the route and SQL.
   const reasons = readFileSync(new URL("../../../../../supabase/migrations/20270113020000_draft_reasons.sql", import.meta.url), "utf8");
   const sqlReasons = [...(reasons.match(/reason_code in \(([^)]*)\)/)?.[1] ?? "").matchAll(/'([A-Z_]+)'/g)].map((m) => m[1]);

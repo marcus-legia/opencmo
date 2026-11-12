@@ -22,8 +22,10 @@ export type CmoJobKind =
   | "publish_post"
   | "niche_video_research"
   /** cmo-review-3 2.2: the founder's draft ratings → up to five rules, free (`cmo_rate_drafts` queues it). */
-  | "distill_ratings";
-export const CMO_JOB_KINDS: CmoJobKind[] = ["plan_week", "post_draft", "sales_scan", "competitor_research", "pull_metrics", "summarize_memory", "review_week", "write_video_brief", "write_caption", "write_slides", "publish_post", "niche_video_research", "distill_ratings"];
+  | "distill_ratings"
+  /** Daily core drafts D4: the founder's "Rewrite for <platform>" on a post card (`repurpose_post` in SQL queues it). */
+  | "repurpose_post";
+export const CMO_JOB_KINDS: CmoJobKind[] = ["plan_week", "post_draft", "sales_scan", "competitor_research", "pull_metrics", "summarize_memory", "review_week", "write_video_brief", "write_caption", "write_slides", "publish_post", "niche_video_research", "distill_ratings", "repurpose_post"];
 
 /** What a weekly goal counts. Only things the product can measure itself. */
 export type GoalMetric = "posts" | "replies" | "views";
@@ -288,6 +290,10 @@ export interface CmoStore {
   postingPlan(userId: string): Promise<PostingPlan>;
   /** Queues the drafts of this plan's posts due today, one per platform (`schedule.ts`); returns how many. */
   queueDueDrafts(run: QueuedRun): Promise<number>;
+  /** The post a rewrite starts from: its core text, while it can still be rewritten (in review or approved, not posted). */
+  variantSource(userId: string, itemId: string): Promise<{ text: string; platform: string } | null>;
+  /** One platform's rewrite of a post (`cmo_save_variant`, which checks the length again); a new one replaces the old. */
+  saveVariant(userId: string, runId: string, itemId: string, platform: string, text: string, gen: Record<string, unknown>): Promise<void>;
   saveDraft(userId: string, runId: string, itemId: string | null, idea: string, body: Record<string, unknown>, priority: ItemRow["priority"]): Promise<ItemRow>;
   /** Thread links that already became cards (dismissed ones too): W4 never offers them again. */
   seenUrls(userId: string): Promise<Set<string>>;

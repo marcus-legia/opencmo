@@ -29,6 +29,8 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
   const voice: VoiceNoteRow[] = [];
   /** Edits a caption run can read, and the captions it saved (`edited`: the founder's own, never overwritten). */
   const videos: VideoSource[] = [];
+  /** One platform's rewrite of a post (`post_variants`). */
+  const variants: { runId: string; itemId: string; platform: string; text: string; gen: Record<string, unknown> }[] = [];
   const captions: { runId: string; clipId: string; profile: string; text: string; title: string | null; gen: Record<string, unknown>; edited: boolean }[] = [];
   const lessons: Lesson[] = [];
   const goals: Goal[] = [];
@@ -143,6 +145,16 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
       for (const item of due) enqueue("post_draft", { source: "schedule", loop: "daily-x-draft", item_id: item.id, ...(run.input.brain === "claude" ? { brain: "claude" } : {}) });
       return due.length;
     },
+    async variantSource(_u, itemId) {
+      const item = items.find((i) => i.id === itemId && i.department === "post" && (i.status === "in_review" || i.status === "approved"));
+      return item && typeof item.body.text === "string" ? { text: item.body.text, platform: item.platform } : null;
+    },
+    async saveVariant(_u, runId, itemId, platform, text, gen) {
+      const at = variants.findIndex((v) => v.itemId === itemId && v.platform === platform);
+      const row = { runId, itemId, platform, text, gen };
+      if (at >= 0) variants[at] = row;
+      else variants.push(row);
+    },
     async saveDraft(_u, runId, itemId, idea, body, priority) {
       let item = itemId ? items.find((i) => i.id === itemId) : undefined;
       if (!item) {
@@ -250,5 +262,5 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
     runs.push(run);
     return run;
   };
-  return { store, posting, runs, items, opps, rules, salesSettings, mentions, insights, niche, metrics, zernio, replies, lessons, goals, results, enqueue, inbox, submit, voice, videos, captions, ratings, ratingRules };
+  return { store, posting, runs, items, opps, rules, salesSettings, mentions, insights, niche, metrics, zernio, replies, lessons, goals, results, enqueue, inbox, submit, voice, videos, captions, variants, ratings, ratingRules };
 }

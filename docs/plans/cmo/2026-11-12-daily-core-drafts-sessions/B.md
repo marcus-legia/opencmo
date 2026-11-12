@@ -44,3 +44,10 @@ Each task: tests first, commit, push (see README). Tick the box in this file in 
   `work_orders_brief_rules` copies named keys from Writer's brief onto the order, so `caption` is added there. **A:** if
   Task 8 redefines `work_orders_brief_rules`, start from this version or the caption is lost. The script card reads the
   caption from the order when it loads (`schedule-enrich.ts`), so `approval_snapshot` is untouched.
+- **Task 7, first half (pushed before A's Task 3):** the `repurpose_post` job, `post_variants`, `cmo_save_variant`,
+  the founder's RPC `repurpose_post(item, platform)`, the route `POST /api/v1/cmo/items/[id]/repurpose` and
+  `schedule_content` preferring a current variant. A variant is tied to the core text it was written from
+  (`source_hash`): edit the post and the core text goes out again. **Still to do once Task 3 is in:** the Rewrite button
+  per target on the post card, the variant shown on the card, and the rule that a slot carrying a variant never rides
+  on the post card's approval (`schedule_take_proposal`), so no rewrite goes out unseen. No button exists until then,
+  so no variant can be made.
