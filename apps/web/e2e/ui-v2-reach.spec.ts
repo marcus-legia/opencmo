@@ -77,7 +77,6 @@ test("the phone layout keeps the feed and the chat on the page; 1024 has the cha
 
   await page.setViewportSize({ width: 1024, height: 900 });
   await page.goto("/app/writer?sample=1");
-  await page.getByRole("banner").getByRole("button", { name: "Chat" }).click();
   await expect(page.locator("#v2-chat").getByLabel("Ask your CMO")).toBeVisible();
 });
 

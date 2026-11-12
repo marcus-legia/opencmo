@@ -1,8 +1,9 @@
 "use client";
 
 /**
- * The feed (Main.dc.html): the Context column on the left, then the greeting, the week's workflow, the list that needs
- * the founder (one row per thing, opened in place) and the agents. The chat column on the right is the shell's.
+ * The feed (Main.dc.html): the greeting, the week's workflow, the list that needs the founder (one row per thing,
+ * opened in place) and the agents. The Context column on the left and the chat on the right are the shell's, so they
+ * stay put when the founder switches to Calendar, Sales or Analytics.
  *
  * Data: `DashboardScreen` (`/api/v1/screens/dashboard`) for the queue, Today, the goal and the team; Schedule's week for
  * what is planned, scheduled and posted. Rows open the real approval card, so every decision keeps its own actions.
@@ -20,7 +21,6 @@ import { fillChat } from "@/components/dashboard/TodayBlock";
 import { useDashboard } from "@/components/dashboard/useDashboard";
 import { useLive } from "@/components/clipping/useLive";
 import { useShellAccount } from "@/components/clipping/web/WebShell";
-import { Sash } from "@/components/shell-v2/Sash";
 import { useShellState } from "@/components/shell-v2/ShellState";
 import { prefetchScreen, useScreen } from "@/components/screens/useScreen";
 import { isTodayPrompt } from "@/lib/cmo/today";
@@ -30,9 +30,7 @@ import type { WriterScreen } from "@/lib/screens/writer";
 import type { DashboardScreen, TodayRowData } from "@/lib/screens/dashboard";
 import type { ScreenName } from "@/lib/screens/registry";
 
-import { ContextColumn } from "./ContextColumn";
 import { KIND_ICON, PLATFORM_ICON, kindLabel, whenLabel } from "./cards";
-import { LEFT, useTodayColumns } from "./columns";
 import { dayLabel, draftsLeftOver, draftsThisWeek } from "./week";
 
 type Draft = WriterScreen["drafts"][number];
@@ -356,7 +354,6 @@ export function Feed({ email }: { email?: string | null }) {
   const [step, setStep] = useState<Step>("waiting");
   const [open, setOpen] = useState<string | null>(null);
   const [later, setLater] = useState<ReadonlySet<string>>(new Set());
-  const sides = useTodayColumns();
 
   // `?ask=1` and Today's `prompt` land in the chat's box; the founder sends it. Only a request Today writes is taken.
   const asking = search.get("ask") === "1";
@@ -552,17 +549,6 @@ export function Feed({ email }: { email?: string | null }) {
     <>
       <PlanSheet open={planSheet} onClose={closePlanSheet} />
       <RatingSheet open={rating} onClose={closeRating} />
-      <ContextColumn goal={data ? { text: data.week.goal, done: data.week.deliverables.done, total: data.week.deliverables.total } : null} />
-      <Sash
-        label="Resize the context column"
-        controls="td-context"
-        value={sides.columns.left}
-        min={LEFT.min}
-        max={LEFT.max}
-        onLive={(value) => sides.live("left", value)}
-        onCommit={(value) => sides.commit("left", value)}
-        onReset={() => sides.commit("left", LEFT.base)}
-      />
 
       <main className="mid" data-testid="v2-dashboard">
         <div style={{ flex: "1 1 auto", overflow: "auto", padding: "18px 24px 40px", maxWidth: "920px", width: "100%", margin: "0 auto" }}>

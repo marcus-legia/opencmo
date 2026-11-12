@@ -376,3 +376,22 @@ html:not([data-theme="dark"]) .k { --ok: #16744c; --warn: #8f5a0e; }
 .pg-main .td-box { display: flex; flex-direction: column; gap: 6px; margin-bottom: 26px; padding: 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
 .pg-main .td-box-more { align-self: center; margin-top: 2px; padding: 4px 12px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-size: 13px; cursor: pointer; }
 .pg-main .td-box-more:hover { color: var(--text); background: var(--raised); }
+
+/* One working screen (owner, 2026-11-12): Calendar, Sales and Analytics are drawn in the feed's frame, between the
+   Context column and the chat. The view scrolls on its own, like the feed's centre, and keeps its artboard's styles
+   inside its own `pg-*` wrapper. */
+.pg-main .cols > .td-view { overflow: auto; }
+.pg-main .cols > .td-view > .k { min-height: 100%; background: var(--bg); color: var(--text); }
+/* The feed frame's `.mid` (its centre column) is also the name of Sales' middle score: only the column is a flex box. */
+.pg-main .td-view .score.mid { flex: 0 0 auto; display: inline-flex; flex-direction: row; min-width: 0; }
+/* A calendar item's detail opens over the chat column, where it sat when Calendar had the whole width: beside a
+   Context column and a chat it would wrap under the grid. */
+.pg-main .td-view[data-view="calendar"] .drawer {
+  position: fixed; top: 48px; right: 0; bottom: 0; z-index: 30;
+  width: var(--td-col-chat, 380px); max-width: 100vw; flex: none; overflow: auto;
+  box-shadow: -12px 0 32px rgb(0 0 0 / 8%);
+}
+@media (max-width: 900px) {
+  .pg-main .td-view[data-view="calendar"] .drawer { position: static; width: auto; box-shadow: none; }
+}
+.pg-main .td-view .drawer[hidden] { display: none; }

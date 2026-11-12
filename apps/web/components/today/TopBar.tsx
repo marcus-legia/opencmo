@@ -13,6 +13,7 @@ import { siteLabel, useWorkspace } from "./workspace";
 const VIEW_SCREENS: Record<string, ScreenName[]> = {
   feed: ["schedule"],
   calendar: ["schedule", "dashboard"],
+  sales: ["sales"],
   analytics: ["analytics", "dashboard", "research", "sales"],
 };
 const readAhead = (view: string) => () => VIEW_SCREENS[view]?.forEach((name) => prefetchScreen(name));
@@ -24,7 +25,7 @@ const readAhead = (view: string) => () => VIEW_SCREENS[view]?.forEach((name) => 
  */
 export type TopVariant =
   | { kind: "home" }
-  | { kind: "views"; current: "feed" | "calendar" | "analytics" }
+  | { kind: "views"; current: "feed" | "calendar" | "sales" | "analytics" | null }
   | { kind: "crumbs"; trail: { label: string; href?: string }[]; logs?: boolean; chat?: boolean; credits?: boolean; back?: boolean };
 
 const Chevron = () => (
@@ -163,6 +164,16 @@ export function TopBar({
         ),
       },
       {
+        id: "sales",
+        label: "Sales",
+        href: "/app/sales",
+        icon: (
+          <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
+          </svg>
+        ),
+      },
+      {
         id: "analytics",
         label: "Analytics",
         href: "/app/analytics",
@@ -232,12 +243,6 @@ export function TopBar({
             <path d="M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />
           </svg>
         </Link>
-        {current === "feed" ? null : (
-          <button type="button" className="pill" onClick={onChat}>
-            <ChatIcon />
-            <span className="td-pill-label">Chat</span>
-          </button>
-        )}
         <Avatar email={email} />
       </header>
     );
