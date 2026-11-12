@@ -340,3 +340,10 @@ the founder asks. Video scripts cost what they cost today; the caption rides in 
 - Autopilot for Facebook, video or photo posts (owner decision needed).
 - Measuring which platform performs best and suggesting counts.
 - Sales.
+
+## 6. Status and sessions (2026-11-12)
+
+Task 1 is done (`fda79fce`). The rest is split between two sessions on this branch and one PR:
+[`2026-11-12-daily-core-drafts-sessions/`](2026-11-12-daily-core-drafts-sessions/README.md) (who owns which file,
+migration numbers, the rulings already made). Session B runs the whole-branch code review and takes the screenshots
+at the end.
