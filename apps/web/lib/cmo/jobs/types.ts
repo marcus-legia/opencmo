@@ -3,6 +3,7 @@
  * store.
  */
 
+import type { PostingPlan } from "../posting-plan";
 import type { DocumentKind } from "../documents";
 import type { VideoSource } from "../writer/types";
 import type { AccountMetricRow } from "./metrics-source";
@@ -159,7 +160,8 @@ export type ItemRow = {
 };
 
 /** `image`: a post that gets an image from the Post image squad once the founder approves it (C3). */
-export type PlanItem = { department: "post" | "sales" | "video"; platform: string; day: string; idea: string; reason: string; image?: boolean };
+/** `targets`: posts only, the platform ids one core post goes to (the posting plan's slot); `platform` is the first one's label. */
+export type PlanItem = { department: "post" | "sales" | "video"; platform: string; day: string; idea: string; reason: string; image?: boolean; targets?: string[] };
 
 export type Documents = Partial<Record<DocumentKind, Record<string, unknown>>>;
 
@@ -279,6 +281,8 @@ export interface CmoStore {
   recordGoalResult(userId: string, week: string, result: number): Promise<boolean>;
   items(userId: string, filter: { statuses?: ItemStatus[]; since?: string; department?: ItemRow["department"]; limit?: number }): Promise<ItemRow[]>;
   planWeek(userId: string, runId: string, items: PlanItem[]): Promise<number>;
+  /** The founder's posting plan (`profiles.posting_plan`), else the default for their connected accounts. */
+  postingPlan(userId: string): Promise<PostingPlan>;
   /** Queues the drafts of this plan's posts due today, one per platform (`schedule.ts`); returns how many. */
   queueDueDrafts(run: QueuedRun): Promise<number>;
   saveDraft(userId: string, runId: string, itemId: string | null, idea: string, body: Record<string, unknown>, priority: ItemRow["priority"]): Promise<ItemRow>;

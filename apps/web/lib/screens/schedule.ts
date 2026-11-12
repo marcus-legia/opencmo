@@ -4,6 +4,8 @@
 
 import { z } from "zod";
 
+import { PostingPlanSchema } from "../cmo/posting-plan";
+
 import { AccountSchema, SlotStatusSchema, WhereSchema, iso } from "./common";
 
 export const SlotSchema = z.object({
@@ -27,5 +29,7 @@ export const ScheduleScreenSchema = z.object({
   slots: z.array(SlotSchema),
   accounts: z.array(AccountSchema),
   rules: z.array(z.string().max(200)),
+  /** The founder's posting plan (`profiles.posting_plan`), else the default for their connected accounts: the planner panel. */
+  postingPlan: PostingPlanSchema,
 });
 export type ScheduleScreen = z.infer<typeof ScheduleScreenSchema>;

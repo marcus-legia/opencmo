@@ -4962,8 +4962,9 @@ declare
   v_item jsonb;
   v_count integer := 0;
   v_day date;
+  v_targets jsonb;
 begin
-  if p_items is null or jsonb_typeof(p_items) <> 'array' or jsonb_array_length(p_items) > 30 then
+  if p_items is null or jsonb_typeof(p_items) <> 'array' or jsonb_array_length(p_items) > 60 then
     raise exception 'This plan is not valid.' using errcode = '22023';
   end if;
   delete from public.content_items where user_id = p_user and status = 'planned' and day >= current_date;
@@ -4972,11 +4973,13 @@ begin
     if v_day < current_date or v_day > current_date + 13 then
       continue;
     end if;
-    insert into public.content_items (user_id, run_id, department, platform, day, idea, reason, wants_image)
+    v_targets := case when v_item->>'department' = 'post' then public.posting_plan_targets(v_item->'targets') end;
+    insert into public.content_items (user_id, run_id, department, platform, day, idea, reason, wants_image, body)
     values (
       p_user, p_run, v_item->>'department', left(v_item->>'platform', 20), v_day,
       left(v_item->>'idea', 300), left(coalesce(v_item->>'reason', ''), 300),
-      coalesce(v_item->>'department' = 'post' and jsonb_typeof(v_item->'image') = 'boolean' and (v_item->>'image')::boolean, false)
+      coalesce(v_item->>'department' = 'post' and jsonb_typeof(v_item->'image') = 'boolean' and (v_item->>'image')::boolean, false),
+      case when v_targets is null then '{}'::jsonb else jsonb_build_object('targets', v_targets) end
     );
     v_count := v_count + 1;
   end loop;
@@ -10270,6 +10273,24 @@ $$;
 
 
 --
+-- Name: posting_plan_targets(jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.posting_plan_targets(p_targets jsonb) RETURNS jsonb
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO 'public'
+    AS $$
+  select case
+    when jsonb_typeof(p_targets) = 'array'
+      and jsonb_array_length(p_targets) between 1 and 3
+      and (select bool_and(jsonb_typeof(t) = 'string' and t #>> '{}' in ('x', 'threads', 'linkedin')) from jsonb_array_elements(p_targets) t)
+      and (select count(distinct t) from jsonb_array_elements(p_targets) t) = jsonb_array_length(p_targets)
+    then p_targets
+    else null end
+$$;
+
+
+--
 -- Name: process_creem_event(text, text, timestamp with time zone, jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -13198,6 +13219,9 @@ declare
   v_user uuid := public.require_user();
   v_key text;
   v_val jsonb;
+  v_slots jsonb[];
+  v_n integer;
+  v_most integer;
 begin
   if p_plan is null or jsonb_typeof(p_plan) <> 'object'
      or jsonb_typeof(p_plan->'text') is distinct from 'object' or jsonb_typeof(p_plan->'video') is distinct from 'object'
@@ -13228,6 +13252,27 @@ begin
   update public.profiles set posting_plan = p_plan where id = v_user;
   if not found then
     raise exception 'Profile not found.' using errcode = 'P0002';
+  end if;
+
+  -- The day's slots as `dayTargets` builds them: slot i goes to every platform (in X, Threads, LinkedIn order) whose
+  -- count is above i.
+  v_most := greatest((p_plan->'text'->>'x')::int, (p_plan->'text'->>'threads')::int, (p_plan->'text'->>'linkedin')::int);
+  v_slots := array(
+    select (select jsonb_agg(p order by o) from unnest(array['x', 'threads', 'linkedin']) with ordinality as u(p, o)
+            where (p_plan->'text'->>p)::int > i)
+    from generate_series(0, v_most - 1) i order by i);
+  v_n := coalesce(array_length(v_slots, 1), 0);
+  if v_n > 0 then
+    update public.content_items c
+    set body = c.body || jsonb_build_object('targets', v_slots[least(r.rank, v_n)]),
+        platform = public.platform_profile(v_slots[least(r.rank, v_n)]->>0)->>'label',
+        updated_at = now()
+    from (
+      select id, row_number() over (partition by day order by created_at, id)::int as rank
+      from public.content_items
+      where user_id = v_user and department = 'post' and status = 'planned' and day >= current_date
+    ) r
+    where c.id = r.id;
   end if;
   return p_plan;
 end;

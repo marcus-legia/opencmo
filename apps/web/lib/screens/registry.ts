@@ -83,12 +83,12 @@ export const SCREENS = {
   studio: entry({ schema: StudioScreenSchema, fixture: studioFixture, empty: studioEmpty, live: ["items", "team", "editStates"], release: ["items"] }),
   // P5 R1: the mention counter, the stuck banner and the founder's Sales settings read real rows.
   sales: entry({ schema: SalesScreenSchema, fixture: salesFixture, empty: salesEmpty, live: ["threads", "week", "mentions", "stuck", "settings"], release: ["threads", "week"] }),
-  // P4 A3: slots, accounts and rules read schedule_slots and social_accounts.
+  // P4 A3: slots, accounts and rules read schedule_slots and social_accounts; the posting plan reads profiles (2026-11-12).
   schedule: entry({
     schema: ScheduleScreenSchema,
     fixture: scheduleFixture,
     empty: scheduleEmpty,
-    live: ["timezone", "from", "to", "slots", "accounts", "rules"],
+    live: ["timezone", "from", "to", "slots", "accounts", "rules", "postingPlan"],
     release: ["slots", "accounts"],
   }),
   settings: entry({

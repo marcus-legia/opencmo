@@ -13,6 +13,7 @@ import { PLATFORM_LABEL, type SlotStatus } from "@/lib/screens/common";
 import type { ApprovalCard as Card } from "@/lib/screens/approval-card";
 import type { ScheduleScreen } from "@/lib/screens/schedule";
 
+import { PostingPlanPanel } from "./PostingPlanPanel";
 import { useDecide } from "./useDecide";
 
 type Slot = ScheduleScreen["slots"][number];
@@ -191,6 +192,15 @@ export function CalendarView() {
           </span>
           <span style={{ marginLeft: "auto" }}>Drag a card to another day to move it. Your CMO asks before it changes a time.</span>
         </div>
+
+        {data ? (
+          <PostingPlanPanel
+            initial={data.postingPlan}
+            accounts={data.accounts}
+            live={state.status === "ready" && state.live.postingPlan}
+            onSaved={reload}
+          />
+        ) : null}
 
         {state.status === "error" ? <div className="meta">{state.message}</div> : null}
         {state.status === "loading" ? <div className="meta">Loading the week…</div> : null}

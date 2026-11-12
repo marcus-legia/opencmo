@@ -7,6 +7,7 @@ import type { VideoSource } from "../writer/types";
 import { latestPerTopic } from "./context";
 import { isoDay, type CmoStore, type DraftRating, type CompetitorInsight, type ConnectedAccountRow, type ReplyOutcomeDue, type MetricRow, type ZernioPostRow, type NicheVideoInsight, type SalesSettings, type SubredditRule, type Documents, type Goal, type InboxRequest, type ItemRow, type Lesson, type MemoryEvent, type Opportunity, type QueuedRun, type Step, type VoiceNoteRow, type WeekResults } from "./types";
 import type { AccountMetricRow } from "./metrics-source";
+import { defaultPostingPlan, type PostingPlan } from "../posting-plan";
 
 export type InboxItem = {
   id: string;
@@ -52,6 +53,8 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
   const ratings = new Map<string, DraftRating[]>();
   const ratingRules = new Map<string, string[]>();
   const replies: (ReplyOutcomeDue & { check?: { status: string; votes: number | null; replies: number | null } })[] = [];
+  /** The founder's saved posting plan; null = never chosen, the default for the connected accounts applies. */
+  const posting: { plan: PostingPlan | null } = { plan: null };
   let seq = 0;
   const id = () => `id-${++seq}`;
   const store: CmoStore = {
@@ -126,10 +129,13 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
     async planWeek(_u, runId, plan) {
       for (let i = items.length - 1; i >= 0; i--) if (items[i].status === "planned") items.splice(i, 1);
       for (const p of plan) {
-        items.push({ id: id(), run_id: runId, ...p, status: "planned", priority: "medium", body: {}, final_text: null, external_url: null, decided_at: null, published_at: null, created_at: new Date().toISOString() });
+        const { targets, ...item } = p;
+        // As `cmo_plan_week` writes it: a post keeps the platforms its slot targets in `body.targets`.
+        items.push({ id: id(), run_id: runId, ...item, status: "planned", priority: "medium", body: targets?.length ? { targets } : {}, final_text: null, external_url: null, decided_at: null, published_at: null, created_at: new Date().toISOString() });
       }
       return plan.length;
     },
+    postingPlan: async () => posting.plan ?? defaultPostingPlan(zernio.accounts.map((a) => a.platform)),
     async queueDueDrafts(run) {
       const seen = new Set<string>();
       const due = items.filter((i) => i.run_id === run.id && i.department === "post" && i.status === "planned" && i.day <= isoDay())
@@ -244,5 +250,5 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
     runs.push(run);
     return run;
   };
-  return { store, runs, items, opps, rules, salesSettings, mentions, insights, niche, metrics, zernio, replies, lessons, goals, results, enqueue, inbox, submit, voice, videos, captions, ratings, ratingRules };
+  return { store, posting, runs, items, opps, rules, salesSettings, mentions, insights, niche, metrics, zernio, replies, lessons, goals, results, enqueue, inbox, submit, voice, videos, captions, ratings, ratingRules };
 }

@@ -11,7 +11,7 @@ Plan: [`../2026-11-12-daily-core-drafts-plan.md`](../2026-11-12-daily-core-draft
 `work_orders_plan_week`; `CLAUDE.md`, `docs/architecture/ai-cmo.md` (+ `.html`).
 
 - [x] Task 1: posting plan (`fda79fce`)
-- [ ] Task 2: planner screen and week plan
+- [x] Task 2: planner screen and week plan
 - [ ] Task 3: core post + fan-out + Rules-and-docs block
 - [ ] Task 5: Facebook Page (with ruling 1)
 - [ ] Task 8: remove `build_slideshow`

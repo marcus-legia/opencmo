@@ -7,6 +7,7 @@ import { latestPerTopic } from "./context";
 import type { CmoStore, DraftRating, CompetitorInsight, ConnectedAccountRow, ReplyOutcomeDue, ZernioPostRow, Documents, NicheVideoInsight, SubredditRule, Goal, InboxState, ItemRow, Lesson, MemoryEvent, QueuedRun } from "./types";
 import { isoDay, toVerdict } from "./types";
 import { enqueueDueDrafts } from "../schedule";
+import { planOrDefault } from "../posting-plan";
 
 const ITEM_COLUMNS =
   "id, run_id, department, platform, day, idea, reason, status, priority, body, final_text, external_url, decided_at, published_at, created_at";
@@ -166,6 +167,15 @@ export function supabaseStore(admin: BaseClient): CmoStore {
       return ((data ?? []) as ItemRow[]).reverse();
     },
     planWeek: (userId, runId, items) => rpc<number>("cmo_plan_week", { p_user: userId, p_run: runId, p_items: items }),
+    async postingPlan(userId) {
+      const [profile, accounts] = await Promise.all([
+        admin.from("profiles").select("posting_plan").eq("id", userId).maybeSingle(),
+        admin.from("social_accounts").select("platform").eq("user_id", userId).eq("status", "connected"),
+      ]);
+      if (profile.error) throw new Error(`profiles: ${profile.error.message}`);
+      if (accounts.error) throw new Error(`social_accounts: ${accounts.error.message}`);
+      return planOrDefault((profile.data as { posting_plan: unknown } | null)?.posting_plan, ((accounts.data ?? []) as { platform: string }[]).map((a) => a.platform));
+    },
     async queueDueDrafts(run) {
       const { data, error } = await admin.from("content_items").select("id, platform").eq("user_id", run.user_id).eq("run_id", run.id)
         .eq("department", "post").eq("status", "planned").lte("day", isoDay()).order("day").order("id");

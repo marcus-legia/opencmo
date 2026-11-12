@@ -44,3 +44,9 @@ export function dayTargets(plan: PostingPlan): string[][] {
   for (let i = 0; i < most; i++) days.push(TEXT_PLATFORMS.filter((p) => plan.text[p] > i));
   return days;
 }
+
+/** The founder's saved plan, else the default for their connected accounts; a saved value that no longer parses counts as unset. */
+export function planOrDefault(saved: unknown, connected: readonly string[]): PostingPlan {
+  const parsed = PostingPlanSchema.safeParse(saved);
+  return parsed.success ? parsed.data : defaultPostingPlan(connected);
+}
