@@ -1506,9 +1506,12 @@ CREATE FUNCTION public.api_key_owner(p_hash text) RETURNS uuid
 declare
   v_user uuid;
 begin
-  select user_id into v_user
-  from public.api_keys
-  where key_hash = p_hash and revoked_at is null;
+  select k.user_id into v_user
+  from public.api_keys k
+  join auth.users u on u.id = k.user_id
+  where k.key_hash = p_hash and k.revoked_at is null
+    and u.deleted_at is null
+    and (u.banned_until is null or u.banned_until <= now());
 
   if v_user is not null then
     update public.api_keys set last_used_at = now()
