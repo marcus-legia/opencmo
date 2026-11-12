@@ -104,7 +104,7 @@ function build(row: ApprovalRow): Built | null {
       const platform = profile.platform;
       const text = str(s.text);
       // Clipped to the contract: one long version or rationale must not fail the card (and with it the whole queue).
-      const versions = [text, ...strings(s.alternates)].filter(Boolean).slice(0, 3).map((v) => clip(v, 3000));
+      const versions = [text, ...strings(s.alternates)].filter(Boolean).slice(0, 3).map((v) => clip(v, 4000));
       // An X thread (P6 W4): SQL emits it only when it is valid (5 to 8 posts, the first being `text`).
       const thread = strings(s.thread);
       const { head, rest } = firstSentence(text);

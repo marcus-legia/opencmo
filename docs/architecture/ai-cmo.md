@@ -65,7 +65,7 @@ slot, with the slot's platforms in `body.targets`. The daily loop (`daily-post-d
 run per due item, at most three a day: a slot with two or more targets gets one **core post** (`core` in
 `packages/contracts/platforms.json`, 3,000 characters), a one-target slot is written for its platform. Approving the
 post makes one schedule slot per target (`post_targets`, `schedule_propose`): `publish` with a connected account, else
-copy and open. X takes long posts (25,000, X Premium); a Threads post over 500 characters goes out as a chain.
+copy and open. X takes long posts (4,000 characters, X Premium); a Threads post over 500 characters goes out as a chain.
 
 Loop: metrics, the founder's edits and winning posts → `cmo_memories`, `cmo_lessons`, `cmo_corrections` and voice
 notes → next week's plan.

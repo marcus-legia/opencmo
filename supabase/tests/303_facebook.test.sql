@@ -8,7 +8,7 @@ set search_path to public, extensions;
 select plan(12);
 
 select is(public.platform_profile_id('Facebook'), 'facebook', 'the calendar label maps to the profile');
-select is((public.platform_profile('facebook')->>'limit')::int, 5000, 'a Facebook post is 5,000 characters at most');
+select is((public.platform_profile('facebook')->>'limit')::int, 4000, 'a Facebook post is 4,000 characters at most');
 select is(public.schedule_platform_label('facebook'), 'Facebook', 'cards name it');
 
 insert into auth.users (id, email) values

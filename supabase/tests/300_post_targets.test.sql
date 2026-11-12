@@ -11,7 +11,7 @@ select plan(14);
 select ok(not has_function_privilege('authenticated', 'public.post_targets(uuid)', 'execute'), 'a founder cannot call post_targets');
 select ok(not has_function_privilege('anon', 'public.post_targets(uuid)', 'execute'), 'anon cannot');
 select is(public.platform_profile('core')->>'kind', 'core', 'the core profile is there');
-select is((public.platform_profile('x')->>'limit')::int, 25000, 'X takes a long post (D6)');
+select is((public.platform_profile('x')->>'limit')::int, 4000, 'X takes a long post (D6): as long as an approved post is kept');
 
 insert into auth.users (id, email) values
   ('e3000000-0000-4000-8000-00000000000a', 'targets-a@test.local'),

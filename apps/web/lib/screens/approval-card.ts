@@ -52,7 +52,7 @@ const PostBody = z.object({
     .array(
       z.object({
         platform: PlatformSchema,
-        versions: z.array(z.string().max(3000)).min(1).max(3),
+        versions: z.array(z.string().max(4000)).min(1).max(3),
         limit: z.number().int().positive(),
         /** Characters shown before the platform's "more" on a phone (LinkedIn); null when the whole post shows. */
         visibleBeforeMore: z.number().int().positive().nullable(),

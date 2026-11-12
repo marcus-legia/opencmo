@@ -242,7 +242,7 @@ async function postChecks() {
   assert.deepEqual(checkPostFor(long, threads, rules), [], "Threads takes 500 characters");
   // D6 (2026-11-12): X takes a long post (X Premium); a free account's refusal is handled at publish time.
   assert.deepEqual(checkPostFor(long, x, rules), [], "X takes a long post");
-  assert.ok(checkPostFor("Late invoices. ".repeat(1800), x, rules)[0]?.includes("X allows 25000"));
+  assert.ok(checkPostFor("Late invoices. ".repeat(300), x, rules)[0]?.includes("X allows 4000"));
   assert.deepEqual(checkPostFor(`${long}\n\n${long}\n\n${long}`, linkedin, rules), [], "LinkedIn takes 3,000");
   assert.ok(checkPostFor(long.repeat(9), linkedin, rules)[0]?.includes("LinkedIn allows 3000"));
   assert.ok(checkPostFor("Ship it #buildinpublic", linkedin, rules).some((issue) => issue.includes("hashtag")), "no hashtags on any post profile");

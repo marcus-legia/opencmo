@@ -69,7 +69,7 @@ check("product rules: no hashtags in posts, a title only for YouTube, the marker
   }
   const x = PROFILES.find((p) => p.id === "x")!;
   // D6 (owner, 2026-11-12): most founders have X Premium; a free account's refusal is handled at publish time.
-  assert.equal(x.limit, 25000, "X takes a long post");
+  assert.equal(x.limit, 4000, "X takes a long post, as long as an approved post is kept");
 });
 
 check("hashtags are counted the way platforms count them", () => {

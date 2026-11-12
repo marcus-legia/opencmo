@@ -7,7 +7,7 @@
  */
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { useShellState } from "@/components/shell-v2/ShellState";
 import { ApiError, api, jsonBody } from "@/components/clipping/api";
@@ -101,6 +101,9 @@ function decidedNote(card: Card): string | null {
   return card.status === "skipped" || card.status === "cancelled" ? "You set this card aside." : "You decided this card.";
 }
 
+/** How long a rewrite may take before its button is offered again (the run itself is one model call). */
+const REWRITE_WAIT_MS = 120_000;
+
 export function ApprovalCard({
   card: given,
   sample,
@@ -177,6 +180,14 @@ export function ApprovalCard({
   const [rewriting, setRewriting] = useState<ReadonlySet<string>>(new Set());
   const postItem = card.body.kind === "post" ? card.body.itemId : undefined;
   const canRewrite = card.body.kind === "post" && card.status === "waiting" && !!postItem && !card.body.platforms.some((p) => p.thread);
+  const doneRewriting = (platform: string) =>
+    setRewriting((now) => {
+      const next = new Set(now);
+      next.delete(platform);
+      return next;
+    });
+  // The rewrite lands as a newer version of this card: the button is free again, to rewrite once more.
+  useEffect(() => setRewriting(new Set()), [given]);
   async function rewrite(platform: string) {
     if (sample) return toast("Sample card: nothing was rewritten or charged.");
     if (!postItem || rewriting.has(platform)) return;
@@ -184,12 +195,10 @@ export function ApprovalCard({
     try {
       await api(`/cmo/items/${encodeURIComponent(postItem)}/repurpose`, jsonBody({ platform }));
       toast(`Rewriting it for ${PLATFORM_LABEL[platform as keyof typeof PLATFORM_LABEL] ?? platform}. It shows on this card in about a minute.`);
+      // A rewrite that fails its checks changes nothing here (its credit comes back): the button must not stay stuck.
+      window.setTimeout(() => doneRewriting(platform), REWRITE_WAIT_MS);
     } catch (error) {
-      setRewriting((now) => {
-        const next = new Set(now);
-        next.delete(platform);
-        return next;
-      });
+      doneRewriting(platform);
       toast(error instanceof ApiError ? error.message : "Something went wrong. Please try again.");
     }
   }

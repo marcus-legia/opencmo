@@ -4069,6 +4069,7 @@ declare
   v_profile text;
   v_label text;
   v_limit integer;
+  v_core boolean := false;
   v_outcome uuid;
   v_note uuid;
 begin
@@ -4092,6 +4093,12 @@ begin
   end if;
   v_label := public.platform_profile(v_profile)->>'label';
   v_limit := (public.platform_profile(v_profile)->>'limit')::integer;
+  -- A core post is written once for every platform it goes to, to the core profile's limit: its first target's own
+  -- limit does not apply (Threads cuts a long one into a chain when it posts).
+  v_core := cardinality(public.post_targets(v_row.id)) > 1;
+  if v_core then
+    v_limit := (public.platform_profile('core')->>'limit')::integer;
+  end if;
 
   if p_action = 'skip' then
     update public.content_items set status = 'skipped', decided_at = now(), updated_at = now()
@@ -4125,6 +4132,10 @@ begin
     raise exception 'This post is empty.' using errcode = '22023';
   end if;
   if char_length(v_text) > v_limit then
+    if v_core then
+      raise exception 'A post that goes to several platforms can be at most % characters.', to_char(v_limit, 'FM999,999')
+        using errcode = '22023';
+    end if;
     raise exception 'Posts on % can be at most % characters.', v_label, to_char(v_limit, 'FM999,999') using errcode = '22023';
   end if;
   if (select count(*) from public.operation_log
@@ -4611,7 +4622,7 @@ CREATE FUNCTION public.cmo_job_daily_limit(p_kind text) RETURNS integer
     AS $$
   select case p_kind when 'plan_week' then 5 when 'post_draft' then 10 when 'sales_scan' then 3
     when 'competitor_research' then 2 when 'pull_metrics' then 2 when 'summarize_memory' then 1 when 'review_week' then 1
-    when 'write_caption' then 20 when 'write_video_brief' then 5 when 'write_slides' then 10 when 'publish_post' then 100 when 'niche_video_research' then 2
+    when 'write_caption' then 20 when 'write_video_brief' then 25 when 'write_slides' then 10 when 'publish_post' then 100 when 'niche_video_research' then 2
     -- cmo-review-3 2.2: one rating round a day (`cmo_rate_drafts`), with room for a retry.
     when 'distill_ratings' then 2
     when 'repurpose_post' then 20
@@ -6110,8 +6121,8 @@ begin
   v_beat := (v_order.brief->'storyboard'->(p_beat - 1))
     || case when v_say is not null then jsonb_build_object('say', v_say) else '{}'::jsonb end
     || case when v_show is not null then jsonb_build_object('show', v_show) else '{}'::jsonb end;
-  -- The order's brief is capped at 4096 bytes (`work_orders_brief_check`): say so in words before the constraint does.
-  if octet_length(jsonb_set(v_order.brief, array['storyboard', (p_beat - 1)::text], v_beat)::text) > 4096 then
+  -- The order's brief is capped at 8192 bytes (`work_orders_brief_check`): say so in words before the constraint does.
+  if octet_length(jsonb_set(v_order.brief, array['storyboard', (p_beat - 1)::text], v_beat)::text) > 8192 then
     raise exception 'This script is too long to save. Shorten this beat or another one.' using errcode = '22023';
   end if;
   update public.work_orders set brief = jsonb_set(brief, array['storyboard', (p_beat - 1)::text], v_beat), updated_at = clock_timestamp()
@@ -9944,9 +9955,14 @@ declare
   v_user uuid := public.require_user();
   v_id uuid;
 begin
-  -- Drafts left open are reused rather than piled up: at most five at a time.
-  if (select count(*) from public.photo_posts where user_id = v_user and status = 'draft') >= 5 then
-    raise exception 'Finish or remove a photo post you started before making another.' using errcode = 'P0001';
+  perform pg_advisory_xact_lock(hashtextextended(v_user::text || ':photo_post', 1719));
+  select id into v_id from public.photo_posts where user_id = v_user and status = 'draft' order by created_at desc limit 1;
+  if v_id is not null then
+    update public.photo_posts set photos = '{}', caption = '', platforms = '{}', updated_at = now() where id = v_id;
+    -- Drafts left over from before this rule are closed, so they stop counting.
+    update public.photo_posts set status = 'cancelled', updated_at = now()
+    where user_id = v_user and status = 'draft' and id <> v_id;
+    return v_id;
   end if;
   insert into public.photo_posts (user_id) values (v_user) returning id into v_id;
   return v_id;
@@ -10024,6 +10040,11 @@ begin
   perform public.photo_post_check(cardinality(v_row.photos), v_row.platforms);
   -- The caption rules of a video caption: 1 to 2,200 characters, five hashtags at most, no link.
   perform public.caption_check('instagram_caption', v_row.caption, null);
+  -- Threads takes 500 characters a post, and a post with photos is never cut into a chain.
+  if 'threads' = any (v_row.platforms) and char_length(btrim(v_row.caption)) > 500 then
+    raise exception 'Threads takes up to 500 characters with photos. Shorten the caption, or leave Threads out.'
+      using errcode = '22023';
+  end if;
   foreach v_platform in array v_row.platforms loop
     if not exists (select 1 from public.social_accounts where user_id = v_user and platform = v_platform and status = 'connected') then
       raise exception 'Connect your % account first: photos go out only from a connected account.',
@@ -10156,10 +10177,10 @@ CREATE FUNCTION public.platform_profile(p_id text) RETURNS jsonb
     SET search_path TO 'public'
     AS $$
   select case p_id
-    when 'x' then '{"kind": "post", "limit": 25000, "title": null, "hashtags": 0, "label": "X"}'::jsonb
+    when 'x' then '{"kind": "post", "limit": 4000, "title": null, "hashtags": 0, "label": "X"}'::jsonb
     when 'threads' then '{"kind": "post", "limit": 500, "title": null, "hashtags": 0, "label": "Threads"}'::jsonb
     when 'linkedin' then '{"kind": "post", "limit": 3000, "title": null, "hashtags": 0, "label": "LinkedIn"}'::jsonb
-    when 'facebook' then '{"kind": "post", "limit": 5000, "title": null, "hashtags": 0, "label": "Facebook"}'::jsonb
+    when 'facebook' then '{"kind": "post", "limit": 4000, "title": null, "hashtags": 0, "label": "Facebook"}'::jsonb
     when 'core' then '{"kind": "core", "limit": 3000, "title": null, "hashtags": 0, "label": "Post"}'::jsonb
     when 'instagram_caption' then '{"kind": "caption", "limit": 2200, "title": null, "hashtags": 5, "label": "Instagram caption"}'::jsonb
     when 'tiktok_caption' then '{"kind": "caption", "limit": 2200, "title": null, "hashtags": 5, "label": "TikTok caption"}'::jsonb
@@ -10434,6 +10455,23 @@ $_$;
 
 
 --
+-- Name: post_slots_open(uuid, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.post_slots_open(p_deliverable uuid, p_except uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select exists (select 1 from public.schedule_slots s
+    where s.deliverable_id = p_deliverable and s.id <> p_except
+      and (s.status in ('proposed', 'waiting', 'due', 'reminded', 'publishing')
+        -- A failed slot whose card still waits (Retry, copy and open) is not over either.
+        or (s.status = 'failed' and exists (select 1 from public.approvals a
+              where a.ref_kind = 'schedule_slot' and a.ref_id = s.id and a.status = 'waiting'))));
+$$;
+
+
+--
 -- Name: post_targets(uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -10505,7 +10543,7 @@ CREATE TABLE public.work_orders (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     finished_at timestamp with time zone,
-    CONSTRAINT work_orders_brief_check CHECK (((jsonb_typeof(brief) = 'object'::text) AND (octet_length((brief)::text) <= 4096))),
+    CONSTRAINT work_orders_brief_check CHECK (((jsonb_typeof(brief) = 'object'::text) AND (octet_length((brief)::text) <= 8192))),
     CONSTRAINT work_orders_budget_credits_check CHECK ((budget_credits >= 0)),
     CONSTRAINT work_orders_check CHECK (((parent_id IS NULL) = ((root_id IS NULL) OR (root_id = id)))),
     CONSTRAINT work_orders_created_by_check CHECK ((created_by = ANY (ARRAY['loop'::text, 'chat'::text, 'event'::text, 'mcp'::text, 'founder'::text]))),
@@ -11430,7 +11468,7 @@ begin
       if v_d.ref_kind = 'content_item' then
         update public.content_items set status = 'published', published_at = coalesce(published_at, now()),
           external_url = coalesce(v_url, external_url), updated_at = now()
-        where id = v_d.ref_id and status <> 'published';
+        where id = v_d.ref_id and status <> 'published' and not public.post_slots_open(v_d.id, v_slot.id);
       end if;
     when 'failed' then
       if v_slot.status <> 'failed' then
@@ -11575,7 +11613,7 @@ begin
     insert into public.storage_deletions (bucket, path, user_id)
     select o.bucket_id, o.name, v_user
     from storage.objects o
-    where o.bucket_id in ('clips', 'sources', 'renders', 'media', 'exports', 'brand', 'captures')
+    where o.bucket_id in ('clips', 'sources', 'renders', 'media', 'exports', 'brand', 'captures', 'photos')
       and o.name like v_user::text || '/%'
       and not exists (
         select 1 from public.storage_deletions d where d.bucket = o.bucket_id and d.path = o.name
@@ -14220,7 +14258,8 @@ begin
     select * into v_d from public.deliverables where id = v_slot.deliverable_id;
     if v_d.ref_kind = 'content_item' then
       update public.content_items set status = 'published', published_at = coalesce(published_at, now()), updated_at = now()
-      where id = v_d.ref_id and user_id = v_user and status <> 'published';
+      where id = v_d.ref_id and user_id = v_user and status <> 'published'
+        and not public.post_slots_open(v_d.id, v_slot.id);
     end if;
   end if;
   select * into v_row from public.approvals
@@ -14451,7 +14490,10 @@ begin
     values (v_d.user_id, v_d.id, v_platform, v_account, case when v_account is null then 'intent' else 'publish' end,
       v_at, public.schedule_jitter(), v_at + make_interval(mins => (v_rules->>'windowMinutes')::integer),
       case when v_platform = 'tiktok' then '{"allow_comment": false, "allow_duet": false, "allow_stitch": false,
-        "brand_organic": false, "brand_content": false}'::jsonb else '{}'::jsonb end)
+        "brand_organic": false, "brand_content": false}'::jsonb else '{}'::jsonb end
+      || case when v_platform = 'x' and exists (select 1 from public.schedule_slots o
+                where o.deliverable_id = v_d.id and o.platform = 'x' and o.options->>'as_thread' = 'true')
+           then '{"as_thread": true}'::jsonb else '{}'::jsonb end)
     returning id into v_slot;
     -- The time the founder approved cannot be used: the card says why, as a missed post's card does.
     if v_taken not in ('none', 'taken') then
@@ -14499,6 +14541,27 @@ CREATE FUNCTION public.schedule_rules() RETURNS jsonb
     LANGUAGE sql IMMUTABLE
     SET search_path TO 'public'
     AS $$ select '{"minGapHours": 3, "windowMinutes": 15, "leadMinutes": 30, "horizonDays": 14, "maxProposals": 3, "jitterSeconds": 240, "platforms": {"x": {"times": ["09:00"], "dailyCap": 5}, "threads": {"times": ["09:00", "12:00"], "dailyCap": 2}, "linkedin": {"times": ["16:00"], "dailyCap": 1}, "facebook": {"times": ["09:00", "13:00"], "dailyCap": 2}, "tiktok": {"times": ["09:00", "13:00"], "dailyCap": 2}, "instagram": {"times": ["09:00"], "dailyCap": 1}, "youtube": {"times": ["16:00", "19:00"], "dailyCap": 2}}}'::jsonb $$;
+
+
+--
+-- Name: schedule_slots_settle_post(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.schedule_slots_settle_post() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  if new.status = 'cancelled' and old.status is distinct from 'cancelled'
+     and exists (select 1 from public.schedule_slots s where s.deliverable_id = new.deliverable_id and s.status = 'published')
+     and not public.post_slots_open(new.deliverable_id, new.id) then
+    update public.content_items c set status = 'published', published_at = coalesce(c.published_at, now()), updated_at = now()
+    from public.deliverables d
+    where d.id = new.deliverable_id and d.ref_kind = 'content_item' and c.id = d.ref_id and c.status = 'approved';
+  end if;
+  return new;
+end;
+$$;
 
 
 --
@@ -18565,7 +18628,7 @@ CREATE TABLE public.storage_deletions (
     attempts integer DEFAULT 0 NOT NULL,
     queued_at timestamp with time zone DEFAULT now() NOT NULL,
     deferred_at timestamp with time zone,
-    CONSTRAINT storage_deletions_bucket_check CHECK ((bucket = ANY (ARRAY['clips'::text, 'sources'::text, 'renders'::text, 'media'::text, 'exports'::text, 'brand'::text, 'photos'::text]))),
+    CONSTRAINT storage_deletions_bucket_check CHECK ((bucket = ANY (ARRAY['clips'::text, 'sources'::text, 'renders'::text, 'media'::text, 'exports'::text, 'brand'::text, 'captures'::text, 'photos'::text]))),
     CONSTRAINT storage_deletions_path_check CHECK (((path <> ''::text) AND (path !~~ '%..%'::text)))
 );
 
@@ -20798,6 +20861,13 @@ CREATE TRIGGER schedule_follow_deliverable AFTER INSERT OR UPDATE OF status ON p
 --
 
 CREATE TRIGGER schedule_slots_paywall BEFORE INSERT OR UPDATE OF status ON public.schedule_slots FOR EACH ROW EXECUTE FUNCTION public.paywall_on_send();
+
+
+--
+-- Name: schedule_slots schedule_slots_settle_post; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER schedule_slots_settle_post AFTER UPDATE OF status ON public.schedule_slots FOR EACH ROW EXECUTE FUNCTION public.schedule_slots_settle_post();
 
 
 --

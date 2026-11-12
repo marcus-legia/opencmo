@@ -14,7 +14,7 @@ the schedule card component, the `approvals_autopilot` trigger, `lib/cmo/writer/
 - [x] Task 6: caption with every video script. Waits on nothing.
 - [x] Task 7: repurpose on demand. **Waits on A's Task 3** (fan-out slots per target) — check `A.md`.
 - [x] Task 9: photo post. **Waits on A's Task 5** (`schedule_propose` with Facebook; your migration redeclares it after A's).
-- [ ] Whole-branch code review once every box in `A.md` and here is ticked: run `/code-review` (high) on the PR's diff
+- [x] Whole-branch code review once every box in `A.md` and here is ticked: run `/code-review` (high) on the PR's diff
   against `main`, fix what it finds in one round, re-review the fixes once, and list what is left in the PR.
 - [ ] Screenshots for the owner, in `shots-B/` and in the PR description: the planner panel (X, Threads, LinkedIn,
   Facebook, TikTok rows), a day's core post card with its targets, the schedule cards it fans out to, a Threads chain
@@ -62,3 +62,30 @@ Each task: tests first, commit, push (see README). Tick the box in this file in 
   platform, photos sent as 1-hour signed URLs (no `publish_media`), TikTok Photo Mode in a top-level `tiktokSettings`
   (docs.zernio.com, not yet tried on a real account), `photo_caption` job (1 credit). Looked at in the browser: upload
   and the panel work locally. Not done: retention cleanup of the `photos` bucket, the whole-branch review, screenshots.
+
+## Whole-branch review (2026-11-12)
+
+`/code-review` (high) on the diff against `main` found ten defects; all are fixed in
+`20270120070000_review_fixes` (pgTAP `308_review_fixes`) and four web files, and the fixes were read again once.
+
+| # | What was wrong | Fix |
+|---|---|---|
+| 1 | The first platform to post marked the core post `published`, and the hand-posted rule cancelled its other slots: a core post went out on one platform only. | The post is `published` when its last open slot is (`post_slots_open`); cancelling the rest after one posted settles it. |
+| 2 | `storage_deletions` lost `captures` (the purge of unpaid accounts would fail) and the purge never queued `photos`. | Both buckets are back in the check and in the purge. |
+| 3 | A core post was approved against its first platform's limit: with Threads first, nothing over 500 characters could be approved. | A post with more than one target is checked against the core limit (3,000). |
+| 4 | Every "New photo post" made a draft, nothing removed one, and the sixth failed for good. | One open draft a founder; starting again empties it and hands it back. |
+| 5 | A long script plus its caption broke the 4,096-byte brief; the error was swallowed and no script card came. | The brief holds 8,192 bytes (`cmo_script_edit_beat` says the same number). |
+| 6 | The planner allows 21 scripts a week, ordered at plan time; only 5 a day could be queued. | `write_video_brief` takes 25 a day. |
+| 7 | "Post as a thread" pressed after the slot's window lost the setting on the new slot. | A new X slot keeps `as_thread` of the slot it replaces. |
+| 8 | A Threads photo post took a 2,200-character caption that Threads refuses (only a text post is chained). | Refused in words before it is scheduled: 500 characters with Threads. |
+| 9 | X at 25,000 and Facebook at 5,000 were longer than an approved post is kept (4,000) and a schedule card carries. | **Both are 4,000** in `platforms.json` and SQL. Owner: say so if X should go longer; `final_text`, the draft body (16 KB), the card snapshot (32 KB) and the publish schema all have to grow with it. |
+| 10 | The Rewrite button stayed "Rewriting…" after a run failed or finished. | It is free again when the card changes, or after two minutes. |
+
+**Left for the owner or a later task**
+
+- Photos of an emptied photo draft stay in Storage (they count toward the quota) until the account's cleanup.
+- A core post with a failed slot whose card nobody decides stays `approved`; it shows as posted per platform, not as a whole.
+- Not verified against Zernio (`zernio.com` is not reachable from the cloud session): `threadItems` for Threads, the words
+  of X's "too long" refusal, photo carousels. Check on a real account before the owner's test.
+- pgTAP ran on a local Postgres 16 shim; nine older test files cannot run there (table grants the shim lacks). CI's run is
+  the authoritative one.

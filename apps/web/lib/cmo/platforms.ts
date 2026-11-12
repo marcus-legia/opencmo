@@ -20,8 +20,9 @@ export const PlatformProfileSchema = z
     // Null only for the core post: it goes to several platforms, so it names none (the refine below).
     platform: PlatformSchema.nullable(),
     kind: z.enum(PROFILE_KINDS),
-    // X takes 25,000 characters (X Premium, D6).
-    limit: z.number().int().min(1).max(25000),
+    // X takes a long post (X Premium, D6). 4,000 is what an approved post is kept in (`content_items.final_text`) and
+    // what a draft's three versions and a schedule card carry; a longer limit failed on Approve.
+    limit: z.number().int().min(1).max(5000),
     title: z.number().int().min(1).max(500).nullable(),
     visibleBeforeMore: z.number().int().min(1).nullable(),
     hashtags: z.number().int().min(0).max(30),
