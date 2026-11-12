@@ -79,7 +79,7 @@ ref_kind, ref_id  content_item | opportunity | goal | correction | studio_step
 snapshot        jsonb (≤ 32 KB) + content_hash (JCS, SHA-256)
 price_credits, post_at, account
 status          waiting | held | approved | edited | skipped | expired | cancelled
-decided_via     app | email | push | mcp
+decided_via     app | email | push | mcp | auto
 reason, expires_at, held_until, released_at, created_at, decided_at
 ```
 
@@ -107,7 +107,13 @@ batching is by row (one `short_batch` for the shorts of one video) rather than a
 
 1. **You approve exactly what you saw.** The snapshot holds the content hash (JCS), price, time and account; any change
    after the card was raised supersedes it and raises a new one.
-2. **Outbound and paid never auto-approve.** Only free, internal, reversible items may skip a card, and only on opt-in.
+2. **Outbound and paid never auto-approve, with one opt-in exception: autopilot for posts** (owner, 2026-11-12).
+   A founder turns it on per platform (X, Threads, LinkedIn) in Settings. A single post on a connected account then
+   gets `approvals.auto_at`: the card counts down (6, 12 or 24 hours, at the latest a quarter of an hour before its
+   time), the founder can edit or skip it, and the hourly cron's `approval_auto_decide` approves an untouched card as
+   its owner through `approval_decide` (`decided_via = 'auto'`). Never: replies, threads, the founder's own chat
+   brief, a post due within the hour, a paused CMO. Three skips in a row turn it off for that platform. Such an
+   approval is nobody's decision: `cmo_draft_outcomes.auto` keeps it out of Writer's voice.
 3. **Few cards.** Batch what belongs together (shorts of one video, slides of one slideshow, posts of one day); keep the
    daily count low.
    A post card carries its time (cmo-review-3 1.2): `body.proposed` (platform, time, account, mode) is in the snapshot,

@@ -10,6 +10,18 @@ import { AccountSchema, CmoStateSchema } from "./common";
 export const BUDGET_MIN = 0;
 export const BUDGET_MAX = 10_000;
 
+/** Where a post may go out without the founder's Approve, and the review windows on offer (`save_autopilot`). */
+export const AUTOPILOT_PLATFORMS = ["x", "threads", "linkedin"] as const;
+export const AUTOPILOT_HOURS = [6, 12, 24] as const;
+
+export const AutopilotSchema = z.object({
+  platforms: z.array(z.enum(AUTOPILOT_PLATFORMS)),
+  hours: z.union(AUTOPILOT_HOURS.map((h) => z.literal(h))),
+  /** Why autopilot turned itself off for a platform, until the founder saves again. */
+  note: z.string().max(200).nullable(),
+});
+export type Autopilot = z.infer<typeof AutopilotSchema>;
+
 export const SettingsScreenSchema = z.object({
   accounts: z.array(AccountSchema),
   cmo: CmoStateSchema,
@@ -19,5 +31,6 @@ export const SettingsScreenSchema = z.object({
   /** Local hour of the morning digest, 0–23; null = off. */
   digestHour: z.number().int().min(0).max(23).nullable(),
   plan: z.object({ name: z.string().max(40), credits: z.number().int().nullable() }),
+  autopilot: AutopilotSchema,
 });
 export type SettingsScreen = z.infer<typeof SettingsScreenSchema>;

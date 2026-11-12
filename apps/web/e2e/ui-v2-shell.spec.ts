@@ -30,21 +30,21 @@ test("the top bars move between views and agent pages; the chat is a column on t
   await expect(views.getByRole("link", { name: "Feed" })).toHaveAttribute("aria-current", "page");
   await views.getByRole("link", { name: "Calendar" }).click();
   await expect(page).toHaveURL(/\/app\/schedule/);
-  await expect(chat.getByLabel("Ask your CMO")).toBeHidden();
+  // One working screen: the chat stays a column beside every view.
+  await expect(chat.getByLabel("Ask your CMO")).toBeVisible();
   await expect(views.getByRole("link", { name: "Calendar" })).toHaveAttribute("aria-current", "page");
   await views.getByRole("link", { name: "Analytics" }).click();
   await expect(page).toHaveURL(/\/app\/analytics/);
 
-  // The chat opens as a drawer and Escape closes it.
-  await page.getByRole("banner").getByRole("button", { name: "Chat" }).click();
   await expect(chat.getByLabel("Ask your CMO")).toBeVisible();
-  await page.keyboard.press("Escape");
-  await expect(chat.getByLabel("Ask your CMO")).toBeHidden();
 
-  // An agent page's crumbs lead back to the agents.
-  await page.goto("/app/sales?sample=1");
+  // Sales is the fourth view of the same bar, and Feed leads back.
+  await views.getByRole("link", { name: "Sales" }).click();
+  await expect(page).toHaveURL(/\/app\/sales/);
   await expect(page.getByTestId("v2-sales")).toBeVisible();
-  await page.getByRole("banner").getByRole("link", { name: "Agents" }).click();
+  await expect(views.getByRole("link", { name: "Sales" })).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("complementary", { name: "Context" })).toBeVisible();
+  await views.getByRole("link", { name: "Feed" }).click();
   await expect(page).toHaveURL(/\/app(\?|$)/);
   await expect(page.getByTestId("v2-dashboard")).toBeVisible();
 
@@ -102,7 +102,6 @@ test("the chat keeps its draft across screens, and ?ask=1 puts the cursor in it"
   await input.fill("Plan a launch week");
   await page.getByRole("region", { name: "Your team" }).getByRole("link", { name: /^Writer/ }).click();
   await expect(page).toHaveURL(/\/app\/writer/);
-  await page.getByRole("banner").getByRole("button", { name: "Chat" }).click();
   await expect(input).toHaveValue("Plan a launch week");
 
   await page.goto("/app?ask=1&sample=1");
@@ -132,7 +131,6 @@ test("look: the frame at 1440, 1280, 1024 and 390, with no serious axe violation
   }
   await page.setViewportSize({ width: 1024, height: 768 });
   await page.goto("/app/writer?sample=1");
-  await page.getByRole("banner").getByRole("button", { name: "Chat" }).click();
   await expect(page.locator("#v2-chat").getByLabel("Ask your CMO")).toBeVisible();
   await page.screenshot({ path: join(OUT, "writer-1024-chat.png") });
 

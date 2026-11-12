@@ -9,7 +9,7 @@ import { ConnectedApps } from "@/components/clipping/web/ConnectedApps";
 import { ThemeSwitch } from "@/components/theme";
 import { Button, MonoLabel } from "@/components/ui";
 import { formatBytes } from "@/lib/upload";
-import { BUDGET_MAX, BUDGET_MIN, type SettingsScreen as Data } from "@/lib/screens/settings";
+import { AUTOPILOT_HOURS, AUTOPILOT_PLATFORMS, BUDGET_MAX, BUDGET_MIN, type Autopilot, type SettingsScreen as Data } from "@/lib/screens/settings";
 
 import { PauseButton } from "../brain/PauseButton";
 import { cx, ErrorNote, PageHeader, Panel, Screen, SkeletonBlocks } from "../parts";
@@ -61,6 +61,77 @@ export function SettingsScreen({ mcpEndpoint, paid }: { mcpEndpoint: string | nu
           </div>
         </div>
     </div>
+  );
+}
+
+const AUTOPILOT_LABEL: Record<(typeof AUTOPILOT_PLATFORMS)[number], string> = { x: "X", threads: "Threads", linkedin: "LinkedIn" };
+
+/**
+ * Autopilot (owner, 2026-11-12): posts on a connected account go out without Approve, after a review window. Saved on
+ * every change, on its own route, so a slip of the hand on the budget field never turns it on.
+ */
+function AutopilotField({ initial, accounts, live }: { initial: Autopilot; accounts: Data["accounts"]; live: boolean }) {
+  const [value, setValue] = useState(initial);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const connected = (id: string) => accounts.some((a) => a.platform === id && a.status === "connected");
+
+  async function save(next: Pick<Autopilot, "platforms" | "hours">) {
+    setBusy(true);
+    setError(null);
+    try {
+      // Sample settings change only on this page.
+      setValue(live ? await api<Autopilot>("/cmo/autopilot", jsonBody(next, "PUT")) : { ...next, note: null });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not save your settings.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <fieldset className="v2-field scr-radios" data-testid="settings-autopilot">
+      <legend>Post without asking me</legend>
+      {AUTOPILOT_PLATFORMS.map((id) => {
+        const on = value.platforms.includes(id);
+        const ready = connected(id);
+        return (
+          <label key={id} className={cx("scr-radio", on && "is-on")}>
+            <input
+              type="checkbox"
+              checked={on}
+              disabled={busy || (!ready && !on)}
+              onChange={() => void save({ platforms: on ? value.platforms.filter((p) => p !== id) : [...value.platforms, id], hours: value.hours })}
+            />
+            <span>
+              <b>{AUTOPILOT_LABEL[id]}</b>
+              <span className="scr-tiny scr-muted">{ready ? (on ? "Posts go out at their time unless you change them." : "Every post waits for your Approve.") : "Connect this account first."}</span>
+            </span>
+          </label>
+        );
+      })}
+      <label className="v2-field" htmlFor="autopilot-hours">
+        Time to change a post first
+        <select
+          id="autopilot-hours"
+          className="v2-input"
+          value={value.hours}
+          disabled={busy}
+          onChange={(e) => void save({ platforms: value.platforms, hours: Number(e.target.value) as Autopilot["hours"] })}
+        >
+          {AUTOPILOT_HOURS.map((hours) => (
+            <option key={hours} value={hours}>
+              {hours} hours
+            </option>
+          ))}
+        </select>
+      </label>
+      {value.note ? <span className="scr-tiny scr-stuck-text" role="status">{value.note}</span> : null}
+      {error && <ErrorNote>{error}</ErrorNote>}
+      <span className="scr-tiny scr-muted">
+        Single posts only. Reddit replies, threads, videos and anything you briefed in the chat always wait for you. Skip three in a row and it turns itself off.
+      </span>
+    </fieldset>
   );
 }
 
@@ -168,6 +239,7 @@ function SettingsBody({ data, live }: { data: Data; live: Record<keyof Data, boo
                 <option value="off">Off · the digest stays in the app</option>
               </select>
             </label>
+            <AutopilotField initial={data.autopilot} accounts={data.accounts} live={live.autopilot} />
             <fieldset className="v2-field scr-radios">
               <legend>Who does the thinking</legend>
               <label className={cx("scr-radio", data.cmo.mode === "opencmo" && "is-on")}>

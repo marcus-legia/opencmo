@@ -23,6 +23,7 @@ import { ChatPanel, type ChatSource } from "@/components/cmo/workspace/ChatPanel
 import { studioItemHref } from "@/components/screens/studio/href";
 import { useApplyTheme } from "@/components/theme";
 import { CHAT, useTodayColumns } from "@/components/today/columns";
+import { WorkspaceSide } from "@/components/today/WorkspaceSide";
 import { LogsDrawer } from "@/components/today/LogsDrawer";
 import { TopBar, type TopVariant } from "@/components/today/TopBar";
 import { WorkspaceProvider } from "@/components/today/workspace";
@@ -49,9 +50,12 @@ const CLASSIC: ReadonlySet<string> = new Set(["video"]);
 /** The script prompter on the founder's phone, drawn without any frame. */
 const PROMPTER = "script";
 
-type Screen = { page: string; top: TopVariant | null; chat: "column" | "drawer" | "assistant"; legacy?: boolean };
-
-const AGENTS = { label: "Agents", href: "/app" };
+/**
+ * `view`: one of the four views of the working screen (owner, 2026-11-12). They share one frame: the Context column on
+ * the left and the CMO chat on the right stay mounted, and only the centre changes. The frame keeps the feed's scope
+ * (`pg-main`) and the view's own artboard styles apply inside its `pg-<view>` wrapper.
+ */
+type Screen = { page: string; top: TopVariant | null; chat: "column" | "drawer" | "assistant"; legacy?: boolean; view?: string };
 
 /** Which artboard each route is. Screens the canvas has no artboard for wear the agent page's frame. */
 function screenFor(segment: string | null): Screen {
@@ -59,20 +63,21 @@ function screenFor(segment: string | null): Screen {
     case null:
       return { page: "main", top: { kind: "home" }, chat: "column" };
     case "schedule":
-      return { page: "calendar", top: { kind: "views", current: "calendar" }, chat: "drawer" };
+      return { page: "main", view: "calendar", top: { kind: "views", current: "calendar" }, chat: "column" };
     case "analytics":
-      return { page: "analytics", top: { kind: "views", current: "analytics" }, chat: "drawer" };
+      return { page: "main", view: "analytics", top: { kind: "views", current: "analytics" }, chat: "column" };
     case "sales":
-      return { page: "agentsales", top: { kind: "crumbs", trail: [AGENTS, { label: "Sales" }], chat: true }, chat: "drawer" };
+      return { page: "main", view: "agentsales", top: { kind: "views", current: "sales" }, chat: "column" };
+    // Reached from the feed and the business menu, not from a tab: still the same screen, with the centre changed.
     case "writer":
-      return { page: "agentwriter", top: { kind: "crumbs", trail: [AGENTS, { label: "Writer" }], logs: true, chat: true }, chat: "drawer" };
+      return { page: "main", view: "agentwriter", top: { kind: "views", current: null }, chat: "column" };
     case "studio":
     case "projects":
     case "jobs":
       return { page: "projects", top: { kind: "crumbs", trail: [{ label: "Editor" }], credits: true, back: true }, chat: "drawer" };
     case "settings":
     case "billing":
-      return { page: "settings", top: { kind: "crumbs", trail: [{ label: "Settings" }], back: true }, chat: "drawer" };
+      return { page: "main", view: "settings", top: { kind: "views", current: null }, chat: "column" };
     case "setup":
       // Setup draws its own header with the steps (Setup.dc.html).
       return { page: "setup", top: null, chat: "drawer" };
@@ -80,8 +85,7 @@ function screenFor(segment: string | null): Screen {
       // The editor has its own top bar (Editor.dc.html); its Assistant takes the right column.
       return { page: "editor", top: null, chat: "assistant" };
     default: {
-      const label = segment.charAt(0).toUpperCase() + segment.slice(1);
-      return { page: "agentsales", top: { kind: "crumbs", trail: [AGENTS, { label }], chat: true }, chat: "drawer", legacy: true };
+      return { page: "main", view: "agentsales", top: { kind: "views", current: null }, chat: "column", legacy: true };
     }
   }
 }
@@ -232,7 +236,14 @@ function TodayFrame({ credits, plan, email, userId, pending, chatLive, children,
               <TopBar variant={screen.top} credits={account.credits} email={email ?? null} logsOpen={logsOpen} onLogs={openLogs} onChat={focusChat} />
             ) : null}
             <div className={screen.chat === "column" ? "cols" : "td-body"}>
-              {screen.legacy ? <div className="v2 td-legacy td-cardhost td-v2host">{children}</div> : children}
+              {screen.chat === "column" ? <WorkspaceSide /> : null}
+              {screen.view ? (
+                <div className="mid td-view" data-view={screen.view}>
+                  <div className={`k pg-${screen.view}`}>{screen.legacy ? <div className="v2 td-legacy td-cardhost td-v2host">{children}</div> : children}</div>
+                </div>
+              ) : (
+                children
+              )}
               {screen.chat === "column" ? (
                 <Sash
                   label="Resize the chat"

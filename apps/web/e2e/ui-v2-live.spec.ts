@@ -44,7 +44,6 @@ test("a finished draft comes back to the chat and lands on the feed; Open goes t
   await expect(up).toHaveAttribute("aria-pressed", "true");
   expect((await saved).ok()).toBe(true);
   await page.reload();
-  await page.getByRole("banner").getByRole("button", { name: "Chat" }).click();
   await expect(chat.getByTestId("run-line")).toContainText("Draft ready to review");
   await expect(chat.getByRole("button", { name: "Good answer" }).last()).toHaveAttribute("aria-pressed", "true");
 

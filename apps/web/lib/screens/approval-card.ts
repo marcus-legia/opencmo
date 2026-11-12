@@ -542,7 +542,10 @@ export const ApprovalCardSchema = z
     raisedAt: iso,
     expiresAt: iso.nullable(),
     decidedAt: iso.nullable(),
-    decidedVia: z.enum(["app", "email", "push", "mcp"]).nullable(),
+    /** `auto`: autopilot approved it when its review window ended (owner, 2026-11-12). */
+    decidedVia: z.enum(["app", "email", "push", "mcp", "auto"]).nullable(),
+    /** Autopilot: the card is approved for the founder at this time unless they edit or skip it first. */
+    autoAt: iso.nullable().optional(),
     problem: CardProblemSchema.nullable(),
     /** What the founder sees, hashed (JCS + sha256). Sent back with the decision; a changed card refuses it. */
     contentHash: z.string().regex(/^[0-9a-f]{64}$/),

@@ -105,7 +105,9 @@ export function CalendarView() {
     reload();
     reloadCards();
   });
-  const sel = slots.find((s) => s.id === picked) ?? slots.find((s) => s.status === "waiting_founder" || s.status === "proposed") ?? slots[0] ?? null;
+  // Nothing is open until the founder picks an item: the detail opens over the chat column (one working screen), and
+  // Close now closes it. Before, the first waiting item was always shown and Close fell back to it.
+  const sel = picked ? (slots.find((s) => s.id === picked) ?? null) : null;
 
   async function move(slot: Slot, publishAt: string) {
     if (!live) {
@@ -237,7 +239,13 @@ export function CalendarView() {
         ) : null}
       </main>
 
-      <aside className="drawer" aria-label="Selected item">
+      {!sel && !slots.length ? (
+        <p className="meta" style={{ flex: "1 1 100%", padding: "0 20px 24px", margin: "0" }} data-testid="calendar-empty">
+          {/* Until the week is read, "nothing on the calendar" would be a guess. */}
+          {data ? `Nothing on the calendar this ${range}. Approved posts show here at their time.` : state.status === "error" ? null : "Loading…"}
+        </p>
+      ) : null}
+      <aside className="drawer" aria-label="Selected item" hidden={!sel}>
         {sel ? (
           <>
             <div style={{ height: "48px", display: "flex", alignItems: "center", gap: "8px", padding: "0 12px 0 16px", borderBottom: "1px solid var(--line)" }}>
@@ -301,12 +309,7 @@ export function CalendarView() {
               ) : null}
             </div>
           </>
-        ) : (
-          <div style={{ padding: "16px" }} className="meta">
-            {/* Until the week is read, "nothing on the calendar" would be a guess. */}
-            {data ? `Nothing on the calendar this ${range}. Approved posts show here at their time.` : state.status === "error" ? null : "Loading…"}
-          </div>
-        )}
+        ) : null}
       </aside>
     </div>
   );

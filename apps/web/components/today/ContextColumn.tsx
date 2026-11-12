@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { ReactNode } from "react";
 
 import { DOCUMENT_KINDS, type DocumentKind } from "@/lib/cmo/documents";
@@ -50,7 +50,9 @@ export function ContextColumn({ goal }: { goal: { text: string | null; done: num
   const doc = params.get("doc");
   const editing = params.get("edit") === "1";
   // The drawer opens over the feed; `edit=1` opens the document's form. One URL, so Back closes it.
-  const openDoc = (id: DocId, edit = false) => router.push(`/app?doc=${id}${edit ? "&edit=1" : ""}`, { scroll: false });
+  // Over the view the founder is on (Feed, Calendar, Sales, Analytics): closing it leaves them where they were.
+  const pathname = usePathname() ?? "/app";
+  const openDoc = (id: DocId, edit = false) => router.push(`${pathname}?doc=${id}${edit ? "&edit=1" : ""}`, { scroll: false });
   const missing = ws.ready ? missingDocument(ws.documents) : null;
   const site = siteLabel(ws.site);
   const docCount = DOC_ROWS.length;
@@ -167,7 +169,7 @@ export function ContextColumn({ goal }: { goal: { text: string | null; done: num
           ))}
         </div>
       </div>
-      {isDocId(doc) ? <ContextDrawer doc={doc} edit={editing} onClose={() => router.push("/app", { scroll: false })} onOpen={openDoc} /> : null}
+      {isDocId(doc) ? <ContextDrawer doc={doc} edit={editing} onClose={() => router.push(pathname, { scroll: false })} onOpen={openDoc} /> : null}
     </aside>
   );
 }

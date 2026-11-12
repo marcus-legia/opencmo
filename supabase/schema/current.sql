@@ -1553,6 +1553,56 @@ $$;
 
 
 --
+-- Name: approval_auto_decide(integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.approval_auto_decide(p_limit integer DEFAULT 200) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_card public.approvals;
+  v_count integer := 0;
+  v_claims text := current_setting('request.jwt.claims', true);
+  v_sub text := current_setting('request.jwt.claim.sub', true);
+begin
+  if p_limit is null or p_limit < 1 or p_limit > 1000 then
+    raise exception 'Invalid batch size.' using errcode = '22023';
+  end if;
+  for v_card in
+    select * from public.approvals
+    where status = 'waiting' and kind = 'post' and auto_at is not null and auto_at <= now()
+    order by auto_at
+    limit p_limit
+    for update skip locked
+  loop
+    begin
+      -- Asked again now: the switch, the plan, the pause and the account may have changed since the card was raised.
+      if not public.post_autopilot_still_on(v_card) then
+        update public.approvals set auto_at = null where id = v_card.id;
+        continue;
+      end if;
+      perform set_config('request.jwt.claims', jsonb_build_object('sub', v_card.user_id, 'role', 'authenticated')::text, true);
+      perform set_config('request.jwt.claim.sub', v_card.user_id::text, true);
+      perform set_config('opencmo.autopilot', 'on', true);
+      perform public.approval_decide(v_card.id, 'approve', jsonb_build_object('content_hash', v_card.content_hash, 'via', 'app'));
+      update public.approvals set decided_via = 'auto' where id = v_card.id;
+      update public.cmo_draft_outcomes set auto = true where department = 'post' and item_id = v_card.ref_id;
+      v_count := v_count + 1;
+    exception when others then
+      raise warning 'autopilot could not approve card %: %', v_card.id, sqlerrm;
+      update public.approvals set auto_at = null where id = v_card.id;
+    end;
+  end loop;
+  perform set_config('opencmo.autopilot', '', true);
+  perform set_config('request.jwt.claims', coalesce(v_claims, ''), true);
+  perform set_config('request.jwt.claim.sub', coalesce(v_sub, ''), true);
+  return v_count;
+end;
+$$;
+
+
+--
 -- Name: approval_close(text, uuid, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -1595,9 +1645,10 @@ CREATE TABLE public.approvals (
     reason text,
     held_until timestamp with time zone,
     released_at timestamp with time zone,
+    auto_at timestamp with time zone,
     CONSTRAINT approvals_account_check CHECK ((char_length(account) <= 100)),
     CONSTRAINT approvals_content_hash_check CHECK ((content_hash ~ '^[0-9a-f]{64}$'::text)),
-    CONSTRAINT approvals_decided_via_check CHECK ((decided_via = ANY (ARRAY['app'::text, 'email'::text, 'push'::text, 'mcp'::text]))),
+    CONSTRAINT approvals_decided_via_check CHECK ((decided_via = ANY (ARRAY['app'::text, 'email'::text, 'push'::text, 'mcp'::text, 'auto'::text]))),
     CONSTRAINT approvals_department_check CHECK ((department = ANY (ARRAY['brain'::text, 'research'::text, 'writer'::text, 'studio'::text, 'sales'::text, 'schedule'::text, 'publish'::text]))),
     CONSTRAINT approvals_held_until CHECK (((status <> 'held'::text) OR (held_until IS NOT NULL))),
     CONSTRAINT approvals_kind_check CHECK ((kind = ANY (ARRAY['post'::text, 'reply'::text, 'goal'::text, 'script'::text, 'price'::text, 'finished_video'::text, 'shorts_batch'::text, 'slideshow'::text, 'schedule'::text, 'correction'::text, 'plan'::text]))),
@@ -2307,6 +2358,61 @@ $$;
 
 
 --
+-- Name: approvals_autopilot(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.approvals_autopilot() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  if new.kind = 'post' and new.status in ('waiting', 'held') then
+    begin
+      new.auto_at := public.post_autopilot_at(new.user_id, new.ref_kind, new.ref_id, new.snapshot);
+    exception when others then
+      -- The card matters more than its countdown: it is raised as an ordinary card.
+      raise warning 'autopilot for card of % failed: %', new.ref_id, sqlerrm;
+      new.auto_at := null;
+    end;
+  end if;
+  return new;
+end;
+$$;
+
+
+--
+-- Name: approvals_autopilot_skips(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.approvals_autopilot_skips() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_platform text := new.snapshot->'proposed'->>'platform';
+begin
+  if new.status <> 'skipped' or old.status = 'skipped' or old.auto_at is null or v_platform is null then
+    return new;
+  end if;
+  if (select count(*) filter (where a.status = 'skipped') = 3
+      from (select status from public.approvals
+            where user_id = new.user_id and kind = 'post' and auto_at is not null
+              and snapshot->'proposed'->>'platform' = v_platform and status in ('approved', 'edited', 'skipped')
+            order by decided_at desc nulls last limit 3) a) then
+    update public.profiles
+    set autopilot_platforms = array_remove(autopilot_platforms, v_platform),
+        autopilot_note = 'Turned off for ' || public.schedule_platform_label(v_platform) || ' after you skipped three posts in a row.'
+    where id = new.user_id and v_platform = any (autopilot_platforms);
+    update public.approvals set auto_at = null
+    where user_id = new.user_id and status in ('waiting', 'held') and auto_at is not null
+      and snapshot->'proposed'->>'platform' = v_platform;
+  end if;
+  return new;
+end;
+$$;
+
+
+--
 -- Name: approvals_backfill(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -2538,6 +2644,15 @@ $$;
 CREATE FUNCTION public.auto_transcript_daily_seconds() RETURNS numeric
     LANGUAGE sql IMMUTABLE
     AS $$ select 10800::numeric $$;
+
+
+--
+-- Name: autopilot_min_window(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.autopilot_min_window() RETURNS interval
+    LANGUAGE sql IMMUTABLE
+    AS $$ select interval '1 hour' $$;
 
 
 --
@@ -4111,6 +4226,9 @@ CREATE FUNCTION public.cmo_draft_outcomes_learn() RETURNS trigger
     AS $$
 begin
   if new.edit_mode is null or (tg_op = 'UPDATE' and old.edit_mode is not distinct from new.edit_mode) then
+    return new;
+  end if;
+  if coalesce(current_setting('opencmo.autopilot', true), '') = 'on' or new.auto then
     return new;
   end if;
   begin
@@ -9771,6 +9889,78 @@ $$;
 
 
 --
+-- Name: post_autopilot_at(uuid, text, uuid, jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.post_autopilot_at(p_user uuid, p_ref_kind text, p_ref_id uuid, p_snapshot jsonb) RETURNS timestamp with time zone
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_p jsonb := p_snapshot->'proposed';
+  v_profile public.profiles;
+  v_item public.content_items;
+  v_at timestamptz;
+  v_auto timestamptz;
+begin
+  if p_snapshot->>'kind' is distinct from 'post' or p_ref_kind <> 'content_item' or p_snapshot ? 'thread'
+     or v_p is null or v_p->>'mode' is distinct from 'publish' then
+    return null;
+  end if;
+  select * into v_profile from public.profiles where id = p_user;
+  if not found or v_profile.cmo_paused_at is not null or v_profile.plan not in ('starter', 'creator')
+     or not (v_p->>'platform' = any (v_profile.autopilot_platforms)) then
+    return null;
+  end if;
+  select * into v_item from public.content_items where id = p_ref_id and user_id = p_user and department = 'post';
+  -- A brief the founder wrote in the chat is theirs to read before it goes out.
+  if not found or v_item.status <> 'in_review' or v_item.body->>'source' = 'cmo_chat' then
+    return null;
+  end if;
+  if not exists (select 1 from public.social_accounts a
+                 where a.user_id = p_user and a.platform = v_p->>'platform' and a.status = 'connected'
+                   and a.id::text = v_p->>'account_id') then
+    return null;
+  end if;
+  begin
+    v_at := (v_p->>'at')::timestamptz;
+  exception when others then
+    return null;
+  end;
+  -- Approved a quarter of an hour before its time at the latest, so the slot is waiting when the sweep looks.
+  v_auto := least(now() + make_interval(hours => v_profile.autopilot_hours), v_at - interval '15 minutes');
+  if v_auto < now() + public.autopilot_min_window() then
+    return null;
+  end if;
+  return v_auto;
+end;
+$$;
+
+
+--
+-- Name: post_autopilot_still_on(public.approvals); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.post_autopilot_still_on(p_card public.approvals) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select p_card.kind = 'post' and p_card.ref_kind = 'content_item' and not (p_card.snapshot ? 'thread')
+    and p_card.snapshot->'proposed'->>'mode' = 'publish'
+    and exists (select 1 from public.profiles p
+                where p.id = p_card.user_id and p.cmo_paused_at is null and p.plan in ('starter', 'creator')
+                  and p_card.snapshot->'proposed'->>'platform' = any (p.autopilot_platforms))
+    and exists (select 1 from public.content_items c
+                where c.id = p_card.ref_id and c.user_id = p_card.user_id and c.status = 'in_review'
+                  and c.body->>'source' is distinct from 'cmo_chat')
+    and exists (select 1 from public.social_accounts a
+                where a.user_id = p_card.user_id and a.status = 'connected'
+                  and a.platform = p_card.snapshot->'proposed'->>'platform'
+                  and a.id::text = p_card.snapshot->'proposed'->>'account_id');
+$$;
+
+
+--
 -- Name: post_change_proposal(public.approvals, text, jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -12700,6 +12890,48 @@ begin
   return v_row;
 end;
 $_$;
+
+
+--
+-- Name: save_autopilot(text[], smallint); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.save_autopilot(p_platforms text[], p_hours smallint) RETURNS TABLE(autopilot_platforms text[], autopilot_hours smallint, autopilot_note text)
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_platforms text[] := coalesce((select array_agg(distinct p order by p) from unnest(coalesce(p_platforms, '{}')) p), '{}');
+  v_platform text;
+begin
+  if p_hours is null or p_hours not in (6, 12, 24) then
+    raise exception 'Choose 6, 12 or 24 hours.' using errcode = '22023';
+  end if;
+  if not (v_platforms <@ array['x', 'threads', 'linkedin']::text[]) then
+    raise exception 'Posts go out on their own on X, Threads and LinkedIn only.' using errcode = '22023';
+  end if;
+  if cardinality(v_platforms) > 0 and coalesce((select plan not in ('starter', 'creator') from public.profiles where id = v_user), true) then
+    perform public.cmo_plan_required();
+  end if;
+  foreach v_platform in array v_platforms loop
+    if not exists (select 1 from public.social_accounts a
+                   where a.user_id = v_user and a.platform = v_platform and a.status = 'connected') then
+      raise exception 'Connect your % account first.', public.schedule_platform_label(v_platform) using errcode = 'P0001';
+    end if;
+  end loop;
+  update public.profiles p
+  set autopilot_platforms = v_platforms, autopilot_hours = p_hours, autopilot_note = null
+  where p.id = v_user;
+  if not found then
+    raise exception 'Profile not found.' using errcode = 'P0002';
+  end if;
+  update public.approvals a set auto_at = null
+  where a.user_id = v_user and a.status in ('waiting', 'held') and a.auto_at is not null
+    and not (a.snapshot->'proposed'->>'platform' = any (v_platforms));
+  return query select p.autopilot_platforms, p.autopilot_hours, p.autopilot_note from public.profiles p where p.id = v_user;
+end;
+$$;
 
 
 --
@@ -16892,6 +17124,12 @@ CREATE TABLE public.profiles (
     post_platforms text[],
     heard_from text,
     heard_from_note text,
+    autopilot_platforms text[] DEFAULT '{}'::text[] NOT NULL,
+    autopilot_hours smallint DEFAULT 12 NOT NULL,
+    autopilot_note text,
+    CONSTRAINT profiles_autopilot_hours_check CHECK ((autopilot_hours = ANY (ARRAY[6, 12, 24]))),
+    CONSTRAINT profiles_autopilot_note_check CHECK ((char_length(autopilot_note) <= 200)),
+    CONSTRAINT profiles_autopilot_platforms_check CHECK ((autopilot_platforms <@ ARRAY['x'::text, 'threads'::text, 'linkedin'::text])),
     CONSTRAINT profiles_digest_hour_check CHECK (((digest_hour >= 0) AND (digest_hour <= 23))),
     CONSTRAINT profiles_heard_from_check CHECK (((heard_from IS NULL) OR (heard_from = ANY (ARRAY['search'::text, 'x'::text, 'reddit'::text, 'linkedin'::text, 'youtube'::text, 'ai_assistant'::text, 'friend'::text, 'newsletter'::text, 'other'::text])))),
     CONSTRAINT profiles_heard_from_note_check CHECK (((heard_from_note IS NULL) OR (char_length(heard_from_note) <= 100))),
@@ -17121,6 +17359,7 @@ CREATE TABLE public.cmo_draft_outcomes (
     outcome_status text,
     reason_code text,
     labelled_by text,
+    auto boolean DEFAULT false NOT NULL,
     CONSTRAINT cmo_draft_outcomes_action_check CHECK ((action = ANY (ARRAY['approve'::text, 'skip'::text, 'replied'::text, 'dismissed'::text]))),
     CONSTRAINT cmo_draft_outcomes_chosen_version_check CHECK (((chosen_version >= 0) AND (chosen_version <= 2))),
     CONSTRAINT cmo_draft_outcomes_department_check CHECK ((department = ANY (ARRAY['post'::text, 'sales'::text]))),
@@ -18891,6 +19130,13 @@ CREATE INDEX api_keys_user_idx ON public.api_keys USING btree (user_id, created_
 
 
 --
+-- Name: approvals_auto_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX approvals_auto_idx ON public.approvals USING btree (auto_at) WHERE ((status = 'waiting'::text) AND (auto_at IS NOT NULL));
+
+
+--
 -- Name: approvals_held_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -19637,6 +19883,20 @@ CREATE TRIGGER agent_messages_immutable BEFORE UPDATE ON public.agent_messages F
 --
 
 CREATE TRIGGER apply_credit_ledger_insert AFTER INSERT ON public.credit_ledger FOR EACH ROW EXECUTE FUNCTION public.apply_credit_ledger_insert();
+
+
+--
+-- Name: approvals approvals_autopilot; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER approvals_autopilot BEFORE INSERT ON public.approvals FOR EACH ROW EXECUTE FUNCTION public.approvals_autopilot();
+
+
+--
+-- Name: approvals approvals_autopilot_skips; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER approvals_autopilot_skips AFTER UPDATE OF status ON public.approvals FOR EACH ROW EXECUTE FUNCTION public.approvals_autopilot_skips();
 
 
 --

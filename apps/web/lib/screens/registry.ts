@@ -96,8 +96,8 @@ export const SCREENS = {
     fixture: settingsFixture,
     empty: settingsEmpty,
     // P4 A3: accounts read social_accounts (every publish platform, connected or not).
-    live: ["accounts", "cmo", "weeklyCreditBudget", "timezone", "digestHour", "plan"],
-    release: ["cmo", "weeklyCreditBudget", "timezone", "digestHour", "plan"],
+    live: ["accounts", "cmo", "weeklyCreditBudget", "timezone", "digestHour", "plan", "autopilot"],
+    release: ["cmo", "weeklyCreditBudget", "timezone", "digestHour", "plan", "autopilot"],
   }),
   setup: entry({ schema: SetupScreenSchema, fixture: setupFixture, empty: setupEmpty, live: [], release: ["site", "step", "done", "documents"] }),
 };

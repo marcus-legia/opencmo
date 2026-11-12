@@ -148,6 +148,7 @@ insert into allowed values
   ('reset_editor_project(uuid,integer)'),
   ('retry_job(uuid)'),
   ('revoke_api_key(uuid)'),
+  ('save_autopilot(text[],smallint)'),
   ('save_brand_kit(uuid,text,jsonb)'),
   ('save_cmo_settings(integer,text,smallint)'),
   ('save_editor_document(uuid,integer,jsonb,jsonb)'),
