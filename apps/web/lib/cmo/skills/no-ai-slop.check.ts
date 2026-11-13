@@ -13,7 +13,7 @@ import { WRITER } from "@/lib/agent/motion-guide";
 import { SYSTEM_PROMPT } from "@/lib/agent/prompt";
 import { PHOTO_CAPTION_SYSTEM } from "@/lib/cmo/jobs/photo-caption";
 import { REPURPOSE_SYSTEM } from "@/lib/cmo/jobs/repurpose-post";
-import { CAPTION_SYSTEM, SLIDES_SYSTEM, VIDEO_BRIEF_SYSTEM, YOUTUBE_SYSTEM } from "@/lib/cmo/writer/prompts";
+import { CAPTION_SYSTEM, VIDEO_BRIEF_SYSTEM, YOUTUBE_SYSTEM } from "@/lib/cmo/writer/prompts";
 import { CLIP_EDITOR } from "@/lib/departments/studio/shorts/squad";
 
 import { NO_AI_SLOP, skillText } from "./index";
@@ -29,7 +29,6 @@ const prompts: Record<string, string> = {
   "Caption writer": CAPTION_SYSTEM,
   "YouTube writer": YOUTUBE_SYSTEM,
   "Video brief writer": VIDEO_BRIEF_SYSTEM,
-  "Slides writer": SLIDES_SYSTEM,
   "Repurpose writer": REPURPOSE_SYSTEM,
   "Photo caption writer": PHOTO_CAPTION_SYSTEM,
 };

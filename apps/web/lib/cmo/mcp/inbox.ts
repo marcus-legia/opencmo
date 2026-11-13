@@ -40,7 +40,6 @@ const KIND_LABEL: Record<CmoJobKind, string> = {
   post_draft: "Post",
   write_video_brief: "Video brief",
   write_caption: "Captions",
-  write_slides: "Slide text",
   sales_scan: "Reddit scan",
   summarize_memory: "Memory summary",
   competitor_research: "Competitor research",

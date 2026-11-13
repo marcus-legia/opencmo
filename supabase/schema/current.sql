@@ -4275,6 +4275,39 @@ $$;
 
 
 --
+-- Name: cmo_drop_write_slides(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_drop_write_slides() RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_run public.cmo_runs;
+  v_order uuid;
+  v_n integer := 0;
+begin
+  for v_run in
+    update public.cmo_runs set status = 'failed', finished_at = now(), lease_until = null,
+      error = 'OpenCMO no longer writes slideshows. Your credits were refunded; a photo post with a caption replaces it.'
+    where kind = 'write_slides' and status in ('queued', 'running')
+    returning *
+  loop
+    perform public.cmo_refund_run(v_run);
+    v_n := v_n + 1;
+  end loop;
+  for v_order in
+    select id from public.work_orders
+    where kind = 'write_slides' and status in ('queued', 'running', 'deferred', 'waiting_order', 'waiting_founder')
+  loop
+    perform public.work_order_move(v_order, 'cancelled', 'OpenCMO no longer writes slideshows');
+  end loop;
+  return v_n;
+end;
+$$;
+
+
+--
 -- Name: cmo_edit_correction(uuid, text, boolean); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -4622,7 +4655,7 @@ CREATE FUNCTION public.cmo_job_daily_limit(p_kind text) RETURNS integer
     AS $$
   select case p_kind when 'plan_week' then 5 when 'post_draft' then 10 when 'sales_scan' then 3
     when 'competitor_research' then 2 when 'pull_metrics' then 2 when 'summarize_memory' then 1 when 'review_week' then 1
-    when 'write_caption' then 20 when 'write_video_brief' then 25 when 'write_slides' then 10 when 'publish_post' then 100 when 'niche_video_research' then 2
+    when 'write_caption' then 20 when 'write_video_brief' then 25 when 'publish_post' then 100 when 'niche_video_research' then 2
     -- cmo-review-3 2.2: one rating round a day (`cmo_rate_drafts`), with room for a retry.
     when 'distill_ratings' then 2
     when 'repurpose_post' then 20
@@ -4640,7 +4673,7 @@ CREATE FUNCTION public.cmo_job_price(p_kind text) RETURNS integer
     AS $$
   select case p_kind when 'plan_week' then 1 when 'post_draft' then 1 when 'sales_scan' then 5
     when 'competitor_research' then 2 when 'pull_metrics' then 0 when 'summarize_memory' then 0 when 'review_week' then 0
-    when 'write_caption' then 1 when 'write_video_brief' then 1 when 'write_slides' then 1 when 'publish_post' then 0 when 'niche_video_research' then 2
+    when 'write_caption' then 1 when 'write_video_brief' then 1 when 'publish_post' then 0 when 'niche_video_research' then 2
     when 'repurpose_post' then 1
     when 'photo_caption' then 1
     else 0 end

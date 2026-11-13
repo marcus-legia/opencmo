@@ -144,6 +144,9 @@ editor core with a Slides view, not a second editor.
 
 Chain: Slides writer (`write_slides`, agent `slides_writer`) → Builder (slide ops) → Renderer → look check.
 
+**Removed (D7 2026-11-12, F2 2026-11-13):** the CMO no longer builds or writes slideshows; a slideshow is the founder's own
+photos with a caption. Slideshows already made still open, render and post. The section below is a record.
+
 - Inputs: brief from the week plan, marketing documents, Brand Kit, captured pages of the founder's own site.
 - Writer: 5–10 slides; slide 1 is the hook; one idea per slide; the last slide is a call to action; no-ai-slop in the
   prompt.

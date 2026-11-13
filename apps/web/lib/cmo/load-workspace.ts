@@ -14,7 +14,8 @@ import { AGENTS, type CalendarItem, type GoalView, type InboxCard, type InsightV
 
 type CmoRunRow = {
   id: string;
-  kind: "onboard" | CmoJobKind;
+  /** `write_slides`: a run from before F2 (2026-11-13) still lists in Activity. */
+  kind: "onboard" | CmoJobKind | "write_slides";
   status: LogEntry["status"];
   input: { site?: string; idea?: string; source?: string };
   error: string | null;

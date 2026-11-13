@@ -18,7 +18,6 @@ export type CmoJobKind =
   | "review_week"
   | "write_video_brief"
   | "write_caption"
-  | "write_slides"
   | "publish_post"
   | "niche_video_research"
   /** cmo-review-3 2.2: the founder's draft ratings → up to five rules, free (`cmo_rate_drafts` queues it). */
@@ -27,7 +26,7 @@ export type CmoJobKind =
   | "repurpose_post"
   /** Daily core drafts D7: the caption of the founder's own photo post (`photo_post_caption` in SQL queues it). */
   | "photo_caption";
-export const CMO_JOB_KINDS: CmoJobKind[] = ["plan_week", "post_draft", "sales_scan", "competitor_research", "pull_metrics", "summarize_memory", "review_week", "write_video_brief", "write_caption", "write_slides", "publish_post", "niche_video_research", "distill_ratings", "repurpose_post", "photo_caption"];
+export const CMO_JOB_KINDS: CmoJobKind[] = ["plan_week", "post_draft", "sales_scan", "competitor_research", "pull_metrics", "summarize_memory", "review_week", "write_video_brief", "write_caption", "publish_post", "niche_video_research", "distill_ratings", "repurpose_post", "photo_caption"];
 
 /** What a weekly goal counts. Only things the product can measure itself. */
 export type GoalMetric = "posts" | "replies" | "views";

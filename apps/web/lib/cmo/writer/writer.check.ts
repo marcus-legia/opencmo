@@ -17,18 +17,18 @@ import { REVIEW_SYSTEM } from "../jobs/draft-post";
 import { postProfile } from "../platforms";
 import { memoryStore } from "../jobs/memory-store";
 import { drainCmoQueue } from "../jobs/runner";
-import { isoDay, type ItemRow } from "../jobs/types";
+import { CMO_JOB_KINDS, isoDay, type ItemRow } from "../jobs/types";
 import { stockPatterns } from "../jobs/eval/style";
 import { CAPTION_PROFILES, countHashtags, POST_PROFILES, profileOf } from "../platforms";
 import { CMO_SKILLS } from "../skills/index.gen";
 import { skillIndex } from "../skills";
 
-import { captionText, checkCaption, checkPostFor, checkSlides, checkYoutube, cleanHashtags, moreAdvice } from "./checks";
+import { captionText, checkCaption, checkPostFor, checkYoutube, cleanHashtags, moreAdvice } from "./checks";
 import { profileBlock, profileFromPrompt, voiceBlock, writerData } from "./context";
 import { createWriter, type WriterThink } from "./draft";
 import { writerAgent } from "./jobs";
 import { firstLine } from "./video-source";
-import { CAPTION_SYSTEM, SLIDES_SYSTEM, VIDEO_BRIEF_SYSTEM, YOUTUBE_SYSTEM } from "./prompts";
+import { CAPTION_SYSTEM, VIDEO_BRIEF_SYSTEM, YOUTUBE_SYSTEM } from "./prompts";
 import { PROFILE_KIND, VideoBriefSchema, WRITER_KINDS, type WriterContext, type WriterProfile } from "./types";
 
 assert.equal(StudioBriefSchema, VideoBriefSchema, "Studio takes Writer's video brief, not a copy");
@@ -54,7 +54,7 @@ for (const text of ["We moved the app to Next.js and Node.js.", "Our #1 rule is 
 
 // No AI Slop is a skill read by the writer, the checker, sales and CMO chat; its plain stock patterns are also a code
 // gate (lib/cmo/slop.ts, checked in slop.check.ts).
-assert.deepEqual([...CMO_SKILLS["no-ai-slop"].agents].sort(), ["brief_writer", "checker", "cmo", "director", "facebook_writer", "instagram_writer", "linkedin_writer", "onboarding", "planner", "research", "sales", "shorts", "slides_writer", "threads_writer", "tiktok_writer", "writer", "x_writer", "youtube_writer"]);
+assert.deepEqual([...CMO_SKILLS["no-ai-slop"].agents].sort(), ["brief_writer", "checker", "cmo", "director", "facebook_writer", "instagram_writer", "linkedin_writer", "onboarding", "planner", "research", "sales", "shorts", "threads_writer", "tiktok_writer", "writer", "x_writer", "youtube_writer"]);
 assert.match(CMO_SKILLS["no-ai-slop"].license, /MIT — Copyright \(c\) 2026 Peter Yang/);
 for (const agent of ["x_writer", "checker", "sales", "cmo"] as const) assert.ok(skillIndex(agent).includes("- no-ai-slop:"), `${agent} lists no-ai-slop`);
 assert.ok(REVIEW_SYSTEM.includes('<skill name="no-ai-slop">') && /reads like AI wrote it/.test(REVIEW_SYSTEM), "the checker fails a draft that reads as AI");
@@ -110,8 +110,6 @@ assert.ok(checkCaption({ text: "x".repeat(2195), hashtags: ["saas"] }, instagram
 assert.deepEqual(checkYoutube({ title: "How Paylane chases late invoices", description: "A walk through.", hashtags: ["saas"] }, youtube, rules), []);
 assert.ok(checkYoutube({ title: "t".repeat(101), description: "d", hashtags: [] }, youtube, rules)[0]?.includes("101 characters"));
 assert.ok(checkYoutube({ title: "Late invoices #saas", description: "d", hashtags: [] }, youtube, rules).some((issue) => issue.includes("title has a hashtag")));
-assert.ok(checkSlides([{ heading: "One", body: "" }], rules)[0]?.includes("1 slides"));
-assert.deepEqual(checkSlides(Array.from({ length: 5 }, (_, i) => ({ heading: `Slide ${i + 1}`, body: "" })), rules), []);
 
 // The data after the cached prefix: profile, then the founder's rules, then their voice (newest, heaviest first).
 assert.match(profileBlock(threads), /platform: threads \(Threads\)[\s\S]*limit: 500 characters[\s\S]*hashtags: none[\s\S]*links: none/);
@@ -130,7 +128,7 @@ const ctx: WriterContext = {
 };
 const data = writerData(ctx, threads, "BRIEF");
 assert.ok(data.indexOf("<platform>") < data.indexOf("<founder_rules") && data.indexOf("<founder_rules") < data.indexOf("<founder_voice") && data.indexOf("<founder_voice") < data.indexOf("<documents>") && data.endsWith("BRIEF"));
-for (const system of [CAPTION_SYSTEM, YOUTUBE_SYSTEM, VIDEO_BRIEF_SYSTEM, SLIDES_SYSTEM]) {
+for (const system of [CAPTION_SYSTEM, YOUTUBE_SYSTEM, VIDEO_BRIEF_SYSTEM]) {
   assert.ok(system.includes('<skill name="no-ai-slop">'), "every writer kind reads No AI Slop");
 }
 
@@ -220,7 +218,6 @@ async function writerChecks() {
   for (const profile of [instagram, tiktok]) assert.ok((await fakeWriter.draft("caption", profile, { video }, ctx)).hashtags.length <= profile.hashtags);
   assert.ok((await fakeWriter.draft("youtube", youtube, { video }, ctx)).title);
   assert.equal((await fakeWriter.draft("video_brief", null, { idea: "Chasing a late invoice", seconds: 45 }, ctx)).brief.seconds, 45);
-  assert.equal((await fakeWriter.draft("slides", null, { idea: "Three reminders that get invoices paid", count: 7 }, ctx)).slides.length, 7);
 
   // A kind on the wrong profile is a programming error, not a draft.
   await assert.rejects(createWriter({ think: scripted([]).think, agentFor: () => "x_writer", canFix: false }).draft("caption", threads, { video }, ctx), /caption profile/);
@@ -321,7 +318,7 @@ async function postChecks() {
 // W3: Writer's runs for Studio, through the runner on the fake provider.
 async function studioChecks() {
   for (const p of CAPTION_PROFILES) assert.ok(CAPTION_WRITERS[p.id] && AGENT_SPECS[CAPTION_WRITERS[p.id]!].tier === "draft", `${p.id} has its own writer agent`);
-  assert.deepEqual([writerAgent("video_brief", null), writerAgent("slides", null), writerAgent("caption", profile("tiktok_caption")), writerAgent("youtube", youtube), writerAgent("post", threads)], ["brief_writer", "slides_writer", "tiktok_writer", "youtube_writer", "threads_writer"]);
+  assert.deepEqual([writerAgent("video_brief", null), writerAgent("caption", profile("tiktok_caption")), writerAgent("youtube", youtube), writerAgent("post", threads)], ["brief_writer", "tiktok_writer", "youtube_writer", "threads_writer"]);
 
   assert.deepEqual([firstLine("Your invoice is late. Paylane sends it."), firstLine("no stop at all"), firstLine("v1.2 shipped today! More soon.")], ["Your invoice is late.", "no stop at all", "v1.2 shipped today!"], "the first sentence said, not a decimal point");
   process.env.OPENCMO_AGENT_FAKE = "1";
@@ -382,14 +379,9 @@ async function studioChecks() {
   await drainCmoQueue(gone.store);
   assert.deepEqual([nothing.status, empty.status], ["failed", "failed"], "no caption saved fails the run (its credit is refunded)");
 
-  // write_slides: 5 to 10 slides, the hook first and the call to action last.
-  const sl = memoryStore(docs, []);
-  const slides = sl.enqueue("write_slides", { order_id: "o7", idea: "Three reminders that get invoices paid", count: 6 });
-  await drainCmoQueue(sl.store);
-  assert.equal(slides.status, "done", `slides run (${slides.error})`);
-  const list = (slides.output as { slides: { heading: string }[] }).slides;
-  assert.equal(list.length, 6);
-  assert.match(list.at(-1)!.heading, /Paylane/, "the call to action last");
+  // F2 (2026-11-13): Writer no longer writes slideshows; SQL refuses the kind (`cmo_job_daily_limit` is 0).
+  assert.ok(!(CMO_JOB_KINDS as readonly string[]).includes("write_slides"), "no write_slides job");
+  assert.ok(!(WRITER_KINDS as readonly string[]).includes("slides"), "no slides kind in Writer");
   delete process.env.OPENCMO_AGENT_FAKE;
 }
 
