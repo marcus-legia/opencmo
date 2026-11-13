@@ -54,6 +54,13 @@ test("the top bars move between views and agent pages; the chat is a column on t
   await expect(logs).toBeVisible();
   await logs.getByRole("button", { name: "Close" }).first().click();
   await expect(logs).toHaveCount(0);
+
+  // Autopilot's switch on the bar (sample settings: on for X): one press and every post waits for Approve.
+  const autopilot = page.getByRole("banner").getByTestId("autopilot-switch");
+  await expect(autopilot).toHaveAttribute("aria-pressed", "true");
+  await autopilot.click();
+  await expect(autopilot).toHaveAttribute("aria-pressed", "false");
+  await expect(autopilot).toContainText("Autopilot off");
 });
 
 test("the feed's Context and chat columns resize by drag and keyboard, and keep their width across a reload", async ({ page }) => {

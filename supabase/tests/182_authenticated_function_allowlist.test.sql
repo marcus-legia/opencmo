@@ -155,6 +155,7 @@ insert into allowed values
   ('retry_job(uuid)'),
   ('revoke_api_key(uuid)'),
   ('save_autopilot(text[],smallint)'),
+  ('set_autopilot_paused(boolean)'),
   ('save_brand_kit(uuid,text,jsonb)'),
   ('save_cmo_settings(integer,text,smallint)'),
   ('save_editor_document(uuid,integer,jsonb,jsonb)'),

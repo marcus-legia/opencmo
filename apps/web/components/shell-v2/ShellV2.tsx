@@ -169,6 +169,7 @@ function TodayFrame({ credits, plan, email, userId, pending, chatLive, children,
   }, []);
   const closeLogs = useCallback(() => setLogsOpen(false), []);
   const [workVersion, setWorkVersion] = useState(0);
+  const workChanged = useCallback(() => setWorkVersion((n) => n + 1), []);
   const chatWidth = useTodayColumns();
   const [clipAssistantSlot, setClipAssistantSlot] = useState<HTMLElement | null>(null);
 
@@ -217,9 +218,10 @@ function TodayFrame({ credits, plan, email, userId, pending, chatLive, children,
       focusChat,
       openLogs,
       workVersion,
+      workChanged,
       clipAssistantSlot,
     }),
-    [queue, account.pending, reportQueue, focusChat, openLogs, workVersion, clipAssistantSlot],
+    [queue, account.pending, reportQueue, focusChat, openLogs, workVersion, workChanged, clipAssistantSlot],
   );
 
   const toastText = message ?? jobToast?.text ?? null;

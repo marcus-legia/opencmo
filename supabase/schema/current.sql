@@ -10404,7 +10404,8 @@ begin
     return null;
   end if;
   select * into v_profile from public.profiles where id = p_user;
-  if not found or v_profile.cmo_paused_at is not null or v_profile.plan not in ('starter', 'creator')
+  if not found or v_profile.cmo_paused_at is not null or v_profile.autopilot_paused
+     or v_profile.plan not in ('starter', 'creator')
      or not (v_p->>'platform' = any (v_profile.autopilot_platforms)) then
     return null;
   end if;
@@ -10444,7 +10445,8 @@ CREATE FUNCTION public.post_autopilot_still_on(p_card public.approvals) RETURNS 
   select p_card.kind = 'post' and p_card.ref_kind = 'content_item' and not (p_card.snapshot ? 'thread')
     and p_card.snapshot->'proposed'->>'mode' = 'publish'
     and exists (select 1 from public.profiles p
-                where p.id = p_card.user_id and p.cmo_paused_at is null and p.plan in ('starter', 'creator')
+                where p.id = p_card.user_id and p.cmo_paused_at is null and not p.autopilot_paused
+                  and p.plan in ('starter', 'creator')
                   and p_card.snapshot->'proposed'->>'platform' = any (p.autopilot_platforms))
     and exists (select 1 from public.content_items c
                 where c.id = p_card.ref_id and c.user_id = p_card.user_id and c.status = 'in_review'
@@ -15102,6 +15104,35 @@ $$;
 
 
 --
+-- Name: set_autopilot_paused(boolean); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.set_autopilot_paused(p_paused boolean) RETURNS TABLE(autopilot_platforms text[], autopilot_hours smallint, autopilot_note text, autopilot_paused boolean)
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+begin
+  if p_paused is null then
+    raise exception 'Say whether autopilot is on or off.' using errcode = '22023';
+  end if;
+  update public.profiles p set autopilot_paused = p_paused where p.id = v_user;
+  if not found then
+    raise exception 'Profile not found.' using errcode = 'P0002';
+  end if;
+  if p_paused then
+    update public.approvals a set auto_at = null
+    where a.user_id = v_user and a.status in ('waiting', 'held') and a.auto_at is not null;
+  end if;
+  return query
+    select p.autopilot_platforms, p.autopilot_hours, p.autopilot_note, p.autopilot_paused
+    from public.profiles p where p.id = v_user;
+end;
+$$;
+
+
+--
 -- Name: set_default_brand_kit(uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -18106,6 +18137,7 @@ CREATE TABLE public.profiles (
     autopilot_hours smallint DEFAULT 12 NOT NULL,
     autopilot_note text,
     posting_plan jsonb,
+    autopilot_paused boolean DEFAULT false NOT NULL,
     CONSTRAINT profiles_autopilot_hours_check CHECK ((autopilot_hours = ANY (ARRAY[6, 12, 24]))),
     CONSTRAINT profiles_autopilot_note_check CHECK ((char_length(autopilot_note) <= 200)),
     CONSTRAINT profiles_autopilot_platforms_check CHECK ((autopilot_platforms <@ ARRAY['x'::text, 'threads'::text, 'linkedin'::text])),

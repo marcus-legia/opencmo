@@ -42,6 +42,11 @@ export function accountsStore(supabase: SupabaseClient): AccountsStore {
       if (!data || !isPublishPlatform(String(data.platform))) return null;
       return { id: String(data.id), platform: data.platform, zernioAccountId: String(data.zernio_account_id) };
     },
+    async platforms(userId) {
+      const { data, error } = await supabase.from("social_accounts").select("platform").eq("user_id", userId);
+      if (error) throw apiErrorFromPostgrest(error);
+      return ((data ?? []) as { platform: string }[]).map((r) => r.platform);
+    },
     async removeAccount(id) {
       await rpcOrThrow(supabase, "social_account_remove", { p_id: id });
     },
