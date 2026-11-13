@@ -131,12 +131,9 @@ select ok((pg_temp.slot(pg_temp.item('e3120000-0000-4000-8000-00000000000a', 'To
   'Threads still waits for its own time');
 
 -- Decision F1 (Task 2, Session B: `309_post_published_first`): a post is published when its first platform posts.
--- Until 309 lands this is a TODO, so it reports without failing the suite.
-select todo_start('needs 309: a post is published when its first platform posts (F1)');
 select is((select status || ' ' || coalesce(external_url, '-') from public.content_items
   where id = pg_temp.item('e3120000-0000-4000-8000-00000000000a', 'Today')),
   'published https://x.com/founder/status/312', 'the post counts as posted once X is live, with X''s link');
-select todo_end();
 
 select is((public.publish_status((pg_temp.slot(pg_temp.item('e3120000-0000-4000-8000-00000000000a', 'Today'), 'threads')).id,
   'published', 'ext-flow-th', 'https://www.threads.net/@founder/post/312')).status, 'published', 'Threads posts after X');
