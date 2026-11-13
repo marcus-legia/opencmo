@@ -490,6 +490,26 @@ async function main() {
     await drainCmoQueue(asked.store);
     assert.equal(asked.runs.filter((r) => r.kind === "post_draft").length, 0, "a plan asked for in the chat drafts nothing by itself");
   }
+  // Daily core drafts, the main flow (core-drafts follow-ups Task 1): a slot for three platforms is one item and one
+  // draft. Three drafts would cost the founder three times and put three cards on the Feed for the same post.
+  {
+    const three = memoryStore(docs);
+    three.posting.plan = plan({ x: 1, threads: 1, linkedin: 1 });
+    const week = three.enqueue("plan_week", { source: "schedule", loop: "weekly-plan" });
+    await drainCmoQueue(three.store);
+    assert.equal(week.status, "done", `the three-platform plan is done (${week.error})`);
+    const posts = three.items.filter((i) => i.department === "post");
+    assert.equal(posts.length, 7, "seven post items, one a day");
+    assert.ok(posts.every((i) => JSON.stringify(i.body.targets) === '["x","threads","linkedin"]'), "each targets X, Threads and LinkedIn");
+    assert.equal(new Set(posts.map((i) => i.day)).size, 7, "on seven different days");
+    const drafts = three.runs.filter((r) => r.kind === "post_draft");
+    assert.equal(drafts.length, 1, "one cron day queues one draft, not one a platform");
+    assert.equal(drafts[0]!.status, "done", `the draft ran (${drafts[0]!.error})`);
+    const cards = three.items.filter((i) => i.department === "post" && i.status === "in_review");
+    assert.equal(cards.length, 1, "one card for the day");
+    assert.equal(cards[0]!.id, drafts[0]!.input.item_id, "the card is the day's item");
+    assert.deepEqual(cards[0]!.body.targets, ["x", "threads", "linkedin"], "and the draft keeps its three targets");
+  }
   // CMO review 3, 3.1: an unpaid account gets no loop at all.
   assert.deepEqual(dueLoops({ ...base, weekday: 1, paid: false }), []);
   assert.deepEqual(
