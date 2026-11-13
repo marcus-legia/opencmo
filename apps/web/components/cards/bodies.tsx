@@ -627,6 +627,7 @@ export function ScheduleBody({
   onOptions,
   editable,
   onCopyPart,
+  onSaveCaption,
 }: {
   body: Body<"schedule">;
   cardId: string;
@@ -636,7 +637,10 @@ export function ScheduleBody({
   editable: string | null;
   /** Copy and open of a chain: copies one part. */
   onCopyPart?: (post: string, index: number) => void;
+  /** A video's caption for this platform, changed on its card before approving (`edit_caption`). */
+  onSaveCaption?: SaveCaption;
 }) {
+  const [copied, setCopied] = useState(false);
   const platform = PLATFORM_LABEL[body.where.platform];
   // A post longer than the platform takes is shown as the parts that go out (`publish/split.ts` cuts both).
   const chain = useMemo(
@@ -647,6 +651,17 @@ export function ScheduleBody({
   const aiLabel = body.mode === "publish" && AI_LABEL_PLATFORMS.has(body.where.platform);
   const set = (patch: Partial<ScheduleOptions>) => onOptions({ ...options, ...patch });
   const off = (account: boolean) => (account ? "Turned off for this account in TikTok." : (editable ?? undefined));
+  // No connected account for a video: the founder downloads it and copies its caption (owner, 2026-11-13).
+  const ownVideo = body.mode === "intent" && !!body.preview.videoUrl;
+  const words = [body.preview.title, body.preview.text].filter(Boolean).join("\n\n");
+  async function copyWords() {
+    try {
+      await navigator.clipboard.writeText(words);
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
+  }
 
   return (
     <>
@@ -669,6 +684,8 @@ export function ScheduleBody({
           }
           onCopy={body.mode === "intent" ? onCopyPart : undefined}
         />
+      ) : body.caption && onSaveCaption ? (
+        <CaptionList captions={[body.caption]} idBase={`${cardId}-caption`} heading={`${platform} caption`} editable={editable} onSave={onSaveCaption} />
       ) : body.preview.title || body.preview.text ? (
         <div className="v2-card-draft">
           {body.preview.title ? <b>{body.preview.title}</b> : null}
@@ -677,6 +694,20 @@ export function ScheduleBody({
         </div>
       ) : null}
       {body.preview.photos?.length ? <PhotoStrip photos={body.preview.photos} label="The photos that go out with it, in order" /> : null}
+      {ownVideo ? (
+        <div className="v2-actions">
+          {body.preview.downloadUrl ? (
+            <a className="v2-button is-secondary is-compact" href={body.preview.downloadUrl} download data-testid="schedule-download">
+              Download video
+            </a>
+          ) : null}
+          {words ? (
+            <Button compact variant="secondary" onClick={() => void copyWords()}>
+              {copied ? "Caption copied" : "Copy caption"}
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
       <dl className="v2-card-facts">
         <div>
           <dt>Where</dt>
@@ -764,7 +795,11 @@ export function ScheduleBody({
           <span>You approve when it posts: it goes out on your {platform} account at this time, as shown here.</span>
         ) : (
           <span>
-            {body.state === "no_account" ? "No account connected: copy and open. Post it from your account, then tell us here." : "No account connected: at this time a card gives you the post to copy and open."}{" "}
+            {ownVideo
+              ? "No account connected: download the video, copy the caption and post it from your account."
+              : body.state === "no_account"
+                ? "No account connected: copy and open. Post it from your account, then tell us here."
+                : "No account connected: at this time a card gives you the post to copy and open."}{" "}
             <Link href="/app/settings#settings-connected-accounts">Connect {platform}</Link> to have it posted.
           </span>
         )}

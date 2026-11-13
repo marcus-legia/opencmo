@@ -10,7 +10,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 
 import type { SupabaseClient } from "@/lib/api/handler";
-import { profileOf } from "@/lib/cmo/platforms";
+import { profileIdOf, profileOf } from "@/lib/cmo/platforms";
 import { publishAdapter } from "@/lib/departments/publish/adapter";
 import type { CreatorInfo } from "@/lib/departments/publish/types";
 
@@ -46,6 +46,7 @@ async function creatorInfo(accounts: Map<string, string>, ids: string[]): Promis
 
 type SlotRow = {
   id: string;
+  platform: string;
   status: string;
   error: { code?: string } | null;
   external_url: string | null;
@@ -174,7 +175,7 @@ export async function enrichScheduleCards(supabase: SupabaseClient, userId: stri
     accountIds.length
       ? supabase.from("social_accounts").select("id, avatar_url, zernio_account_id").in("id", accountIds)
       : Promise.resolve({ data: [] as { id: string; avatar_url: string | null; zernio_account_id: string }[] }),
-    supabase.from("schedule_slots").select("id, status, error, external_url, deliverable:deliverables(ref_kind, ref_id)").in("id", slotIds),
+    supabase.from("schedule_slots").select("id, platform, status, error, external_url, deliverable:deliverables(ref_kind, ref_id)").in("id", slotIds),
     supabase.from("best_slots").select("platform, hour"),
   ]);
   const bestRows = (best.data ?? []) as { platform: string; hour: number }[];
@@ -189,8 +190,29 @@ export async function enrichScheduleCards(supabase: SupabaseClient, userId: stri
     ),
   );
 
-  const renders = await shortRenders(supabase, [...new Set(clipOf.values())]);
-  const signed = await sign(supabase, "exports", [...renders.values()]);
+  const clipIds = [...new Set(clipOf.values())];
+  const renders = await shortRenders(supabase, clipIds);
+  // A video with no connected account is downloaded and posted by the founder: the same render, signed as a download.
+  const downloads = new Set(
+    schedule.flatMap((c) => {
+      const b = c.body as Extract<ApprovalCard["body"], { kind: "schedule" }>;
+      const render = b.mode === "intent" ? renders.get(clipOf.get(b.slotId) ?? "") : undefined;
+      return render ? [render] : [];
+    }),
+  );
+  const [signed, signedDownloads, captionRows] = await Promise.all([
+    sign(supabase, "exports", [...renders.values()]),
+    sign(supabase, "exports", [...downloads], true),
+    // A video's caption on each platform's card (one card per platform, owner 2026-11-13), changed there while it asks.
+    clipIds.length
+      ? supabase.from("content_items").select("id, clip_id, platform, status, body").eq("department", "video").in("clip_id", clipIds)
+      : Promise.resolve({ data: [] }),
+  ]);
+  const captionOf = new Map(
+    ((captionRows.data ?? []) as { id: string; clip_id: string; platform: string; status: string; body: { text?: unknown; title?: unknown } | null }[])
+      .filter((r) => r.status === "in_review" || r.status === "approved")
+      .map((r) => [`${r.clip_id}:${r.platform}`, r] as const),
+  );
   const tiktokIds = schedule.flatMap((c) => {
     const b = c.body as Extract<ApprovalCard["body"], { kind: "schedule" }>;
     return c.status === "waiting" && b.where.platform === "tiktok" && b.mode === "publish" && b.accountId ? [b.accountId] : [];
@@ -205,6 +227,12 @@ export async function enrichScheduleCards(supabase: SupabaseClient, userId: stri
     const creator = b.accountId ? info.get(b.accountId) : undefined;
     const slot = slotOf.get(b.slotId);
     const local = localHourMinute(b.at, timezone);
+    const profile = profileIdOf(b.where.platform);
+    const captionRow = clip && profile && card.status === "waiting" && slot?.status === "proposed" ? captionOf.get(`${clip}:${profile}`) : undefined;
+    const caption =
+      captionRow && profileOf(profile!) && typeof captionRow.body?.text === "string"
+        ? { id: captionRow.id, profile: profile!, text: captionRow.body.text, title: typeof captionRow.body.title === "string" ? captionRow.body.title : null }
+        : undefined;
     const defaults = (scheduleDefaults.platforms as Record<string, { times: string[] } | undefined>)[b.where.platform]?.times ?? [];
     return {
       ...card,
@@ -213,7 +241,12 @@ export async function enrichScheduleCards(supabase: SupabaseClient, userId: stri
         timezone,
         why: bestTimeWhy(b.where.platform, local.hour, local.minute, bestRows.filter((r) => r.platform === b.where.platform), defaults),
         avatarUrl: (b.accountId ? avatar.get(b.accountId) : null) ?? null,
-        preview: { ...b.preview, videoUrl: render ? signed.get(render) ?? null : null },
+        preview: {
+          ...b.preview,
+          videoUrl: render ? signed.get(render) ?? null : null,
+          downloadUrl: render && b.mode === "intent" ? signedDownloads.get(render) ?? null : null,
+        },
+        ...(caption ? { caption } : {}),
         state: slot ? slotState(slot) : b.state,
         ...(slot?.status === "failed" && slot.error?.code === "too_long" && b.where.platform === "x" ? { canThread: true } : {}),
         publishedUrl: slot?.status === "published" && slot.external_url?.startsWith("https://") ? slot.external_url : null,

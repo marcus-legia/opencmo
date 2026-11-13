@@ -476,7 +476,14 @@ const ScheduleBody = z.object({
     videoUrl: z.url().nullable(),
     /** The founder's own photos that go out with it (a photo post, or a text post's), `photos` bucket objects in order. */
     photos: z.array(z.string().max(500)).max(35).optional(),
+    /** A video with no connected account: the same render, signed to download (`schedule-enrich.ts`). */
+    downloadUrl: z.url().nullable().optional(),
   }),
+  /**
+   * A video's caption for this platform while the card still asks (one card per platform, owner 2026-11-13): the
+   * founder changes it here (`edit_caption`), and approving the card approves it with the time.
+   */
+  caption: CaptionSchema.optional(),
   options: ScheduleOptionsSchema,
   /**
    * TikTok's creator info for the account (read live through the publish adapter, not part of the hash): the privacy

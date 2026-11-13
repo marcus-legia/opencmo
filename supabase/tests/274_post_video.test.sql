@@ -1,13 +1,14 @@
 -- C2 (20270112020000): the founder's own finished edit goes out. Marked finished and rendered at that hash, a
--- `post_video` order follows the render through the look check to the finished-video card; approving it makes the
--- `video` deliverable and Schedule proposes its time. A failed render fails the order; sending the card back cancels
--- it; the founder's other exports change nothing; another founder cannot start it.
+-- `post_video` order follows the render through the look check; since 20270122010000 (one card per platform) the
+-- video gets no card of its own: Writer is asked for its captions, the video is the order's `video` deliverable and
+-- each platform with a caption gets its schedule card. A failed render fails the order; the founder's other exports
+-- change nothing; another founder cannot start it.
 create extension if not exists pgtap with schema extensions;
 
 begin;
 set search_path to public, extensions;
 
-select plan(24);
+select plan(23);
 
 select ok(has_function_privilege('authenticated', 'public.post_video_start(uuid,uuid)', 'execute'), 'founders start it');
 select ok(not has_function_privilege('authenticated', 'public.post_video_render_settled(public.work_orders,public.tasks)', 'execute'),
@@ -64,34 +65,29 @@ select is((select kind || ' ' || status || ' ' || (brief->>'finished_hash') from
 update public.tasks set status = 'done' where id = (select id from t where name = 'other');
 select is((select count(*)::int from public.look_checks where order_id = (select id from t where name = 'order')), 0, 'another export starts no check');
 
--- The render of the finished hash: the look check, then card 3.
+-- The render of the finished hash: the look check, then the platforms' cards.
 update public.tasks set status = 'done' where id = (select id from t where name = 'render');
 select is((select count(*)::int from public.look_checks where order_id = (select id from t where name = 'order')), 1, 'the render is looked at');
 update public.tasks set status = 'done', output = '{"pass":true,"round":0,"note":"","files":[]}'
 where id = (select task_id from public.look_checks where order_id = (select id from t where name = 'order'));
-insert into t select 'card', id from public.approvals where ref_kind = 'editor_project' and ref_id = (select id from t where name = 'clip') and status = 'waiting';
-select is((select kind from public.approvals where id = (select id from t where name = 'card')), 'finished_video', 'the finished-video card asks the founder');
-select is((select status from public.work_orders where id = (select id from t where name = 'order')), 'waiting_founder', 'the order waits on it');
+select is((select count(*)::int from public.approvals where ref_kind = 'editor_project' and ref_id = (select id from t where name = 'clip')), 0,
+  'the video gets no card of its own');
+select is((select status from public.work_orders where id = (select id from t where name = 'order')), 'done', 'the order is done');
 select ok(exists (select 1 from public.work_orders where kind = 'write_caption' and brief->>'ref_id' = (select id from t where name = 'clip')::text),
   'Writer is asked for its captions');
-
--- Approved: the video is the order's deliverable, its caption is approved, Schedule proposes a time.
-set local role authenticated;
-select public.approval_decide((select id from t where name = 'card'), 'approve',
-  jsonb_build_object('content_hash', (select content_hash from public.approvals where id = (select id from t where name = 'card'))));
-reset role;
-select is((select status from public.work_orders where id = (select id from t where name = 'order')), 'done', 'the order is done');
 select is((select status from public.deliverables where order_id = (select id from t where name = 'order') and kind = 'video'), 'decided',
-  'with the video as its deliverable');
-select is((select status from public.content_items where clip_id = (select id from t where name = 'clip') and platform = 'youtube'), 'approved',
-  'the caption it showed is approved');
-select is((select platform from public.schedule_slots s join public.deliverables d on d.id = s.deliverable_id
-  where d.order_id = (select id from t where name = 'order') and d.kind = 'video'), 'youtube', 'Schedule proposes a time where it has a caption');
+  'the video is its deliverable');
+select is((select status from public.content_items where clip_id = (select id from t where name = 'clip') and platform = 'youtube'), 'in_review',
+  'its caption waits on its platform''s card');
+select is((select s.platform || ' ' || s.status || ' ' || a.status from public.schedule_slots s join public.deliverables d on d.id = s.deliverable_id
+  join public.approvals a on a.id = s.approval_id
+  where d.order_id = (select id from t where name = 'order') and d.kind = 'video'), 'youtube proposed waiting',
+  'Schedule asks on a card where it has a caption');
 
--- Marked finished again at the approved hash: nothing new. Edited and marked again: a new order, a new card, and
--- approving it moves the video's deliverable to that order (review fix: it used to fail on the existing deliverable).
+-- Marked finished again at the same hash: nothing new. Edited and marked again: a new order, and the video's
+-- deliverable moves to that order (review fix: it used to fail on the existing deliverable).
 set local role authenticated;
-select ok(not public.post_video_wanted((select id from t where name = 'clip')), 'already approved at this hash: nothing to start');
+select ok(not public.post_video_wanted((select id from t where name = 'clip')), 'already done at this hash: nothing to start');
 reset role;
 update public.editor_projects set document = document || '{"cut": 1}' where clip_id = (select id from t where name = 'clip');
 set local role authenticated;
@@ -104,14 +100,10 @@ insert into t select 'order_b', public.post_video_start((select id from t where 
 reset role;
 update public.tasks set status = 'done', output = '{"pass":true,"round":0,"note":"","files":[]}'
 where id = (select task_id from public.look_checks where order_id = (select id from t where name = 'order_b'));
-set local role authenticated;
-select public.approval_decide(a.id, 'approve', jsonb_build_object('content_hash', a.content_hash))
-from public.approvals a where a.ref_kind = 'editor_project' and a.ref_id = (select id from t where name = 'clip') and a.status = 'waiting';
-reset role;
 select is((select o.status || ' ' || (d.order_id = o.id) from public.work_orders o join public.deliverables d on d.ref_kind = 'clip' and d.ref_id = (select id from t where name = 'clip')
-  where o.id = (select id from t where name = 'order_b')), 'done true', 'an edited video is approved again, its deliverable under the new order');
+  where o.id = (select id from t where name = 'order_b')), 'done true', 'an edited video is ready again, its deliverable under the new order');
 
--- A failed render fails its order; sending a card back cancels the order (the founder marks it finished again).
+-- A failed render fails its order; a render done already is settled at once.
 set local role authenticated;
 select public.mark_finished((select id from t where name = 'clip2'), pg_temp.hash('clip2'));
 reset role;
@@ -129,12 +121,8 @@ insert into t select 'order3', public.post_video_start((select id from t where n
 reset role;
 update public.tasks set status = 'done', output = '{"pass":true,"round":0,"note":"","files":[]}'
 where id = (select task_id from public.look_checks where order_id = (select id from t where name = 'order3'));
-set local role authenticated;
-select public.approval_decide(a.id, 'send_back', jsonb_build_object('content_hash', a.content_hash, 'reason', 'Cut the intro'))
-from public.approvals a where a.ref_kind = 'editor_project' and a.ref_id = (select id from t where name = 'clip2') and a.status = 'waiting';
-reset role;
-select is((select status from public.work_orders where id = (select id from t where name = 'order3')), 'cancelled',
-  'a render done already is settled at once, and sending the card back cancels the order');
+select is((select status from public.work_orders where id = (select id from t where name = 'order3')), 'done',
+  'a render done already is settled at once');
 
 -- An edit after marking it finished cancels its posting; the render of the old version then raises nothing.
 update public.editor_projects set document = document || '{"cut": 3}' where clip_id = (select id from t where name = 'clip2');

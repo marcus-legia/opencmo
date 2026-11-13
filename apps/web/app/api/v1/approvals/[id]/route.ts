@@ -89,7 +89,7 @@ export const POST = withApi(
     if (!card || !row) throw new ApiError(500, "Could not read the card back.");
     // A caption edit keeps the card open on screen: answer it signed, so its previews stay. A schedule change answers
     // the new card, which the founder decides next: in their time, with its video and TikTok's fields.
-    if (action === "edit_caption") return (await signStudioCards(supabase, [card], [row]))[0]!;
+    if (action === "edit_caption" && card.kind !== "schedule") return (await signStudioCards(supabase, [card], [row]))[0]!;
     return card.kind === "schedule" || card.kind === "post" ? (await enrichScheduleCards(supabase, user.id, [card]))[0]! : card;
   },
 );

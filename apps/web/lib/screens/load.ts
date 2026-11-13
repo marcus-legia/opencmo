@@ -771,7 +771,7 @@ async function scheduleSlots(supabase: SupabaseClient, from: Date, to: Date): Pr
     ...((itemRows.data ?? []) as { id: string; idea: string | null; body: { text?: string } | null }[]).map(
       (r) => [r.id, (r.body?.text?.split("\n")[0] || r.idea || "Post").slice(0, 300)] as [string, string],
     ),
-    ...((clipRows.data ?? []) as { id: string; hook: string | null }[]).map((r) => [r.id, `Short · ${r.hook || "Untitled"}`.slice(0, 300)] as [string, string]),
+    ...((clipRows.data ?? []) as { id: string; hook: string | null }[]).map((r) => [r.id, r.hook || "Untitled"] as [string, string]),
   ]);
   const waiting = new Set(((waitingRows.data ?? []) as { id: string }[]).map((r) => r.id));
   return slots.flatMap((s) => {
@@ -782,7 +782,10 @@ async function scheduleSlots(supabase: SupabaseClient, from: Date, to: Date): Pr
       id: s.id,
       at: iso(s.publish_at)!,
       where: { platform, handle: (s.account?.handle ?? "").slice(0, 80) },
-      title: titles.get(s.deliverable?.ref_id ?? "") ?? "Post",
+      // A short is cut from a finished edit; anything else from a clip is the founder's video (or slideshow).
+      title: (s.deliverable?.ref_kind === "clip"
+        ? `${s.deliverable.kind === "short" ? "Short" : "Video"} · ${titles.get(s.deliverable.ref_id) ?? "Untitled"}`
+        : (titles.get(s.deliverable?.ref_id ?? "") ?? "Post")).slice(0, 300),
       status,
       note,
       // A card still waiting (a time to approve, a failed post's Retry, a copy-and-open) opens from its slot.
@@ -964,7 +967,7 @@ async function writer({ supabase }: LoadContext): Promise<Partial<WriterScreen>>
       };
       const columns = "id, day, idea, platform, status, body, final_text, published_at, clip_id";
       const statuses = ["planned", "drafting", "in_review", "approved", "published"];
-      const [posts, captions, briefs, cards, videoCards, batchCards, shorts, scriptCards, slotTimes] = await Promise.all([
+      const [posts, captions, briefs, cards, videoCards, batchCards, shorts, scriptCards, slotTimes, videoSlots, slotCards] = await Promise.all([
         supabase.from("content_items").select(columns).eq("department", "post").in("status", statuses).gte("day", since).order("day").limit(100),
         supabase.from("content_items").select(columns).eq("department", "video").not("clip_id", "is", null).in("status", statuses).gte("day", since).order("day").limit(60),
         supabase.from("work_orders").select("id, status, brief, due_at, created_at").eq("kind", "write_video_brief").in("status", ["queued", "running", "deferred", "done"]).gte("created_at", `${since}T00:00:00Z`).order("created_at").limit(20),
@@ -975,6 +978,9 @@ async function writer({ supabase }: LoadContext): Promise<Partial<WriterScreen>>
         supabase.from("approvals").select("id, ref_id, status").eq("ref_kind", "work_order").eq("kind", "script").gte("created_at", `${since}T00:00:00Z`).limit(40),
         // The time an approved post goes out: its slot's, not only the day the plan gave it.
         supabase.from("schedule_slots").select("publish_at, deliverable:deliverables(ref_kind, ref_id)").in("status", ["waiting", "due", "publishing", "reminded"]).gte("publish_at", `${since}T00:00:00Z`).order("publish_at").limit(200),
+        // A video goes out one card per platform (owner, 2026-11-13): each caption's row follows its platform's slot.
+        supabase.from("schedule_slots").select("platform, status, publish_at, published_at, approval_id, error, created_at, deliverable:deliverables!inner(ref_kind, ref_id)").eq("deliverable.ref_kind", "clip").neq("status", "cancelled").gte("created_at", `${since}T00:00:00Z`).order("created_at").limit(200),
+        supabase.from("approvals").select("id").eq("ref_kind", "schedule_slot").eq("status", "waiting").limit(200),
       ]);
       // A read that fails here only loses the exact time; the row keeps its day.
       const goesOut = new Map<string, string>();
@@ -1013,7 +1019,38 @@ async function writer({ supabase }: LoadContext): Promise<Partial<WriterScreen>>
           text: (r.final_text ?? text).slice(0, 5000),
         };
       });
+      type VideoSlot = { platform: string; status: string; publish_at: string; published_at: string | null; approval_id: string | null; error: { message?: string } | null; deliverable: { ref_kind: string; ref_id: string } };
+      // The newest slot of each video on each platform: a missed one is followed by its new time.
+      const slotOfCaption = new Map<string, VideoSlot>();
+      for (const slot of (videoSlots.data ?? []) as unknown as VideoSlot[]) slotOfCaption.set(`${slot.deliverable.ref_id}:${slot.platform}`, slot);
+      const asking = new Set(((slotCards.data ?? []) as { id: string }[]).map((c) => c.id));
       const captionDrafts = (must(captions, "content_items") as ItemRow[]).map((r) => {
+        const platform = screenPlatform(r.platform, "tiktok");
+        const title = (typeof r.body.title === "string" && r.body.title ? r.body.title : typeof r.body.text === "string" ? r.body.text : r.idea).slice(0, 300);
+        const slot = slotOfCaption.get(`${r.clip_id}:${platform}`);
+        if (slot) {
+          // Its platform's card decides the caption with the time: the row says where that stands, at the slot's time.
+          const card = slot.approval_id && asking.has(slot.approval_id) ? slot.approval_id : null;
+          const failed = slot.status === "failed" || slot.status === "missed";
+          const column = slot.status === "published" ? ("posted" as const) : slot.status === "proposed" || (failed && card) ? ("waiting" as const) : ("scheduled" as const);
+          return {
+            id: r.id,
+            kind: "caption" as const,
+            platform,
+            at: iso(slot.published_at ?? slot.publish_at),
+            dayText: null,
+            day: r.day.slice(0, 10),
+            title,
+            column,
+            versions: 1,
+            note: failed ? (slot.error?.message ?? "It did not go out").slice(0, 120) : slot.status === "proposed" ? "Approve it on its card" : r.body.edited_at ? "You edited it on its card" : null,
+            cardState: column === "waiting" && card ? ("waiting" as const) : null,
+            heldUntil: null,
+            approvalId: card,
+            ref: null,
+            text: null,
+          };
+        }
         const batch = batchOf.get(r.clip_id!);
         const videoCard = videoCards.get(r.clip_id!);
         const card = videoCard ?? (batch ? batchCards.get(batch) : undefined) ?? null;
@@ -1022,11 +1059,11 @@ async function writer({ supabase }: LoadContext): Promise<Partial<WriterScreen>>
         return {
           id: r.id,
           kind: "caption" as const,
-          platform: screenPlatform(r.platform, "tiktok"),
+          platform,
           at: iso(r.published_at),
           dayText: r.published_at ? null : dayText(r.day),
           day: r.day.slice(0, 10),
-          title: (typeof r.body.title === "string" && r.body.title ? r.body.title : typeof r.body.text === "string" ? r.body.text : r.idea).slice(0, 300),
+          title,
           column: column[r.status],
           versions: 1,
           note: r.body.edited_at ? "You edited it on the card" : r.status === "in_review" ? "On the video's card" : null,
