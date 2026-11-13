@@ -2265,6 +2265,8 @@ begin
         'text', coalesce(body->>'text', ''),
         'alternates', case when jsonb_typeof(body->'alternates') = 'array' then body->'alternates' else '[]'::jsonb end,
         'rationale', coalesce(body->>'rationale', reason))
+        -- The founder's own photos are part of what they approve; a post without any keeps its old hash.
+        || case when cardinality(photos) > 0 then jsonb_build_object('photos', to_jsonb(photos)) else '{}'::jsonb end
       into v from public.content_items where id = p_ref_id;
     when 'opportunity' then
       select jsonb_build_object('kind', 'reply', 'url', url, 'community', community, 'title', title,
@@ -3060,12 +3062,14 @@ CREATE TABLE public.content_items (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     clip_id uuid,
     wants_image boolean DEFAULT false NOT NULL,
+    photos text[] DEFAULT '{}'::text[] NOT NULL,
     CONSTRAINT content_items_body_check CHECK (((jsonb_typeof(body) = 'object'::text) AND (octet_length((body)::text) <= 16384))),
     CONSTRAINT content_items_clip_check CHECK (((clip_id IS NULL) OR (department = 'video'::text))),
     CONSTRAINT content_items_department_check CHECK ((department = ANY (ARRAY['post'::text, 'sales'::text, 'video'::text]))),
     CONSTRAINT content_items_external_url_check CHECK ((char_length(external_url) <= 500)),
     CONSTRAINT content_items_final_text_check CHECK ((char_length(final_text) <= 4000)),
     CONSTRAINT content_items_idea_check CHECK (((char_length(idea) >= 1) AND (char_length(idea) <= 300))),
+    CONSTRAINT content_items_photos_check CHECK ((cardinality(photos) <= 4)),
     CONSTRAINT content_items_platform_check CHECK (((char_length(platform) >= 1) AND (char_length(platform) <= 20))),
     CONSTRAINT content_items_priority_check CHECK ((priority = ANY (ARRAY['high'::text, 'medium'::text, 'low'::text]))),
     CONSTRAINT content_items_reason_check CHECK ((char_length(reason) <= 300)),
@@ -7055,7 +7059,8 @@ begin
     return new;
   end if;
   begin
-    if public.cmo_paused(new.user_id)
+    -- The founder added their own photos: no generated image (owner, 2026-11-13).
+    if public.cmo_paused(new.user_id) or cardinality(new.photos) > 0
        or exists (select 1 from public.deliverables where post_id = new.id and kind = 'image')
        or exists (select 1 from public.work_orders where user_id = new.user_id and kind = 'build_post_image'
                   and brief->>'postId' = new.id::text and status not in ('failed', 'cancelled')) then
@@ -10500,6 +10505,56 @@ $$;
 
 
 --
+-- Name: post_photos_save(uuid, text[]); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.post_photos_save(p_item uuid, p_photos text[]) RETURNS public.content_items
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'storage'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_row public.content_items;
+  v_photos text[] := coalesce(p_photos, '{}');
+begin
+  select * into v_row from public.content_items where id = p_item and user_id = v_user and department = 'post' for update;
+  if not found then
+    raise exception 'Post not found.' using errcode = 'P0002';
+  end if;
+  if v_row.status not in ('in_review', 'approved') then
+    raise exception '%', case when v_row.status = 'published' then 'This post is already posted; its photos cannot change.'
+      else 'Add photos once the post is written.' end using errcode = 'P0001';
+  end if;
+  if cardinality(v_photos) > 4 then
+    raise exception 'A post takes up to 4 photos.' using errcode = '22023';
+  end if;
+  if (select count(distinct p) from unnest(v_photos) p) <> cardinality(v_photos) then
+    raise exception 'The same photo is in the post twice.' using errcode = '22023';
+  end if;
+  if exists (select 1 from unnest(v_photos) p
+             where p not like v_user::text || '/' || p_item::text || '/%'
+                or not exists (select 1 from storage.objects o where o.bucket_id = 'photos' and o.name = p))
+     or exists (select 1 from public.storage_deletions where bucket = 'photos' and path = any (v_photos)) then
+    raise exception 'A photo is missing. Upload it again.' using errcode = '22023';
+  end if;
+  if v_photos = v_row.photos then
+    return v_row;
+  end if;
+  insert into public.storage_deletions (bucket, path, user_id)
+  select 'photos', p, v_user from unnest(v_row.photos) p where p <> all (v_photos)
+  on conflict (bucket, path) do nothing;
+  update public.content_items set photos = v_photos, updated_at = now() where id = p_item returning * into v_row;
+  if v_row.status = 'in_review' then
+    perform public.approval_raise(v_user, 'content_item', p_item);
+  else
+    perform public.schedule_image_changed(p_item);
+  end if;
+  return v_row;
+end;
+$$;
+
+
+--
 -- Name: post_proposal(uuid, text, uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -13133,7 +13188,8 @@ declare
   v_row public.upload_reservations;
   v_parts text[] := string_to_array(coalesce(p_object_name, ''), '/');
 begin
-  -- A photo of a photo post (20270120060000): a JPEG, PNG or WebP of 10 MB at most, under the founder's draft.
+  -- A photo of a photo post (20270120060000) or of a text post (20270121040000): a JPEG, PNG or WebP of 10 MB at most,
+  -- under the founder's draft, or under a post of theirs that is in review or approved.
   if p_bucket = 'photos' then
     if p_size is null or p_size <= 0 or p_size > 10485760
        or coalesce(p_content_type, '') not in ('image/jpeg', 'image/png', 'image/webp') then
@@ -13141,7 +13197,9 @@ begin
     end if;
     if p_project_id is null or array_length(v_parts, 1) <> 3 or v_parts[1] is distinct from v_user::text
        or v_parts[2] is distinct from p_project_id::text
-       or not exists (select 1 from public.photo_posts where id = p_project_id and user_id = v_user and status = 'draft') then
+       or not (exists (select 1 from public.photo_posts where id = p_project_id and user_id = v_user and status = 'draft')
+               or exists (select 1 from public.content_items where id = p_project_id and user_id = v_user
+                            and department = 'post' and status in ('in_review', 'approved'))) then
       raise exception 'Photo post not found.' using errcode = 'P0002';
     end if;
     -- The post is in the path; `upload_reservations.project_id` points at jobs, so the reservation names none.
@@ -14165,14 +14223,15 @@ declare
   v_image jsonb;
   v_thread jsonb;
   v_variant text;
+  v_photos text[];
 begin
   select * into v_d from public.deliverables where id = p_deliverable;
   if not found then
     return null;
   end if;
   if v_d.ref_kind = 'content_item' then
-    select coalesce(body->>'text', ''), case when public.thread_valid(body) then body->'thread' end
-    into v_text, v_thread from public.content_items where id = v_d.ref_id;
+    select coalesce(body->>'text', ''), case when public.thread_valid(body) then body->'thread' end, photos
+    into v_text, v_thread, v_photos from public.content_items where id = v_d.ref_id;
     -- The founder had the post rewritten for this platform: its slot there carries the rewrite, the others the core.
     v_variant := public.post_variant_text(v_d.ref_id, p_platform);
     if v_variant is not null then
@@ -14196,11 +14255,18 @@ begin
         v_image := null;
       end if;
     end if;
+    -- The founder's own photos (owner, 2026-11-13) go out with the post on every platform of its slot, in their order,
+    -- in place of a generated image. The publish job posts `photos` as it does a photo post's.
+    if cardinality(v_photos) > 0 then
+      v_image := null;
+    end if;
     return jsonb_build_object('clip_id', null, 'text', v_text, 'title', null,
       'content_hash', public.approval_hash(jsonb_build_object('text', v_text)
         || case when v_image is not null then jsonb_build_object('image', v_image->>'object') else '{}'::jsonb end
+        || case when cardinality(v_photos) > 0 then jsonb_build_object('photos', to_jsonb(v_photos)) else '{}'::jsonb end
         || case when v_thread is not null then jsonb_build_object('thread', v_thread) else '{}'::jsonb end))
       || case when v_image is not null then jsonb_build_object('image', v_image) else '{}'::jsonb end
+      || case when cardinality(v_photos) > 0 then jsonb_build_object('photos', to_jsonb(v_photos)) else '{}'::jsonb end
       || case when v_thread is not null then jsonb_build_object('thread', v_thread) else '{}'::jsonb end;
   elsif v_d.ref_kind = 'photo_post' then
     -- The caption and the photos in the founder's order; both are in the hash, so a change after approval refuses it.
