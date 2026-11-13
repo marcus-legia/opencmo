@@ -36,6 +36,11 @@ begin
                             and department = 'post' and status in ('in_review', 'approved'))) then
       raise exception 'Photo post not found.' using errcode = 'P0002';
     end if;
+    -- A text post's photos go to every platform of its slot, and Threads and LinkedIn do not take WebP.
+    if p_content_type = 'image/webp'
+       and not exists (select 1 from public.photo_posts where id = p_project_id and user_id = v_user and status = 'draft') then
+      raise exception 'Use a JPEG or PNG photo: Threads and LinkedIn do not take WebP.' using errcode = '22023';
+    end if;
     -- The post is in the path; `upload_reservations.project_id` points at jobs, so the reservation names none.
     p_project_id := null;
   elsif p_bucket not in ('sources', 'media', 'exports') or p_size is null or p_size <= 0
@@ -334,14 +339,19 @@ begin
 end;
 $_$;
 
--- The founder's photos for a text post, in order. A photo dropped from the list is queued for deletion. In review, the
--- post card is raised again with the photos; approved, its schedule cards go back to the founder, as a new image does.
-create or replace function public.post_photos_save(p_item uuid, p_photos text[]) returns public.content_items
+-- The founder's photos for a text post, in order. `p_previous` is the list the card showed: a card older than the
+-- post (another tab, a slow upload) is refused instead of overwriting it. A photo dropped from the list is queued for
+-- deletion. In review, the `approvals_sync` trigger raises the post card again with the photos; approved, its schedule
+-- cards go back to the founder, a failed one included, as a new image does. While a slot is posting, nothing changes.
+drop function if exists public.post_photos_save(uuid, text[]);
+create or replace function public.post_photos_save(p_item uuid, p_photos text[], p_previous text[] default null)
+returns public.content_items
 language plpgsql security definer set search_path = public, storage as $$
 declare
   v_user uuid := public.require_user();
   v_row public.content_items;
   v_photos text[] := coalesce(p_photos, '{}');
+  v_slot public.schedule_slots;
 begin
   select * into v_row from public.content_items where id = p_item and user_id = v_user and department = 'post' for update;
   if not found then
@@ -350,6 +360,13 @@ begin
   if v_row.status not in ('in_review', 'approved') then
     raise exception '%', case when v_row.status = 'published' then 'This post is already posted; its photos cannot change.'
       else 'Add photos once the post is written.' end using errcode = 'P0001';
+  end if;
+  if p_previous is not null and p_previous is distinct from v_row.photos then
+    raise exception 'The photos of this post changed elsewhere. Reload the card and try again.' using errcode = 'P0001';
+  end if;
+  if exists (select 1 from public.schedule_slots s join public.deliverables d on d.id = s.deliverable_id
+             where d.ref_kind = 'content_item' and d.ref_id = p_item and s.status in ('due', 'reminded', 'publishing')) then
+    raise exception 'This post is being posted right now; its photos cannot change.' using errcode = 'P0001';
   end if;
   if cardinality(v_photos) > 4 then
     raise exception 'A post takes up to 4 photos.' using errcode = '22023';
@@ -370,13 +387,51 @@ begin
   select 'photos', p, v_user from unnest(v_row.photos) p where p <> all (v_photos)
   on conflict (bucket, path) do nothing;
   update public.content_items set photos = v_photos, updated_at = now() where id = p_item returning * into v_row;
-  if v_row.status = 'in_review' then
-    perform public.approval_raise(v_user, 'content_item', p_item);
-  else
+  if v_row.status = 'approved' then
     perform public.schedule_image_changed(p_item);
+    -- A failed slot waiting on its Retry card posts the new photos only after the founder sees them.
+    for v_slot in
+      select s.* from public.schedule_slots s join public.deliverables d on d.id = s.deliverable_id
+      where d.ref_kind = 'content_item' and d.ref_id = p_item and s.status = 'failed'
+        and exists (select 1 from public.approvals a where a.ref_kind = 'schedule_slot' and a.ref_id = s.id and a.status = 'waiting')
+    loop
+      perform public.approval_raise(v_slot.user_id, 'schedule_slot', v_slot.id);
+    end loop;
   end if;
   return v_row;
 end;
 $$;
-revoke all on function public.post_photos_save(uuid, text[]) from public, anon;
-grant execute on function public.post_photos_save(uuid, text[]) to authenticated;
+revoke all on function public.post_photos_save(uuid, text[], text[]) from public, anon;
+grant execute on function public.post_photos_save(uuid, text[], text[]) to authenticated;
+
+-- Photos nothing will post: a text post's upload never saved, the photos of a post skipped or gone, a photo post's
+-- leftovers. Older than p_days, so an upload in progress is never touched; a draft photo post's folder is left to
+-- `photo_drafts_sweep`; a photo a live post or a scheduled photo post lists is never queued.
+create or replace function public.post_photos_sweep(p_days integer default 7) returns integer
+language plpgsql security definer set search_path = public, storage as $$
+declare
+  v_n integer;
+begin
+  if p_days is null or p_days < 1 or p_days > 365 then
+    raise exception 'p_days must be between 1 and 365.' using errcode = '22023';
+  end if;
+  insert into public.storage_deletions (bucket, path, user_id)
+  select 'photos', o.name, f.id
+  from storage.objects o
+  join public.profiles f on f.id::text = (storage.foldername(o.name))[1]
+  where o.bucket_id = 'photos' and o.created_at < now() - make_interval(days => p_days)
+    and not exists (select 1 from public.photo_posts p
+                    where p.id::text = (storage.foldername(o.name))[2] and p.status = 'draft')
+    and not exists (select 1 from public.photo_posts p where p.status = 'scheduled' and o.name = any (p.photos))
+    and not exists (select 1 from public.content_items c
+                    where c.id::text = (storage.foldername(o.name))[2] and c.status not in ('skipped', 'failed')
+                      and o.name = any (c.photos))
+    and not exists (select 1 from public.storage_deletions d where d.bucket = 'photos' and d.path = o.name)
+  limit 1000
+  on conflict (bucket, path) do nothing;
+  get diagnostics v_n = row_count;
+  return v_n;
+end;
+$$;
+revoke all on function public.post_photos_sweep(integer) from public, anon, authenticated;
+grant execute on function public.post_photos_sweep(integer) to service_role;

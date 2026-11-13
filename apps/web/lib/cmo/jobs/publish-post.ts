@@ -221,7 +221,9 @@ export async function runPublishPost(deps: PublishPostDeps, slotId: string): Pro
       return settle(fail("unavailable", "Your photos could not be read just now. Retry in a minute.", true), "failed");
     }
     if (photos.length !== approvedPhotos.length) {
-      return settle(fail("invalid", "A photo of this post is missing. Open the photo post, upload it again and schedule it again."), "failed");
+      // A photo post is made on the Photos page; a text post's photos are on the post's own card.
+      const where = slot.snapshot!.deliverable_kind === "photo_post" ? "Open the photo post, upload it again and schedule it again." : "Add it again on the post's card, then approve the new time.";
+      return settle(fail("invalid", `A photo of this post is missing. ${where}`), "failed");
     }
     let input: ReturnType<typeof adapterInput>;
     try {

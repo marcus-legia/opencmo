@@ -11,7 +11,9 @@ export const dynamic = "force-dynamic";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Up to 4 (`post_photos_save` holds the same number), each under the founder's folder and the post. */
-const body = z.object({ photos: z.array(z.string().min(1).max(500)).max(4) });
+const photoList = z.array(z.string().min(1).max(500)).max(4);
+/** `previous`: the photos the card showed, so a card older than the post does not overwrite it. */
+const body = z.object({ photos: photoList, previous: photoList });
 
 /**
  * The founder's own photos on a text post, in order (owner, 2026-11-13). Answers the post card that now waits with
@@ -20,7 +22,7 @@ const body = z.object({ photos: z.array(z.string().min(1).max(500)).max(4) });
  */
 export const PUT = withApi({ body, rateLimit: { bucket: "presets", limit: 60, windowSeconds: 3600 } }, async ({ supabase, user, params, body }) => {
   if (!UUID.test(params.id ?? "")) throw new ApiError(404, "Post not found.");
-  await rpcOrThrow(supabase, "post_photos_save", { p_item: params.id, p_photos: body.photos });
+  await rpcOrThrow(supabase, "post_photos_save", { p_item: params.id, p_photos: body.photos, p_previous: body.previous });
   const { data } = await supabase
     .from("approvals")
     .select(APPROVAL_COLUMNS)

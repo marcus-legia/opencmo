@@ -51,4 +51,20 @@ green; `tsc --noEmit` clean; `npx tsx e2e/run.ts ui-v2-post-photos ui-v2-core-dr
 [`2026-11-13-post-photos-shots/`](2026-11-13-post-photos-shots/): the post card with a photo, the Threads schedule card
 carrying it, and the Photos page.
 
-Left for later: a photo of a post that is skipped or deleted stays in Storage (the post keeps it; no sweep yet).
+## Whole-PR review before the merge (2026-11-13)
+
+`/code-review` (high) of PR #207 against #204, ten findings, all fixed:
+
+1. Unsaved uploads and a skipped post's photos were never deleted: `post_photos_sweep` (the cleanup cron, a week on).
+2. A dropped photo could still be listed by a slot that was posting or waiting on Retry: no change while a slot is
+   posting, and a failed slot's Retry card is raised again with the new photos.
+3. `xLength` took closing punctuation into a link; X does not.
+4. `xLength` counted `Next.js` or `README.md` as links: bare domains only with a known ending, or a path.
+5. A missing photo told a text post's founder to open a photo post: the message now names the post's card.
+6. Threads and LinkedIn do not take WebP: a text post takes JPEG or PNG.
+7. A card older than the post could overwrite its photos: the save carries the list the card showed.
+8. Two copies of the upload route and loop: one server helper (`photo-uploads.ts`), one client helper.
+9. A second `approval_raise` the `approvals_sync` trigger already does: removed.
+10. The Photos page loaded the whole calendar for a form: it reads the workspace's accounts.
+
+Also fixed for CI, both from #204: `301` depended on the time of day; `test_platforms.py` still expected X at 25,000.

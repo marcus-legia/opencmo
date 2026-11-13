@@ -12,10 +12,16 @@ export const postLength = (text: string): number => [...text].length;
 type Measure = (text: string) => number;
 
 /**
- * A link, or a bare domain X turns into one ("opencmo.com", "app.io/pricing": two letters or more after the last dot),
- * with the character before it kept in group 1 so an e-mail's domain is not taken for a link.
+ * A link, or a bare domain ("opencmo.com", "app.io/pricing"), with the character before it kept in group 1 so an
+ * e-mail's domain is not taken for a link. Closing punctuation after it (".", ")", ",") is not part of the link: X
+ * ends the link there and counts those characters.
  */
-const LINK = /(^|[^\w@.\/-])(https?:\/\/\S+|(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}(?:\/\S*)?)/gi;
+const LINK = /(^|[^\w@.\/-])(https?:\/\/\S+?|(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+([a-z]{2,})(\/\S*?)?)(?=[)\].,!?;:'"”’]*(?:\s|$))/gi;
+/**
+ * Endings X links without "https://": the generic ones, and the country endings startups use as if they were. Another
+ * two-letter ending ("README.md") is a link only with a path after it; "Next.js" never is.
+ */
+const BARE_LINK = new Set(["com", "net", "org", "info", "biz", "xyz", "app", "dev", "io", "ai", "co", "me", "so", "gg", "ly", "fm", "to", "tv", "sh"]);
 const EMOJI = /\p{Extended_Pictographic}/u;
 const X_URL = 23;
 
@@ -49,8 +55,10 @@ function weigh(text: string): number {
  */
 export function xLength(text: string): number {
   let n = 0;
-  const rest = text.replace(LINK, (_match, before: string, link: string) => {
-    n += /^https?:\/\//i.test(link) ? X_URL : Math.max(X_URL, weigh(link));
+  const rest = text.replace(LINK, (match: string, before: string, link: string, ending: string | undefined, path: string | undefined) => {
+    if (/^https?:\/\//i.test(link)) n += X_URL;
+    else if (BARE_LINK.has((ending ?? "").toLowerCase()) || (path && (ending ?? "").length === 2)) n += Math.max(X_URL, weigh(link));
+    else return match;
     return before;
   });
   return n + weigh(rest);

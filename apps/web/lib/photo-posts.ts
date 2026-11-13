@@ -9,6 +9,8 @@ export type PhotoPlatform = (typeof PHOTO_PLATFORMS)[number];
 /** Photos a platform takes in one post (Zernio's docs, 2026-11-12). */
 export const PHOTO_LIMIT: Record<PhotoPlatform, number> = { tiktok: 35, instagram: 20, threads: 20 };
 export const PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
+/** A text post's photos go to every platform of its slot, and Threads and LinkedIn do not take WebP (`reserve_upload`). */
+export const POST_PHOTO_TYPES = ["image/jpeg", "image/png"] as const;
 export const PHOTO_MAX_BYTES = 10 * 1024 * 1024;
 export const PHOTO_CAPTION_MAX = 2200;
 

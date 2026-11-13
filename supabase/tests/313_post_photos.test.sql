@@ -6,10 +6,10 @@ create extension if not exists pgtap with schema extensions;
 begin;
 set search_path to public, extensions;
 
-select plan(18);
+select plan(28);
 
-select ok(has_function_privilege('authenticated', 'public.post_photos_save(uuid,text[])', 'execute'), 'the founder saves a post''s photos');
-select ok(not has_function_privilege('anon', 'public.post_photos_save(uuid,text[])', 'execute'), 'anon cannot');
+select ok(has_function_privilege('authenticated', 'public.post_photos_save(uuid,text[],text[])', 'execute'), 'the founder saves a post''s photos');
+select ok(not has_function_privilege('anon', 'public.post_photos_save(uuid,text[],text[])', 'execute'), 'anon cannot');
 
 insert into auth.users (id, email) values
   ('e3130000-0000-4000-8000-00000000000a', 'post-photos-a@test.local'),
@@ -106,6 +106,54 @@ set local request.jwt.claims = '{"sub":"e3130000-0000-4000-8000-00000000000b","r
 select throws_ok($$ select public.post_photos_save('e3132000-0000-4000-8000-000000000002', '{}') $$, 'P0002', 'Post not found.',
   'nobody saves photos on another founder''s post');
 reset role;
+
+-- A card older than the post (another tab, a slow upload) does not overwrite it.
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"e3130000-0000-4000-8000-00000000000a","role":"authenticated"}';
+select throws_ok(format($$ select public.post_photos_save('e3132000-0000-4000-8000-000000000002', %L, %L) $$, pg_temp.photos(2, 1), pg_temp.photos(2, 2)),
+  'P0001', 'The photos of this post changed elsewhere. Reload the card and try again.', 'a card older than the post is refused');
+select throws_ok($$ select public.reserve_upload('photos', 'e3130000-0000-4000-8000-00000000000a/e3132000-0000-4000-8000-000000000002/x.webp',
+  1000, 'image/webp', 'e3132000-0000-4000-8000-000000000002') $$, '22023', 'Use a JPEG or PNG photo: Threads and LinkedIn do not take WebP.',
+  'a text post takes no WebP');
+reset role;
+
+-- A failed slot waiting on Retry gets a new card with the new photos.
+update public.schedule_slots set status = 'failed', error = '{"code":"x","message":"X said no.","retryable":true}'
+where deliverable_id = 'e3133000-0000-4000-8000-000000000002';
+select public.approval_raise(user_id, 'schedule_slot', id) from public.schedule_slots where deliverable_id = 'e3133000-0000-4000-8000-000000000002';
+create temp table retry_card on commit drop as select a.id from public.approvals a join public.schedule_slots s on s.id = a.ref_id
+  where a.ref_kind = 'schedule_slot' and a.status = 'waiting' and s.deliverable_id = 'e3133000-0000-4000-8000-000000000002';
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"e3130000-0000-4000-8000-00000000000a","role":"authenticated"}';
+select lives_ok(format($$ select public.post_photos_save('e3132000-0000-4000-8000-000000000002', %L, %L) $$, pg_temp.photos(2, 2), pg_temp.photos(2, 3)),
+  'two of the three photos are kept');
+reset role;
+select is((select count(*)::int from public.approvals a join public.schedule_slots s on s.id = a.ref_id
+  where a.ref_kind = 'schedule_slot' and a.status = 'waiting' and s.deliverable_id = 'e3133000-0000-4000-8000-000000000002'
+    and a.id <> (select id from retry_card)), 1, 'the failed slot''s Retry card is raised again');
+select is((select jsonb_array_length(a.snapshot->'photos') from public.approvals a join public.schedule_slots s on s.id = a.ref_id
+  where a.ref_kind = 'schedule_slot' and a.status = 'waiting' and s.deliverable_id = 'e3133000-0000-4000-8000-000000000002'), 2,
+  'with the photos it now posts');
+
+-- While a slot is posting, the photos stay as they are.
+update public.schedule_slots set status = 'due' where deliverable_id = 'e3133000-0000-4000-8000-000000000002';
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"e3130000-0000-4000-8000-00000000000a","role":"authenticated"}';
+select throws_ok($$ select public.post_photos_save('e3132000-0000-4000-8000-000000000002', '{}') $$,
+  'P0001', 'This post is being posted right now; its photos cannot change.', 'a post going out keeps its photos');
+reset role;
+
+-- The cron's sweep: uploads never saved go a week on; a live post's photos stay.
+select ok(not has_function_privilege('authenticated', 'public.post_photos_sweep(integer)', 'execute'), 'a founder cannot sweep photos');
+update storage.objects set created_at = now() - interval '8 days' where name like 'e3130000-0000-4000-8000-00000000000a/%';
+delete from public.storage_deletions;
+select public.post_photos_sweep(7);
+select ok(not exists (select 1 from public.storage_deletions where path = any (pg_temp.photos(1, 1) || pg_temp.photos(2, 2))),
+  'the photos posts list are kept');
+select ok(exists (select 1 from public.storage_deletions where path = (pg_temp.photos(1, 5))[5])
+  and exists (select 1 from public.storage_deletions where path = (pg_temp.photos(2, 5))[5]),
+  'uploads no post lists are queued');
+select is(public.post_photos_sweep(7), 0, 'a second sweep queues nothing twice');
 
 select * from finish();
 rollback;

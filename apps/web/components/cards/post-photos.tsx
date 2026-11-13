@@ -4,9 +4,9 @@ import { useEffect, useRef, useState } from "react";
 
 import { ApiError, api, jsonBody } from "@/components/clipping/api";
 import type { ApprovalCard } from "@/lib/screens/approval-card";
-import { PHOTO_MAX_BYTES, PHOTO_TYPES } from "@/lib/photo-posts";
+import { PHOTO_MAX_BYTES, POST_PHOTO_TYPES } from "@/lib/photo-posts";
 import { createClient } from "@/lib/supabase/client";
-import { uploadResumable } from "@/lib/upload-tus";
+import { uploadPhoto } from "@/lib/photo-upload-client";
 
 /** `post_photos_save` holds the same number: X takes 4, and one core post serves every platform of its slot. */
 export const POST_PHOTO_LIMIT = 4;
@@ -34,8 +34,18 @@ function useSignedPhotos(objects: readonly string[]): Record<string, string> {
   return urls;
 }
 
-/** The photos that go out with a post, in order, read-only (schedule cards, a decided post). */
-export function PhotoStrip({ photos, label }: { photos: readonly string[]; label: string }) {
+/** The photos that go out with a post, in order; with `onRemove`, each has a remove button. */
+export function PhotoStrip({
+  photos,
+  label,
+  onRemove,
+  disabled,
+}: {
+  photos: readonly string[];
+  label: string;
+  onRemove?: (object: string) => void;
+  disabled?: boolean;
+}) {
   const urls = useSignedPhotos(photos);
   if (!photos.length) return null;
   return (
@@ -48,6 +58,11 @@ export function PhotoStrip({ photos, label }: { photos: readonly string[]; label
           ) : (
             <span className="v2-card-photo-wait">Photo {i + 1}</span>
           )}
+          {onRemove ? (
+            <button type="button" aria-label={`Remove photo ${i + 1}`} disabled={disabled} onClick={() => onRemove(object)}>
+              ×
+            </button>
+          ) : null}
         </li>
       ))}
     </ol>
@@ -77,7 +92,10 @@ export function PostPhotos({
   const room = POST_PHOTO_LIMIT - photos.length;
 
   async function save(next: string[]) {
-    const answer = await api<{ card: ApprovalCard | null }>(`/cmo/items/${encodeURIComponent(itemId)}/photos`, jsonBody({ photos: next }, "PUT"));
+    const answer = await api<{ card: ApprovalCard | null }>(
+      `/cmo/items/${encodeURIComponent(itemId)}/photos`,
+      jsonBody({ photos: next, previous: [...photos] }, "PUT"),
+    );
     onCard(answer.card);
   }
 
@@ -87,18 +105,13 @@ export function PostPhotos({
     if (!picked.length) return;
     if (sample) return onError("Sample card: nothing was uploaded.");
     if (picked.length > room) return onError(`A post takes up to ${POST_PHOTO_LIMIT} photos.`);
-    const bad = picked.find((f) => !(PHOTO_TYPES as readonly string[]).includes(f.type) || f.size > PHOTO_MAX_BYTES);
-    if (bad) return onError("Use JPEG, PNG or WebP photos of 10 MB at most.");
+    const bad = picked.find((f) => !(POST_PHOTO_TYPES as readonly string[]).includes(f.type) || f.size > PHOTO_MAX_BYTES);
+    if (bad) return onError("Use JPEG or PNG photos of 10 MB at most: Threads and LinkedIn do not take WebP.");
     const added: string[] = [];
     try {
       for (const [i, file] of picked.entries()) {
         setBusy(`Uploading ${i + 1} of ${picked.length}…`);
-        const reserved = await api<{ bucket: string; objectName: string }>(
-          `/cmo/items/${encodeURIComponent(itemId)}/photos/uploads`,
-          jsonBody({ size: file.size, type: file.type }),
-        );
-        await uploadResumable({ bucket: reserved.bucket, objectName: reserved.objectName, file, contentType: file.type }).promise;
-        added.push(reserved.objectName);
+        added.push(await uploadPhoto(`/cmo/items/${encodeURIComponent(itemId)}/photos/uploads`, file));
       }
       setBusy("Saving…");
       await save([...photos, ...added]);
@@ -121,29 +134,12 @@ export function PostPhotos({
     }
   }
 
-  const urls = useSignedPhotos(photos);
   return (
     <div className="v2-card-photo-edit" data-testid="post-photos">
-      {photos.length ? (
-        <ol className="v2-card-photos" aria-label="Your photos, in posting order">
-          {photos.map((object, i) => (
-            <li key={object}>
-              {urls[object] ? (
-                // eslint-disable-next-line @next/next/no-img-element -- a signed link to the founder's own photo
-                <img src={urls[object]} alt={`Photo ${i + 1}`} />
-              ) : (
-                <span className="v2-card-photo-wait">Photo {i + 1}</span>
-              )}
-              <button type="button" aria-label={`Remove photo ${i + 1}`} disabled={busy !== null} onClick={() => void remove(object)}>
-                ×
-              </button>
-            </li>
-          ))}
-        </ol>
-      ) : null}
+      <PhotoStrip photos={photos} label="Your photos, in posting order" onRemove={(object) => void remove(object)} disabled={busy !== null} />
       {room > 0 ? (
         <label className={`v2-card-photo-add${busy ? " is-busy" : ""}`}>
-          <input ref={input} type="file" accept={PHOTO_TYPES.join(",")} multiple disabled={busy !== null} onChange={(e) => void add(e.target.files)} />
+          <input ref={input} type="file" accept={POST_PHOTO_TYPES.join(",")} multiple disabled={busy !== null} onChange={(e) => void add(e.target.files)} />
           <span>{busy ?? (photos.length ? "Add more photos" : "Add photos")}</span>
           <span className="v2-card-photo-hint">Your own, up to {POST_PHOTO_LIMIT}: they go out with the post on every platform.</span>
         </label>

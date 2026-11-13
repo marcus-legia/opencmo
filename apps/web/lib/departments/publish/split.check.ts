@@ -105,4 +105,11 @@ assert.equal(xLength("3.5 e.g."), 8, "a number and an abbreviation are not domai
 const glued = `${"a".repeat(270)}https://example.com/${"b".repeat(100)} ${"word ".repeat(10)}`;
 for (const part of chainFor("x", glued, true) ?? []) assert.ok(xLength(part) <= 280, `a glued part counts ${xLength(part)}`);
 
+// Closing punctuation after a link is counted, and words with a dot are not links.
+assert.equal(xLength("(see https://example.com/a)."), 1 + 4 + 23 + 2, "the bracket and stop after a link count");
+assert.equal(xLength("Built on Next.js and Node.js"), 28, "Next.js is not a link");
+assert.equal(xLength("Read README.md"), 14, "a country ending without a path is not a link");
+assert.equal(xLength("works.Then"), 10, "a missing space is not a link");
+assert.equal(xLength("Try opencmo.com, then app.io/pricing."), 4 + 23 + 7 + 23 + 1, "bare domains with a known ending are links");
+
 console.log("split.check ok");

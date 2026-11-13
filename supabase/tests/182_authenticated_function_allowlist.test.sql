@@ -142,7 +142,7 @@ insert into allowed values
   ('photo_post_create()'),
   ('photo_post_save(uuid,text[],text,text[])'),
   ('photo_post_schedule(uuid)'),
-  ('post_photos_save(uuid,text[])'),
+  ('post_photos_save(uuid,text[],text[])'),
   ('request_stills_export(uuid,uuid,uuid)'),
   ('sales_settings_save(text[],jsonb)'),
   ('rename_project(uuid,text)'),

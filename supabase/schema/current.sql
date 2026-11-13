@@ -10505,10 +10505,10 @@ $$;
 
 
 --
--- Name: post_photos_save(uuid, text[]); Type: FUNCTION; Schema: public; Owner: -
+-- Name: post_photos_save(uuid, text[], text[]); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.post_photos_save(p_item uuid, p_photos text[]) RETURNS public.content_items
+CREATE FUNCTION public.post_photos_save(p_item uuid, p_photos text[], p_previous text[] DEFAULT NULL::text[]) RETURNS public.content_items
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public', 'storage'
     AS $$
@@ -10516,6 +10516,7 @@ declare
   v_user uuid := public.require_user();
   v_row public.content_items;
   v_photos text[] := coalesce(p_photos, '{}');
+  v_slot public.schedule_slots;
 begin
   select * into v_row from public.content_items where id = p_item and user_id = v_user and department = 'post' for update;
   if not found then
@@ -10524,6 +10525,13 @@ begin
   if v_row.status not in ('in_review', 'approved') then
     raise exception '%', case when v_row.status = 'published' then 'This post is already posted; its photos cannot change.'
       else 'Add photos once the post is written.' end using errcode = 'P0001';
+  end if;
+  if p_previous is not null and p_previous is distinct from v_row.photos then
+    raise exception 'The photos of this post changed elsewhere. Reload the card and try again.' using errcode = 'P0001';
+  end if;
+  if exists (select 1 from public.schedule_slots s join public.deliverables d on d.id = s.deliverable_id
+             where d.ref_kind = 'content_item' and d.ref_id = p_item and s.status in ('due', 'reminded', 'publishing')) then
+    raise exception 'This post is being posted right now; its photos cannot change.' using errcode = 'P0001';
   end if;
   if cardinality(v_photos) > 4 then
     raise exception 'A post takes up to 4 photos.' using errcode = '22023';
@@ -10544,12 +10552,52 @@ begin
   select 'photos', p, v_user from unnest(v_row.photos) p where p <> all (v_photos)
   on conflict (bucket, path) do nothing;
   update public.content_items set photos = v_photos, updated_at = now() where id = p_item returning * into v_row;
-  if v_row.status = 'in_review' then
-    perform public.approval_raise(v_user, 'content_item', p_item);
-  else
+  if v_row.status = 'approved' then
     perform public.schedule_image_changed(p_item);
+    -- A failed slot waiting on its Retry card posts the new photos only after the founder sees them.
+    for v_slot in
+      select s.* from public.schedule_slots s join public.deliverables d on d.id = s.deliverable_id
+      where d.ref_kind = 'content_item' and d.ref_id = p_item and s.status = 'failed'
+        and exists (select 1 from public.approvals a where a.ref_kind = 'schedule_slot' and a.ref_id = s.id and a.status = 'waiting')
+    loop
+      perform public.approval_raise(v_slot.user_id, 'schedule_slot', v_slot.id);
+    end loop;
   end if;
   return v_row;
+end;
+$$;
+
+
+--
+-- Name: post_photos_sweep(integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.post_photos_sweep(p_days integer DEFAULT 7) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'storage'
+    AS $$
+declare
+  v_n integer;
+begin
+  if p_days is null or p_days < 1 or p_days > 365 then
+    raise exception 'p_days must be between 1 and 365.' using errcode = '22023';
+  end if;
+  insert into public.storage_deletions (bucket, path, user_id)
+  select 'photos', o.name, f.id
+  from storage.objects o
+  join public.profiles f on f.id::text = (storage.foldername(o.name))[1]
+  where o.bucket_id = 'photos' and o.created_at < now() - make_interval(days => p_days)
+    and not exists (select 1 from public.photo_posts p
+                    where p.id::text = (storage.foldername(o.name))[2] and p.status = 'draft')
+    and not exists (select 1 from public.photo_posts p where p.status = 'scheduled' and o.name = any (p.photos))
+    and not exists (select 1 from public.content_items c
+                    where c.id::text = (storage.foldername(o.name))[2] and c.status not in ('skipped', 'failed')
+                      and o.name = any (c.photos))
+    and not exists (select 1 from public.storage_deletions d where d.bucket = 'photos' and d.path = o.name)
+  limit 1000
+  on conflict (bucket, path) do nothing;
+  get diagnostics v_n = row_count;
+  return v_n;
 end;
 $$;
 
@@ -13201,6 +13249,11 @@ begin
                or exists (select 1 from public.content_items where id = p_project_id and user_id = v_user
                             and department = 'post' and status in ('in_review', 'approved'))) then
       raise exception 'Photo post not found.' using errcode = 'P0002';
+    end if;
+    -- A text post's photos go to every platform of its slot, and Threads and LinkedIn do not take WebP.
+    if p_content_type = 'image/webp'
+       and not exists (select 1 from public.photo_posts where id = p_project_id and user_id = v_user and status = 'draft') then
+      raise exception 'Use a JPEG or PNG photo: Threads and LinkedIn do not take WebP.' using errcode = '22023';
     end if;
     -- The post is in the path; `upload_reservations.project_id` points at jobs, so the reservation names none.
     p_project_id := null;
