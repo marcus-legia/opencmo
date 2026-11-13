@@ -50,7 +50,7 @@ const STAGE: Record<Draft["column"], { label: string; tone: "plan" | "new" | "wa
 };
 
 const draftKind = (d: Draft) =>
-  d.kind === "video_brief" ? "Script · you record" : d.kind === "slide_text" ? "Slideshow" : d.kind === "caption" ? "Caption" : `${PLATFORM_LABEL[d.platform] ?? d.platform} post`;
+  d.kind === "video_brief" ? "Script · you record" : d.kind === "slide_text" ? "Slideshow" : d.kind === "caption" ? `${PLATFORM_LABEL[d.platform] ?? d.platform} video` : `${PLATFORM_LABEL[d.platform] ?? d.platform} post`;
 const draftIcon = (d: Draft) =>
   d.kind === "video_brief" ? KIND_ICON.script : d.kind === "slide_text" ? KIND_ICON.slideshow : d.kind === "caption" ? KIND_ICON.price : (PLATFORM_ICON[d.platform] ?? KIND_ICON.post);
 

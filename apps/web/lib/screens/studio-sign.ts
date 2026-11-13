@@ -13,10 +13,11 @@ import type { ApprovalRow } from "./cards";
 
 const SECONDS = 3600;
 
-export async function sign(supabase: SupabaseClient, bucket: "media" | "exports", paths: string[]): Promise<Map<string, string>> {
+export async function sign(supabase: SupabaseClient, bucket: "media" | "exports", paths: string[], download = false): Promise<Map<string, string>> {
   const unique = [...new Set(paths.filter((p) => p && !p.includes("..")))];
   if (!unique.length) return new Map();
-  const { data } = await supabase.storage.from(bucket).createSignedUrls(unique, SECONDS);
+  // `download`: Storage answers with `Content-Disposition: attachment`, so the browser saves the file instead of playing it.
+  const { data } = await supabase.storage.from(bucket).createSignedUrls(unique, SECONDS, download ? { download: true } : undefined);
   return new Map((data ?? []).flatMap((d, i) => (d?.signedUrl ? [[unique[i]!, d.signedUrl] as const] : [])));
 }
 

@@ -123,10 +123,10 @@ select throws_ok($$ select public.schedule_change((select x_slot from ids), 'set
 select is((select snapshot->'options'->>'ai_label' from public.schedule_change((select x_slot from ids), 'set_options', '{"options":{"ai_label":true}}')),
   'true', 'the AI-generated label is the founder''s toggle');
 
--- TikTok: an account and its required fields first.
-select throws_ok($$ select public.approval_decide((select approval_id from public.schedule_slots where id = (select t_slot from ids)), 'approve',
-  jsonb_build_object('content_hash', (select content_hash from public.approvals where id = (select approval_id from public.schedule_slots where id = (select t_slot from ids))))) $$,
-  'P0001', 'Connect your TikTok account to post this.', 'no TikTok account: nothing to post from');
+-- TikTok: with no account the founder downloads the video and posts it (20270122010000); with one, its required
+-- fields first.
+select is((select mode from public.schedule_slots where id = (select t_slot from ids)), 'intent',
+  'no TikTok account: the founder posts it themselves');
 reset role;
 select public.social_account_save('e2160000-0000-4000-8000-00000000000a', 'tiktok', '@founder', null, 'acc-a1-tt');
 set local role authenticated;

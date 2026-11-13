@@ -85,6 +85,9 @@ function withCaption(card: ApprovalCard, caption: Caption): ApprovalCard {
   if (card.body.kind === "finished_video") return { ...card, body: { ...card.body, captions: swap(card.body.captions) } };
   if (card.body.kind === "shorts_batch") return { ...card, body: { ...card.body, shorts: card.body.shorts.map((s) => ({ ...s, captions: swap(s.captions) })) } };
   if (card.body.kind === "slideshow") return { ...card, body: { ...card.body, captions: swap(card.body.captions ?? []) } };
+  if (card.body.kind === "schedule" && card.body.caption?.id === caption.id) {
+    return { ...card, body: { ...card.body, caption, preview: { ...card.body.preview, text: caption.text, title: caption.title } } };
+  }
   return card;
 }
 
@@ -100,6 +103,8 @@ export async function editCaption(card: ApprovalCard, caption: Caption, sample: 
     `/approvals/${encodeURIComponent(card.id)}`,
     jsonBody({ action: CAPTION_ACTION, contentHash: card.contentHash, caption: caption.id, text: caption.text, ...(caption.title !== null ? { title: caption.title } : {}) }),
   );
+  // A schedule card comes back as the server has it now: its video signed, its new words and hash.
+  if (card.body.kind === "schedule") return next;
   // The answer is not signed: keep this card's previews and take the new hash and the captions as saved.
   const saved = (
     next.body.kind === "finished_video" || next.body.kind === "slideshow"

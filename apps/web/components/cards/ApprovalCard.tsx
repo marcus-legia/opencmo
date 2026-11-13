@@ -527,7 +527,7 @@ export function ApprovalCard({
           ) : card.body.kind === "slideshow" ? (
             <SlideshowBody body={card.body} cardId={card.id} editable={captionsBlocked} edited={slideEdited} onSaveSlide={saveSlide} onSaveCaption={saveCaption} />
           ) : card.body.kind === "schedule" ? (
-            <ScheduleBody body={card.body} cardId={card.id} options={options} onOptions={setOptions} onCopyPart={(post, index) => void copyPart(post, index)} editable={blocked ?? (busy ? "Wait for the decision to finish." : card.body.state === "failed" || card.body.state === "no_account" || card.body.state === "unconfirmed" ? "It posts as you approved it; change the time to start again." : null)} />
+            <ScheduleBody body={card.body} cardId={card.id} options={options} onOptions={setOptions} onCopyPart={(post, index) => void copyPart(post, index)} onSaveCaption={saveCaption} editable={blocked ?? (busy ? "Wait for the decision to finish." : card.body.state === "failed" || card.body.state === "no_account" || card.body.state === "unconfirmed" ? "It posts as you approved it; change the time to start again." : null)} />
           ) : card.body.kind === "plan" ? (
             <PlanBody
               body={card.body}

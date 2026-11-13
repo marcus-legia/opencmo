@@ -242,6 +242,7 @@ export function CalendarView() {
                       </span>
                       <span className="n">{e.title}</span>
                       <span>
+                        {e.status === "failed" ? <FailedMark /> : null}
                         <span className={ST[e.status][1]}>{ST[e.status][0]}</span>
                       </span>
                     </button>
@@ -316,7 +317,12 @@ export function CalendarView() {
                 <a href={sel.url} target="_blank" rel="noopener noreferrer" className="primary" style={{ textDecoration: "none" }}>
                   Open the post
                 </a>
-              ) : sel.status === "failed" ? (
+              ) : sel.status === "failed" && sel.approvalId && !queue.some((c) => c.id === sel.approvalId) ? (
+                // A post that did not go out stays on its day; its card offers Retry at the approved time.
+                <Link href={`/app/inbox/${encodeURIComponent(sel.approvalId)}`} className="primary" style={{ textDecoration: "none" }}>
+                  Retry
+                </Link>
+              ) : sel.status === "failed" && sel.note !== "missed" && !sel.approvalId ? (
                 <Link href="/app/settings#settings-connected-accounts" className="primary" style={{ textDecoration: "none" }}>
                   Fix the account
                 </Link>
@@ -326,6 +332,17 @@ export function CalendarView() {
         ) : null}
       </aside>
     </div>
+  );
+}
+
+/** A post that did not go out: an alert mark next to its status, so it stands out on the week. */
+function FailedMark() {
+  return (
+    <svg className="i s" viewBox="0 0 24 24" role="img" aria-label="Did not go out" style={{ color: "var(--warn)", marginRight: "4px", verticalAlign: "-2px" }}>
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 8v4" />
+      <path d="M12 16h.01" />
+    </svg>
   );
 }
 

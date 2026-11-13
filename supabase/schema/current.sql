@@ -1708,6 +1708,19 @@ begin
 
   -- Words on a finished video or a shorts batch: one caption changes, nothing is decided.
   if p_action = 'edit_caption' then
+    if v_row.kind = 'schedule' then
+      -- A video goes out one card per platform (owner, 2026-11-13): the card's caption is its platform's, changed
+      -- while the card still asks.
+      select c.* into v_caption from public.schedule_slots s
+      join public.deliverables d on d.id = s.deliverable_id and d.ref_kind = 'clip'
+      join public.content_items c on c.clip_id = d.ref_id and c.department = 'video' and c.user_id = v_user
+        and c.platform = public.platform_profile_id(s.platform) and c.status in ('in_review', 'approved')
+      where s.id = v_row.ref_id and s.user_id = v_user and s.status = 'proposed'
+      for update of c;
+      if not found then
+        raise exception 'This card has no caption to change.' using errcode = '22023';
+      end if;
+    else
     if v_row.kind not in ('finished_video', 'shorts_batch', 'slideshow') then
       raise exception 'Only a video''s, a batch''s or a slideshow''s captions are edited here.' using errcode = '22023';
     end if;
@@ -1720,6 +1733,7 @@ begin
     for update;
     if not found then
       raise exception 'That caption is not on this card.' using errcode = '22023';
+    end if;
     end if;
     v_text := trim(coalesce(v_payload->>'text', ''));
     v_title := case when v_caption.platform = 'youtube' then nullif(trim(coalesce(v_payload->>'title', v_caption.body->>'title', '')), '') end;
@@ -1953,6 +1967,8 @@ begin
       if p_action = 'cancel' then
         update public.schedule_slots set status = 'cancelled', updated_at = now() where id = v_slot.id;
         perform public.approval_close(v_row.ref_kind, v_row.ref_id, 'skipped');
+        -- Skipped on this platform: its caption is skipped too, so no new time is asked for it.
+        perform public.schedule_caption_decided(v_slot, 'skipped');
       elsif v_slot.status = 'failed' and now() >= v_slot.window_ends_at then
         -- Too late for this time: never post late. The founder's Retry asks for a new time instead.
         perform public.approval_close(v_row.ref_kind, v_row.ref_id, 'approved');
@@ -1969,6 +1985,8 @@ begin
             using errcode = 'P0001';
         end;
         perform public.approval_close(v_row.ref_kind, v_row.ref_id, 'approved');
+        -- The card showed the caption with the time: approving one approved the other.
+        perform public.schedule_caption_decided(v_slot, 'approved');
       end if;
     else
       raise exception 'This card cannot be decided yet.' using errcode = 'P0001';
@@ -2987,6 +3005,8 @@ CREATE FUNCTION public.caption_cards_refresh(p_clip uuid) RETURNS void
     AS $$
 declare
   v_batch uuid;
+  v_d uuid;
+  v_slot uuid;
 begin
   perform public.approval_refresh('editor_project', p_clip);
   for v_batch in select distinct s.batch_id from public.shorts s where s.short_clip_id = p_clip loop
@@ -2995,6 +3015,20 @@ begin
   for v_batch in select st.id from public.studio_steps st where st.clip_id = p_clip and st.kind = 'slideshow' and st.status = 'waiting' loop
     perform public.approval_refresh('studio_step', v_batch);
   end loop;
+  -- The founder's own video goes out one card per platform (owner, 2026-11-13): a caption written proposes its
+  -- platform's time, and a card already asking shows the new words. Scheduling never fails the caption's save.
+  begin
+    for v_d in select d.id from public.deliverables d join public.work_orders o on o.id = d.order_id
+      where d.ref_kind = 'clip' and d.ref_id = p_clip and d.kind = 'video' and o.kind = 'post_video'
+    loop
+      perform public.schedule_propose(v_d);
+      for v_slot in select id from public.schedule_slots where deliverable_id = v_d and status = 'proposed' loop
+        perform public.approval_refresh('schedule_slot', v_slot);
+      end loop;
+    end loop;
+  exception when others then
+    raise warning 'schedule rule for the captions of % failed: %', p_clip, sqlerrm;
+  end;
 end;
 $$;
 
@@ -8133,6 +8167,10 @@ begin
   if new.ref_kind <> 'clip' or new.kind not in ('video', 'short') then
     return new;
   end if;
+  -- The founder's own video: each caption is approved on its platform's schedule card, not with the video.
+  if exists (select 1 from public.work_orders where id = new.order_id and kind = 'post_video') then
+    return new;
+  end if;
   for v_caption in select * from public.content_items where clip_id = new.ref_id and department = 'video' and user_id = new.user_id loop
     perform public.caption_deliver(v_caption);
   end loop;
@@ -9289,14 +9327,22 @@ CREATE FUNCTION public.look_check_raise(p_check public.look_checks) RETURNS void
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
+declare
+  v_order public.work_orders;
 begin
   case p_check.ref_kind
     when 'editor_project' then
       -- Only for the edit that was rendered: an edit made during the check gets its own render and card.
       if p_check.doc_key = (select public.editor_document_hash(document) from public.editor_projects where clip_id = p_check.ref_id) then
-        perform public.approval_raise(p_check.user_id, 'editor_project', p_check.ref_id);
-        if p_check.order_id is not null then
-          perform public.work_order_wait_founder(p_check.order_id, 'Your video is rendered');
+        select * into v_order from public.work_orders where id = p_check.order_id and kind = 'post_video';
+        if found then
+          -- The founder's own finished video: no card of its own, each platform asks on its schedule card.
+          perform public.post_video_ready(v_order, p_check.ref_id);
+        else
+          perform public.approval_raise(p_check.user_id, 'editor_project', p_check.ref_id);
+          if p_check.order_id is not null then
+            perform public.work_order_wait_founder(p_check.order_id, 'Your video is rendered');
+          end if;
         end if;
       end if;
     when 'short_batch' then
@@ -10777,6 +10823,61 @@ CREATE TABLE public.work_orders (
 
 
 --
+-- Name: post_video_ready(public.work_orders, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.post_video_ready(p_order public.work_orders, p_clip uuid) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_hash text := p_order.brief->>'finished_hash';
+  v_root public.work_orders;
+  v_caption public.work_orders;
+  v_free integer;
+  v_profiles text[];
+  v_deliverable uuid;
+  v_again boolean;
+begin
+  if p_order.kind <> 'post_video' or p_order.status not in ('running', 'waiting_founder') then
+    return;
+  end if;
+  if not public.cmo_paused(p_order.user_id) and not exists (select 1 from public.work_orders
+      where user_id = p_order.user_id and kind = 'write_caption' and brief->>'ref_id' = p_clip::text
+        and brief->>'document_hash' is not distinct from v_hash and status not in ('failed', 'cancelled')) then
+    begin
+      v_profiles := public.caption_targets(p_order.user_id);
+      v_root := public.work_order_week_root(p_order.user_id);
+      v_free := v_root.budget_credits - v_root.spent_credits - coalesce((
+        select sum(budget_credits - spent_credits) from public.work_orders
+        where parent_id = v_root.id and status not in ('done', 'failed', 'cancelled')), 0);
+      v_caption := public.work_order_create(p_order.user_id, v_root.week, v_root.id, 'write_caption',
+        left('Captions for “' || coalesce(nullif((select hook from public.clips where id = p_clip), ''), 'your video') || '”', 200),
+        jsonb_build_object('objective', 'Write the captions for each platform.', 'ref_kind', 'editor_project', 'ref_id', p_clip,
+          'clip_ids', jsonb_build_array(p_clip), 'profiles', to_jsonb(v_profiles), 'document_hash', v_hash,
+          'done_when', 'Each platform has its caption on its schedule card.'),
+        least(public.cmo_job_price('write_caption'), greatest(v_free, 0)), null, '{}', 'event');
+      perform public.writer_order_start(v_caption, jsonb_build_object('clip_ids', jsonb_build_array(p_clip),
+        'profiles', to_jsonb(v_profiles), 'ref_kind', 'editor_project', 'ref_id', p_clip));
+    exception when others then
+      raise warning 'captions for video % failed: %', p_clip, sqlerrm;
+    end;
+  end if;
+  -- A video posted before and edited since has its deliverable already: it now belongs to this order.
+  insert into public.deliverables (user_id, order_id, kind, ref_kind, ref_id, status)
+  values (p_order.user_id, p_order.id, 'video', 'clip', p_clip, 'decided')
+  on conflict (ref_kind, ref_id) do update set order_id = excluded.order_id, status = 'decided'
+  returning id, (xmax <> 0) into v_deliverable, v_again;
+  if v_again then
+    perform public.schedule_propose(v_deliverable);
+  end if;
+  perform public.work_order_move(p_order.id, 'done', 'Ready: approve it on each platform''s card', null,
+    'The video is ready to post; each platform asks on its own card.');
+end;
+$$;
+
+
+--
 -- Name: post_video_render_settled(public.work_orders, public.tasks); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -10794,8 +10895,7 @@ begin
   if p_task.status = 'done' then
     if not public.look_check_begin(p_order.user_id, 'editor_project', p_task.clip_id, p_order.id, p_task.settings_hash,
         jsonb_build_array(jsonb_build_object('path', p_task.output_path, 'clip_id', p_task.clip_id))) then
-      perform public.approval_raise(p_order.user_id, 'editor_project', p_task.clip_id);
-      perform public.work_order_wait_founder(p_order.id, 'Your video is rendered');
+      perform public.post_video_ready(p_order, p_task.clip_id);
     end if;
   elsif p_task.status = 'failed' then
     perform public.work_order_move(p_order.id, 'failed', null, jsonb_build_object('code', 'render_failed',
@@ -14055,6 +14155,25 @@ $$;
 
 
 --
+-- Name: schedule_caption_decided(public.schedule_slots, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.schedule_caption_decided(p_slot public.schedule_slots, p_status text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  update public.content_items c
+  set status = p_status, decided_at = coalesce(c.decided_at, now()), updated_at = now()
+  from public.deliverables d
+  where d.id = p_slot.deliverable_id and d.ref_kind = 'clip' and d.kind = 'video'
+    and c.clip_id = d.ref_id and c.user_id = p_slot.user_id and c.department = 'video'
+    and c.platform = public.platform_profile_id(p_slot.platform) and c.status = 'in_review';
+end;
+$$;
+
+
+--
 -- Name: schedule_change(uuid, text, jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -14331,7 +14450,7 @@ begin
     select body->>'text', body->>'title' into v_text, v_title
     from public.content_items
     where clip_id = v_d.ref_id and department = 'video' and platform = public.platform_profile_id(p_platform)
-      and status in ('approved', 'published');
+      and status in ('in_review', 'approved', 'published');
     return jsonb_build_object('clip_id', v_d.ref_id, 'text', v_text, 'title', v_title,
       'content_hash', public.approval_hash(jsonb_strip_nulls(jsonb_build_object('document_hash', v_doc, 'text', v_text,
         'title', v_title))));
@@ -14700,7 +14819,7 @@ begin
   elsif v_d.kind in ('short', 'slideshow', 'video') and v_d.ref_kind = 'clip' then
     select array_agg(p) into v_platforms from unnest(array['tiktok', 'instagram', 'youtube']) p
     where exists (select 1 from public.content_items c
-      where c.clip_id = v_d.ref_id and c.department = 'video' and c.status = 'approved'
+      where c.clip_id = v_d.ref_id and c.department = 'video' and c.status in ('in_review', 'approved')
         and c.platform = public.platform_profile_id(p));
   end if;
   foreach v_platform in array coalesce(v_platforms, '{}') loop
@@ -14759,11 +14878,9 @@ CREATE FUNCTION public.schedule_ready_check(p_slot public.schedule_slots) RETURN
     SET search_path TO 'public'
     AS $$
 begin
+  -- No connected account: the founder downloads the video (or copies the post) and posts it, a video too
+  -- (owner, 2026-11-13).
   if p_slot.mode = 'intent' then
-    if p_slot.platform in ('tiktok', 'instagram', 'youtube') then
-      raise exception 'Connect your % account to post this.', public.schedule_platform_label(p_slot.platform)
-        using errcode = 'P0001';
-    end if;
     return;
   end if;
   if not exists (select 1 from public.social_accounts where id = p_slot.account_id and status = 'connected') then
