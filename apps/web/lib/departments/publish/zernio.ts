@@ -279,7 +279,9 @@ export function createZernioAdapter(options: ZernioOptions): PublishAdapter {
       for (const a of rows) {
         const platform = fromZernioSlug(str(a.platform) ?? "");
         const id = str(a._id);
-        if (!platform || !id || a.isActive !== true || str(a.profileId) !== zernioProfileId) continue;
+        // GET /accounts returns the profile populated ({ _id, name, externalId }), not its bare id (seen 2026-11-13).
+        const profile = str(a.profileId) ?? str(obj(a.profileId)._id);
+        if (!platform || !id || a.isActive !== true || profile !== zernioProfileId) continue;
         const avatar = str(a.profilePicture);
         accounts.push({
           zernioAccountId: id,
