@@ -6,8 +6,29 @@
  * Pure module: the publish adapter and the cards both use it, so the card shows the parts that will be posted.
  */
 
-/** A post's length as the platforms count it here: code points, so an emoji is one character. */
+/** A post's length as Threads counts it here: code points, so an emoji is one character. */
 export const postLength = (text: string): number => [...text].length;
+
+type Measure = (text: string) => number;
+
+const LINK = /https?:\/\/\S+/g;
+const EMOJI = /\p{Extended_Pictographic}/u;
+const graphemes = (text: string): string[] => [...new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(text)].map((g) => g.segment);
+
+/**
+ * A post's length as X counts it, in the words of X's refusal that Zernio's documents quote
+ * (docs.zernio.com/platforms/twitter/reference, read 2026-11-13): "URLs count as 23 characters and emojis as 2".
+ * By code points a free account's thread part could hold 280 emojis and be refused as 560.
+ */
+export function xLength(text: string): number {
+  let n = 0;
+  const rest = text.replace(LINK, () => {
+    n += 23;
+    return "";
+  });
+  for (const g of graphemes(rest)) n += EMOJI.test(g) ? 2 : [...g].length;
+  return n;
+}
 
 /** Threads takes 500 characters a post; a free X account takes 280. */
 export const THREADS_LIMIT = 500;
@@ -16,19 +37,34 @@ export const X_FREE_LIMIT = 280;
 export const MAX_THREAD_PARTS = 25;
 
 const paragraphs = (text: string) => text.split(/\n\s*\n/);
-/** A sentence ends at . ! ? or … (and any closing quote or bracket after it). */
-const sentences = (text: string) => text.match(/[^.!?…]+[.!?…]+["'”’)\]]*|[^.!?…]+$/g) ?? [text];
+/**
+ * A sentence ends at . ! ? or … (and any closing quote or bracket after it) followed by a space or the end. A stop
+ * inside a word is not an end: cut there, a link (example.com) or a number (3.5) would come out with a space in it.
+ */
+const sentences = (text: string) => text.split(/(?<=[.!?…]+["'”’)\]]*)\s+/);
 const words = (text: string) => text.split(/\s+/);
 
-function hardCut(word: string, limit: number): string[] {
-  const chars = [...word];
+/** A word longer than a post, cut into the longest pieces that fit; an emoji is never cut in half. */
+function hardCut(word: string, limit: number, measure: Measure): string[] {
   const out: string[] = [];
-  for (let i = 0; i < chars.length; i += limit) out.push(chars.slice(i, i + limit).join(""));
+  let current = "";
+  let size = 0;
+  for (const g of graphemes(word)) {
+    const add = measure(g);
+    if (current && size + add > limit) {
+      out.push(current);
+      current = "";
+      size = 0;
+    }
+    current += g;
+    size += add;
+  }
+  if (current) out.push(current);
   return out;
 }
 
 /** Fills each part with as many whole units as fit; a unit that is too long on its own is broken down a level. */
-function pack(units: string[], joiner: string, limit: number, breakDown: (unit: string) => string[]): string[] {
+function pack(units: string[], joiner: string, limit: number, measure: Measure, breakDown: (unit: string) => string[]): string[] {
   const parts: string[] = [];
   let current = "";
   const flush = () => {
@@ -38,7 +74,7 @@ function pack(units: string[], joiner: string, limit: number, breakDown: (unit: 
   for (const raw of units) {
     const unit = raw.trim();
     if (!unit) continue;
-    if (postLength(unit) > limit) {
+    if (measure(unit) > limit) {
       flush();
       const smaller = breakDown(unit);
       // The tail of a broken unit may still take what follows it.
@@ -47,7 +83,7 @@ function pack(units: string[], joiner: string, limit: number, breakDown: (unit: 
       continue;
     }
     const joined = current ? `${current}${joiner}${unit}` : unit;
-    if (postLength(joined) <= limit) current = joined;
+    if (measure(joined) <= limit) current = joined;
     else {
       flush();
       current = unit;
@@ -58,13 +94,13 @@ function pack(units: string[], joiner: string, limit: number, breakDown: (unit: 
 }
 
 /** Parts of at most `limit` characters, cut at a paragraph, else a sentence, else a word. Never an empty part. */
-export function splitPost(text: string, limit: number): string[] {
+export function splitPost(text: string, limit: number, measure: Measure = postLength): string[] {
   const whole = text.trim();
   if (!whole || limit < 1) return [];
-  if (postLength(whole) <= limit) return [whole];
-  const byWord = (sentence: string) => pack(words(sentence), " ", limit, (word) => hardCut(word, limit));
-  const bySentence = (paragraph: string) => pack(sentences(paragraph), " ", limit, byWord);
-  return pack(paragraphs(whole), "\n\n", limit, bySentence);
+  if (measure(whole) <= limit) return [whole];
+  const byWord = (sentence: string) => pack(words(sentence), " ", limit, measure, (word) => hardCut(word, limit, measure));
+  const bySentence = (paragraph: string) => pack(sentences(paragraph), " ", limit, measure, byWord);
+  return pack(paragraphs(whole), "\n\n", limit, measure, bySentence);
 }
 
 /**
@@ -73,7 +109,7 @@ export function splitPost(text: string, limit: number): string[] {
  */
 export function chainFor(platform: string, text: string, asThread = false): string[] | null {
   if (platform === "threads" && postLength(text.trim()) > THREADS_LIMIT) return splitPost(text, THREADS_LIMIT);
-  if (platform === "x" && asThread && postLength(text.trim()) > X_FREE_LIMIT) return splitPost(text, X_FREE_LIMIT);
+  if (platform === "x" && asThread && xLength(text.trim()) > X_FREE_LIMIT) return splitPost(text, X_FREE_LIMIT, xLength);
   return null;
 }
 

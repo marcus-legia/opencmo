@@ -19,7 +19,7 @@
  * `PublishPostDeps` so the rules are checked without a database (`publish-post.check.ts`).
  */
 
-import { MAX_THREAD_PARTS, X_FREE_LIMIT, X_TOO_LONG, X_TOO_LONG_FOR_THREAD, chainFor, postLength, saysTooLong } from "@/lib/departments/publish/split";
+import { MAX_THREAD_PARTS, X_FREE_LIMIT, X_TOO_LONG, X_TOO_LONG_FOR_THREAD, chainFor, saysTooLong, xLength } from "@/lib/departments/publish/split";
 import { ScheduleOptionsSchema, type ScheduleOptions, type ScheduleSnapshot } from "@/lib/screens/approval-card";
 import {
   PlatformFieldsSchema,
@@ -179,7 +179,7 @@ export function adapterInput(slot: FiredSlot, mediaUrl: string | null, mediaType
 export function xTooLong(result: PublishResult, deliverable: PublishDeliverable, slot: PublishSlot): PublishResult {
   if (result.status !== "failed" || result.error.code !== "invalid" || slot.platform !== "x" || deliverable.thread) return result;
   if (slot.fields.platform === "x" && slot.fields.asThread) return result;
-  if (postLength(deliverable.text.trim()) <= X_FREE_LIMIT || !saysTooLong(result.error.message)) return result;
+  if (xLength(deliverable.text.trim()) <= X_FREE_LIMIT || !saysTooLong(result.error.message)) return result;
   const parts = chainFor("x", deliverable.text, true)?.length ?? 0;
   return parts <= MAX_THREAD_PARTS
     ? { ...result, error: { code: "too_long", message: X_TOO_LONG, retryable: true } }

@@ -6,7 +6,7 @@
  */
 import assert from "node:assert/strict";
 
-import { chainFor, postLength, splitPost } from "./split";
+import { chainFor, postLength, splitPost, xLength } from "./split";
 
 const squash = (text: string) => text.replace(/\s+/g, " ").trim();
 
@@ -70,5 +70,29 @@ assert.equal(chainFor("x", over), null, "X takes a long post as one");
 assert.ok((chainFor("x", over, true)?.length ?? 0) >= 2, "a thread on X only when the founder asked");
 assert.equal(chainFor("x", "short", true), null);
 assert.equal(chainFor("linkedin", over, true), null);
+
+// X counts as Zernio's documents quote X's refusal (docs.zernio.com/platforms/twitter/reference, read 2026-11-13):
+// "URLs count as 23 characters and emojis as 2".
+assert.equal(xLength("hello"), 5);
+assert.equal(xLength("🚀"), 2, "an emoji is 2 on X");
+assert.equal(xLength("👩‍💻"), 2, "a joined emoji is one emoji");
+assert.equal(xLength("see https://example.com/a/very/long/path/that/goes/on?and=on"), 4 + 23, "a link is 23");
+assert.equal(xLength("é"), 1);
+// A thread on X is cut by X's count: 200 rockets are 400 there, so two posts, each within 280.
+const rockets = Array.from({ length: 200 }, () => "🚀").join(" ");
+const xParts = chainFor("x", rockets, true) ?? [];
+assert.ok(xParts.length >= 2, "emojis push an X post over 280");
+for (const part of xParts) assert.ok(xLength(part) <= 280, `an X part counts ${xLength(part)}`);
+assert.equal(xParts.join(" "), rockets, "every emoji goes out, in order");
+const linky = Array.from({ length: 30 }, (_, i) => `https://example.com/${"x".repeat(40)}/${i}`).join(" ");
+for (const part of chainFor("x", linky, true) ?? []) assert.ok(xLength(part) <= 280);
+assert.equal((chainFor("x", linky, true) ?? []).length, 3, "30 links of 23 are three posts, not by their 60 letters");
+
+// A stop inside a word is not a sentence end: a link or a number in a long post is posted whole.
+const site = `${"We wrote it down. ".repeat(30)}Read it at https://example.com/notes.html today, it takes 3.5 minutes.`;
+for (const parts of [splitPost(site, 500), chainFor("x", site, true) ?? []]) {
+  assert.ok(parts.some((part) => part.includes("https://example.com/notes.html")), "the link is whole");
+  assert.ok(parts.some((part) => part.includes("3.5 minutes")), "the number is whole");
+}
 
 console.log("split.check ok");

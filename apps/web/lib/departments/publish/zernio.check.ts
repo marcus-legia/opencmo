@@ -177,6 +177,8 @@ async function main() {
     assert.deepEqual(tt.mediaItems, photos.map((p) => ({ url: p.url, type: "image" })), "every photo as an image");
     assert.deepEqual(tt.platforms, [{ platform: "tiktok", accountId: ACC }]);
     assert.deepEqual([tt.tiktokSettings.mediaType, tt.tiktokSettings.photoCoverIndex, tt.tiktokSettings.description, tt.tiktokSettings.privacyLevel], ["photo", 0, "Demo day, in three photos.", "SELF_ONLY"]);
+    // docs.zernio.com/platforms/tiktok/posts (read 2026-11-13): "allow_duet and allow_stitch do not apply" to photos.
+    assert.ok(!("allowDuet" in tt.tiktokSettings) && !("allowStitch" in tt.tiktokSettings), "no duet or stitch on a photo post");
     const ig = postBody(photoPost, { ...slot, platform: "instagram", fields: { platform: "instagram", aiGenerated: false } }) as { mediaItems: unknown[]; tiktokSettings?: unknown };
     assert.deepEqual([ig.mediaItems.length, "tiktokSettings" in ig], [3, false], "an Instagram carousel is the images alone");
 
