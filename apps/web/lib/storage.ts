@@ -27,8 +27,9 @@ type SignClient = Awaited<ReturnType<typeof createServerClient>>;
  * Bốn bucket của sản phẩm. `sources` giữ cả file nguồn người dùng upload, cache
  * section của worker và proxy cho editor; `renders` giữ preview/export/ZIP.
  */
-// `captures`: page captures for proof B-roll (`lib/capture`), written only by the worker.
-export const BUCKETS = ["clips", "sources", "renders", "media", "exports", "brand", "captures"] as const;
+// `captures`: page captures for proof B-roll (`lib/capture`), written only by the worker. `photos`: a photo post's
+// photos. Every bucket `storage_deletions` accepts is here, or the cleanup cron never deletes its rows.
+export const BUCKETS = ["clips", "sources", "renders", "media", "exports", "brand", "captures", "photos"] as const;
 export type Bucket = (typeof BUCKETS)[number];
 
 /**

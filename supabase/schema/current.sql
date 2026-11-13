@@ -9919,6 +9919,72 @@ $$;
 
 
 --
+-- Name: photo_draft_release(uuid, text[]); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.photo_draft_release(p_post uuid, p_photos text[] DEFAULT NULL::text[]) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'storage'
+    AS $$
+declare
+  v_row public.photo_posts;
+  v_n integer;
+begin
+  -- Locked first, so the statement below sees a post scheduled meanwhile in another tab as scheduled.
+  select * into v_row from public.photo_posts where id = p_post for update;
+  if not found or v_row.status <> 'draft' then
+    return 0;
+  end if;
+  insert into public.storage_deletions (bucket, path, user_id)
+  select 'photos', o.name, v_row.user_id from storage.objects o
+  where o.bucket_id = 'photos'
+    and o.name like v_row.user_id::text || '/' || v_row.id::text || '/%'
+    and (p_photos is null or o.name = any (p_photos))
+    -- A photo of a scheduled post is never deleted, whichever post it was uploaded for.
+    and not exists (select 1 from public.photo_posts s where s.status = 'scheduled' and o.name = any (s.photos))
+  on conflict (bucket, path) do nothing;
+  get diagnostics v_n = row_count;
+  return v_n;
+end;
+$$;
+
+
+--
+-- Name: photo_drafts_sweep(integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.photo_drafts_sweep(p_days integer DEFAULT 7) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'storage'
+    AS $$
+declare
+  v_since timestamptz;
+  v_id uuid;
+  v_n integer := 0;
+begin
+  if p_days is null or p_days < 1 or p_days > 365 then
+    raise exception 'p_days must be between 1 and 365.' using errcode = '22023';
+  end if;
+  v_since := now() - make_interval(days => p_days);
+  for v_id in
+    select p.id from public.photo_posts p
+    where p.status = 'draft' and p.updated_at < v_since
+      and not exists (select 1 from storage.objects o where o.bucket_id = 'photos'
+        and o.name like p.user_id::text || '/' || p.id::text || '/%' and o.created_at >= v_since)
+    order by p.updated_at
+    limit 500
+    for update of p skip locked
+  loop
+    perform public.photo_draft_release(v_id);
+    update public.photo_posts set status = 'cancelled', updated_at = now() where id = v_id;
+    v_n := v_n + 1;
+  end loop;
+  return v_n;
+end;
+$$;
+
+
+--
 -- Name: photo_post_caption(uuid, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -9989,10 +10055,16 @@ declare
   v_id uuid;
 begin
   perform pg_advisory_xact_lock(hashtextextended(v_user::text || ':photo_post', 1719));
-  select id into v_id from public.photo_posts where user_id = v_user and status = 'draft' order by created_at desc limit 1;
+  -- Locked: a draft scheduled meanwhile in another tab is not emptied, and its photos are not released.
+  select id into v_id from public.photo_posts where user_id = v_user and status = 'draft' order by created_at desc limit 1
+  for update;
   if v_id is not null then
+    -- Starting again empties the draft: its photos are deleted (F3), so they stop counting toward storage.
+    perform public.photo_draft_release(v_id);
     update public.photo_posts set photos = '{}', caption = '', platforms = '{}', updated_at = now() where id = v_id;
     -- Drafts left over from before this rule are closed, so they stop counting.
+    perform public.photo_draft_release(id) from public.photo_posts
+    where user_id = v_user and status = 'draft' and id <> v_id;
     update public.photo_posts set status = 'cancelled', updated_at = now()
     where user_id = v_user and status = 'draft' and id <> v_id;
     return v_id;
@@ -10036,6 +10108,12 @@ begin
   if char_length(coalesce(p_caption, '')) > 2200 then
     raise exception 'A caption is 2,200 characters at most.' using errcode = '22023';
   end if;
+  -- A photo already queued for deletion is as good as gone: the cleanup would delete it under a scheduled post.
+  if exists (select 1 from public.storage_deletions where bucket = 'photos' and path = any (v_photos)) then
+    raise exception 'A photo is missing. Upload it again.' using errcode = '22023';
+  end if;
+  -- A photo dropped from the list is deleted.
+  perform public.photo_draft_release(p_id, array(select p from unnest(v_row.photos) p where p <> all (v_photos)));
   update public.photo_posts set photos = v_photos, caption = coalesce(p_caption, ''), platforms = v_platforms, updated_at = now()
   where id = p_id returning * into v_row;
   return v_row;
