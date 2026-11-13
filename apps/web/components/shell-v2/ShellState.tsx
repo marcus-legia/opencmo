@@ -19,6 +19,8 @@ export type ShellState = {
   openLogs: () => void;
   /** Goes up each time the chat starts work, so a screen showing that work reloads. */
   workVersion: number;
+  /** Raises `workVersion` from outside the chat: the top bar's autopilot switch changes every card's countdown. */
+  workChanged: () => void;
   /**
    * In the editor, column 2 holds that clip's Assistant instead of the CMO chat. The editor portals its
    * `AssistantPanel` here, so the panel keeps all of the editor's state (playhead, selection, capture tools).

@@ -19,6 +19,8 @@ export const AutopilotSchema = z.object({
   hours: z.union(AUTOPILOT_HOURS.map((h) => z.literal(h))),
   /** Why autopilot turned itself off for a platform, until the founder saves again. */
   note: z.string().max(200).nullable(),
+  /** Off from the top bar (`set_autopilot_paused`): nothing counts down, and `platforms` is kept for the way back. */
+  paused: z.boolean(),
 });
 export type Autopilot = z.infer<typeof AutopilotSchema>;
 

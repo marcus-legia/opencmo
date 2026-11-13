@@ -405,3 +405,10 @@ html:not([data-theme="dark"]) .k { --ok: #16744c; --warn: #8f5a0e; }
   .pg-main .td-view[data-view="calendar"] .drawer { position: static; width: auto; box-shadow: none; }
 }
 .pg-main .td-view .drawer[hidden] { display: none; }
+
+/* Autopilot's switch on the top bar (owner, 2026-11-13): on, it reads like the connected-account pill with its live
+   dot; off, it is muted, so a glance tells which way it is. The words go on a phone, the bolt and the dot stay. */
+.td-frame .top .td-autopilot { white-space: nowrap; flex-shrink: 0; }
+.td-frame .top .td-autopilot[aria-pressed="true"] { color: var(--text); }
+.td-frame .top .td-autopilot.is-off { color: var(--subtle); border-style: dashed; }
+.td-frame .top .td-autopilot:disabled { opacity: .6; cursor: progress; }

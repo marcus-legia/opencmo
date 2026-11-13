@@ -112,7 +112,8 @@ batching is by row (one `short_batch` for the shorts of one video) rather than a
    gets `approvals.auto_at`: the card counts down (6, 12 or 24 hours, at the latest a quarter of an hour before its
    time), the founder can edit or skip it, and the hourly cron's `approval_auto_decide` approves an untouched card as
    its owner through `approval_decide` (`decided_via = 'auto'`). Never: replies, threads, the founder's own chat
-   brief, a post due within the hour, a paused CMO. Three skips in a row turn it off for that platform. Such an
+   brief, a post due within the hour, a paused CMO. Three skips in a row turn it off for that platform. The founder turns it off whole from the top bar's switch
+   (`set_autopilot_paused`, 2026-11-13): every countdown stops and the platforms are kept. Such an
    approval is nobody's decision: `cmo_draft_outcomes.auto` keeps it out of Writer's voice.
 3. **Few cards.** Batch what belongs together (shorts of one video, slides of one slideshow, posts of one day); keep the
    daily count low.

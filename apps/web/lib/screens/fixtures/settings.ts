@@ -9,7 +9,7 @@ export const settingsFixture: SettingsScreen = {
   timezone: TZ,
   digestHour: 7,
   plan: { name: "Starter", credits: 312 },
-  autopilot: { platforms: ["x"], hours: 12, note: null },
+  autopilot: { platforms: ["x"], hours: 12, note: null, paused: false },
 };
 
 export const settingsEmpty: SettingsScreen = {
@@ -19,5 +19,5 @@ export const settingsEmpty: SettingsScreen = {
   timezone: "UTC",
   digestHour: null,
   plan: { name: "Free", credits: null },
-  autopilot: { platforms: [], hours: 12, note: null },
+  autopilot: { platforms: [], hours: 12, note: null, paused: false },
 };

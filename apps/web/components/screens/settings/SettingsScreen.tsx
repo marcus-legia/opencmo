@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { ApiError, api, jsonBody } from "@/components/clipping/api";
 import type { AccountSummary } from "@/components/clipping/web/AccountUsage";
@@ -10,6 +10,8 @@ import { ThemeSwitch } from "@/components/theme";
 import { Button, MonoLabel } from "@/components/ui";
 import { formatBytes } from "@/lib/upload";
 import { AUTOPILOT_HOURS, AUTOPILOT_PLATFORMS, BUDGET_MAX, BUDGET_MIN, type Autopilot, type SettingsScreen as Data } from "@/lib/screens/settings";
+
+import { publishAutopilot, useAutopilotChanges } from "@/components/today/autopilot";
 
 import { PauseButton } from "../brain/PauseButton";
 import { cx, ErrorNote, PageHeader, Panel, Screen, SkeletonBlocks } from "../parts";
@@ -75,13 +77,19 @@ function AutopilotField({ initial, accounts, live }: { initial: Autopilot; accou
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const connected = (id: string) => accounts.some((a) => a.platform === id && a.status === "connected");
+  // The top bar's switch changes the same setting while this block is on screen.
+  useAutopilotChanges(useCallback((next: Autopilot) => setValue(next), []));
 
-  async function save(next: Pick<Autopilot, "platforms" | "hours">) {
+  async function send(request: Pick<Autopilot, "platforms" | "hours"> | { paused: boolean }) {
     setBusy(true);
     setError(null);
     try {
       // Sample settings change only on this page.
-      setValue(live ? await api<Autopilot>("/cmo/autopilot", jsonBody(next, "PUT")) : { ...next, note: null });
+      const next = live
+        ? await api<Autopilot>("/cmo/autopilot", jsonBody(request, "paused" in request ? "PATCH" : "PUT"))
+        : { ...value, ...request, note: null };
+      setValue(next);
+      publishAutopilot(next);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not save your settings.");
     } finally {
@@ -92,6 +100,14 @@ function AutopilotField({ initial, accounts, live }: { initial: Autopilot; accou
   return (
     <fieldset className="v2-field scr-radios" data-testid="settings-autopilot">
       <legend>Post without asking me</legend>
+      {value.paused && value.platforms.length > 0 ? (
+        <span role="status" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
+          <span className="scr-small">Autopilot is off from the top bar. Your choices are kept; every post waits for your Approve.</span>
+          <Button variant="secondary" disabled={busy} onClick={() => void send({ paused: false })}>
+            Turn on
+          </Button>
+        </span>
+      ) : null}
       {AUTOPILOT_PLATFORMS.map((id) => {
         const on = value.platforms.includes(id);
         const ready = connected(id);
@@ -101,7 +117,7 @@ function AutopilotField({ initial, accounts, live }: { initial: Autopilot; accou
               type="checkbox"
               checked={on}
               disabled={busy || (!ready && !on)}
-              onChange={() => void save({ platforms: on ? value.platforms.filter((p) => p !== id) : [...value.platforms, id], hours: value.hours })}
+              onChange={() => void send({ platforms: on ? value.platforms.filter((p) => p !== id) : [...value.platforms, id], hours: value.hours })}
             />
             <span>
               <b>{AUTOPILOT_LABEL[id]}</b>
@@ -117,7 +133,7 @@ function AutopilotField({ initial, accounts, live }: { initial: Autopilot; accou
           className="v2-input"
           value={value.hours}
           disabled={busy}
-          onChange={(e) => void save({ platforms: value.platforms, hours: Number(e.target.value) as Autopilot["hours"] })}
+          onChange={(e) => void send({ platforms: value.platforms, hours: Number(e.target.value) as Autopilot["hours"] })}
         >
           {AUTOPILOT_HOURS.map((hours) => (
             <option key={hours} value={hours}>
