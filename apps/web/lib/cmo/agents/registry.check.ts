@@ -36,7 +36,7 @@ assert.deepEqual(agentCandidates("planner", others).map((agent) => agent.model),
 assert.deepEqual(agentCandidates("planner", { GEMINI_API_KEY: "g" } as unknown as NodeJS.ProcessEnv), [], "no Anthropic key: not set up");
 
 // The tiers the owner set: Sonnet writes and plans, Haiku does the small tasks.
-for (const id of ["cmo", "onboarding", "planner", "x_writer", "brief_writer", "slides_writer", "sales", "research", "motion", "director"] as const) assert.equal(resolveAgent(id, base).model, "claude-sonnet-5-5", `${id} on Sonnet`);
+for (const id of ["cmo", "onboarding", "planner", "x_writer", "brief_writer", "sales", "research", "motion", "director"] as const) assert.equal(resolveAgent(id, base).model, "claude-sonnet-5-5", `${id} on Sonnet`);
 for (const id of ["checker", "captions", "writer", "moderation", "shorts"] as const) assert.equal(resolveAgent(id, base).model, "claude-haiku-5-5", `${id} on Haiku`);
 
 // No key: empty (the caller reports it in English).

@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 import {
   chunk,
   sweepOrphanPages,
 } from "./cleanup";
+import { BUCKETS } from "./storage";
 
 async function main(): Promise<void> {
   // Deadline hết giữa hai lô: không mở thêm request, cũng không xoá sau reserve.
@@ -43,6 +45,14 @@ async function main(): Promise<void> {
     [100, 100, 1],
     "orphan deletes remain within the 100-object Storage batch bound",
   );
+
+  // The cron skips a row whose bucket is not in BUCKETS, and that row comes back every loop: photos never went.
+  const schema = readFileSync(new URL("../../../supabase/schema/current.sql", import.meta.url), "utf8");
+  const queued = /CONSTRAINT storage_deletions_bucket_check CHECK \(\(bucket = ANY \(ARRAY\[([^\]]+)\]/.exec(schema);
+  assert.ok(queued, "the storage_deletions bucket check is in the schema");
+  for (const bucket of queued[1].matchAll(/'([a-z]+)'::text/g)) {
+    assert.ok((BUCKETS as readonly string[]).includes(bucket[1]), `the cleanup cron deletes from ${bucket[1]}`);
+  }
 
   console.log("cleanup sweep: mọi kiểm tra xanh");
 }

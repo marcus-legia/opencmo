@@ -14,19 +14,18 @@ import { z } from "zod";
 import type { Documents } from "../jobs/types";
 import type { PlatformProfile } from "../platforms";
 
-export const WRITER_KINDS = ["post", "caption", "youtube", "video_brief", "slides"] as const;
+export const WRITER_KINDS = ["post", "caption", "youtube", "video_brief"] as const;
 export type WriterKind = (typeof WRITER_KINDS)[number];
 
 /** A platform profile (`packages/contracts/platforms.json`, A0): limit, title limit, "more" cut, tone, hashtags, links. */
 export type WriterProfile = PlatformProfile;
 
-/** Which profile kind each writer kind drafts for. Video briefs and slides go to Studio, not a platform. */
+/** Which profile kind each writer kind drafts for. A video brief goes to Studio, not a platform. */
 export const PROFILE_KIND: Record<WriterKind, WriterProfile["kind"] | null> = {
   post: "post",
   caption: "caption",
   youtube: "youtube",
   video_brief: null,
-  slides: null,
 };
 
 /** Frames a video can have, the same list as `editor-core`'s `VIDEO_ASPECTS`. */
@@ -100,7 +99,6 @@ export type WriterBriefs = {
   caption: { video: VideoSource };
   youtube: { video: VideoSource };
   video_brief: { idea: string; reason?: string; seconds?: number; aspect?: VideoBrief["aspect"] };
-  slides: { idea: string; reason?: string; count?: number };
 };
 export type WriterBrief<K extends WriterKind = WriterKind> = WriterBriefs[K];
 
@@ -222,12 +220,6 @@ export const SlideSchema = z.object({
 });
 export type Slide = z.infer<typeof SlideSchema>;
 
-/** Slide text for a slideshow: 5–10 slides, the hook first, one idea each, the call to action last. */
-export const SlidesDraftSchema = z.object({
-  slides: z.array(SlideSchema).describe("5 to 10 slides: the hook first, one idea each, the call to action last"),
-  rationale: z.string().describe("One sentence: why this slideshow now"),
-});
-export type SlidesDraft = z.infer<typeof SlidesDraftSchema>;
 
 export type WriterOutputs = {
   post: PostDraft;
@@ -235,12 +227,11 @@ export type WriterOutputs = {
   youtube: YoutubeDraft;
   /** The brief as Studio takes it (parsed), plus why. */
   video_brief: { brief: VideoBrief; rationale: string; learnedFrom: string[] };
-  slides: SlidesDraft;
 };
 export type WriterOutput<K extends WriterKind = WriterKind> = WriterOutputs[K];
 
 /** The profile a kind is written for: a platform profile for posts, captions and YouTube; none for Studio's kinds. */
-export type ProfileFor<K extends WriterKind> = K extends "video_brief" | "slides" ? null : WriterProfile;
+export type ProfileFor<K extends WriterKind> = K extends "video_brief" ? null : WriterProfile;
 
 /**
  * One writer for every kind. `draft` writes and checks with code; a version a code check refuses never

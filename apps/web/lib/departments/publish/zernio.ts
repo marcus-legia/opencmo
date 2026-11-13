@@ -152,11 +152,13 @@ export function postBody(deliverable: PublishDeliverable, slot: PublishSlot): Js
   // (docs.zernio.com/platforms/tiktok/posts, read 2026-11-12); the caption is its description, as TikTok's title
   // takes only 90 characters. Instagram and Threads make a carousel from the images alone.
   if (deliverable.kind === "photo_post" && slot.platform === "tiktok" && data) {
+    // The same page: "allow_duet and allow_stitch do not apply" to photos (read 2026-11-13).
+    const { allowDuet: _duet, allowStitch: _stitch, ...photo } = data;
     return {
       ...(deliverable.text.trim() ? { content: deliverable.text } : {}),
       mediaItems: media,
       platforms: [{ platform: SLUG[slot.platform], accountId: slot.zernioAccountId }],
-      tiktokSettings: { ...data, mediaType: "photo", photoCoverIndex: 0, description: deliverable.text },
+      tiktokSettings: { ...photo, mediaType: "photo", photoCoverIndex: 0, description: deliverable.text },
       publishNow: true,
       metadata: { opencmoSlotId: slot.id, opencmoDeliverableId: deliverable.id },
     };

@@ -33,6 +33,13 @@ begin
       'platform', p_platform, 'mode', 'publish', 'handle', 'founder',
       'account_id', case p_platform when 'x' then 'e3011000-0000-4000-8000-000000000001' else 'e3011000-0000-4000-8000-000000000002' end,
       'at', to_char(date_trunc('minute', now() + interval '48 hours') at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'))) || p_extra);
+  -- The insert's trigger picks the platform's next free time (today at noon on Threads), which is under the autopilot
+  -- window late in the day; an update in review keeps the time the test set.
+  update public.content_items set body = body || jsonb_build_object('proposed', jsonb_build_object(
+      'platform', p_platform, 'mode', 'publish', 'handle', 'founder',
+      'account_id', case p_platform when 'x' then 'e3011000-0000-4000-8000-000000000001' else 'e3011000-0000-4000-8000-000000000002' end,
+      'at', to_char(date_trunc('minute', now() + interval '48 hours') at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')))
+  where id = p_id;
   delete from public.approvals where ref_id = p_id;
   perform public.approval_raise('e3010000-0000-4000-8000-00000000000a', 'content_item', p_id);
   return p_id;

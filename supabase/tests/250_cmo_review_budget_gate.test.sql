@@ -34,7 +34,8 @@ select public.cmo_enqueue('e2500000-0000-4000-8000-00000000000b', 'niche_video_r
 select public.cmo_enqueue('e2500000-0000-4000-8000-00000000000b', 'post_draft', '{"source":"schedule"}');
 select is((select cmo_paused_at is not null from public.profiles where id = 'e2500000-0000-4000-8000-00000000000b'), false,
   '10 credits in an hour is at the limit, not past it');
-select public.cmo_enqueue('e2500000-0000-4000-8000-00000000000b', 'write_slides', '{"source":"event","idea":"x"}');
+-- One more 1-credit draft (write_slides was this test's job until 20270121030000 removed it).
+select public.cmo_enqueue('e2500000-0000-4000-8000-00000000000b', 'post_draft', '{"source":"event"}');
 select is((select cmo_paused_at is not null from public.profiles where id = 'e2500000-0000-4000-8000-00000000000b'), true,
   'past it, the brain pauses itself');
 select ok(exists (select 1 from public.work_order_events where user_id = 'e2500000-0000-4000-8000-00000000000b' and text like 'Paused:%'),

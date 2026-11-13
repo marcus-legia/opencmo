@@ -2265,6 +2265,8 @@ begin
         'text', coalesce(body->>'text', ''),
         'alternates', case when jsonb_typeof(body->'alternates') = 'array' then body->'alternates' else '[]'::jsonb end,
         'rationale', coalesce(body->>'rationale', reason))
+        -- The founder's own photos are part of what they approve; a post without any keeps its old hash.
+        || case when cardinality(photos) > 0 then jsonb_build_object('photos', to_jsonb(photos)) else '{}'::jsonb end
       into v from public.content_items where id = p_ref_id;
     when 'opportunity' then
       select jsonb_build_object('kind', 'reply', 'url', url, 'community', community, 'title', title,
@@ -3060,12 +3062,14 @@ CREATE TABLE public.content_items (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     clip_id uuid,
     wants_image boolean DEFAULT false NOT NULL,
+    photos text[] DEFAULT '{}'::text[] NOT NULL,
     CONSTRAINT content_items_body_check CHECK (((jsonb_typeof(body) = 'object'::text) AND (octet_length((body)::text) <= 16384))),
     CONSTRAINT content_items_clip_check CHECK (((clip_id IS NULL) OR (department = 'video'::text))),
     CONSTRAINT content_items_department_check CHECK ((department = ANY (ARRAY['post'::text, 'sales'::text, 'video'::text]))),
     CONSTRAINT content_items_external_url_check CHECK ((char_length(external_url) <= 500)),
     CONSTRAINT content_items_final_text_check CHECK ((char_length(final_text) <= 4000)),
     CONSTRAINT content_items_idea_check CHECK (((char_length(idea) >= 1) AND (char_length(idea) <= 300))),
+    CONSTRAINT content_items_photos_check CHECK ((cardinality(photos) <= 4)),
     CONSTRAINT content_items_platform_check CHECK (((char_length(platform) >= 1) AND (char_length(platform) <= 20))),
     CONSTRAINT content_items_priority_check CHECK ((priority = ANY (ARRAY['high'::text, 'medium'::text, 'low'::text]))),
     CONSTRAINT content_items_reason_check CHECK ((char_length(reason) <= 300)),
@@ -4275,6 +4279,39 @@ $$;
 
 
 --
+-- Name: cmo_drop_write_slides(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_drop_write_slides() RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_run public.cmo_runs;
+  v_order uuid;
+  v_n integer := 0;
+begin
+  for v_run in
+    update public.cmo_runs set status = 'failed', finished_at = now(), lease_until = null,
+      error = 'OpenCMO no longer writes slideshows. Your credits were refunded; a photo post with a caption replaces it.'
+    where kind = 'write_slides' and status in ('queued', 'running')
+    returning *
+  loop
+    perform public.cmo_refund_run(v_run);
+    v_n := v_n + 1;
+  end loop;
+  for v_order in
+    select id from public.work_orders
+    where kind = 'write_slides' and status in ('queued', 'running', 'deferred', 'waiting_order', 'waiting_founder')
+  loop
+    perform public.work_order_move(v_order, 'cancelled', 'OpenCMO no longer writes slideshows');
+  end loop;
+  return v_n;
+end;
+$$;
+
+
+--
 -- Name: cmo_edit_correction(uuid, text, boolean); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -4622,7 +4659,7 @@ CREATE FUNCTION public.cmo_job_daily_limit(p_kind text) RETURNS integer
     AS $$
   select case p_kind when 'plan_week' then 5 when 'post_draft' then 10 when 'sales_scan' then 3
     when 'competitor_research' then 2 when 'pull_metrics' then 2 when 'summarize_memory' then 1 when 'review_week' then 1
-    when 'write_caption' then 20 when 'write_video_brief' then 25 when 'write_slides' then 10 when 'publish_post' then 100 when 'niche_video_research' then 2
+    when 'write_caption' then 20 when 'write_video_brief' then 25 when 'publish_post' then 100 when 'niche_video_research' then 2
     -- cmo-review-3 2.2: one rating round a day (`cmo_rate_drafts`), with room for a retry.
     when 'distill_ratings' then 2
     when 'repurpose_post' then 20
@@ -4640,7 +4677,7 @@ CREATE FUNCTION public.cmo_job_price(p_kind text) RETURNS integer
     AS $$
   select case p_kind when 'plan_week' then 1 when 'post_draft' then 1 when 'sales_scan' then 5
     when 'competitor_research' then 2 when 'pull_metrics' then 0 when 'summarize_memory' then 0 when 'review_week' then 0
-    when 'write_caption' then 1 when 'write_video_brief' then 1 when 'write_slides' then 1 when 'publish_post' then 0 when 'niche_video_research' then 2
+    when 'write_caption' then 1 when 'write_video_brief' then 1 when 'publish_post' then 0 when 'niche_video_research' then 2
     when 'repurpose_post' then 1
     when 'photo_caption' then 1
     else 0 end
@@ -7022,7 +7059,8 @@ begin
     return new;
   end if;
   begin
-    if public.cmo_paused(new.user_id)
+    -- The founder added their own photos: no generated image (owner, 2026-11-13).
+    if public.cmo_paused(new.user_id) or cardinality(new.photos) > 0
        or exists (select 1 from public.deliverables where post_id = new.id and kind = 'image')
        or exists (select 1 from public.work_orders where user_id = new.user_id and kind = 'build_post_image'
                   and brief->>'postId' = new.id::text and status not in ('failed', 'cancelled')) then
@@ -9886,6 +9924,73 @@ $$;
 
 
 --
+-- Name: photo_draft_release(uuid, text[]); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.photo_draft_release(p_post uuid, p_photos text[] DEFAULT NULL::text[]) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'storage'
+    AS $$
+declare
+  v_row public.photo_posts;
+  v_n integer;
+begin
+  -- Locked first, so the statement below sees a post scheduled meanwhile in another tab as scheduled.
+  select * into v_row from public.photo_posts where id = p_post for update;
+  -- Only a draft is ever cancelled, so a cancelled post is an abandoned draft whose photos may go too.
+  if not found or v_row.status not in ('draft', 'cancelled') then
+    return 0;
+  end if;
+  insert into public.storage_deletions (bucket, path, user_id)
+  select 'photos', o.name, v_row.user_id from storage.objects o
+  where o.bucket_id = 'photos'
+    and o.name like v_row.user_id::text || '/' || v_row.id::text || '/%'
+    and (p_photos is null or o.name = any (p_photos))
+    -- A photo of a scheduled post is never deleted, whichever post it was uploaded for.
+    and not exists (select 1 from public.photo_posts s where s.status = 'scheduled' and o.name = any (s.photos))
+  on conflict (bucket, path) do nothing;
+  get diagnostics v_n = row_count;
+  return v_n;
+end;
+$$;
+
+
+--
+-- Name: photo_drafts_sweep(integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.photo_drafts_sweep(p_days integer DEFAULT 7) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'storage'
+    AS $$
+declare
+  v_since timestamptz;
+  v_id uuid;
+  v_n integer := 0;
+begin
+  if p_days is null or p_days < 1 or p_days > 365 then
+    raise exception 'p_days must be between 1 and 365.' using errcode = '22023';
+  end if;
+  v_since := now() - make_interval(days => p_days);
+  for v_id in
+    select p.id from public.photo_posts p
+    where p.status = 'draft' and p.updated_at < v_since
+      and not exists (select 1 from storage.objects o where o.bucket_id = 'photos'
+        and o.name like p.user_id::text || '/' || p.id::text || '/%' and o.created_at >= v_since)
+    order by p.updated_at
+    limit 500
+    for update of p skip locked
+  loop
+    perform public.photo_draft_release(v_id);
+    update public.photo_posts set status = 'cancelled', updated_at = now() where id = v_id;
+    v_n := v_n + 1;
+  end loop;
+  return v_n;
+end;
+$$;
+
+
+--
 -- Name: photo_post_caption(uuid, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -9956,10 +10061,16 @@ declare
   v_id uuid;
 begin
   perform pg_advisory_xact_lock(hashtextextended(v_user::text || ':photo_post', 1719));
-  select id into v_id from public.photo_posts where user_id = v_user and status = 'draft' order by created_at desc limit 1;
+  -- Locked: a draft scheduled meanwhile in another tab is not emptied, and its photos are not released.
+  select id into v_id from public.photo_posts where user_id = v_user and status = 'draft' order by created_at desc limit 1
+  for update;
   if v_id is not null then
+    -- Starting again empties the draft: its photos are deleted (F3), so they stop counting toward storage.
+    perform public.photo_draft_release(v_id);
     update public.photo_posts set photos = '{}', caption = '', platforms = '{}', updated_at = now() where id = v_id;
     -- Drafts left over from before this rule are closed, so they stop counting.
+    perform public.photo_draft_release(id) from public.photo_posts
+    where user_id = v_user and status = 'draft' and id <> v_id;
     update public.photo_posts set status = 'cancelled', updated_at = now()
     where user_id = v_user and status = 'draft' and id <> v_id;
     return v_id;
@@ -9988,6 +10099,9 @@ begin
   if not found then
     raise exception 'Photo post not found.' using errcode = 'P0002';
   end if;
+  if v_row.status = 'cancelled' then
+    raise exception 'This draft was closed. Start a new photo post.' using errcode = 'P0001';
+  end if;
   if v_row.status <> 'draft' then
     raise exception 'This photo post is already scheduled.' using errcode = 'P0001';
   end if;
@@ -10003,6 +10117,12 @@ begin
   if char_length(coalesce(p_caption, '')) > 2200 then
     raise exception 'A caption is 2,200 characters at most.' using errcode = '22023';
   end if;
+  -- A photo already queued for deletion is as good as gone: the cleanup would delete it under a scheduled post.
+  if exists (select 1 from public.storage_deletions where bucket = 'photos' and path = any (v_photos)) then
+    raise exception 'A photo is missing. Upload it again.' using errcode = '22023';
+  end if;
+  -- A photo dropped from the list is deleted.
+  perform public.photo_draft_release(p_id, array(select p from unnest(v_row.photos) p where p <> all (v_photos)));
   update public.photo_posts set photos = v_photos, caption = coalesce(p_caption, ''), platforms = v_platforms, updated_at = now()
   where id = p_id returning * into v_row;
   return v_row;
@@ -10027,6 +10147,9 @@ begin
   select * into v_row from public.photo_posts where id = p_id and user_id = v_user for update;
   if not found then
     raise exception 'Photo post not found.' using errcode = 'P0002';
+  end if;
+  if v_row.status = 'cancelled' then
+    raise exception 'This draft was closed. Start a new photo post.' using errcode = 'P0001';
   end if;
   if v_row.status <> 'draft' then
     raise exception 'This photo post is already scheduled.' using errcode = 'P0001';
@@ -10382,6 +10505,104 @@ $$;
 
 
 --
+-- Name: post_photos_save(uuid, text[], text[]); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.post_photos_save(p_item uuid, p_photos text[], p_previous text[] DEFAULT NULL::text[]) RETURNS public.content_items
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'storage'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_row public.content_items;
+  v_photos text[] := coalesce(p_photos, '{}');
+  v_slot public.schedule_slots;
+begin
+  select * into v_row from public.content_items where id = p_item and user_id = v_user and department = 'post' for update;
+  if not found then
+    raise exception 'Post not found.' using errcode = 'P0002';
+  end if;
+  if v_row.status not in ('in_review', 'approved') then
+    raise exception '%', case when v_row.status = 'published' then 'This post is already posted; its photos cannot change.'
+      else 'Add photos once the post is written.' end using errcode = 'P0001';
+  end if;
+  if p_previous is not null and p_previous is distinct from v_row.photos then
+    raise exception 'The photos of this post changed elsewhere. Reload the card and try again.' using errcode = 'P0001';
+  end if;
+  if exists (select 1 from public.schedule_slots s join public.deliverables d on d.id = s.deliverable_id
+             where d.ref_kind = 'content_item' and d.ref_id = p_item and s.status in ('due', 'reminded', 'publishing')) then
+    raise exception 'This post is being posted right now; its photos cannot change.' using errcode = 'P0001';
+  end if;
+  if cardinality(v_photos) > 4 then
+    raise exception 'A post takes up to 4 photos.' using errcode = '22023';
+  end if;
+  if (select count(distinct p) from unnest(v_photos) p) <> cardinality(v_photos) then
+    raise exception 'The same photo is in the post twice.' using errcode = '22023';
+  end if;
+  if exists (select 1 from unnest(v_photos) p
+             where p not like v_user::text || '/' || p_item::text || '/%'
+                or not exists (select 1 from storage.objects o where o.bucket_id = 'photos' and o.name = p))
+     or exists (select 1 from public.storage_deletions where bucket = 'photos' and path = any (v_photos)) then
+    raise exception 'A photo is missing. Upload it again.' using errcode = '22023';
+  end if;
+  if v_photos = v_row.photos then
+    return v_row;
+  end if;
+  insert into public.storage_deletions (bucket, path, user_id)
+  select 'photos', p, v_user from unnest(v_row.photos) p where p <> all (v_photos)
+  on conflict (bucket, path) do nothing;
+  update public.content_items set photos = v_photos, updated_at = now() where id = p_item returning * into v_row;
+  if v_row.status = 'approved' then
+    perform public.schedule_image_changed(p_item);
+    -- A failed slot waiting on its Retry card posts the new photos only after the founder sees them.
+    for v_slot in
+      select s.* from public.schedule_slots s join public.deliverables d on d.id = s.deliverable_id
+      where d.ref_kind = 'content_item' and d.ref_id = p_item and s.status = 'failed'
+        and exists (select 1 from public.approvals a where a.ref_kind = 'schedule_slot' and a.ref_id = s.id and a.status = 'waiting')
+    loop
+      perform public.approval_raise(v_slot.user_id, 'schedule_slot', v_slot.id);
+    end loop;
+  end if;
+  return v_row;
+end;
+$$;
+
+
+--
+-- Name: post_photos_sweep(integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.post_photos_sweep(p_days integer DEFAULT 7) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'storage'
+    AS $$
+declare
+  v_n integer;
+begin
+  if p_days is null or p_days < 1 or p_days > 365 then
+    raise exception 'p_days must be between 1 and 365.' using errcode = '22023';
+  end if;
+  insert into public.storage_deletions (bucket, path, user_id)
+  select 'photos', o.name, f.id
+  from storage.objects o
+  join public.profiles f on f.id::text = (storage.foldername(o.name))[1]
+  where o.bucket_id = 'photos' and o.created_at < now() - make_interval(days => p_days)
+    and not exists (select 1 from public.photo_posts p
+                    where p.id::text = (storage.foldername(o.name))[2] and p.status = 'draft')
+    and not exists (select 1 from public.photo_posts p where p.status = 'scheduled' and o.name = any (p.photos))
+    and not exists (select 1 from public.content_items c
+                    where c.id::text = (storage.foldername(o.name))[2] and c.status not in ('skipped', 'failed')
+                      and o.name = any (c.photos))
+    and not exists (select 1 from public.storage_deletions d where d.bucket = 'photos' and d.path = o.name)
+  limit 1000
+  on conflict (bucket, path) do nothing;
+  get diagnostics v_n = row_count;
+  return v_n;
+end;
+$$;
+
+
+--
 -- Name: post_proposal(uuid, text, uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -10455,19 +10676,15 @@ $_$;
 
 
 --
--- Name: post_slots_open(uuid, uuid); Type: FUNCTION; Schema: public; Owner: -
+-- Name: post_schedules(text, uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.post_slots_open(p_deliverable uuid, p_except uuid) RETURNS boolean
+CREATE FUNCTION public.post_schedules(p_status text, p_deliverable uuid) RETURNS boolean
     LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
-  select exists (select 1 from public.schedule_slots s
-    where s.deliverable_id = p_deliverable and s.id <> p_except
-      and (s.status in ('proposed', 'waiting', 'due', 'reminded', 'publishing')
-        -- A failed slot whose card still waits (Retry, copy and open) is not over either.
-        or (s.status = 'failed' and exists (select 1 from public.approvals a
-              where a.ref_kind = 'schedule_slot' and a.ref_id = s.id and a.status = 'waiting'))));
+  select p_status = 'approved' or (p_status = 'published' and exists (select 1 from public.schedule_slots s
+    where s.deliverable_id = p_deliverable and s.status = 'published'))
 $$;
 
 
@@ -11466,9 +11683,13 @@ begin
       perform public.approval_close('schedule_slot', v_slot.id, 'approved');
       select * into v_d from public.deliverables where id = v_slot.deliverable_id;
       if v_d.ref_kind = 'content_item' then
+        -- The first platform to post makes the post published (F1); the flag tells `schedule_follow_content` that a
+        -- slot posted, so the other platforms keep their slots.
+        perform set_config('opencmo.slot_published', 'on', true);
         update public.content_items set status = 'published', published_at = coalesce(published_at, now()),
           external_url = coalesce(v_url, external_url), updated_at = now()
-        where id = v_d.ref_id and status <> 'published' and not public.post_slots_open(v_d.id, v_slot.id);
+        where id = v_d.ref_id and status <> 'published';
+        perform set_config('opencmo.slot_published', '', true);
       end if;
     when 'failed' then
       if v_slot.status <> 'failed' then
@@ -13015,7 +13236,8 @@ declare
   v_row public.upload_reservations;
   v_parts text[] := string_to_array(coalesce(p_object_name, ''), '/');
 begin
-  -- A photo of a photo post (20270120060000): a JPEG, PNG or WebP of 10 MB at most, under the founder's draft.
+  -- A photo of a photo post (20270120060000) or of a text post (20270121040000): a JPEG, PNG or WebP of 10 MB at most,
+  -- under the founder's draft, or under a post of theirs that is in review or approved.
   if p_bucket = 'photos' then
     if p_size is null or p_size <= 0 or p_size > 10485760
        or coalesce(p_content_type, '') not in ('image/jpeg', 'image/png', 'image/webp') then
@@ -13023,8 +13245,15 @@ begin
     end if;
     if p_project_id is null or array_length(v_parts, 1) <> 3 or v_parts[1] is distinct from v_user::text
        or v_parts[2] is distinct from p_project_id::text
-       or not exists (select 1 from public.photo_posts where id = p_project_id and user_id = v_user and status = 'draft') then
+       or not (exists (select 1 from public.photo_posts where id = p_project_id and user_id = v_user and status = 'draft')
+               or exists (select 1 from public.content_items where id = p_project_id and user_id = v_user
+                            and department = 'post' and status in ('in_review', 'approved'))) then
       raise exception 'Photo post not found.' using errcode = 'P0002';
+    end if;
+    -- A text post's photos go to every platform of its slot, and Threads and LinkedIn do not take WebP.
+    if p_content_type = 'image/webp'
+       and not exists (select 1 from public.photo_posts where id = p_project_id and user_id = v_user and status = 'draft') then
+      raise exception 'Use a JPEG or PNG photo: Threads and LinkedIn do not take WebP.' using errcode = '22023';
     end if;
     -- The post is in the path; `upload_reservations.project_id` points at jobs, so the reservation names none.
     p_project_id := null;
@@ -14047,14 +14276,15 @@ declare
   v_image jsonb;
   v_thread jsonb;
   v_variant text;
+  v_photos text[];
 begin
   select * into v_d from public.deliverables where id = p_deliverable;
   if not found then
     return null;
   end if;
   if v_d.ref_kind = 'content_item' then
-    select coalesce(body->>'text', ''), case when public.thread_valid(body) then body->'thread' end
-    into v_text, v_thread from public.content_items where id = v_d.ref_id;
+    select coalesce(body->>'text', ''), case when public.thread_valid(body) then body->'thread' end, photos
+    into v_text, v_thread, v_photos from public.content_items where id = v_d.ref_id;
     -- The founder had the post rewritten for this platform: its slot there carries the rewrite, the others the core.
     v_variant := public.post_variant_text(v_d.ref_id, p_platform);
     if v_variant is not null then
@@ -14078,11 +14308,18 @@ begin
         v_image := null;
       end if;
     end if;
+    -- The founder's own photos (owner, 2026-11-13) go out with the post on every platform of its slot, in their order,
+    -- in place of a generated image. The publish job posts `photos` as it does a photo post's.
+    if cardinality(v_photos) > 0 then
+      v_image := null;
+    end if;
     return jsonb_build_object('clip_id', null, 'text', v_text, 'title', null,
       'content_hash', public.approval_hash(jsonb_build_object('text', v_text)
         || case when v_image is not null then jsonb_build_object('image', v_image->>'object') else '{}'::jsonb end
+        || case when cardinality(v_photos) > 0 then jsonb_build_object('photos', to_jsonb(v_photos)) else '{}'::jsonb end
         || case when v_thread is not null then jsonb_build_object('thread', v_thread) else '{}'::jsonb end))
       || case when v_image is not null then jsonb_build_object('image', v_image) else '{}'::jsonb end
+      || case when cardinality(v_photos) > 0 then jsonb_build_object('photos', to_jsonb(v_photos)) else '{}'::jsonb end
       || case when v_thread is not null then jsonb_build_object('thread', v_thread) else '{}'::jsonb end;
   elsif v_d.ref_kind = 'photo_post' then
     -- The caption and the photos in the founder's order; both are in the hash, so a change after approval refuses it.
@@ -14141,8 +14378,10 @@ begin
       if v_deliverable is not null then
         perform public.schedule_propose(v_deliverable);
       end if;
-    elsif new.status = 'published' and new.department = 'post' then
-      -- Posted by hand (copy and open, or marked posted): what still waits for its time is dropped with its card.
+    elsif new.status = 'published' and new.department = 'post'
+          and coalesce(current_setting('opencmo.slot_published', true), '') <> 'on' then
+      -- Posted by hand on the post card ("I posted it"): what still waits for its time is dropped with its card. A
+      -- slot that posted sets the flag, and the other platforms keep theirs.
       update public.approvals a set status = 'cancelled', decided_at = now()
       from public.schedule_slots s join public.deliverables d on d.id = s.deliverable_id
       where a.ref_kind = 'schedule_slot' and a.ref_id = s.id and a.status = 'waiting'
@@ -14257,9 +14496,11 @@ begin
     perform public.approval_close('schedule_slot', v_slot.id, 'approved');
     select * into v_d from public.deliverables where id = v_slot.deliverable_id;
     if v_d.ref_kind = 'content_item' then
+      -- One platform marked posted is the post published (F1); the other platforms keep their slots.
+      perform set_config('opencmo.slot_published', 'on', true);
       update public.content_items set status = 'published', published_at = coalesce(published_at, now()), updated_at = now()
-      where id = v_d.ref_id and user_id = v_user and status <> 'published'
-        and not public.post_slots_open(v_d.id, v_slot.id);
+      where id = v_d.ref_id and user_id = v_user and status <> 'published';
+      perform set_config('opencmo.slot_published', '', true);
     end if;
   end if;
   select * into v_row from public.approvals
@@ -14445,11 +14686,13 @@ begin
     return 0;
   end if;
   if v_d.kind = 'post' and v_d.ref_kind = 'content_item' then
-    -- Every platform of the post's slot (Writer's old items: the one platform of their label).
+    -- Every platform of the post's slot (Writer's old items: the one platform of their label). A post one platform
+    -- already published (F1) still asks for a new time on the others; one posted by hand on its card does not.
     select array(select t from unnest(public.post_targets(c.id)) with ordinality as u(t, o)
                  where t in ('x', 'threads', 'linkedin', 'facebook') order by o)
       into v_platforms
-    from public.content_items c where c.id = v_d.ref_id and c.status = 'approved';
+    from public.content_items c where c.id = v_d.ref_id
+      and public.post_schedules(c.status, v_d.id);
   elsif v_d.kind = 'photo_post' and v_d.ref_kind = 'photo_post' then
     -- The founder's own photos (D7): every platform they picked, each from its connected account.
     select array(select p from unnest(platforms) p where p in ('tiktok', 'instagram', 'threads') order by p) into v_platforms
@@ -14544,27 +14787,6 @@ CREATE FUNCTION public.schedule_rules() RETURNS jsonb
 
 
 --
--- Name: schedule_slots_settle_post(); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.schedule_slots_settle_post() RETURNS trigger
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public'
-    AS $$
-begin
-  if new.status = 'cancelled' and old.status is distinct from 'cancelled'
-     and exists (select 1 from public.schedule_slots s where s.deliverable_id = new.deliverable_id and s.status = 'published')
-     and not public.post_slots_open(new.deliverable_id, new.id) then
-    update public.content_items c set status = 'published', published_at = coalesce(c.published_at, now()), updated_at = now()
-    from public.deliverables d
-    where d.id = new.deliverable_id and d.ref_kind = 'content_item' and c.id = d.ref_id and c.status = 'approved';
-  end if;
-  return new;
-end;
-$$;
-
-
---
 -- Name: deliverables; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -14620,7 +14842,8 @@ begin
   if exists (select 1 from public.schedule_slots where deliverable_id = p_d.id and platform = p_platform) then
     return 'none';
   end if;
-  select * into v_item from public.content_items where id = p_d.ref_id and user_id = p_d.user_id and status = 'approved';
+  select * into v_item from public.content_items where id = p_d.ref_id and user_id = p_d.user_id
+    and public.post_schedules(status, p_d.id);
   if not found then
     return 'none';
   end if;
@@ -20861,13 +21084,6 @@ CREATE TRIGGER schedule_follow_deliverable AFTER INSERT OR UPDATE OF status ON p
 --
 
 CREATE TRIGGER schedule_slots_paywall BEFORE INSERT OR UPDATE OF status ON public.schedule_slots FOR EACH ROW EXECUTE FUNCTION public.paywall_on_send();
-
-
---
--- Name: schedule_slots schedule_slots_settle_post; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER schedule_slots_settle_post AFTER UPDATE OF status ON public.schedule_slots FOR EACH ROW EXECUTE FUNCTION public.schedule_slots_settle_post();
 
 
 --

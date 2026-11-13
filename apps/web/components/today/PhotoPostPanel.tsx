@@ -6,8 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { ApiError, api, jsonBody } from "@/components/clipping/api";
 import { Button } from "@/components/ui";
 import { PHOTO_LIMIT, PHOTO_MAX_BYTES, PHOTO_PLATFORMS, PHOTO_TYPES, photoPostProblem, type PhotoPlatform, type PhotoPost } from "@/lib/photo-posts";
-import type { ScheduleScreen } from "@/lib/screens/schedule";
-import { uploadResumable } from "@/lib/upload-tus";
+import { uploadPhoto } from "@/lib/photo-upload-client";
 
 import { PlatformLogo } from "./platform-logos";
 
@@ -22,7 +21,7 @@ type Photo = { key: string; name: string; preview: string; object: string | null
  * or Threads carousel. Photos go from the browser straight to Storage (TUS, with a reservation); the founder orders
  * them, writes the caption or asks the CMO for one, picks platforms, and each platform gets a schedule card.
  */
-export function PhotoPostPanel({ accounts, live, onScheduled }: { accounts: ScheduleScreen["accounts"]; live: boolean; onScheduled?: () => void }) {
+export function PhotoPostPanel({ connectedPlatforms, live, onScheduled }: { connectedPlatforms: readonly string[]; live: boolean; onScheduled?: () => void }) {
   const [open, setOpen] = useState(false);
   const [postId, setPostId] = useState<string | null>(null);
   const [photos, setPhotos] = useState<Photo[]>([]);
@@ -36,7 +35,7 @@ export function PhotoPostPanel({ accounts, live, onScheduled }: { accounts: Sche
 
   useEffect(() => () => previews.current.forEach((url) => URL.revokeObjectURL(url)), []);
 
-  const connected = (p: PhotoPlatform) => accounts.some((a) => a.platform === p && a.status === "connected");
+  const connected = (p: PhotoPlatform) => connectedPlatforms.includes(p);
   const ready = photos.filter((p) => p.object);
   const uploading = photos.some((p) => !p.object && !p.failed);
   const problem = photoPostProblem(ready.length, platforms, caption);
@@ -78,9 +77,8 @@ export function PhotoPostPanel({ accounts, live, onScheduled }: { accounts: Sche
   async function upload(key: string, file: File, id: string) {
     const patch = (p: Partial<Photo>) => setPhotos((now) => now.map((x) => (x.key === key ? { ...x, ...p } : x)));
     try {
-      const reserved = await api<{ bucket: string; objectName: string }>(`/photo-posts/${encodeURIComponent(id)}/uploads`, jsonBody({ size: file.size, type: file.type }));
-      await uploadResumable({ bucket: reserved.bucket, objectName: reserved.objectName, file, contentType: file.type, onProgress: (f) => patch({ progress: f }) }).promise;
-      patch({ object: reserved.objectName, progress: 1 });
+      const object = await uploadPhoto(`/photo-posts/${encodeURIComponent(id)}/uploads`, file, (f) => patch({ progress: f }));
+      patch({ object, progress: 1 });
     } catch (error) {
       patch({ failed: error instanceof Error ? error.message : "The upload stopped. Remove it and add it again." });
     }
@@ -144,7 +142,7 @@ export function PhotoPostPanel({ accounts, live, onScheduled }: { accounts: Sche
     try {
       if (!(await save())) return;
       const { slots } = await api<{ slots: number }>(`/photo-posts/${encodeURIComponent(postId)}/schedule`, jsonBody({}));
-      setNote({ ok: true, text: `${slots === 1 ? "A schedule card is" : `${slots} schedule cards are`} waiting in Approvals: check the time and approve ${slots === 1 ? "it" : "each"}.` });
+      setNote({ ok: true, text: `${slots === 1 ? "A schedule card is" : `${slots} schedule cards are`} waiting on your Feed: check the time and approve ${slots === 1 ? "it" : "each"}.` });
       setPostId(null);
       setPhotos([]);
       setCaption("");

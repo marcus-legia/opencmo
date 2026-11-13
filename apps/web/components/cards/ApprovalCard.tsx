@@ -38,6 +38,7 @@ import { renderAgain, saveSlideText, slidesHref } from "./slides";
 import { NUMERAL, autoLabel, cardHead, headNote, type DraftReason } from "./labels";
 import { ReasonChips } from "./ReasonChips";
 import { approveBlocked, formatWhen, fromLocalInput, sameOptions, savedOptions, toLocalInput } from "./schedule";
+import { PhotoStrip, PostPhotos } from "./post-photos";
 
 export type DecideHandler = (card: Card, decision: Decision) => Promise<boolean>;
 
@@ -483,6 +484,22 @@ export function ApprovalCard({
               onPick={setShown}
               onRewrite={canRewrite ? (platform) => void rewrite(platform) : undefined}
               rewriting={rewriting}
+              photos={
+                postItem && card.status === "waiting" && !editing && !card.body.platforms.some((p) => p.thread) ? (
+                  <PostPhotos
+                    itemId={postItem}
+                    photos={card.body.photos ?? []}
+                    sample={sample}
+                    onError={toast}
+                    onCard={(next) => {
+                      if (next) setChanged({ from: given, card: next });
+                      toast(next ? "Photos saved. Approve the post with them." : "Photos saved. Its schedule cards ask you again.");
+                    }}
+                  />
+                ) : card.body.photos?.length ? (
+                  <PhotoStrip photos={card.body.photos} label="Your photos, in posting order" />
+                ) : null
+              }
             />
           ) : card.body.kind === "reply" ? (
             <ReplyBody body={card.body} />

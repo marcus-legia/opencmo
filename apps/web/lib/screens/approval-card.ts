@@ -85,6 +85,8 @@ const PostBody = z.object({
   // --- targets (daily core drafts D3, D4; 2026-11-12) ---
   /** The calendar item: the Rewrite button's address. Absent on a post card made outside the calendar (older cards). */
   itemId: z.string().optional(),
+  /** The founder's own photos on the post (owner, 2026-11-13), `photos` bucket objects in order; part of the hash. */
+  photos: z.array(z.string().max(500)).max(4).optional(),
   /**
    * Every platform the core post goes to, added when the card loads. `variant`: the platform's own rewrite, current
    * with the core text, which its slot posts instead (a schedule card shows it before it goes out).
@@ -441,7 +443,7 @@ export const ScheduleSnapshotSchema = z.object({
   image: z.object({ clip_id: z.string(), object: z.string().max(500), bytes: z.number().int().positive().nullable() }).optional(),
   /** An X thread (P6 W4): its 5 to 8 posts, the first being `text`; part of `content_hash`. Absent for a single post. */
   thread: z.array(z.string().max(280)).min(5).max(8).optional(),
-  /** A photo post (D7): the founder's photos in order (`photos` bucket objects), part of `content_hash`. */
+  /** A photo post (D7), or a text post with the founder's photos (2026-11-13): the photos in order (`photos` bucket objects), part of `content_hash`. */
   photos: z.array(z.string().max(500)).min(1).max(35).optional(),
 });
 export type ScheduleSnapshot = z.infer<typeof ScheduleSnapshotSchema>;
@@ -468,7 +470,13 @@ const ScheduleBody = z.object({
   timezone: z.string().max(64),
   why: z.string().max(200).nullable(),
   /** What goes out: the words, the YouTube title, and the video's signed preview URL (null for a text post). */
-  preview: z.object({ text: z.string().max(5000).nullable(), title: z.string().max(100).nullable(), videoUrl: z.url().nullable() }),
+  preview: z.object({
+    text: z.string().max(5000).nullable(),
+    title: z.string().max(100).nullable(),
+    videoUrl: z.url().nullable(),
+    /** The founder's own photos that go out with it (a photo post, or a text post's), `photos` bucket objects in order. */
+    photos: z.array(z.string().max(500)).max(35).optional(),
+  }),
   options: ScheduleOptionsSchema,
   /**
    * TikTok's creator info for the account (read live through the publish adapter, not part of the hash): the privacy

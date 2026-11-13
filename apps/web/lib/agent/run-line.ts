@@ -16,7 +16,6 @@ const FINISHED = new Set(["done", "failed"]);
 const KINDS: Record<string, { done: string; noun: string; open: PanelOpen | null }> = {
   post_draft: { done: "Draft ready to review", noun: "The draft", open: { screen: "writer" } },
   write_caption: { done: "Caption ready to review", noun: "The caption", open: { screen: "writer" } },
-  write_slides: { done: "Slides ready to review", noun: "The slides", open: { screen: "writer" } },
   write_video_brief: { done: "Video brief ready", noun: "The video brief", open: { screen: "schedule" } },
   plan_week: { done: "Your week is planned", noun: "The week plan", open: { screen: "dashboard" } },
   sales_scan: { done: "Sales scan finished. New threads are in Sales", noun: "The Sales scan", open: { screen: "sales" } },

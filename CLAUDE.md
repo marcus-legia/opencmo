@@ -72,8 +72,10 @@ too expensive to lead. The AI CMO makes value at a small cost, so it leads.
   real quality, and for video a script and its caption the founder records from (D1). **One core post serves every
   platform of its slot**; a rewrite for one platform is an optional paid button, never the default (D3). X takes long
   posts (X Premium) and autopilot may post them; a Threads chain is a thread and stays out of autopilot (D6). A
-  carousel or slideshow is photos the founder uploads (TikTok Photo Mode, Instagram carousel); the CMO writes only its
-  caption (D7). Facebook posts to a **Page**; a personal profile gets copy-and-open, since Meta's API cannot post there (D9).
+  carousel or slideshow is photos the founder uploads (TikTok Photo Mode, Instagram carousel), **never a video**, made
+  on its own page (photos + caption); the CMO writes only its caption (D7). **A text post takes the founder's own photos
+  on its card** (owner, 2026-11-13): that is part of the post, not of the slideshow page. Facebook posts to a **Page**; a
+  personal profile gets copy-and-open, since Meta's API cannot post there (D9).
 - **Charge before running, then run in one go** (owner, 2026-11-05). A paid job shows its storyboard (or plan)
   and one credit estimate that covers everything it will spend: media, voice, music, renders and the agents'
   tokens. The user confirms once, the credits are held, and the job runs to the end without stopping for another

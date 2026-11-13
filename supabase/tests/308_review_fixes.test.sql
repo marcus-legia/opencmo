@@ -1,5 +1,5 @@
 -- 20270120070000: the fixes of the whole-branch review. A core post goes out on every platform (the first one to post
--- no longer cancels the rest); a core post is approved against the core limit; the purge can queue `captures` and
+-- no longer cancels the rest; since 20270121010000 it makes the post published); a core post is approved against the core limit; the purge can queue `captures` and
 -- `photos`; one open photo draft; a script with a caption fits its order; a week of scripts can be queued; a new
 -- slot keeps "post as a thread"; a Threads photo post takes 500 characters; a 4,000-character X post can be approved.
 create extension if not exists pgtap with schema extensions;
@@ -32,12 +32,12 @@ select public.publish_status((select id from public.schedule_slots where deliver
 select is((select status from public.schedule_slots where deliverable_id = 'e3083000-0000-4000-8000-000000000001' and platform = 'x'), 'published', 'X is live');
 select ok((select status in ('proposed', 'waiting') from public.schedule_slots where deliverable_id = 'e3083000-0000-4000-8000-000000000001' and platform = 'linkedin'),
   'the LinkedIn slot is not cancelled when X posts');
-select is((select status from public.content_items where id = 'e3082000-0000-4000-8000-000000000001'), 'approved', 'the post is not done while LinkedIn waits');
+select is((select status from public.content_items where id = 'e3082000-0000-4000-8000-000000000001'), 'published', 'the first platform makes the post published');
 select public.publish_status((select id from public.schedule_slots where deliverable_id = 'e3083000-0000-4000-8000-000000000001' and platform = 'linkedin'),
   'published', 'ext-li-1', 'https://www.linkedin.com/feed/update/urn:li:activity:1');
-select is((select status from public.content_items where id = 'e3082000-0000-4000-8000-000000000001'), 'published', 'the last platform makes the post published');
+select is((select status from public.schedule_slots where deliverable_id = 'e3083000-0000-4000-8000-000000000001' and platform = 'linkedin'), 'published', 'LinkedIn still posts after it');
 
--- One platform posted, the founder cancels the other: the post is published, nothing is left to go out.
+-- One platform posted: the post is published, and cancelling the other leaves it so.
 insert into public.content_items (id, user_id, department, platform, day, idea, status, body)
 values ('e3082000-0000-4000-8000-000000000007', 'e3080000-0000-4000-8000-00000000000a', 'post', 'X', current_date + 1, 'Core two', 'approved',
   '{"text":"Another core post.","targets":["x","linkedin"]}');
@@ -46,9 +46,9 @@ values ('e3083000-0000-4000-8000-000000000007', 'e3080000-0000-4000-8000-0000000
   'content_item', 'e3082000-0000-4000-8000-000000000007', 'decided');
 select public.publish_status((select id from public.schedule_slots where deliverable_id = 'e3083000-0000-4000-8000-000000000007' and platform = 'x'),
   'published', 'ext-x-7', 'https://x.com/founder/status/7');
-select is((select status from public.content_items where id = 'e3082000-0000-4000-8000-000000000007'), 'approved', 'one platform posted, one waits');
+select is((select status from public.content_items where id = 'e3082000-0000-4000-8000-000000000007'), 'published', 'one platform posted, one waits: published');
 update public.schedule_slots set status = 'cancelled' where deliverable_id = 'e3083000-0000-4000-8000-000000000007' and platform = 'linkedin';
-select is((select status from public.content_items where id = 'e3082000-0000-4000-8000-000000000007'), 'published', 'cancelling the rest settles the post');
+select is((select status from public.content_items where id = 'e3082000-0000-4000-8000-000000000007'), 'published', 'cancelling the rest leaves it published');
 
 -- 2. The purge's buckets.
 select lives_ok($$ insert into public.storage_deletions (bucket, path, user_id) values

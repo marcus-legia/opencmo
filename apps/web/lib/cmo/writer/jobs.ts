@@ -7,7 +7,6 @@
  *                      into the `build_video` order that waits on it (the Director's input)
  *   write_caption      {clip_ids, profiles}                      → each caption saved with `cmo_save_caption` (it
  *                      refreshes the card and keeps a caption the founder edited) → { reason, saved, failed }
- *   write_slides       {idea, reason, count}                     → { slides, reason } (S3 in P5 orders it)
  *
  * Every kind goes through `createWriter().draft()`: the kind's fixed prompt, the founder's rules and voice as data,
  * code checks, one fix round.
@@ -24,10 +23,9 @@ import { writerMemory } from "./context";
 import { createWriter, writerPromptVersion, type WriterDeps } from "./draft";
 import { BRIEF_ASPECTS, type VideoSource, type WriterContext, type WriterKind, type WriterProfile } from "./types";
 
-/** The registry agent for a kind and profile: one per platform profile, one for briefs, one for slides. */
+/** The registry agent for a kind and profile: one per platform profile, one for briefs. */
 export function writerAgent(kind: WriterKind, profile: WriterProfile | null): AgentId {
   if (kind === "video_brief") return "brief_writer";
-  if (kind === "slides") return "slides_writer";
   return (profile && (kind === "post" ? POST_WRITERS : CAPTION_WRITERS)[profile.id]) || (kind === "post" ? "x_writer" : "instagram_writer");
 }
 
@@ -91,23 +89,6 @@ export async function writeVideoBrief(ctx: JobContext): Promise<JobOutput> {
   const known = new Set(context.nicheUrls ?? []);
   const sources = [...new Set(out.learnedFrom.filter((url) => known.has(url)))].slice(0, 6);
   return { brief: out.brief, reason: out.rationale, sources };
-}
-
-export async function writeSlides(ctx: JobContext): Promise<JobOutput> {
-  const input = ctx.run.input;
-  const idea = text(input.idea, 300);
-  if (idea.length < 3) throw new LlmError("This slideshow has no idea to write.");
-  const count = typeof input.count === "number" && Number.isInteger(input.count) ? Math.min(10, Math.max(5, input.count)) : undefined;
-  const reason = text(input.reason, 300);
-  const context = await readContext(ctx, "post", true);
-  const { writer } = runWriter(ctx);
-  const out = await ctx.step(
-    "write_slides",
-    "Writing the slides",
-    () => writer.draft("slides", null, { idea, ...(reason ? { reason } : {}), ...(count ? { count } : {}) }, context),
-    (done) => `${done.slides.length} slides`,
-  );
-  return { slides: out.slides, reason: out.rationale };
 }
 
 const CAPTION_CONCURRENCY = 3;

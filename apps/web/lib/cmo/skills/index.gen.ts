@@ -38,7 +38,6 @@ export const CMO_SKILLS = {
       "tiktok_writer",
       "youtube_writer",
       "brief_writer",
-      "slides_writer",
       "writer",
       "checker",
       "sales",

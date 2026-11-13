@@ -1,5 +1,7 @@
 "use client";
 
+// TODO(storage): uploads move from Supabase Storage to DigitalOcean storage later this week
+// (owner, 2026-11-13); keep this path as it is until then.
 /**
  * Upload resumable thẳng từ trình duyệt lên Supabase Storage.
  *

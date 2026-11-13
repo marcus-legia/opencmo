@@ -10,6 +10,7 @@
 
 import { countHashtags } from "../platforms";
 import { slopIssues } from "../slop";
+import { xLength } from "@/lib/departments/publish/split";
 
 import { normalizeNumber, numberTokens } from "./context";
 
@@ -83,7 +84,9 @@ export function checkPost(text: string, rules: CheckRules, profile: { limit: num
   const t = text.trim();
   if (!t) return ["The post is empty."];
   const issues: string[] = [];
-  const length = [...t].length;
+  // X counts links as 23 and emojis, CJK and accented Vietnamese as 2 (`xLength`); the larger count keeps every
+  // post the 280-character thread schemas take.
+  const length = profile.platform === "X" ? Math.max([...t].length, xLength(t)) : [...t].length;
   if (length > profile.limit) issues.push(`It is ${length} characters; ${profile.platform} allows ${profile.limit}.`);
   issues.push(...factIssues(t, rules));
   if (hasLink(t, rules.names)) issues.push("It has a link. Posts carry no links.");

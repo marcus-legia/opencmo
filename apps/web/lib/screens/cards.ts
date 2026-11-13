@@ -130,6 +130,7 @@ function build(row: ApprovalRow): Built | null {
           why: clip(str(s.rationale), 200) || null,
           ...timed,
           ...(row.ref_kind === "content_item" ? { itemId: row.ref_id } : {}),
+          ...(strings(s.photos).length ? { photos: strings(s.photos).slice(0, 4) } : {}),
         },
       };
     }
@@ -357,7 +358,7 @@ function build(row: ApprovalRow): Built | null {
           // (`schedule-enrich.ts`): none of them is part of what the card approves.
           timezone: "UTC",
           why: null,
-          preview: { text: v.text, title: v.title, videoUrl: null },
+          preview: { text: v.text, title: v.title, videoUrl: null, ...(v.photos?.length ? { photos: v.photos } : {}) },
           options: v.options,
           tiktok: null,
           lastError: v.last_error,

@@ -25,10 +25,10 @@ State: ✅ done · 🟡 partial · ❌ not built.
 
 | Part | Where | What it does | State |
 |---|---|---|---|
-| Agents | `lib/cmo/agents/registry.ts` | `x_writer`, `threads_writer`, `linkedin_writer`, `instagram_writer`, `tiktok_writer`, `youtube_writer`, `brief_writer`, `slides_writer`, `writer` (intro words), `director` (long-take script), `checker` (Haiku) | ✅ |
+| Agents | `lib/cmo/agents/registry.ts` | `x_writer`, `threads_writer`, `linkedin_writer`, `instagram_writer`, `tiktok_writer`, `youtube_writer`, `brief_writer`, `writer` (intro words), `director` (long-take script), `checker` (Haiku) | ✅ |
 | Post draft job | `jobs/draft-post.ts`, `lib/cmo/writer/` | 3 versions with an angle each and a rationale; the checker in a separate context; one fix; a card with alternates | ✅ X, Threads, LinkedIn |
 | X threads | `jobs/draft-thread.ts` | a thread when the founder asks for one | ✅ |
-| Words for Studio | `write_caption`, `write_video_brief`, `write_slides` (`lib/cmo/writer/jobs.ts`) | captions per platform (hashtags only here), YouTube title and description, the video brief, slide text | ✅ |
+| Words for Studio | `write_caption`, `write_video_brief` (`lib/cmo/writer/jobs.ts`) | captions per platform (hashtags only here), YouTube title and description, the video brief. `write_slides` was removed on 2026-11-13 (F2): a photo post with a caption replaces it | ✅ |
 | Code checks | `jobs/check-post.ts`, `lib/cmo/writer/checks.ts` | length per profile, words to avoid, numbers that must be in the documents, no links, hashtags per profile | ✅ |
 | Platform profiles | `packages/contracts/platforms.json`, `lib/cmo/platforms.ts` | one data file read by the prompts, the checks, the cards and SQL's `platform_profile()` | ✅ |
 | no-ai-slop | `lib/cmo/skills/no-ai-slop.md`, `NO_AI_SLOP`, `no-ai-slop.check.ts` | the guide in every prompt that writes for a reader; the check fails when a writing prompt does not carry it | ✅ |
@@ -133,7 +133,7 @@ brain keeps learning it from what the founder approves and how they edit, and ne
 | caption | a video, short or slideshow, one per platform | `write_caption` | ✅ |
 | YouTube title + description | a long video | `write_caption` (YouTube profile) | ✅ |
 | video brief | Studio's Director (angle, 3 hooks, key points, CTA) | `write_video_brief` | ✅ |
-| slide text | Studio's Slideshow squad | `write_slides` | ✅ |
+| slide text | removed 2026-11-13 (F2); `cmo_enqueue` refuses `write_slides` | — | ❌ |
 | article | a long post or article copied out | — | ❌ later |
 
 ## 9. Evals

@@ -28,4 +28,11 @@ assert.deepEqual(checkPost("OpenCMO covers it for $60/month.", briefRules(docs, 
 for (const ask of ["No product pitch.", "no pitch", "Don't mention OpenCMO", "never pitch the product", "No promo"]) assert.ok(asksNoPitch(ask), ask);
 for (const fine of ["Pitch deck lessons", "How we price it", "No invented stats"]) assert.ok(!asksNoPitch(fine), fine);
 
+// X weighs an arrow as 2: 150 of them are 300 on X, though 150 characters by code point.
+const arrows = `Steps ${"→".repeat(150)}`;
+assert.ok(checkPost(arrows, briefRules(docs, brief, true), { limit: 280, platform: "X" }).some((issue) => /306 characters; X allows 280/.test(issue)),
+  "X's own count decides an X post's length");
+assert.ok(!checkPost(arrows, briefRules(docs, brief, true), { limit: 500, platform: "Threads" }).some((issue) => /characters/.test(issue)),
+  "Threads counts characters");
+
 console.log("check-post.check ok");

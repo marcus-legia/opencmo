@@ -312,6 +312,13 @@ html:not([data-theme="dark"]) .k { --ok: #16744c; --warn: #8f5a0e; }
 .td-views a:hover { color: var(--text); }
 .td-views a[aria-current="page"] { background: var(--raised); color: var(--text); box-shadow: 0 1px 2px rgba(0, 0, 0, .12); }
 @media (max-width: 640px) { .td-viewsbar .td-views { order: 10; flex: 1 1 100%; justify-content: center; } }
+/* Five views (Photos joined, 2026-11-13) do not fit a phone with their icons: the words stay, and the row scrolls
+   inside itself rather than widening the page. */
+@media (max-width: 480px) {
+  .td-viewsbar .td-views { min-width: 0; max-width: 100%; overflow-x: auto; scrollbar-width: none; justify-content: flex-start; }
+  .td-viewsbar .td-views a { flex: 0 0 auto; padding: 0 9px; }
+  .td-viewsbar .td-views a svg { display: none; }
+}
 
 /* A document's form in the Context drawer, in the artboard's fields. */
 .td-docform { margin-top: 16px; }

@@ -4,8 +4,6 @@
  *
  *   s4-shorts    — the Clip editor (`pickShorts`) on a fixed 90 s founder talk: `reviewShorts` (15–60 s,
  *                  whole sentences, the hook in the first 3 s, the right count), then the judge per short
- *   s4-slideshow — `write_slides` on the fixture's brief, then the frame (`reviewSlides`: text fits) and
- *                  the writer's checks (no invented numbers, avoid words), then the judge
  *   s4-long-take — the video brief → `create_video` request (`briefRequest`): the Director's input has the
  *                  goal, the hooks and the key points; the render-level measures (frozen shots, jumps at shot
  *                  boundaries, look-check pass rate) need a render on the worker, so they are reported as
@@ -16,11 +14,9 @@
 
 import type { CaseResult } from "@/lib/eval/compare";
 import { pickShorts, reviewShorts, shortCount, candidates, type Word } from "@/lib/departments/studio/shorts/squad";
-import { reviewSlides } from "@/lib/departments/studio/slideshow/build";
 import { briefRequest } from "@/lib/departments/studio/video";
 
-import { SlidesDraftSchema, VideoBriefSchema } from "../../../writer/types";
-import { checkPost } from "../../check-post";
+import { VideoBriefSchema } from "../../../writer/types";
 import { checkRules } from "../../context";
 import { cascade } from "../../judge";
 import { memoryStore } from "../../memory-store";
@@ -33,10 +29,6 @@ const BUDGET_MS = 240_000;
 export const SHORT_QUESTIONS = [
   "The short makes sense on its own: someone who never saw the full video understands it.",
   "Its first sentence is a hook that makes a founder want to keep watching.",
-] as const;
-export const SLIDES_QUESTIONS = [
-  "Each slide holds one idea a reader takes in within a few seconds.",
-  "The first slide is a hook and the last one says what to do next.",
 ] as const;
 export const LONG_TAKE_QUESTIONS = ["The request tells a video team exactly what to show, for whom, and what the viewer should do after."] as const;
 
@@ -99,34 +91,6 @@ const shortsCase: EvalCase = {
   },
 };
 
-const slideshowCase: EvalCase = {
-  job: "s4-slideshow",
-  async run(fixture, env) {
-    const id = (output: string) => caseId("slideshow", fixture.name, output);
-    const mem = memoryStore(fixture.docs, []);
-    // A slideshow item's idea comes from the plan, which takes it from a content pillar: short, like a heading.
-    const pillars = (fixture.docs.content_strategy?.pillars ?? []) as { ideas?: string[] }[];
-    const idea = pillars[0]?.ideas?.[0] ?? fixture.brief;
-    const run = mem.enqueue("write_slides", { idea, reason: "From the content strategy" });
-    await env.drain(mem.store, { runId: run.id, budgetMs: BUDGET_MS });
-    const parsed = SlidesDraftSchema.pick({ slides: true }).safeParse(run.output);
-    if (run.status !== "done" || !parsed.success) return [fail(id("run"), env.epoch, run.error ?? "no slides")];
-    const slides = parsed.data.slides;
-    const rules = checkRules(fixture.docs);
-    const issues = [
-      ...reviewSlides(slides),
-      ...(slides.length < 5 || slides.length > 10 ? [`${slides.length} slides`] : []),
-      ...slides.flatMap((s, i) => checkPost(`${s.heading}\n${s.body}`, rules).filter((issue) => !/characters|link/i.test(issue)).map((issue) => `slide ${i + 1}: ${issue}`)),
-    ];
-    const text = slides.map((s, i) => `${i + 1}. ${s.heading}${s.body ? ` — ${s.body}` : ""}`).join("\n");
-    env.log(text);
-    return [
-      { id: id("run"), epoch: env.epoch, pass: true, decided_by: "code" },
-      await cascade(id("slides"), env.epoch, issues, env.judge, { job: `A slideshow about "${idea}"`, docs: fixture.docs, output: text, criteria: [...SLIDES_QUESTIONS] }),
-    ];
-  },
-};
-
 const longTakeCase: EvalCase = {
   job: "s4-long-take",
   async run(fixture, env) {
@@ -153,7 +117,7 @@ const longTakeCase: EvalCase = {
 };
 
 /** Shared for a check: the fake env runs the three cases end to end without a network. */
-export const STUDIO_CASES: readonly EvalCase[] = [shortsCase, slideshowCase, longTakeCase];
+export const STUDIO_CASES: readonly EvalCase[] = [shortsCase, longTakeCase];
 export type { EvalEnv };
 
 registerCases([...STUDIO_CASES]);

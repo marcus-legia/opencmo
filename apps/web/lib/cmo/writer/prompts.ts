@@ -58,13 +58,3 @@ Rules:
 ${FOUNDER_FIRST}
 - ${DATA_RULE}`;
 
-export const SLIDES_SYSTEM = `You write the text of a slideshow (a carousel of still slides) for a solo founder.
-
-${skillText("no-ai-slop")}
-
-Rules:
-- 5 to 10 slides. The first slide is the hook; the last slide is the call to action; each slide in between carries one idea.
-- A heading of a few words and at most two short lines of body per slide. A slide is read in two seconds.
-- No invented numbers: a number appears only when the documents or the brief hold it. No links and no hashtags on a slide.
-${FOUNDER_FIRST}
-- ${DATA_RULE}`;

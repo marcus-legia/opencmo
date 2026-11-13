@@ -23,7 +23,7 @@ def test_posts_have_no_hashtags_and_nothing_has_links():
 
 
 def test_limits_match_the_contract():
-    assert platforms.profile("x").limit == 25000  # X Premium (D6, 2026-11-12)
+    assert platforms.profile("x").limit == 4000  # long posts (D6), held at 4,000 (F4, 2026-11-13)
     assert platforms.profile("threads").limit == 500
     assert platforms.profile("linkedin").visible_before_more == 140
     assert platforms.profile("youtube").title == 100

@@ -23,7 +23,7 @@ import type { HnThread } from "../social/hn";
 import { maxSteps } from "../step-limits";
 import type { RedditThread } from "../social/reddit";
 import { summarizeMemory } from "./summarize-memory";
-import { writeCaption, writeSlides, writeVideoBrief } from "../writer/jobs";
+import { writeCaption, writeVideoBrief } from "../writer/jobs";
 import type { PublishAnalytics } from "@/lib/departments/publish/analytics";
 import { publishPost } from "@/lib/departments/publish/job";
 import { NeedsClaude, think, type ThinkOptions } from "./think";
@@ -106,7 +106,6 @@ export const JOBS: Record<CmoJobKind, Job> = {
   review_week: reviewWeek,
   write_video_brief: writeVideoBrief,
   write_caption: writeCaption,
-  write_slides: writeSlides,
   // P4: only Schedule's sweep queues it (enqueue_cmo_run refuses it), for one approved slot.
   publish_post: publishPost,
   niche_video_research: nicheVideoResearch,

@@ -6,7 +6,7 @@
  */
 import assert from "node:assert/strict";
 
-import { chainFor, postLength, splitPost } from "./split";
+import { chainFor, postLength, splitPost, xLength } from "./split";
 
 const squash = (text: string) => text.replace(/\s+/g, " ").trim();
 
@@ -70,5 +70,46 @@ assert.equal(chainFor("x", over), null, "X takes a long post as one");
 assert.ok((chainFor("x", over, true)?.length ?? 0) >= 2, "a thread on X only when the founder asked");
 assert.equal(chainFor("x", "short", true), null);
 assert.equal(chainFor("linkedin", over, true), null);
+
+// X counts as Zernio's documents quote X's refusal (docs.zernio.com/platforms/twitter/reference, read 2026-11-13):
+// "URLs count as 23 characters and emojis as 2".
+assert.equal(xLength("hello"), 5);
+assert.equal(xLength("🚀"), 2, "an emoji is 2 on X");
+assert.equal(xLength("👩‍💻"), 2, "a joined emoji is one emoji");
+assert.equal(xLength("see https://example.com/a/very/long/path/that/goes/on?and=on"), 4 + 23, "a link is 23");
+assert.equal(xLength("é"), 1);
+// A thread on X is cut by X's count: 200 rockets are 400 there, so two posts, each within 280.
+const rockets = Array.from({ length: 200 }, () => "🚀").join(" ");
+const xParts = chainFor("x", rockets, true) ?? [];
+assert.ok(xParts.length >= 2, "emojis push an X post over 280");
+for (const part of xParts) assert.ok(xLength(part) <= 280, `an X part counts ${xLength(part)}`);
+assert.equal(xParts.join(" "), rockets, "every emoji goes out, in order");
+const linky = Array.from({ length: 30 }, (_, i) => `https://example.com/${"x".repeat(40)}/${i}`).join(" ");
+for (const part of chainFor("x", linky, true) ?? []) assert.ok(xLength(part) <= 280);
+assert.equal((chainFor("x", linky, true) ?? []).length, 3, "30 links of 23 are three posts, not by their 60 letters");
+
+// A stop inside a word is not a sentence end: a link or a number in a long post is posted whole.
+const site = `${"We wrote it down. ".repeat(30)}Read it at https://example.com/notes.html today, it takes 3.5 minutes.`;
+for (const parts of [splitPost(site, 500), chainFor("x", site, true) ?? []]) {
+  assert.ok(parts.some((part) => part.includes("https://example.com/notes.html")), "the link is whole");
+  assert.ok(parts.some((part) => part.includes("3.5 minutes")), "the number is whole");
+}
+
+// X's count past "URLs are 23, emojis 2" (twitter-text v3): a bare domain is a link, wide characters weigh 2.
+assert.equal(xLength("Visit opencmo.com now…"), 6 + 23 + 4 + 2, "a bare domain is a link, and an ellipsis weighs 2");
+assert.equal(xLength("Tiếng Việt"), 12, "a Vietnamese letter with a tone mark weighs 2");
+assert.equal(xLength("mail me@site.com"), 16, "an e-mail is not a link");
+assert.equal(xLength("3.5 e.g."), 8, "a number and an abbreviation are not domains");
+
+// A link inside a long unbroken word: each cut piece is measured whole, so none goes over once it holds the link.
+const glued = `${"a".repeat(270)}https://example.com/${"b".repeat(100)} ${"word ".repeat(10)}`;
+for (const part of chainFor("x", glued, true) ?? []) assert.ok(xLength(part) <= 280, `a glued part counts ${xLength(part)}`);
+
+// Closing punctuation after a link is counted, and words with a dot are not links.
+assert.equal(xLength("(see https://example.com/a)."), 1 + 4 + 23 + 2, "the bracket and stop after a link count");
+assert.equal(xLength("Built on Next.js and Node.js"), 28, "Next.js is not a link");
+assert.equal(xLength("Read README.md"), 14, "a country ending without a path is not a link");
+assert.equal(xLength("works.Then"), 10, "a missing space is not a link");
+assert.equal(xLength("Try opencmo.com, then app.io/pricing."), 4 + 23 + 7 + 23 + 1, "bare domains with a known ending are links");
 
 console.log("split.check ok");
