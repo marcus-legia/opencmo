@@ -22,12 +22,22 @@ export const hasLogo = (platform: string): platform is LogoPlatform => platform 
 /** The platform's mark in a small rounded tile. Decorative: the platform's name is always written next to it. */
 export function PlatformLogo({ platform, size = 28, dim = false }: { platform: LogoPlatform; size?: number; dim?: boolean }) {
   const logo = LOGOS[platform];
-  const style: CSSProperties = { width: size, height: size, color: dim ? "var(--subtle)" : (logo.color ?? "var(--text)") };
+  const style: CSSProperties = { width: size, height: size, color: dim ? "var(--subtle, currentColor)" : (logo.color ?? "var(--text, currentColor)") };
   return (
     <span className="pl-tile" data-dim={dim || undefined} style={style} aria-hidden="true">
       <svg viewBox="0 0 24 24" width={Math.round(size * 0.57)} height={Math.round(size * 0.57)} fill="currentColor">
         <path d={logo.path} />
       </svg>
     </span>
+  );
+}
+
+/** The bare mark, for a place that already draws its own tile (a Feed row) or sits in a line of text. */
+export function PlatformMark({ platform, size = 14 }: { platform: LogoPlatform; size?: number }) {
+  const logo = LOGOS[platform];
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} fill="currentColor" style={{ color: logo.color ?? "currentColor", flex: "0 0 auto" }} aria-hidden="true">
+      <path d={logo.path} />
+    </svg>
   );
 }

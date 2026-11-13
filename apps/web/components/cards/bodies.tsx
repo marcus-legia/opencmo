@@ -7,6 +7,7 @@ import { Button, Tabs, Toggle } from "@/components/ui";
 import type { CardBody, ScheduleOptions } from "@/lib/screens/approval-card";
 import { DEPARTMENT_LABEL, PLATFORM_LABEL, type Platform } from "@/lib/screens/common";
 
+import { PlatformMark, hasLogo } from "@/components/today/platform-logos";
 import { THREADS_LIMIT, X_FREE_LIMIT, chainFor } from "@/lib/departments/publish/split";
 
 import { CaptionList, charCount, type SaveCaption } from "./captions";
@@ -129,28 +130,47 @@ function PostTargets({
   const several = targets.length > 1;
   return (
     <div className="v2-card-targets" data-testid="post-targets">
-      <p className="v2-card-meta">
-        <span>
-          Goes to {targets.map((t) => PLATFORM_LABEL[t.platform]).join(" · ")}
-          {several ? ": one post for every platform" : ""}
-        </span>
-      </p>
+      <div className="v2-card-goes">
+        <span className="v2-card-goes-label">{several ? "One post, goes out on" : "Goes out on"}</span>
+        <ul>
+          {targets.map((t) => (
+            <li key={t.platform} data-own={t.variant ? "" : undefined}>
+              {hasLogo(t.platform) ? <PlatformMark platform={t.platform} /> : null}
+              {PLATFORM_LABEL[t.platform]}
+              {t.variant ? <span className="v2-card-goes-own">own version</span> : null}
+            </li>
+          ))}
+        </ul>
+      </div>
       {targets.map((t) =>
         t.variant ? (
           <details key={t.platform} className="v2-card-variant">
-            <summary>{PLATFORM_LABEL[t.platform]} gets its own version</summary>
+            <summary>
+              {hasLogo(t.platform) ? <PlatformMark platform={t.platform} /> : null}
+              {PLATFORM_LABEL[t.platform]} gets its own version
+            </summary>
             <FoldedText text={t.variant} fold={null} />
             <p className="v2-card-meta">It goes out on {PLATFORM_LABEL[t.platform]} after you approve its time card.</p>
           </details>
         ) : null,
       )}
       {several && onRewrite ? (
-        <div className="v2-actions" role="group" aria-label="Rewrite for one platform">
-          {targets.map((t) => (
-            <Button key={t.platform} compact variant="quiet" disabled={rewriting?.has(t.platform)} onClick={() => onRewrite(t.platform)}>
-              {rewriting?.has(t.platform) ? `Rewriting for ${PLATFORM_LABEL[t.platform]}…` : `${t.variant ? "Rewrite again" : "Rewrite"} for ${PLATFORM_LABEL[t.platform]} · ${REWRITE_CREDITS} credit`}
-            </Button>
-          ))}
+        <div className="v2-card-rewrite" role="group" aria-label="Rewrite for one platform">
+          <p>
+            <b>Want it to read differently on one platform?</b> Your CMO rewrites it for that platform only, {REWRITE_CREDITS} credit each.
+          </p>
+          <div className="v2-card-rewrite-row">
+            {targets.map((t) => {
+              const busy = rewriting?.has(t.platform);
+              const label = PLATFORM_LABEL[t.platform];
+              return (
+                <button key={t.platform} type="button" disabled={busy} onClick={() => onRewrite(t.platform)} aria-label={`${t.variant ? "Rewrite again" : "Rewrite"} for ${label}, ${REWRITE_CREDITS} credit`}>
+                  {hasLogo(t.platform) ? <PlatformMark platform={t.platform} /> : null}
+                  {busy ? `Rewriting for ${label}…` : `${t.variant ? "Rewrite again" : "Rewrite"} for ${label}`}
+                </button>
+              );
+            })}
+          </div>
         </div>
       ) : null}
     </div>
@@ -649,13 +669,17 @@ export function ScheduleBody({
           <dd className="v2-card-account">
             {body.mode === "publish" ? (
               <>
+                {hasLogo(body.where.platform) ? <PlatformMark platform={body.where.platform} size={16} /> : null}
                 {body.avatarUrl ? <img src={body.avatarUrl} alt="" width={20} height={20} /> : null}
                 <span>
                   {platform} · {body.where.handle}
                 </span>
               </>
             ) : (
-              <span>{platform} · no account connected</span>
+              <>
+                {hasLogo(body.where.platform) ? <PlatformMark platform={body.where.platform} size={16} /> : null}
+                <span>{platform} · you post it yourself</span>
+              </>
             )}
           </dd>
         </div>

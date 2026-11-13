@@ -3,21 +3,36 @@ import type { ReactNode } from "react";
 import type { ApprovalCard as Card, CardKind } from "@/lib/screens/approval-card";
 import { PLATFORM_LABEL } from "@/lib/screens/common";
 
-/** A post's tile by platform: X's mark for X, LinkedIn's for LinkedIn, a generic post mark otherwise. */
+import { PlatformMark } from "./platform-logos";
+
+/** A row's tile by platform: the platform's own mark, so a founder sees where it goes before reading. */
 export const PLATFORM_ICON: Record<string, ReactNode> = {
-  linkedin: (
-    <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-4 0v7h-4v-7a6 6 0 0 1 6-6z" />
-      <rect width="4" height="12" x="2" y="9" />
-      <circle cx="4" cy="4" r="2" />
-    </svg>
-  ),
-  threads: (
-    <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
-    </svg>
-  ),
+  x: <PlatformMark platform="x" />,
+  threads: <PlatformMark platform="threads" />,
+  linkedin: <PlatformMark platform="linkedin" />,
+  facebook: <PlatformMark platform="facebook" />,
+  tiktok: <PlatformMark platform="tiktok" />,
+  instagram: <PlatformMark platform="instagram" />,
+  youtube: <PlatformMark platform="youtube" />,
 };
+
+/** One post written for several platforms: a pen, not one platform's mark. */
+const CORE_POST_ICON = (
+  <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M12 20h9" />
+    <path d="M16.4 3.6a2 2 0 0 1 2.9 2.9L7 18.8l-4 1 1-4Z" />
+  </svg>
+);
+
+/** How many platforms a post card's post goes to (1 for a post without the planner's targets). */
+const targetCount = (card: Card) => (card.body.kind === "post" ? (card.body.targets?.length ?? 1) : 1);
+
+/** The tile of a card's row: where it goes for a post or a time, the kind's own icon otherwise. */
+export function cardIcon(card: Card): ReactNode {
+  if (card.kind === "post" && targetCount(card) > 1) return CORE_POST_ICON;
+  if ((card.kind === "post" || card.kind === "schedule") && card.account) return PLATFORM_ICON[card.account.platform] ?? KIND_ICON[card.kind];
+  return KIND_ICON[card.kind];
+}
 
 /** The artboards' row tiles (Main.dc.html), by card kind. */
 export const KIND_ICON: Record<CardKind, ReactNode> = {
@@ -106,6 +121,8 @@ export function kindLabel(card: Card): string {
   const platform = where(card);
   switch (card.kind) {
     case "post":
+      // A core post is one post for every platform of its slot: naming only the first would read as "X only".
+      if (targetCount(card) > 1) return `Post for ${targetCount(card)} platforms`;
       return `${platform ?? "Post"}${platform ? " post" : ""}`;
     case "reply":
       return card.body.kind === "reply" ? `Reddit · ${card.body.community}` : "Reddit reply";

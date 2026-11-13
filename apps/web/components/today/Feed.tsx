@@ -30,7 +30,7 @@ import type { WriterScreen } from "@/lib/screens/writer";
 import type { DashboardScreen, TodayRowData } from "@/lib/screens/dashboard";
 import type { ScreenName } from "@/lib/screens/registry";
 
-import { KIND_ICON, PLATFORM_ICON, kindLabel, whenLabel } from "./cards";
+import { KIND_ICON, PLATFORM_ICON, cardIcon, kindLabel, whenLabel } from "./cards";
 import { dayLabel, draftsLeftOver, draftsThisWeek } from "./week";
 
 type Draft = WriterScreen["drafts"][number];
@@ -170,7 +170,7 @@ function CardRow({ card, inv, open, onToggle, onLater, onDecide, sample }: { car
     <Row
       cardId={card.id}
       inv={inv}
-      icon={card.kind === "post" && card.account ? (PLATFORM_ICON[card.account.platform] ?? KIND_ICON.post) : KIND_ICON[card.kind]}
+      icon={cardIcon(card)}
       kind={label}
       title={card.title}
       meta={meta}
