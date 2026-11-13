@@ -87,5 +87,13 @@ test("a slideshow or carousel has its own page; the Calendar points to it", asyn
   await expect(page.getByRole("heading", { name: "Slideshows and carousels" })).toBeVisible();
   await expect(page.getByTestId("photo-post")).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("photos-page.png") });
+
+  // Five views in the bar: on a phone the row scrolls inside itself, never the page.
+  await page.setViewportSize({ width: 390, height: 844 });
+  for (const path of ["/app", "/app/schedule", "/app/photos"]) {
+    await page.goto(path);
+    await expect(page.locator(".td-views")).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth), `no sideways scroll on ${path}`).toBeLessThanOrEqual(390);
+  }
   await expect(page.getByRole("link", { name: "Photos" }).first()).toBeVisible();
 });

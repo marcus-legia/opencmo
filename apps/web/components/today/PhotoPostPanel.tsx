@@ -144,7 +144,7 @@ export function PhotoPostPanel({ accounts, live, onScheduled }: { accounts: Sche
     try {
       if (!(await save())) return;
       const { slots } = await api<{ slots: number }>(`/photo-posts/${encodeURIComponent(postId)}/schedule`, jsonBody({}));
-      setNote({ ok: true, text: `${slots === 1 ? "A schedule card is" : `${slots} schedule cards are`} waiting in Approvals: check the time and approve ${slots === 1 ? "it" : "each"}.` });
+      setNote({ ok: true, text: `${slots === 1 ? "A schedule card is" : `${slots} schedule cards are`} waiting on your Feed: check the time and approve ${slots === 1 ? "it" : "each"}.` });
       setPostId(null);
       setPhotos([]);
       setCaption("");
