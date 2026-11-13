@@ -11,23 +11,49 @@ export const postLength = (text: string): number => [...text].length;
 
 type Measure = (text: string) => number;
 
-const LINK = /https?:\/\/\S+/g;
+/**
+ * A link, or a bare domain X turns into one ("opencmo.com", "app.io/pricing": two letters or more after the last dot),
+ * with the character before it kept in group 1 so an e-mail's domain is not taken for a link.
+ */
+const LINK = /(^|[^\w@.\/-])(https?:\/\/\S+|(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}(?:\/\S*)?)/gi;
 const EMOJI = /\p{Extended_Pictographic}/u;
-const graphemes = (text: string): string[] => [...new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(text)].map((g) => g.segment);
+const X_URL = 23;
+
+// Built once: the cutter measures every step. A browser without Intl.Segmenter cuts by code point instead.
+const segmenter = typeof Intl !== "undefined" && "Segmenter" in Intl ? new Intl.Segmenter(undefined, { granularity: "grapheme" }) : null;
+const graphemes = (text: string): string[] => (segmenter ? [...segmenter.segment(text)].map((g) => g.segment) : [...text]);
 
 /**
- * A post's length as X counts it, in the words of X's refusal that Zernio's documents quote
- * (docs.zernio.com/platforms/twitter/reference, read 2026-11-13): "URLs count as 23 characters and emojis as 2".
- * By code points a free account's thread part could hold 280 emojis and be refused as 560.
+ * X's weight of one code point: 1 in the ranges X counts light (Latin, Greek, Cyrillic, most punctuation), 2 for
+ * everything else (CJK, "…", "→", "€", Vietnamese letters with tone marks). From twitter-text's v3 configuration
+ * (github.com/twitter/twitter-text, config/v3.json, Apache-2.0: the numbers only, no code).
+ */
+function xWeight(codePoint: number): number {
+  return codePoint <= 4351 || (codePoint >= 8192 && codePoint <= 8205) || (codePoint >= 8208 && codePoint <= 8223) ||
+    (codePoint >= 8242 && codePoint <= 8247) ? 1 : 2;
+}
+
+function weigh(text: string): number {
+  let n = 0;
+  for (const g of graphemes(text)) {
+    if (EMOJI.test(g)) n += 2;
+    else for (const c of g) n += xWeight(c.codePointAt(0) ?? 0);
+  }
+  return n;
+}
+
+/**
+ * A post's length as X counts it. Zernio's documents quote X's refusal (docs.zernio.com/platforms/twitter/reference,
+ * read 2026-11-13): "URLs count as 23 characters and emojis as 2". A bare domain counts as at least 23: X links it
+ * when it knows the ending, and counting more than X does only cuts a part earlier, never makes one X refuses.
  */
 export function xLength(text: string): number {
   let n = 0;
-  const rest = text.replace(LINK, () => {
-    n += 23;
-    return "";
+  const rest = text.replace(LINK, (_match, before: string, link: string) => {
+    n += /^https?:\/\//i.test(link) ? X_URL : Math.max(X_URL, weigh(link));
+    return before;
   });
-  for (const g of graphemes(rest)) n += EMOJI.test(g) ? 2 : [...g].length;
-  return n;
+  return n + weigh(rest);
 }
 
 /** Threads takes 500 characters a post; a free X account takes 280. */
@@ -41,23 +67,22 @@ const paragraphs = (text: string) => text.split(/\n\s*\n/);
  * A sentence ends at . ! ? or … (and any closing quote or bracket after it) followed by a space or the end. A stop
  * inside a word is not an end: cut there, a link (example.com) or a number (3.5) would come out with a space in it.
  */
-const sentences = (text: string) => text.split(/(?<=[.!?…]+["'”’)\]]*)\s+/);
+const sentences = (text: string) => text.replace(/([.!?…]+["'”’)\]]*)\s+/g, "$1\u0000").split("\u0000");
 const words = (text: string) => text.split(/\s+/);
 
-/** A word longer than a post, cut into the longest pieces that fit; an emoji is never cut in half. */
+/**
+ * A word longer than a post, cut into the longest pieces that fit; an emoji is never cut in half. Each piece is
+ * measured whole, as the platform will: a link inside a long word counts 23 on X only once its piece holds "https://".
+ */
 function hardCut(word: string, limit: number, measure: Measure): string[] {
   const out: string[] = [];
   let current = "";
-  let size = 0;
   for (const g of graphemes(word)) {
-    const add = measure(g);
-    if (current && size + add > limit) {
+    if (current && measure(current + g) > limit) {
       out.push(current);
       current = "";
-      size = 0;
     }
     current += g;
-    size += add;
   }
   if (current) out.push(current);
   return out;

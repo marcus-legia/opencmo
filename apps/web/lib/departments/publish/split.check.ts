@@ -95,4 +95,14 @@ for (const parts of [splitPost(site, 500), chainFor("x", site, true) ?? []]) {
   assert.ok(parts.some((part) => part.includes("3.5 minutes")), "the number is whole");
 }
 
+// X's count past "URLs are 23, emojis 2" (twitter-text v3): a bare domain is a link, wide characters weigh 2.
+assert.equal(xLength("Visit opencmo.com now…"), 6 + 23 + 4 + 2, "a bare domain is a link, and an ellipsis weighs 2");
+assert.equal(xLength("Tiếng Việt"), 12, "a Vietnamese letter with a tone mark weighs 2");
+assert.equal(xLength("mail me@site.com"), 16, "an e-mail is not a link");
+assert.equal(xLength("3.5 e.g."), 8, "a number and an abbreviation are not domains");
+
+// A link inside a long unbroken word: each cut piece is measured whole, so none goes over once it holds the link.
+const glued = `${"a".repeat(270)}https://example.com/${"b".repeat(100)} ${"word ".repeat(10)}`;
+for (const part of chainFor("x", glued, true) ?? []) assert.ok(xLength(part) <= 280, `a glued part counts ${xLength(part)}`);
+
 console.log("split.check ok");

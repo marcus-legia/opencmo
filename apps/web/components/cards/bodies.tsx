@@ -1,14 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import { Button, Tabs, Toggle } from "@/components/ui";
 import type { CardBody, ScheduleOptions } from "@/lib/screens/approval-card";
 import { DEPARTMENT_LABEL, PLATFORM_LABEL, type Platform } from "@/lib/screens/common";
 
 import { PlatformMark, hasLogo } from "@/components/today/platform-logos";
-import { THREADS_LIMIT, X_FREE_LIMIT, chainFor } from "@/lib/departments/publish/split";
+import { THREADS_LIMIT, X_FREE_LIMIT, chainFor, xLength } from "@/lib/departments/publish/split";
 
 import { CaptionList, charCount, type SaveCaption } from "./captions";
 import { joinSlideText, slideTextProblem, splitSlideText } from "./slides";
@@ -184,9 +184,12 @@ function ThreadPosts({
   why,
   note,
   onCopy,
+  platform = "x",
 }: {
   posts: string[];
   limit: number;
+  /** Whose count the chips show: X weighs links and emojis, Threads counts characters. */
+  platform?: "x" | "threads";
   why: string | null;
   /** What the row of posts is: an X thread by default, a Threads chain on a schedule card. */
   note?: string;
@@ -197,7 +200,8 @@ function ThreadPosts({
     <>
       <ol className="v2-card-thread" aria-label={`Thread of ${posts.length} posts`} data-testid="thread-posts">
         {posts.map((post, i) => {
-          const length = charCount(post);
+          // The parts are cut by the platform's own count, so the chip shows that count: X's for an X thread.
+          const length = platform === "threads" ? charCount(post) : xLength(post);
           return (
             <li key={i}>
               <span className="v2-card-thread-n" aria-hidden="true">
@@ -630,7 +634,10 @@ export function ScheduleBody({
 }) {
   const platform = PLATFORM_LABEL[body.where.platform];
   // A post longer than the platform takes is shown as the parts that go out (`publish/split.ts` cuts both).
-  const chain = !body.preview.videoUrl && !body.preview.title && body.preview.text ? chainFor(body.where.platform, body.preview.text, body.options.as_thread === true) : null;
+  const chain = useMemo(
+    () => (!body.preview.videoUrl && !body.preview.title && body.preview.text ? chainFor(body.where.platform, body.preview.text, body.options.as_thread === true) : null),
+    [body.preview.videoUrl, body.preview.title, body.preview.text, body.where.platform, body.options.as_thread],
+  );
   const tiktok = body.mode === "publish" && body.where.platform === "tiktok" ? body.tiktok : null;
   const aiLabel = body.mode === "publish" && AI_LABEL_PLATFORMS.has(body.where.platform);
   const set = (patch: Partial<ScheduleOptions>) => onOptions({ ...options, ...patch });
@@ -647,6 +654,7 @@ export function ScheduleBody({
       {chain ? (
         <ThreadPosts
           posts={chain}
+          platform={body.where.platform === "threads" ? "threads" : "x"}
           limit={body.where.platform === "threads" ? THREADS_LIMIT : X_FREE_LIMIT}
           why={null}
           note={
