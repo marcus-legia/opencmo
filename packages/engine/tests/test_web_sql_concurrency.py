@@ -286,3 +286,55 @@ def test_parallel_media_registration_keeps_fifty_file_cap(clip):
     assert try_sql(as_user(user, retry))[0]
 
 
+
+
+def test_two_platforms_posting_at_once_settle_the_core_post(user):
+    """Two slots of one core post confirm in overlapping transactions: the post still ends `published`.
+
+    The order is fixed, not timed: A confirms X and stays open, B confirms LinkedIn and commits, then A commits.
+    Each saw the other slot as 'publishing' when it checked, which left the post 'approved' for good before
+    20270121030000 settled it at commit under a per-post lock.
+    """
+    order, item, deliverable = (str(uuid.uuid4()) for _ in range(3))
+    sql(f"""
+        update public.profiles set plan = 'starter', timezone = 'UTC' where id = '{user}';
+        select public.zernio_profile_save('{user}', 'prof-{user}');
+        select public.social_account_save('{user}', 'x', '@founder', null, 'x-{user}');
+        select public.social_account_save('{user}', 'linkedin', 'Founder', null, 'li-{user}');
+        insert into public.work_orders (id, user_id, week, kind, title, brief, department, status)
+        values ('{order}', '{user}', date_trunc('week', current_date)::date, 'post_draft', 'Posts', '{{}}', 'writer', 'done');
+        insert into public.content_items (id, user_id, department, platform, day, idea, status, body)
+        values ('{item}', '{user}', 'post', 'X', current_date, 'Core', 'approved',
+                '{{"text":"One core post.","targets":["x","linkedin"]}}');
+        insert into public.deliverables (id, user_id, order_id, kind, ref_kind, ref_id, status)
+        values ('{deliverable}', '{user}', '{order}', 'post', 'content_item', '{item}', 'decided');
+        update public.schedule_slots set status = 'publishing' where deliverable_id = '{deliverable}';
+    """)
+
+    def slot(platform: str) -> str:
+        return f"(select id from public.schedule_slots where deliverable_id = '{deliverable}' and platform = '{platform}')"
+
+    if DATABASE_URL:
+        command = ["psql", DATABASE_URL, "-v", "ON_ERROR_STOP=1", "-Atq"]
+    else:
+        command = ["docker", "exec", "-i", CONTAINER, "psql", "-U", "postgres", "-d", "postgres",
+                   "-v", "ON_ERROR_STOP=1", "-Atq"]
+    first = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    try:
+        assert first.stdin and first.stdout
+        first.stdin.write(f"begin; select (public.publish_status({slot('x')}, 'published', 'ext-x', "
+                          "'https://x.com/founder/status/1')).status; \\echo READY\n")
+        first.stdin.flush()
+        assert first.stdout.readline().strip() == "published"
+        assert first.stdout.readline().strip() == "READY"
+
+        assert sql(f"select (public.publish_status({slot('linkedin')}, 'published', 'ext-li', "
+                   "'https://www.linkedin.com/feed/update/urn:li:activity:1')).status;") == "published"
+        assert sql(f"select status from public.content_items where id = '{item}';") == "approved"
+
+        _, err = first.communicate("commit;\n", timeout=30)
+        assert first.returncode == 0, err
+    finally:
+        if first.poll() is None:
+            first.kill()
+    assert sql(f"select status from public.content_items where id = '{item}';") == "published"

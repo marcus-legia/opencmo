@@ -2526,6 +2526,26 @@ $$;
 
 
 --
+-- Name: approvals_settle_post_at_commit(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.approvals_settle_post_at_commit() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_deliverable uuid;
+begin
+  select deliverable_id into v_deliverable from public.schedule_slots where id = new.ref_id;
+  if v_deliverable is not null then
+    perform public.post_settle(v_deliverable);
+  end if;
+  return null;
+end;
+$$;
+
+
+--
 -- Name: approvals_studio_lesson(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -10472,6 +10492,37 @@ $_$;
 
 
 --
+-- Name: post_settle(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.post_settle(p_deliverable uuid) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_item uuid;
+begin
+  select ref_id into v_item from public.deliverables where id = p_deliverable and ref_kind = 'content_item';
+  if v_item is null then
+    return;
+  end if;
+  -- An advisory lock, not the deliverable row: other flows lock deliverables before slots, and this runs after a slot
+  -- lock, so a row lock here could deadlock against them.
+  perform pg_advisory_xact_lock(hashtextextended('post-settle:' || p_deliverable::text, 0));
+  -- A new statement after the wait: in READ COMMITTED it reads what the other settle committed.
+  update public.content_items c
+  set status = 'published', published_at = coalesce(c.published_at, now()), updated_at = now(),
+      external_url = coalesce(c.external_url, (select s.external_url from public.schedule_slots s
+        where s.deliverable_id = p_deliverable and s.status = 'published' and s.external_url is not null
+        order by s.published_at desc nulls last limit 1))
+  where c.id = v_item and c.status = 'approved'
+    and exists (select 1 from public.schedule_slots s where s.deliverable_id = p_deliverable and s.status = 'published')
+    and not public.post_slots_open(p_deliverable, '00000000-0000-0000-0000-000000000000');
+end;
+$$;
+
+
+--
 -- Name: post_slots_open(uuid, uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -14569,14 +14620,25 @@ CREATE FUNCTION public.schedule_slots_settle_post() RETURNS trigger
     SET search_path TO 'public'
     AS $$
 begin
-  if new.status = 'cancelled' and old.status is distinct from 'cancelled'
-     and exists (select 1 from public.schedule_slots s where s.deliverable_id = new.deliverable_id and s.status = 'published')
-     and not public.post_slots_open(new.deliverable_id, new.id) then
-    update public.content_items c set status = 'published', published_at = coalesce(c.published_at, now()), updated_at = now()
-    from public.deliverables d
-    where d.id = new.deliverable_id and d.ref_kind = 'content_item' and c.id = d.ref_id and c.status = 'approved';
+  if new.status = 'cancelled' and old.status is distinct from 'cancelled' then
+    perform public.post_settle(new.deliverable_id);
   end if;
   return new;
+end;
+$$;
+
+
+--
+-- Name: schedule_slots_settle_post_at_commit(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.schedule_slots_settle_post_at_commit() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  perform public.post_settle(new.deliverable_id);
+  return null;
 end;
 $$;
 
@@ -20867,6 +20929,13 @@ CREATE TRIGGER approvals_caption_rules AFTER INSERT ON public.approvals FOR EACH
 
 
 --
+-- Name: approvals approvals_settle_post_at_commit; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER approvals_settle_post_at_commit AFTER UPDATE OF status ON public.approvals DEFERRABLE INITIALLY DEFERRED FOR EACH ROW WHEN (((new.ref_kind = 'schedule_slot'::text) AND (old.status = 'waiting'::text) AND (new.status <> 'waiting'::text))) EXECUTE FUNCTION public.approvals_settle_post_at_commit();
+
+
+--
 -- Name: approvals approvals_studio_lesson; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -21144,6 +21213,13 @@ CREATE TRIGGER schedule_slots_paywall BEFORE INSERT OR UPDATE OF status ON publi
 --
 
 CREATE TRIGGER schedule_slots_settle_post AFTER UPDATE OF status ON public.schedule_slots FOR EACH ROW EXECUTE FUNCTION public.schedule_slots_settle_post();
+
+
+--
+-- Name: schedule_slots schedule_slots_settle_post_at_commit; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER schedule_slots_settle_post_at_commit AFTER UPDATE OF status ON public.schedule_slots DEFERRABLE INITIALLY DEFERRED FOR EACH ROW WHEN (((new.status = ANY (ARRAY['published'::text, 'failed'::text, 'cancelled'::text])) AND (old.status IS DISTINCT FROM new.status))) EXECUTE FUNCTION public.schedule_slots_settle_post_at_commit();
 
 
 --

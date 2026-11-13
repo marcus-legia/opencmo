@@ -50,6 +50,17 @@ Approve when CLAUDE.md says they must see it first.
    becomes visible.
 3. **A banned or deleted account kept its autopilot.** The sweep now checks `auth.users`, as `api_key_owner` does.
 
+`20270121030000_post_settle.sql` (test `311_post_settle`, and a two-connection test in
+`packages/engine/tests/test_web_sql_concurrency.py`): two holes from #204's review of its own fan-out.
+
+1. **A race left a core post `approved` for good.** X, Threads and Facebook post at the same minute by default. Two
+   results committing together each read the other slot as still 'publishing', so neither marked the post. A post is
+   now settled at commit, by one helper (`post_settle`) under a per-post advisory lock, so the second settle reads the
+   first's committed slot. An advisory lock rather than the deliverable row: other flows lock deliverables before slots.
+2. **A last slot that failed for good never settled the post.** Only a cancellation did. The settle now also runs when
+   a slot fails and when its Retry card is decided or expires. It runs at commit because a failure raises its card
+   after the slot update in the same transaction.
+
 ## Before deploying (owner)
 
 The index migration takes a short write lock on each table while it builds. It sets `lock_timeout = 5s`, so it fails
@@ -95,6 +106,18 @@ asserted the old behaviour were updated.
    and grant each user RPC explicitly. That is a convention change for every future migration, so it waits for you.
 
 ## Code review findings not fixed here (product logic)
+
+From the high-effort review of #204, not verified one by one; each belongs to #204's sessions:
+
+- The planner allows 3 posts a day per platform, but X and LinkedIn have one posting time a day: the extra posts pile up
+  and, past the 14-day horizon, are skipped with no card.
+- A script with a long storyboard and caption breaks the 8,192-byte brief cap; the error is swallowed and the founder
+  paid a credit for a script card that never appears.
+- Photo posts: photos of a replaced or abandoned draft are never queued for deletion but count toward the storage quota.
+- "Rewrite for X" charges even when the X slot already went out.
+- A queued `build_slideshow` order is still claimed after the branch that ran it was removed.
+- Photo post panel: no way to start a second photo post without a reload; a failed caption run is never noticed.
+- The posting-plan stepper sends unserialized saves, so the stored plan can differ from the one shown.
 
 From the high-effort review of the autopilot change. Each needs a product decision, not a database one:
 
