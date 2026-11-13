@@ -10,22 +10,27 @@ import { z } from "zod";
 import data from "../../../../packages/contracts/platforms.json";
 import { PlatformSchema } from "../screens/common";
 
-export const PROFILE_KINDS = ["post", "caption", "youtube"] as const;
+/** `core`: one post for every platform the planner picked for its slot (daily core drafts, owner 2026-11-12). */
+export const PROFILE_KINDS = ["post", "caption", "youtube", "core"] as const;
 
 export const PlatformProfileSchema = z
   .object({
     id: z.string().regex(/^[a-z][a-z_]{0,19}$/),
     label: z.string().min(1).max(40),
-    platform: PlatformSchema,
+    // Null only for the core post: it goes to several platforms, so it names none (the refine below).
+    platform: PlatformSchema.nullable(),
     kind: z.enum(PROFILE_KINDS),
-    limit: z.number().int().min(1).max(10000),
+    // X takes a long post (X Premium, D6). 4,000 is what an approved post is kept in (`content_items.final_text`) and
+    // what a draft's three versions and a schedule card carry; a longer limit failed on Approve.
+    limit: z.number().int().min(1).max(5000),
     title: z.number().int().min(1).max(500).nullable(),
     visibleBeforeMore: z.number().int().min(1).nullable(),
     hashtags: z.number().int().min(0).max(30),
     links: z.literal(false),
     tone: z.string().min(1).max(300),
   })
-  .strict();
+  .strict()
+  .refine((p) => (p.platform === null) === (p.kind === "core"), "Only the core post names no platform.");
 export type PlatformProfile = z.infer<typeof PlatformProfileSchema>;
 
 export const PlatformsFileSchema = z
@@ -51,6 +56,7 @@ export const PLATFORM_LABELS: Readonly<Record<string, string>> = {
   twitter: "x",
   threads: "threads",
   linkedin: "linkedin",
+  facebook: "facebook",
   instagram: "instagram_caption",
   instagram_caption: "instagram_caption",
   reels: "instagram_caption",
@@ -66,10 +72,27 @@ export function profileIdOf(label: string | null | undefined): string | null {
   return PLATFORM_LABELS[label.trim().toLowerCase()] ?? null;
 }
 
+const X_PROFILE = BY_ID.get("x")!;
+const CORE_PROFILE = BY_ID.get("core")!;
+
+/**
+ * The profile a post is written for: the core post when it goes to more than one platform (`body.targets`, the
+ * planner's), else its platform's own profile, since one target is cheaper and better written for that platform. A
+ * calendar label ("LinkedIn") or a profile id (`core` too: the MCP inbox reads it back from the `<platform>` block); X for
+ * a brief without an item (it becomes an X item) or an unknown one.
+ */
+export function postProfile(platform: string | null | undefined, targets?: readonly unknown[] | null): PlatformProfile {
+  if (Array.isArray(targets) && new Set(targets).size > 1) return CORE_PROFILE;
+  if (platform?.trim().toLowerCase() === CORE_PROFILE.id) return CORE_PROFILE;
+  const id = profileIdOf(platform);
+  const profile = id ? profileOf(id) : null;
+  return profile?.kind === "post" ? profile : X_PROFILE;
+}
+
 /** The profiles Writer drafts posts for, in the file's order: X, Threads, LinkedIn. */
 export const POST_PROFILES = PROFILES.filter((p) => p.kind === "post");
 /** The profiles a video or short gets words for: captions and the YouTube title and description. */
-export const CAPTION_PROFILES = PROFILES.filter((p) => p.kind !== "post");
+export const CAPTION_PROFILES = PROFILES.filter((p) => p.kind === "caption" || p.kind === "youtube");
 
 const HASHTAG = /(?:^|[^\p{L}\p{N}_&/])#[\p{L}\p{N}_]*\p{L}[\p{L}\p{N}_]*/gu;
 

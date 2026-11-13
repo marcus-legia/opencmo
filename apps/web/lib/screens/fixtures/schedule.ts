@@ -28,6 +28,7 @@ export const scheduleFixture: ScheduleScreen = {
     "Drag a slot to move it. A new time or account asks you again.",
     "Sunday review: no posts by default.",
   ],
+  postingPlan: { text: { x: 1, threads: 0, linkedin: 1, facebook: 0 }, video: { tiktok: 1, instagram: 0, youtube: 0 } },
 };
 
-export const scheduleEmpty: ScheduleScreen = { timezone: "UTC", from: at("2026-10-26", "00:00"), to: at("2026-11-02", "00:00"), slots: [], accounts: [], rules: [] };
+export const scheduleEmpty: ScheduleScreen = { timezone: "UTC", from: at("2026-10-26", "00:00"), to: at("2026-11-02", "00:00"), slots: [], accounts: [], rules: [], postingPlan: { text: { x: 1, threads: 0, linkedin: 0, facebook: 0 }, video: { tiktok: 0, instagram: 0, youtube: 0 } } };

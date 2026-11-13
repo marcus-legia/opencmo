@@ -255,6 +255,9 @@ html[data-ui="v2"] .k :is(.td-menu, .cmo-messages) :is(ul, ol), html[data-ui="v2
 .pg-editor .ed2-scr { padding: 12px; gap: 10px; }
 .pg-editor .ed2-scr-title { min-width: 0; flex: 1 1 auto; font-size: 14px; font-weight: 600; font-family: Geist, ui-sans-serif, system-ui, sans-serif; }
 .pg-editor .ed2-scr-label { font-size: 12.5px; color: var(--subtle); text-transform: none; letter-spacing: 0; font-weight: 400; }
+.pg-editor .ed2-scr-caption { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; padding: 9px 10px; border: 1px dashed var(--line); border-radius: 8px; }
+.pg-editor .ed2-scr-caption-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.pg-editor .ed2-scr-caption p { margin: 0; font-size: 14px; color: var(--text); white-space: pre-wrap; }
 .pg-editor .ed2-scr-beats { display: flex; flex-direction: column; gap: 8px; list-style: none; padding: 0; margin: 0; }
 .pg-editor .ed2-scr-beat { border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
 .pg-editor .ed2-scr-beat.is-current { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }

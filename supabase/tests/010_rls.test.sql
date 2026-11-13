@@ -99,7 +99,7 @@ select throws_ok(
   '42501', null, 'A không insert thẳng vào rate_limits'
 );
 
--- No UPDATE privilege on any table since 20270120010000, not even on A's own rows: writes are RPCs only.
+-- No UPDATE privilege on any table since 20270121010000, not even on A's own rows: writes are RPCs only.
 select throws_ok(
   $$ update public.tasks set status = 'done' where id = 'a6000000-0000-4000-8000-00000000000a' returning id $$,
   '42501', null, 'A không tự chốt task'
@@ -150,7 +150,7 @@ set local role postgres;
 reset request.jwt.claims;
 set local role anon;
 
--- anon has no SELECT on these tables at all since 20270120010000, so the read is refused rather than empty.
+-- anon has no SELECT on these tables at all since 20270121010000, so the read is refused rather than empty.
 select throws_ok($$ select job_id from public.artifacts $$, '42501', null, 'anon không đọc artifacts');
 select throws_ok($$ select settings from public.clips $$, '42501', null, 'anon không đọc settings của clip');
 select throws_ok($$ select id from public.media_assets $$, '42501', null, 'anon không đọc media_assets');

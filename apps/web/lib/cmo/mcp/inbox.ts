@@ -13,7 +13,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 
 import { DOCUMENT_KINDS, type DocumentKind } from "../documents";
-import { postProfile } from "../jobs/draft-post";
+import { postProfile } from "../platforms";
 import { avoidList, checkRules } from "../jobs/context";
 import { checkRubric, INBOX_STEPS, isInboxStep, parseAnswer, stepsFor, type InboxStepName, type SubmitTool } from "../jobs/steps";
 import { CMO_JOB_KINDS, type CmoJobKind, type Documents, type InboxRequest } from "../jobs/types";
@@ -48,6 +48,8 @@ const KIND_LABEL: Record<CmoJobKind, string> = {
   pull_metrics: "Post metrics",
   publish_post: "Scheduled post",
   distill_ratings: "Rules from your ratings",
+  repurpose_post: "Post rewrite",
+  photo_caption: "Photo caption",
 };
 
 /** Longest a poll waits inside one request: Modal cuts web requests at 150 s. */

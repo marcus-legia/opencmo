@@ -24,7 +24,7 @@ export const AI_LABEL_PLATFORMS: ReadonlySet<Platform> = new Set(["tiktok", "you
 export const TIKTOK_MUSIC_TERMS = "https://www.tiktok.com/legal/page/global/music-usage-confirmation/en";
 
 /** Option keys in a fixed order, so two option sets compare the same whatever order their keys came in. */
-const OPTION_KEYS = ["privacy", "allow_comment", "allow_duet", "allow_stitch", "brand_organic", "brand_content", "ai_label"] as const;
+const OPTION_KEYS = ["privacy", "allow_comment", "allow_duet", "allow_stitch", "brand_organic", "brand_content", "ai_label", "as_thread"] as const;
 
 export function sameOptions(a: ScheduleOptions, b: ScheduleOptions): boolean {
   return OPTION_KEYS.every((key) => (a[key] ?? null) === (b[key] ?? null));

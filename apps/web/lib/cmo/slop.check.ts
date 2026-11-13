@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 import { checkPost } from "./jobs/check-post";
 import { memoryStore } from "./jobs/memory-store";
 import { threadIssues } from "./jobs/draft-thread";
-import { postProfile } from "./jobs/draft-post";
+import { postProfile } from "./platforms";
 import { founderPatterns, slopIssues, slopPatterns } from "./slop";
 import { writerMemory } from "./writer/context";
 

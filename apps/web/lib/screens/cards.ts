@@ -65,7 +65,7 @@ type PostBody = Extract<ApprovalCard["body"], { kind: "post" }>;
 function proposedOf(v: unknown): Pick<PostBody, "proposed"> {
   if (!v || typeof v !== "object") return {};
   const p = v as Record<string, unknown>;
-  const platform = p.platform === "x" || p.platform === "threads" || p.platform === "linkedin" ? p.platform : null;
+  const platform = p.platform === "x" || p.platform === "threads" || p.platform === "linkedin" || p.platform === "facebook" ? p.platform : null;
   const mode = p.mode === "publish" || p.mode === "intent" ? p.mode : null;
   if (!platform || !mode || typeof p.at !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(p.at)) return {};
   return {
@@ -81,7 +81,7 @@ function proposedOf(v: unknown): Pick<PostBody, "proposed"> {
   };
 }
 
-const PLATFORM_NAME = { x: "X", threads: "Threads", linkedin: "LinkedIn", tiktok: "TikTok", youtube: "YouTube", instagram: "Instagram" } as const;
+const PLATFORM_NAME = { x: "X", threads: "Threads", linkedin: "LinkedIn", facebook: "Facebook", tiktok: "TikTok", youtube: "YouTube", instagram: "Instagram" } as const;
 
 type CaptionRow = { caption_id: string; clip_id: string; profile: string; text: string; title: string | null };
 
@@ -99,10 +99,12 @@ function build(row: ApprovalRow): Built | null {
       // `cmo_decide_post` decides it (every post before P3 was for X).
       const named = profileOf(profileIdOf(str(s.platform)) ?? "x");
       const profile = named && named.kind === "post" ? named : profileOf("x");
-      if (!profile) return null;
+      // A post profile always names its platform; only `core` does not (`PlatformProfileSchema`).
+      if (!profile?.platform) return null;
+      const platform = profile.platform;
       const text = str(s.text);
       // Clipped to the contract: one long version or rationale must not fail the card (and with it the whole queue).
-      const versions = [text, ...strings(s.alternates)].filter(Boolean).slice(0, 3).map((v) => clip(v, 3000));
+      const versions = [text, ...strings(s.alternates)].filter(Boolean).slice(0, 3).map((v) => clip(v, 4000));
       // An X thread (P6 W4): SQL emits it only when it is valid (5 to 8 posts, the first being `text`).
       const thread = strings(s.thread);
       const { head, rest } = firstSentence(text);
@@ -117,7 +119,7 @@ function build(row: ApprovalRow): Built | null {
           kind: "post",
           platforms: [
             {
-              platform: profile.platform,
+              platform,
               versions: versions.length ? versions : [str(s.idea)],
               limit: profile.limit,
               visibleBeforeMore: profile.visibleBeforeMore,
@@ -127,6 +129,7 @@ function build(row: ApprovalRow): Built | null {
           checks: [],
           why: clip(str(s.rationale), 200) || null,
           ...timed,
+          ...(row.ref_kind === "content_item" ? { itemId: row.ref_id } : {}),
         },
       };
     }
@@ -326,7 +329,12 @@ function build(row: ApprovalRow): Built | null {
       if (!parsed.success) return null;
       const v = parsed.data;
       const where = PLATFORM_NAME[v.platform];
-      const what = v.deliverable_kind === "post" ? firstSentence(v.text ?? "").head || "Your post" : v.title || firstSentence(v.text ?? "").head || "Your short";
+      const what =
+        v.deliverable_kind === "post"
+          ? firstSentence(v.text ?? "").head || "Your post"
+          : v.deliverable_kind === "photo_post"
+            ? `Your ${v.photos?.length ?? 0} photos: ${firstSentence(v.text ?? "").head || "no caption"}`
+            : v.title || firstSentence(v.text ?? "").head || "Your short";
       return {
         title: clip(`${what} · ${where}${v.handle ? ` ${v.handle}` : ""}`, 300),
         summary: v.last_error

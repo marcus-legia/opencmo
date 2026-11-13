@@ -1,4 +1,4 @@
--- 20270120020000: autopilot never approves a founder's own brief, a card the founder has not seen yet, or a card of
+-- 20270121020000: autopilot never approves a founder's own brief, a card the founder has not seen yet, or a card of
 -- a banned account.
 create extension if not exists pgtap with schema extensions;
 

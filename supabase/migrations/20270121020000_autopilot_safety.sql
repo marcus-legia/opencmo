@@ -3,7 +3,8 @@
 --
 -- 1. A founder's own brief lost its marker. cmo_save_draft replaced the whole body, so `source = 'cmo_chat'` from
 --    cmo_add_item was gone by the time the card was raised; and a "write it now" brief (the run's input.idea) never
---    had one. Now the marker survives the draft, and a run that carries the founder's idea sets it.
+--    had one. Now the marker survives the draft, and a run that carries the founder's idea sets it. Built on the
+--    versions of 20270120020000 (targets, slot) and 20270120025000 (Threads chains), which it keeps.
 -- 2. A held card got its countdown when it was inserted, out of the founder's sight. When it was released the next
 --    day, auto_at had often passed, and the same cron call approved it. The countdown now starts when the card
 --    becomes visible (inserted waiting, or released from held), from post_autopilot_at as before.
@@ -38,8 +39,11 @@ begin
   if p_item is not null then
     update public.content_items
     set status = 'in_review',
-        -- The right side reads the row before the update: a founder's brief keeps its marker through the draft.
-        body = case when body->>'source' = 'cmo_chat' then p_body || jsonb_build_object('source', 'cmo_chat') else p_body end,
+        -- The right side reads the row before the update: the planner's targets and slot (20270120020000) and a
+        -- founder's brief marker survive the draft.
+        body = (p_body - 'targets' - 'slot' - 'source')
+          || jsonb_strip_nulls(jsonb_build_object('targets', body->'targets', 'slot', body->'slot',
+               'source', case when body->>'source' = 'cmo_chat' then 'cmo_chat' end)),
         priority = coalesce(p_priority, 'medium'), run_id = p_run, updated_at = now()
     where id = p_item and user_id = p_user and status in ('planned', 'drafting')
     returning * into v_row;
@@ -54,7 +58,8 @@ begin
     values (p_user, p_run, 'post', v_platform, current_date,
             left(coalesce(nullif(p_idea, ''), 'Post for ' || case when v_post then v_profile->>'label' else 'X' end), 300),
             'in_review', coalesce(p_priority, 'medium'),
-            case when v_founder_brief then p_body || jsonb_build_object('source', 'cmo_chat') else p_body end)
+            (p_body - 'targets' - 'slot' - 'source')
+              || case when v_founder_brief then jsonb_build_object('source', 'cmo_chat') else '{}'::jsonb end)
     returning * into v_row;
   end if;
   return v_row;
@@ -76,6 +81,10 @@ begin
   if new.kind = 'post' and new.status = 'waiting' then
     begin
       new.auto_at := public.post_autopilot_at(new.user_id, new.ref_kind, new.ref_id, new.snapshot);
+      -- A Threads chain is a thread and stays out of autopilot (20270120025000).
+      if new.auto_at is not null and public.post_is_threads_chain(new.ref_id, new.snapshot) then
+        new.auto_at := null;
+      end if;
     exception when others then
       -- The card matters more than its countdown: it is raised as an ordinary card.
       raise warning 'autopilot for card of % failed: %', new.ref_id, sqlerrm;

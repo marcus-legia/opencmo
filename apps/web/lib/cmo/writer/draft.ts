@@ -73,7 +73,8 @@ export function rulesFor(context: WriterContext, video?: VideoSource): CheckRule
 
 function videoBlock(video: VideoSource): string {
   const hook = video.hook ? `\nfirst line said: ${video.hook}` : "";
-  return `<video kind="${video.kind}" seconds="${Math.round(video.seconds)}">\ntitle: ${video.title}${hook}\ntranscript: ${video.transcript || "(no speech)"}\n</video>`;
+  const draft = video.scriptCaption ? `\n<script_caption>${video.scriptCaption}</script_caption>` : "";
+  return `<video kind="${video.kind}" seconds="${Math.round(video.seconds)}">\ntitle: ${video.title}${hook}\ntranscript: ${video.transcript || "(no speech)"}${draft}\n</video>`;
 }
 
 const reasonOf = (brief: { reason?: string }) => (brief.reason ? ` (why: ${brief.reason})` : "");
@@ -144,6 +145,7 @@ function fakeOutput(kind: WriterKind, profile: WriterProfile | null, brief: Writ
         aspect: b.aspect ?? "9:16",
         rationale: "From this week's video item.",
         learnedFrom: (context.nicheUrls ?? []).slice(0, 2),
+        caption: `${b.idea.replace(/\.$/, "")}.\n\nHere is ${product} doing it, recorded in one take.\n\n#buildinpublic #founder`,
         storyboard: fakeStoryboard(b.idea, product, b.seconds ?? 30),
       };
     }
@@ -195,6 +197,8 @@ function toBrief(raw: z.infer<typeof VideoBriefDraftSchema>) {
     cta: raw.cta.trim().slice(0, 160),
     seconds: Math.min(90, Math.max(5, Math.round(raw.seconds))),
     aspect: raw.aspect,
+    // An older model answer has no caption: the brief is still a script, so it parses and the check says what is missing.
+    caption: (raw.caption ?? "").trim(),
     storyboard: raw.storyboard.map((beat) => ({ say: beat.say.trim(), show: beat.show.trim(), shot: beat.shot, seconds: Math.min(30, Math.max(1, Math.round(beat.seconds))) })),
   });
 }

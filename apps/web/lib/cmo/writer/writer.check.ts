@@ -13,10 +13,10 @@ import { briefRequest } from "@/lib/departments/studio/video";
 
 import { AGENT_SPECS, CAPTION_WRITERS, POST_WRITERS } from "../agents/registry";
 import { checkPost } from "../jobs/check-post";
-import { postProfile, REVIEW_SYSTEM } from "../jobs/draft-post";
+import { REVIEW_SYSTEM } from "../jobs/draft-post";
+import { postProfile } from "../platforms";
 import { memoryStore } from "../jobs/memory-store";
 import { drainCmoQueue } from "../jobs/runner";
-import { duePerPlatform } from "../schedule";
 import { isoDay, type ItemRow } from "../jobs/types";
 import { stockPatterns } from "../jobs/eval/style";
 import { CAPTION_PROFILES, countHashtags, POST_PROFILES, profileOf } from "../platforms";
@@ -54,7 +54,7 @@ for (const text of ["We moved the app to Next.js and Node.js.", "Our #1 rule is 
 
 // No AI Slop is a skill read by the writer, the checker, sales and CMO chat; its plain stock patterns are also a code
 // gate (lib/cmo/slop.ts, checked in slop.check.ts).
-assert.deepEqual([...CMO_SKILLS["no-ai-slop"].agents].sort(), ["brief_writer", "checker", "cmo", "director", "instagram_writer", "linkedin_writer", "onboarding", "planner", "research", "sales", "shorts", "slides_writer", "threads_writer", "tiktok_writer", "writer", "x_writer", "youtube_writer"]);
+assert.deepEqual([...CMO_SKILLS["no-ai-slop"].agents].sort(), ["brief_writer", "checker", "cmo", "director", "facebook_writer", "instagram_writer", "linkedin_writer", "onboarding", "planner", "research", "sales", "shorts", "slides_writer", "threads_writer", "tiktok_writer", "writer", "x_writer", "youtube_writer"]);
 assert.match(CMO_SKILLS["no-ai-slop"].license, /MIT — Copyright \(c\) 2026 Peter Yang/);
 for (const agent of ["x_writer", "checker", "sales", "cmo"] as const) assert.ok(skillIndex(agent).includes("- no-ai-slop:"), `${agent} lists no-ai-slop`);
 assert.ok(REVIEW_SYSTEM.includes('<skill name="no-ai-slop">') && /reads like AI wrote it/.test(REVIEW_SYSTEM), "the checker fails a draft that reads as AI");
@@ -67,7 +67,7 @@ const postSkill = CMO_SKILLS["post"].body;
 for (const taught of ["isn't what you think", "is wrong. Here's why:", "the last post sums up", "1-2 hashtags", "link in reply", "I was wrong about [", "Do this instead:", "a question, a takeaway"]) {
   assert.ok(!postSkill.includes(taught), `the post skill does not teach: ${taught}`);
 }
-assert.deepEqual([...CMO_SKILLS["post"].agents].sort(), ["checker", "cmo", "linkedin_writer", "threads_writer", "x_writer"], "one post skill for every post writer");
+assert.deepEqual([...CMO_SKILLS["post"].agents].sort(), ["checker", "cmo", "facebook_writer", "linkedin_writer", "threads_writer", "x_writer"], "one post skill for every post writer");
 
 // The eval's stock-pattern measure: catches the old fake drafts, passes the new ones and plain posts.
 assert.deepEqual(stockPatterns("Most founders skip this: polite reminders get invoices paid."), ["faux_insight", "colon_reveal"]);
@@ -190,6 +190,7 @@ async function writerChecks() {
 
   // Video brief: exactly three hooks, facts from the documents, parsed into Studio's type.
   const brief = { objective: "Show how Paylane chases a late invoice", angle: "Show it working", hooks: ["Your invoice is late.", "Paylane sends the reminder.", "Stop chasing invoices."], keyPoints: ["Plans start at $12/month"], cta: "Try Paylane", seconds: 30, aspect: "9:16", rationale: "r", learnedFrom: [],
+    caption: "Your invoice is late.\n\nPaylane sends the reminder on the day it is due.\n\n#freelance #invoicing",
     storyboard: [
       { say: "Your invoice is late.", show: "You, to camera", shot: "talking_head", seconds: 5 },
       { say: "Paylane sends the reminder for you, on the day it is due.", show: "Paylane's reminder screen", shot: "screen", seconds: 15 },
@@ -198,6 +199,14 @@ async function writerChecks() {
   const b = await createWriter({ think: scripted([brief]).think, agentFor: () => "x_writer", canFix: false }).draft("video_brief", null, { idea: "Late invoices" }, ctx);
   assert.deepEqual([b.brief.hooks.length, b.brief.cta, b.brief.seconds], [3, "Try Paylane", 30]);
   assert.equal(VideoBriefSchema.parse(b.brief).objective, brief.objective, "Studio's buildVideo takes it as is");
+  // The caption is written with the script, in the same call: there, short enough, five hashtags at most, no link.
+  assert.equal(b.brief.caption, brief.caption);
+  const briefWith = (caption: string) => createWriter({ think: scripted([{ ...brief, caption }]).think, agentFor: () => "x_writer", canFix: false }).draft("video_brief", null, { idea: "x" }, ctx);
+  await assert.rejects(briefWith("  "), /no caption/);
+  await assert.rejects(briefWith(`Your invoice is late. ${"#a #b #c #d #e #f"}`), /6 hashtags; it takes at most 5/);
+  await assert.rejects(briefWith("Your invoice is late. See https://paylane.example/pricing"), /caption has a link/);
+  await assert.rejects(briefWith(`Your invoice is late. ${"It is late. ".repeat(200)}`), /caption: /);
+  await assert.rejects(briefWith("Paylane has helped 9,000 freelancers get paid."), /9,000/);
   await assert.rejects(createWriter({ think: scripted([{ ...brief, hooks: ["One"] }]).think, agentFor: () => "x_writer", canFix: false }).draft("video_brief", null, { idea: "x" }, ctx), /1 hooks; a brief has 3/);
   await assert.rejects(createWriter({ think: scripted([{ ...brief, storyboard: brief.storyboard.slice(0, 2) }]).think, agentFor: () => "x_writer", canFix: false }).draft("video_brief", null, { idea: "x" }, ctx), /2 beats; a script has 3 to 8/);
   await assert.rejects(createWriter({ think: scripted([{ ...brief, seconds: 60 }]).think, agentFor: () => "x_writer", canFix: false }).draft("video_brief", null, { idea: "x" }, ctx), /beats run 30 s; the video is 60 s/);
@@ -231,7 +240,9 @@ async function postChecks() {
   const long = `${"Late invoices are a process problem. ".repeat(11).trim()}`;
   assert.ok([...long].length > 280 && [...long].length <= 500);
   assert.deepEqual(checkPostFor(long, threads, rules), [], "Threads takes 500 characters");
-  assert.ok(checkPostFor(long, x, rules)[0]?.includes("X allows 280"));
+  // D6 (2026-11-12): X takes a long post (X Premium); a free account's refusal is handled at publish time.
+  assert.deepEqual(checkPostFor(long, x, rules), [], "X takes a long post");
+  assert.ok(checkPostFor("Late invoices. ".repeat(300), x, rules)[0]?.includes("X allows 4000"));
   assert.deepEqual(checkPostFor(`${long}\n\n${long}\n\n${long}`, linkedin, rules), [], "LinkedIn takes 3,000");
   assert.ok(checkPostFor(long.repeat(9), linkedin, rules)[0]?.includes("LinkedIn allows 3000"));
   assert.ok(checkPostFor("Ship it #buildinpublic", linkedin, rules).some((issue) => issue.includes("hashtag")), "no hashtags on any post profile");
@@ -239,9 +250,6 @@ async function postChecks() {
   assert.deepEqual(moreAdvice(`Late invoices are a process.\n\n${long}`, linkedin), [], "a short first line lands before the cut");
   assert.deepEqual(moreAdvice(long, threads), [], "Threads shows the whole post");
 
-  // The schedule drafts one post per platform a tick, the oldest first: an X backlog never crowds out the others.
-  const due = [{ id: "x-old", platform: "X" }, { id: "x-older", platform: "x" }, { id: "x-today", platform: "Twitter" }, { id: "t", platform: "Threads" }, { id: "l", platform: "LinkedIn" }, { id: "unknown", platform: null }];
-  assert.deepEqual(duePerPlatform(due).map((d) => d.id), ["x-old", "t", "l"]);
 
   // A Threads item through the founder's Claude: its own agent, the <platform> block first, X's prefix.
   process.env.OPENCMO_AGENT_FAKE = "1";
@@ -258,7 +266,7 @@ async function postChecks() {
   assert.equal(onThreads.request.system, onX.request.system, "one cached prefix for every post profile");
   assert.deepEqual([profileFromPrompt(onThreads.request.prompt), profileFromPrompt(onX.request.prompt)], ["threads", "x"]);
   assert.match(onThreads.request.title, /today's Threads post/);
-  // A 400-character version is a Threads post, never an X one.
+  // A 400-character version fits Threads, and X too since X takes long posts (D6).
   const answer = { versions: [{ text: long, angle: "long" }, { text: "Reminders on day 3, 7 and 14.", angle: "short" }], rationale: "r" };
   mem.submit(onThreads.id, "draft_post", answer);
   mem.submit(onX.id, "draft_post", answer);
@@ -267,7 +275,18 @@ async function postChecks() {
   const xCard = mem.items.find((i) => i.id === "x1")!;
   assert.equal(threadsCard.status, "in_review");
   assert.deepEqual([threadsCard.body.text, threadsCard.body.alternates], [long, ["Reminders on day 3, 7 and 14."]]);
-  assert.deepEqual([xCard.body.text, xCard.body.alternates], ["Reminders on day 3, 7 and 14.", []], "the long version is dropped on X");
+  assert.deepEqual([xCard.body.text, xCard.body.alternates], [long, ["Reminders on day 3, 7 and 14."]], "X keeps the long version");
+
+  // A slot for two platforms is one core post (D3): the core profile, and the draft keeps the planner's targets.
+  const core = memoryStore(docs, []);
+  core.items.push({ ...item("X", "c1"), body: { targets: ["x", "linkedin"], slot: 0 } });
+  core.enqueue("post_draft", { brain: "claude", item_id: "c1" });
+  await drainCmoQueue(core.store);
+  assert.equal(profileFromPrompt(core.inbox[0]!.request.prompt), "core", "two targets: the core profile");
+  core.submit(core.inbox[0]!.id, "draft_post", answer);
+  await drainCmoQueue(core.store);
+  const coreCard = core.items.find((i) => i.id === "c1")!;
+  assert.deepEqual([coreCard.status, coreCard.body.targets, coreCard.body.slot], ["in_review", ["x", "linkedin"], 0], "the draft keeps its targets");
 
   // W2: the founder's rules first, then their voice notes (newest, weightiest), then documents; the prefix is the same
   // whatever the founder's notes say; voice notes are not read twice through the general memories.
@@ -316,7 +335,8 @@ async function studioChecks() {
   const out = b.output as { brief: unknown; reason: string };
   const parsed = VideoBriefSchema.parse(out.brief);
   assert.deepEqual([parsed.hooks.length, parsed.seconds, parsed.aspect, Boolean(parsed.cta), typeof out.reason], [3, 30, "9:16", true, "string"]);
-  assert.deepEqual(Object.keys(out.brief as object).sort(), ["angle", "aspect", "cta", "hooks", "keyPoints", "objective", "seconds", "storyboard"], "the keys SQL copies into the order");
+  assert.deepEqual(Object.keys(out.brief as object).sort(), ["angle", "aspect", "caption", "cta", "hooks", "keyPoints", "objective", "seconds", "storyboard"], "the keys SQL copies into the order");
+  assert.ok(parsed.caption.length > 0 && parsed.caption.length <= 2200 && countHashtags(parsed.caption) <= 5, "the fake script comes with its caption");
   assert.deepEqual((b.output as { sources: string[] }).sources, [], "no niche research, no sources");
   // P5 F8: with niche research the brief cites its videos, and only URLs the research read.
   const nicheRun = memoryStore(docs, []);

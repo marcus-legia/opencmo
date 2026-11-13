@@ -13,7 +13,7 @@ import { z } from "zod";
 import type { Platform } from "@/lib/screens/common";
 
 /** The platforms posted through Zernio (F1's connect buttons). Reddit is never posted: Sales has no post button. */
-export const PUBLISH_PLATFORMS = ["x", "threads", "linkedin", "tiktok", "youtube", "instagram"] as const satisfies readonly Platform[];
+export const PUBLISH_PLATFORMS = ["x", "threads", "linkedin", "facebook", "tiktok", "youtube", "instagram"] as const satisfies readonly Platform[];
 export const PublishPlatformSchema = z.enum(PUBLISH_PLATFORMS);
 export type PublishPlatform = z.infer<typeof PublishPlatformSchema>;
 
@@ -44,7 +44,14 @@ export const PlatformFieldsSchema = z.discriminatedUnion("platform", [
       aiGenerated: z.boolean(),
     })
     .strict(),
-  z.object({ platform: z.enum(["x", "threads", "linkedin", "youtube", "instagram"]), aiGenerated: z.boolean() }).strict(),
+  z
+    .object({
+      platform: z.enum(["x", "threads", "linkedin", "facebook", "youtube", "instagram"]),
+      aiGenerated: z.boolean(),
+      /** X only: the founder asked for a long post as a thread, after a free account refused it as one post. */
+      asThread: z.boolean().optional(),
+    })
+    .strict(),
 ]);
 export type PlatformFields = z.infer<typeof PlatformFieldsSchema>;
 
@@ -65,7 +72,7 @@ export type PublishMedia = z.infer<typeof PublishMediaSchema>;
 export const PublishDeliverableSchema = z
   .object({
     id: z.uuid(),
-    kind: z.enum(["post", "video", "short", "slideshow"]),
+    kind: z.enum(["post", "video", "short", "slideshow", "photo_post"]),
     text: z.string().max(10000),
     /** YouTube's title; null elsewhere. */
     title: z.string().min(1).max(100).nullable(),
@@ -78,7 +85,7 @@ export const PublishDeliverableSchema = z
       .optional(),
   })
   .strict()
-  .refine((d) => d.kind === "post" || d.media.length > 0, { message: "A video, short or slideshow needs its media." })
+  .refine((d) => d.kind === "post" || d.media.length > 0, { message: "A video, short, slideshow or photo post needs its media." })
   .refine((d) => !d.thread || (d.kind === "post" && d.thread[0] === d.text), { message: "A thread is a post whose first post is its text." })
   .refine((d) => d.text.trim().length > 0 || d.media.length > 0, { message: "Nothing to post." });
 export type PublishDeliverable = z.infer<typeof PublishDeliverableSchema>;
@@ -115,6 +122,8 @@ export const PUBLISH_ERROR_CODES = [
   "not_found",
   /** The post breaks a platform rule (length, media, a field). Retrying the same post fails again. */
   "invalid",
+  /** X refused the text as too long for the account (no X Premium). The card offers "Post as a thread". */
+  "too_long",
   /** Too many requests, or the platform's daily limit (TikTok's 429). */
   "rate_limited",
   /** Zernio or the platform is down, or timed out. The fallback card offers copy + open. */

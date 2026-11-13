@@ -4,6 +4,11 @@ A review of the whole Supabase schema for operations and safety: all 213 migrati
 (17.6.1.167), then the catalog queried directly (RLS, grants, indexes, security definer functions, triggers), plus a
 high-effort code review of the latest schema changes (autopilot, banned API keys, planned-item expiry).
 
+**Merge order: after #204.** #204 redefines `cmo_save_draft` and `approvals_autopilot`, and its migrations used the
+same versions (`20270120010000`, `20270120020000`) and test numbers (299, 300) this branch first had. This branch is
+merged on top of #204, its migrations renumbered to `20270121…` and its function bodies built on #204's (targets, slot,
+Threads chains kept). Merged the other way round, #204's later `create or replace` would undo the autopilot fixes.
+
 ## What was already right
 
 - RLS is on for all 84 tables, and no table has a write policy: every write is a security definer RPC (web rule 1).
@@ -16,7 +21,7 @@ high-effort code review of the latest schema changes (autopilot, banned API keys
 
 ## Fixed
 
-`20270120010000_db_hardening.sql` (test `299_db_hardening`):
+`20270121010000_db_hardening.sql` (test `309_db_hardening`):
 
 1. **40 foreign keys had no index.** Every delete of a parent scanned the whole child table: `purge_expired_jobs`
    (jobs → tasks, worker_operations, upload_reservations), deleting an unpaid account (auth.users → agent_sessions,
@@ -30,11 +35,11 @@ high-effort code review of the latest schema changes (autopilot, banned API keys
    TRUNCATE is not covered by RLS at all. anon also had SELECT on 41 tables, which let GraphQL introspection list their
    columns. Now anon reads only `billing_catalog`, authenticated keeps SELECT only, and the default privileges stop
    new tables from getting more. service_role is unchanged.
-4. **Guards for the future.** `299_db_hardening` checks the whole schema on every CI run: RLS on every table, an index
+4. **Guards for the future.** `309_db_hardening` checks the whole schema on every CI run: RLS on every table, an index
    on every foreign key, no duplicate indexes, no direct writes by the API roles, anon reads only the price list, every
    security definer function pins `search_path` and checks its caller.
 
-`20270120020000_autopilot_safety.sql` (test `300_autopilot_safety`): three ways a post went out without the founder's
+`20270121020000_autopilot_safety.sql` (test `310_autopilot_safety`): three ways a post went out without the founder's
 Approve when CLAUDE.md says they must see it first.
 
 1. **A founder's own brief lost its marker.** `cmo_save_draft` replaced the whole body, so `source = 'cmo_chat'` was gone

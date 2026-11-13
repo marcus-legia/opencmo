@@ -1,4 +1,4 @@
--- 20270120010000: schema-wide invariants. They run on the whole schema, so a future migration that adds a table
+-- 20270121010000: schema-wide invariants. They run on the whole schema, so a future migration that adds a table
 -- without RLS, a foreign key without an index, or a grant wider than the RPCs need fails here.
 create extension if not exists pgtap with schema extensions;
 

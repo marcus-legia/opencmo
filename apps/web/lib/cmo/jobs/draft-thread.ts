@@ -50,8 +50,13 @@ const RECAP = /^\s*(to (sum|wrap) (it )?up|in (short|summary|sum)|tl;?dr|recap|s
 // "1/", "2." or "3)" numbering, not a post that opens on a figure ("10.5% of invoices…").
 const NUMBERED = /^\s*(\d{1,2}\s*(?:[/)]|\.(?!\d))|🧵)/u;
 
+/** Each post of an X thread fits a free account (SQL `thread_valid`), whatever X's profile allows a single post (D6). */
+export const THREAD_POST_CHARS = 280;
+export const threadProfile = (profile: PlatformProfile): PlatformProfile => ({ ...profile, limit: Math.min(profile.limit, THREAD_POST_CHARS) });
+
 /** Code-only problems of a thread; empty when it passes. `post` is 1-based in the messages. */
-export function threadIssues(posts: readonly string[], profile: PlatformProfile, rules: CheckRules): string[] {
+export function threadIssues(posts: readonly string[], xProfile: PlatformProfile, rules: CheckRules): string[] {
+  const profile = threadProfile(xProfile);
   const issues: string[] = [];
   // A question inside a thread leads to the next post; only the last post must not end by baiting replies.
   const inside: CheckRules = { ...rules, allowSlop: new Set([...(rules.allowSlop ?? []), "closing_question"]) };
@@ -88,7 +93,8 @@ export type ThreadInput = { idea: string; product: string; docs: Documents; cont
 
 /** Writes, checks and fixes one thread; the body `cmo_save_draft` keeps (`text` = the first post). */
 export async function writeThread(ctx: JobContext, input: ThreadInput): Promise<ThreadBody> {
-  const { idea, product, docs, context, profile, agent } = input;
+  const { idea, product, docs, context, agent } = input;
+  const profile = threadProfile(input.profile);
   const rules = checkRules(docs);
   let answered: string | null = null;
   const noteModel = (usage: { model: string }) => {

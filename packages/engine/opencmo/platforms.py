@@ -22,7 +22,8 @@ _CANDIDATES = (
 class PlatformProfile:
     id: str
     label: str
-    platform: str
+    # None only for `core`: one post for every platform the planner picked (2026-11-12).
+    platform: str | None
     kind: str
     limit: int
     title: int | None
@@ -46,7 +47,7 @@ def profiles() -> tuple[PlatformProfile, ...]:
         PlatformProfile(
             id=str(p["id"]),
             label=str(p["label"]),
-            platform=str(p["platform"]),
+            platform=None if p["platform"] is None else str(p["platform"]),
             kind=str(p["kind"]),
             limit=int(p["limit"]),
             title=None if p["title"] is None else int(p["title"]),

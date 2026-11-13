@@ -17,7 +17,7 @@
     "jitterSeconds": { "type": "integer", "minimum": 0, "maximum": 240, "description": "Natural posting: a slot fires up to this many seconds either side of its time." },
     "platforms": {
       "type": "object",
-      "required": ["x", "threads", "linkedin", "tiktok", "instagram", "youtube"],
+      "required": ["x", "threads", "linkedin", "facebook", "tiktok", "instagram", "youtube"],
       "additionalProperties": false,
       "patternProperties": {
         "^[a-z]+$": {

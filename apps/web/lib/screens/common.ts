@@ -28,7 +28,7 @@ export const DEPARTMENT_LABEL: Record<Department, string> = {
 /** The six departments the team graph draws around the Brain, in the frame's order (I to VI). */
 export const TEAM: Exclude<Department, "brain">[] = ["research", "writer", "studio", "sales", "schedule", "publish"];
 
-export const PLATFORMS = ["x", "threads", "linkedin", "tiktok", "youtube", "instagram", "reddit"] as const;
+export const PLATFORMS = ["x", "threads", "linkedin", "facebook", "tiktok", "youtube", "instagram", "reddit"] as const;
 export const PlatformSchema = z.enum(PLATFORMS);
 export type Platform = z.infer<typeof PlatformSchema>;
 
@@ -36,6 +36,8 @@ export const PLATFORM_LABEL: Record<Platform, string> = {
   x: "X",
   threads: "Threads",
   linkedin: "LinkedIn",
+  // A Page only: Meta's API cannot post to a personal profile (D9).
+  facebook: "Facebook",
   tiktok: "TikTok",
   youtube: "YouTube Shorts",
   instagram: "Instagram",

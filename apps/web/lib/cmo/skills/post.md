@@ -2,7 +2,7 @@
 name: post
 kind: playbook
 description: How to write a social post for a solo founder on any platform (X, Threads, LinkedIn): one true thing, in their voice, with no stock patterns. The <platform> block gives each platform's length, cut and format. Used by the post writers and the checker.
-agents: [x_writer, threads_writer, linkedin_writer, checker, cmo]
+agents: [x_writer, threads_writer, linkedin_writer, facebook_writer, checker, cmo]
 source: OpenCMO, rewritten 2026-11-12 from x-writing (marketingskills/social, marketingskills/copywriting; claude-code-templates/publisher-x)
 license: MIT — Copyright (c) 2025 Corey Haines; Copyright (c) 2025 Daniel (San) Ávila
 ---

@@ -33,6 +33,7 @@ export const CMO_SKILLS = {
       "x_writer",
       "threads_writer",
       "linkedin_writer",
+      "facebook_writer",
       "instagram_writer",
       "tiktok_writer",
       "youtube_writer",
@@ -72,6 +73,7 @@ export const CMO_SKILLS = {
       "x_writer",
       "threads_writer",
       "linkedin_writer",
+      "facebook_writer",
       "checker",
       "cmo"
     ],

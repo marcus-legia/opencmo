@@ -10,7 +10,7 @@ import assert from "node:assert/strict";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { isoDay } from "./jobs/types";
-import { enqueueDueLoops, loopHour, loopKey } from "./schedule";
+import { enqueueDueDrafts, enqueueDueLoops, loopHour, loopKey } from "./schedule";
 
 type Row = Record<string, unknown>;
 const MAX_ROWS = 1000;
@@ -104,7 +104,7 @@ async function main() {
   assert.equal(drafts.length, 1199, "each paid founder's due post has its draft");
   assert.equal(new Set(drafts.map((run) => run.user_id)).size, 1199, "one draft each");
   const last = drafts.find((run) => run.user_id === "user-1198")!.input as Row;
-  assert.deepEqual([last.source, last.loop, last.item_id], ["schedule", "daily-x-draft", "item-1198"], "the draft names its calendar item");
+  assert.deepEqual([last.source, last.loop, last.item_id], ["schedule", "daily-post-draft", "item-1198"], "the draft names its calendar item");
   assert.equal(early.queued + first.queued, tables.cmo_runs!.length);
   const total = tables.cmo_runs!.length;
 
@@ -128,6 +128,23 @@ async function main() {
   for (const run of tables.cmo_runs) run.created_at = `${isoDay(-1)}T00:05:00.000Z`;
   const tomorrow = await enqueueDueLoops(resumed, at(23));
   assert.ok(tomorrow.queued >= 1199, "a new day queues the loops again");
+
+  // One run per due item, not per platform: X at 2 or 3 a day drafts every X slot (daily core drafts, 2026-11-12),
+  // up to the planner's most posts a day.
+  const day: Record<string, Row[]> = { work_orders: [], cmo_runs: [] };
+  const { admin: one } = fakeAdmin(day, new Set());
+  const xs = ["a", "b", "c", "d"].map((id) => ({ id, platform: "X" }));
+  assert.deepEqual(await enqueueDueDrafts(one, "u", xs, { claude: false }), [3, 0], "three X items on a day are three runs, the fourth waits");
+  assert.deepEqual(day.cmo_runs!.map((run) => (run.input as Row).item_id), ["a", "b", "c"], "the oldest first");
+
+  // A day in flight when the loop was renamed is not drafted twice: yesterday's name still counts for today.
+  const renamed: Record<string, Row[]> = {
+    ...tables,
+    cmo_runs: founders.map((user_id, i) => ({ id: `old-${i}`, user_id, kind: "post_draft", status: "done", created_at: `${today}T00:05:00.000Z`, input: { source: "schedule", loop: "daily-x-draft", item_id: `item-${i}` } })),
+  };
+  const { admin: legacy } = fakeAdmin(renamed, new Set(founders.slice(0, -1)));
+  await enqueueDueLoops(legacy, at(23));
+  assert.equal(renamed.cmo_runs!.filter((run) => String(run.id).startsWith("run-") && run.kind === "post_draft").length, 0, "the old loop name's runs count");
 
   console.log("schedule.check — paged reads, 1200 founders, each from their own morning, one run per loop a day, a retry resumes.");
 }
