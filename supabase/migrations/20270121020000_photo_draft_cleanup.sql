@@ -3,7 +3,10 @@
 --
 -- `photo_draft_release` queues a draft's photos in `storage_deletions`, never one a scheduled post lists. Starting a
 -- photo post again releases the draft it empties; a save releases the photos dropped from the list; the cleanup cron
--- closes drafts untouched for 7 days (`photo_drafts_sweep`) and releases them.
+-- closes drafts untouched for 7 days (`photo_drafts_sweep`) and releases them. Drafts closed before this migration are
+-- released once, at its end.
+--
+-- The photos stay in Supabase Storage (bucket `photos`) for now: uploads move to DigitalOcean storage later this week.
 
 -- p_photos null: every object under the draft's folder, uploaded and listed or not.
 create or replace function public.photo_draft_release(p_post uuid, p_photos text[] default null) returns integer
@@ -14,7 +17,8 @@ declare
 begin
   -- Locked first, so the statement below sees a post scheduled meanwhile in another tab as scheduled.
   select * into v_row from public.photo_posts where id = p_post for update;
-  if not found or v_row.status <> 'draft' then
+  -- Only a draft is ever cancelled, so a cancelled post is an abandoned draft whose photos may go too.
+  if not found or v_row.status not in ('draft', 'cancelled') then
     return 0;
   end if;
   insert into public.storage_deletions (bucket, path, user_id)
@@ -73,6 +77,9 @@ begin
   if not found then
     raise exception 'Photo post not found.' using errcode = 'P0002';
   end if;
+  if v_row.status = 'cancelled' then
+    raise exception 'This draft was closed. Start a new photo post.' using errcode = 'P0001';
+  end if;
   if v_row.status <> 'draft' then
     raise exception 'This photo post is already scheduled.' using errcode = 'P0001';
   end if;
@@ -130,3 +137,55 @@ end;
 $$;
 revoke all on function public.photo_drafts_sweep(integer) from public, anon, authenticated;
 grant execute on function public.photo_drafts_sweep(integer) to service_role;
+
+-- A draft the sweep closed, or one started again elsewhere, says so instead of "already scheduled".
+create or replace function public.photo_post_schedule(p_id uuid) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_row public.photo_posts;
+  v_platform text;
+  v_d uuid;
+begin
+  select * into v_row from public.photo_posts where id = p_id and user_id = v_user for update;
+  if not found then
+    raise exception 'Photo post not found.' using errcode = 'P0002';
+  end if;
+  if v_row.status = 'cancelled' then
+    raise exception 'This draft was closed. Start a new photo post.' using errcode = 'P0001';
+  end if;
+  if v_row.status <> 'draft' then
+    raise exception 'This photo post is already scheduled.' using errcode = 'P0001';
+  end if;
+  if cardinality(v_row.photos) = 0 then
+    raise exception 'Add at least one photo.' using errcode = '22023';
+  end if;
+  if cardinality(v_row.platforms) = 0 then
+    raise exception 'Pick at least one platform.' using errcode = '22023';
+  end if;
+  perform public.photo_post_check(cardinality(v_row.photos), v_row.platforms);
+  -- The caption rules of a video caption: 1 to 2,200 characters, five hashtags at most, no link.
+  perform public.caption_check('instagram_caption', v_row.caption, null);
+  -- Threads takes 500 characters a post, and a post with photos is never cut into a chain.
+  if 'threads' = any (v_row.platforms) and char_length(btrim(v_row.caption)) > 500 then
+    raise exception 'Threads takes up to 500 characters with photos. Shorten the caption, or leave Threads out.'
+      using errcode = '22023';
+  end if;
+  foreach v_platform in array v_row.platforms loop
+    if not exists (select 1 from public.social_accounts where user_id = v_user and platform = v_platform and status = 'connected') then
+      raise exception 'Connect your % account first: photos go out only from a connected account.',
+        public.schedule_platform_label(v_platform) using errcode = 'P0001';
+    end if;
+  end loop;
+  update public.photo_posts set status = 'scheduled', updated_at = now() where id = p_id;
+  insert into public.deliverables (user_id, order_id, kind, ref_kind, ref_id, status)
+  values (v_user, (public.work_order_week_root(v_user)).id, 'photo_post', 'photo_post', p_id, 'decided')
+  returning id into v_d;
+  return public.schedule_propose(v_d);
+end;
+$$;
+
+-- Drafts closed before this migration still hold their photos: release them once.
+select public.photo_draft_release(id) from public.photo_posts where status = 'cancelled';

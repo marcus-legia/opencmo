@@ -6,10 +6,11 @@ create extension if not exists pgtap with schema extensions;
 begin;
 set search_path to public, extensions;
 
-select plan(22);
+select plan(23);
 
 select hasnt_function('public', 'post_slots_open', array['uuid', 'uuid'], 'post_slots_open is gone');
 select hasnt_trigger('public', 'schedule_slots', 'schedule_slots_settle_post', 'the settle trigger is gone');
+select ok(not has_function_privilege('authenticated', 'public.post_schedules(text,uuid)', 'execute'), 'post_schedules is internal');
 
 insert into auth.users (id, email) values ('e3090000-0000-4000-8000-00000000000a', 'first-a@test.local');
 update public.profiles set plan = 'starter', credit_balance = 20, timezone = 'UTC' where id = 'e3090000-0000-4000-8000-00000000000a';

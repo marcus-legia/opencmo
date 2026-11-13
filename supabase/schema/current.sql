@@ -9932,7 +9932,8 @@ declare
 begin
   -- Locked first, so the statement below sees a post scheduled meanwhile in another tab as scheduled.
   select * into v_row from public.photo_posts where id = p_post for update;
-  if not found or v_row.status <> 'draft' then
+  -- Only a draft is ever cancelled, so a cancelled post is an abandoned draft whose photos may go too.
+  if not found or v_row.status not in ('draft', 'cancelled') then
     return 0;
   end if;
   insert into public.storage_deletions (bucket, path, user_id)
@@ -10093,6 +10094,9 @@ begin
   if not found then
     raise exception 'Photo post not found.' using errcode = 'P0002';
   end if;
+  if v_row.status = 'cancelled' then
+    raise exception 'This draft was closed. Start a new photo post.' using errcode = 'P0001';
+  end if;
   if v_row.status <> 'draft' then
     raise exception 'This photo post is already scheduled.' using errcode = 'P0001';
   end if;
@@ -10138,6 +10142,9 @@ begin
   select * into v_row from public.photo_posts where id = p_id and user_id = v_user for update;
   if not found then
     raise exception 'Photo post not found.' using errcode = 'P0002';
+  end if;
+  if v_row.status = 'cancelled' then
+    raise exception 'This draft was closed. Start a new photo post.' using errcode = 'P0001';
   end if;
   if v_row.status <> 'draft' then
     raise exception 'This photo post is already scheduled.' using errcode = 'P0001';
@@ -10563,6 +10570,19 @@ begin
   return (p_body->'proposed'->>'at')::timestamptz;
 end;
 $_$;
+
+
+--
+-- Name: post_schedules(text, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.post_schedules(p_status text, p_deliverable uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select p_status = 'approved' or (p_status = 'published' and exists (select 1 from public.schedule_slots s
+    where s.deliverable_id = p_deliverable and s.status = 'published'))
+$$;
 
 
 --
@@ -14553,8 +14573,7 @@ begin
                  where t in ('x', 'threads', 'linkedin', 'facebook') order by o)
       into v_platforms
     from public.content_items c where c.id = v_d.ref_id
-      and (c.status = 'approved' or (c.status = 'published' and exists (select 1 from public.schedule_slots s
-        where s.deliverable_id = v_d.id and s.status = 'published')));
+      and public.post_schedules(c.status, v_d.id);
   elsif v_d.kind = 'photo_post' and v_d.ref_kind = 'photo_post' then
     -- The founder's own photos (D7): every platform they picked, each from its connected account.
     select array(select p from unnest(platforms) p where p in ('tiktok', 'instagram', 'threads') order by p) into v_platforms
@@ -14705,8 +14724,7 @@ begin
     return 'none';
   end if;
   select * into v_item from public.content_items where id = p_d.ref_id and user_id = p_d.user_id
-    and (status = 'approved' or (status = 'published' and exists (select 1 from public.schedule_slots s
-        where s.deliverable_id = p_d.id and s.status = 'published')));
+    and public.post_schedules(status, p_d.id);
   if not found then
     return 'none';
   end if;

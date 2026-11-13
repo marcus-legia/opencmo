@@ -5,6 +5,15 @@
 -- This replaces "published when the last open slot is" (20270120070000, review fix 1), which left a post `approved`
 -- for ever behind one ignored failure: `post_slots_open` and the trigger `schedule_slots_settle_post` go.
 
+-- One rule for `schedule_propose` and `schedule_take_proposal`: an approved post gets slots, and so does a published
+-- one whose slot posted (F1). A post marked posted by hand on its card has no posted slot, so nothing asks again for it.
+create or replace function public.post_schedules(p_status text, p_deliverable uuid) returns boolean
+language sql stable security definer set search_path = public as $$
+  select p_status = 'approved' or (p_status = 'published' and exists (select 1 from public.schedule_slots s
+    where s.deliverable_id = p_deliverable and s.status = 'published'))
+$$;
+revoke all on function public.post_schedules(text, uuid) from public, anon, authenticated;
+
 create or replace function public.publish_status(p_slot uuid, p_status text, p_external_id text DEFAULT NULL::text, p_url text DEFAULT NULL::text, p_error jsonb DEFAULT NULL::jsonb, p_zernio_account_id text DEFAULT NULL::text) RETURNS public.schedule_slots
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
@@ -190,8 +199,7 @@ begin
                  where t in ('x', 'threads', 'linkedin', 'facebook') order by o)
       into v_platforms
     from public.content_items c where c.id = v_d.ref_id
-      and (c.status = 'approved' or (c.status = 'published' and exists (select 1 from public.schedule_slots s
-        where s.deliverable_id = v_d.id and s.status = 'published')));
+      and public.post_schedules(c.status, v_d.id);
   elsif v_d.kind = 'photo_post' and v_d.ref_kind = 'photo_post' then
     -- The founder's own photos (D7): every platform they picked, each from its connected account.
     select array(select p from unnest(platforms) p where p in ('tiktok', 'instagram', 'threads') order by p) into v_platforms
@@ -279,8 +287,7 @@ begin
     return 'none';
   end if;
   select * into v_item from public.content_items where id = p_d.ref_id and user_id = p_d.user_id
-    and (status = 'approved' or (status = 'published' and exists (select 1 from public.schedule_slots s
-        where s.deliverable_id = p_d.id and s.status = 'published')));
+    and public.post_schedules(status, p_d.id);
   if not found then
     return 'none';
   end if;

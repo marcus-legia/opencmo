@@ -6,7 +6,7 @@ create extension if not exists pgtap with schema extensions;
 begin;
 set search_path to public, extensions;
 
-select plan(20);
+select plan(24);
 
 select ok(not has_function_privilege('authenticated', 'public.photo_draft_release(uuid,text[])', 'execute'),
   'a founder cannot release photos');
@@ -98,6 +98,21 @@ set local role service_role;
 select is(public.photo_drafts_sweep(7), 0, 'a second sweep closes nothing');
 reset role;
 select is((select count(*)::int from public.storage_deletions), (select n from before_rerun), 'and queues nothing twice');
+
+-- A closed draft says so, and its photos go too (drafts closed before 20270121020000 are released by the migration).
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"e3100000-0000-4000-8000-00000000000b","role":"authenticated"}';
+select throws_ok($$ select public.photo_post_save('e3101000-0000-4000-8000-000000000003', '{}', '', '{}') $$,
+  'P0001', 'This draft was closed. Start a new photo post.', 'saving a closed draft says it was closed');
+select throws_ok($$ select public.photo_post_schedule('e3101000-0000-4000-8000-000000000003') $$,
+  'P0001', 'This draft was closed. Start a new photo post.', 'so does scheduling it');
+reset role;
+insert into public.photo_posts (id, user_id, status) values
+  ('e3101000-0000-4000-8000-000000000006', 'e3100000-0000-4000-8000-00000000000b', 'cancelled');
+insert into storage.objects (bucket_id, name, owner) values
+  ('photos', 'e3100000-0000-4000-8000-00000000000b/e3101000-0000-4000-8000-000000000006/left.jpg', 'e3100000-0000-4000-8000-00000000000b');
+select is(public.photo_draft_release('e3101000-0000-4000-8000-000000000006'), 1, 'a draft closed earlier still releases its photo');
+select is(public.photo_draft_release('e3101000-0000-4000-8000-000000000006'), 0, 'once');
 
 select * from finish();
 rollback;
