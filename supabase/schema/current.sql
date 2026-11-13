@@ -10488,23 +10488,6 @@ $_$;
 
 
 --
--- Name: post_slots_open(uuid, uuid); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.post_slots_open(p_deliverable uuid, p_except uuid) RETURNS boolean
-    LANGUAGE sql STABLE SECURITY DEFINER
-    SET search_path TO 'public'
-    AS $$
-  select exists (select 1 from public.schedule_slots s
-    where s.deliverable_id = p_deliverable and s.id <> p_except
-      and (s.status in ('proposed', 'waiting', 'due', 'reminded', 'publishing')
-        -- A failed slot whose card still waits (Retry, copy and open) is not over either.
-        or (s.status = 'failed' and exists (select 1 from public.approvals a
-              where a.ref_kind = 'schedule_slot' and a.ref_id = s.id and a.status = 'waiting'))));
-$$;
-
-
---
 -- Name: post_targets(uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -11499,9 +11482,13 @@ begin
       perform public.approval_close('schedule_slot', v_slot.id, 'approved');
       select * into v_d from public.deliverables where id = v_slot.deliverable_id;
       if v_d.ref_kind = 'content_item' then
+        -- The first platform to post makes the post published (F1); the flag tells `schedule_follow_content` that a
+        -- slot posted, so the other platforms keep their slots.
+        perform set_config('opencmo.slot_published', 'on', true);
         update public.content_items set status = 'published', published_at = coalesce(published_at, now()),
           external_url = coalesce(v_url, external_url), updated_at = now()
-        where id = v_d.ref_id and status <> 'published' and not public.post_slots_open(v_d.id, v_slot.id);
+        where id = v_d.ref_id and status <> 'published';
+        perform set_config('opencmo.slot_published', '', true);
       end if;
     when 'failed' then
       if v_slot.status <> 'failed' then
@@ -14174,8 +14161,10 @@ begin
       if v_deliverable is not null then
         perform public.schedule_propose(v_deliverable);
       end if;
-    elsif new.status = 'published' and new.department = 'post' then
-      -- Posted by hand (copy and open, or marked posted): what still waits for its time is dropped with its card.
+    elsif new.status = 'published' and new.department = 'post'
+          and coalesce(current_setting('opencmo.slot_published', true), '') <> 'on' then
+      -- Posted by hand on the post card ("I posted it"): what still waits for its time is dropped with its card. A
+      -- slot that posted sets the flag, and the other platforms keep theirs.
       update public.approvals a set status = 'cancelled', decided_at = now()
       from public.schedule_slots s join public.deliverables d on d.id = s.deliverable_id
       where a.ref_kind = 'schedule_slot' and a.ref_id = s.id and a.status = 'waiting'
@@ -14290,9 +14279,11 @@ begin
     perform public.approval_close('schedule_slot', v_slot.id, 'approved');
     select * into v_d from public.deliverables where id = v_slot.deliverable_id;
     if v_d.ref_kind = 'content_item' then
+      -- One platform marked posted is the post published (F1); the other platforms keep their slots.
+      perform set_config('opencmo.slot_published', 'on', true);
       update public.content_items set status = 'published', published_at = coalesce(published_at, now()), updated_at = now()
-      where id = v_d.ref_id and user_id = v_user and status <> 'published'
-        and not public.post_slots_open(v_d.id, v_slot.id);
+      where id = v_d.ref_id and user_id = v_user and status <> 'published';
+      perform set_config('opencmo.slot_published', '', true);
     end if;
   end if;
   select * into v_row from public.approvals
@@ -14478,11 +14469,14 @@ begin
     return 0;
   end if;
   if v_d.kind = 'post' and v_d.ref_kind = 'content_item' then
-    -- Every platform of the post's slot (Writer's old items: the one platform of their label).
+    -- Every platform of the post's slot (Writer's old items: the one platform of their label). A post one platform
+    -- already published (F1) still asks for a new time on the others; one posted by hand on its card does not.
     select array(select t from unnest(public.post_targets(c.id)) with ordinality as u(t, o)
                  where t in ('x', 'threads', 'linkedin', 'facebook') order by o)
       into v_platforms
-    from public.content_items c where c.id = v_d.ref_id and c.status = 'approved';
+    from public.content_items c where c.id = v_d.ref_id
+      and (c.status = 'approved' or (c.status = 'published' and exists (select 1 from public.schedule_slots s
+        where s.deliverable_id = v_d.id and s.status = 'published')));
   elsif v_d.kind = 'photo_post' and v_d.ref_kind = 'photo_post' then
     -- The founder's own photos (D7): every platform they picked, each from its connected account.
     select array(select p from unnest(platforms) p where p in ('tiktok', 'instagram', 'threads') order by p) into v_platforms
@@ -14577,27 +14571,6 @@ CREATE FUNCTION public.schedule_rules() RETURNS jsonb
 
 
 --
--- Name: schedule_slots_settle_post(); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.schedule_slots_settle_post() RETURNS trigger
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public'
-    AS $$
-begin
-  if new.status = 'cancelled' and old.status is distinct from 'cancelled'
-     and exists (select 1 from public.schedule_slots s where s.deliverable_id = new.deliverable_id and s.status = 'published')
-     and not public.post_slots_open(new.deliverable_id, new.id) then
-    update public.content_items c set status = 'published', published_at = coalesce(c.published_at, now()), updated_at = now()
-    from public.deliverables d
-    where d.id = new.deliverable_id and d.ref_kind = 'content_item' and c.id = d.ref_id and c.status = 'approved';
-  end if;
-  return new;
-end;
-$$;
-
-
---
 -- Name: deliverables; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -14653,7 +14626,9 @@ begin
   if exists (select 1 from public.schedule_slots where deliverable_id = p_d.id and platform = p_platform) then
     return 'none';
   end if;
-  select * into v_item from public.content_items where id = p_d.ref_id and user_id = p_d.user_id and status = 'approved';
+  select * into v_item from public.content_items where id = p_d.ref_id and user_id = p_d.user_id
+    and (status = 'approved' or (status = 'published' and exists (select 1 from public.schedule_slots s
+        where s.deliverable_id = p_d.id and s.status = 'published')));
   if not found then
     return 'none';
   end if;
@@ -20894,13 +20869,6 @@ CREATE TRIGGER schedule_follow_deliverable AFTER INSERT OR UPDATE OF status ON p
 --
 
 CREATE TRIGGER schedule_slots_paywall BEFORE INSERT OR UPDATE OF status ON public.schedule_slots FOR EACH ROW EXECUTE FUNCTION public.paywall_on_send();
-
-
---
--- Name: schedule_slots schedule_slots_settle_post; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER schedule_slots_settle_post AFTER UPDATE OF status ON public.schedule_slots FOR EACH ROW EXECUTE FUNCTION public.schedule_slots_settle_post();
 
 
 --
