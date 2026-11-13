@@ -95,6 +95,9 @@ async function main() {
             { _id: "acc_fb", platform: "facebook", profileId: "prof_1", username: "page", isActive: true },
             { _id: "acc_old", platform: "threads", profileId: "prof_1", username: "old", isActive: false },
             { _id: "acc_other", platform: "linkedin", profileId: "prof_2", username: "someone", isActive: true },
+            // Zernio's live answer populates the profile.
+            { _id: "acc_th", platform: "threads", profileId: { _id: "prof_1", name: "opencmo-x", externalId: "opencmo:u" }, username: "founder_th", isActive: true },
+            { _id: "acc_li", platform: "linkedin", profileId: { _id: "prof_2", name: "other" }, username: "someone", isActive: true },
           ],
         },
       },
@@ -104,6 +107,7 @@ async function main() {
       { zernioAccountId: "acc_tt", platform: "tiktok", handle: "Founder", avatarUrl: null },
       // A Facebook Page (D9, 2026-11-12): the founder picked the Page in Zernio's connect flow.
       { zernioAccountId: "acc_fb", platform: "facebook", handle: "page", avatarUrl: null },
+      { zernioAccountId: "acc_th", platform: "threads", handle: "founder_th", avatarUrl: null },
     ]);
   }
 
