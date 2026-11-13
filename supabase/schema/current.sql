@@ -2366,7 +2366,12 @@ CREATE FUNCTION public.approvals_autopilot() RETURNS trigger
     SET search_path TO 'public'
     AS $$
 begin
-  if new.kind = 'post' and new.status in ('waiting', 'held') then
+  if tg_op = 'UPDATE' and not (old.status = 'held' and new.status = 'waiting') then
+    return new;
+  end if;
+  new.auto_at := null;
+  -- The countdown starts when the founder can see the card, never while it is held.
+  if new.kind = 'post' and new.status = 'waiting' then
     begin
       new.auto_at := public.post_autopilot_at(new.user_id, new.ref_kind, new.ref_id, new.snapshot);
     exception when others then
@@ -5668,6 +5673,7 @@ declare
   v_profile jsonb := public.platform_profile(public.platform_profile_id(p_platform));
   v_post boolean := coalesce(v_profile->>'kind' = 'post', false);
   v_platform text := case when v_post then v_profile->>'label' else 'x' end;
+  v_founder_brief boolean;
 begin
   if p_body is null or jsonb_typeof(p_body) <> 'object' or coalesce(p_body->>'text', '') = '' then
     raise exception 'This draft is not valid.' using errcode = '22023';
@@ -5683,17 +5689,24 @@ begin
   end if;
   if p_item is not null then
     update public.content_items
-    set status = 'in_review', body = p_body, priority = coalesce(p_priority, 'medium'), run_id = p_run, updated_at = now()
+    set status = 'in_review',
+        -- The right side reads the row before the update: a founder's brief keeps its marker through the draft.
+        body = case when body->>'source' = 'cmo_chat' then p_body || jsonb_build_object('source', 'cmo_chat') else p_body end,
+        priority = coalesce(p_priority, 'medium'), run_id = p_run, updated_at = now()
     where id = p_item and user_id = p_user and status in ('planned', 'drafting')
     returning * into v_row;
     if not found then
       raise exception 'This calendar item is no longer open.' using errcode = 'P0002';
     end if;
   else
+    -- No calendar item: the brief came from the run. An idea in its input is the founder's own words.
+    v_founder_brief := exists (select 1 from public.cmo_runs r
+                               where r.id = p_run and r.user_id = p_user and coalesce(r.input->>'idea', '') <> '');
     insert into public.content_items (user_id, run_id, department, platform, day, idea, status, priority, body)
     values (p_user, p_run, 'post', v_platform, current_date,
             left(coalesce(nullif(p_idea, ''), 'Post for ' || case when v_post then v_profile->>'label' else 'X' end), 300),
-            'in_review', coalesce(p_priority, 'medium'), p_body)
+            'in_review', coalesce(p_priority, 'medium'),
+            case when v_founder_brief then p_body || jsonb_build_object('source', 'cmo_chat') else p_body end)
     returning * into v_row;
   end if;
   return v_row;
@@ -9947,6 +9960,9 @@ CREATE FUNCTION public.post_autopilot_still_on(p_card public.approvals) RETURNS 
     AS $$
   select p_card.kind = 'post' and p_card.ref_kind = 'content_item' and not (p_card.snapshot ? 'thread')
     and p_card.snapshot->'proposed'->>'mode' = 'publish'
+    and exists (select 1 from auth.users u
+                where u.id = p_card.user_id and u.deleted_at is null
+                  and (u.banned_until is null or u.banned_until <= now()))
     and exists (select 1 from public.profiles p
                 where p.id = p_card.user_id and p.cmo_paused_at is null and p.plan in ('starter', 'creator')
                   and p_card.snapshot->'proposed'->>'platform' = any (p.autopilot_platforms))
@@ -19081,10 +19097,24 @@ ALTER TABLE ONLY public.zernio_receipts
 
 
 --
+-- Name: account_metrics_social_account_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX account_metrics_social_account_id_idx ON public.account_metrics USING btree (social_account_id) WHERE (social_account_id IS NOT NULL);
+
+
+--
 -- Name: account_metrics_user_idx; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX account_metrics_user_idx ON public.account_metrics USING btree (user_id, day DESC);
+
+
+--
+-- Name: agent_messages_turn_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX agent_messages_turn_id_idx ON public.agent_messages USING btree (turn_id);
 
 
 --
@@ -19102,6 +19132,13 @@ CREATE INDEX agent_sessions_job_idx ON public.agent_sessions USING btree (job_id
 
 
 --
+-- Name: agent_sessions_user_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX agent_sessions_user_id_idx ON public.agent_sessions USING btree (user_id);
+
+
+--
 -- Name: agent_tool_calls_turn_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -19116,10 +19153,24 @@ CREATE INDEX agent_turn_ratings_user_idx ON public.agent_turn_ratings USING btre
 
 
 --
+-- Name: agent_turns_checkpoint_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX agent_turns_checkpoint_id_idx ON public.agent_turns USING btree (checkpoint_id) WHERE (checkpoint_id IS NOT NULL);
+
+
+--
 -- Name: agent_turns_open_idx; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX agent_turns_open_idx ON public.agent_turns USING btree (created_at) WHERE (status = ANY (ARRAY['running'::text, 'awaiting_browser'::text, 'awaiting_approval'::text, 'awaiting_input'::text, 'awaiting_continue'::text]));
+
+
+--
+-- Name: agent_usage_turn_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX agent_usage_turn_id_idx ON public.agent_usage USING btree (turn_id);
 
 
 --
@@ -19179,6 +19230,13 @@ CREATE UNIQUE INDEX brand_kits_user_name_idx ON public.brand_kits USING btree (u
 
 
 --
+-- Name: caption_translations_clip_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX caption_translations_clip_id_idx ON public.caption_translations USING btree (clip_id);
+
+
+--
 -- Name: caption_translations_user_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -19235,10 +19293,17 @@ CREATE INDEX cmo_draft_ratings_user_idx ON public.cmo_draft_ratings USING btree 
 
 
 --
--- Name: cmo_goals_user_idx; Type: INDEX; Schema: public; Owner: -
+-- Name: cmo_goals_run_id_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX cmo_goals_user_idx ON public.cmo_goals USING btree (user_id, week DESC);
+CREATE INDEX cmo_goals_run_id_idx ON public.cmo_goals USING btree (run_id) WHERE (run_id IS NOT NULL);
+
+
+--
+-- Name: cmo_inbox_run_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX cmo_inbox_run_id_idx ON public.cmo_inbox USING btree (run_id) WHERE (run_id IS NOT NULL);
 
 
 --
@@ -19249,10 +19314,24 @@ CREATE INDEX cmo_inbox_user_idx ON public.cmo_inbox USING btree (user_id, status
 
 
 --
+-- Name: cmo_insights_run_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX cmo_insights_run_id_idx ON public.cmo_insights USING btree (run_id) WHERE (run_id IS NOT NULL);
+
+
+--
 -- Name: cmo_insights_user_idx; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX cmo_insights_user_idx ON public.cmo_insights USING btree (user_id, kind, created_at DESC);
+
+
+--
+-- Name: cmo_lessons_run_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX cmo_lessons_run_id_idx ON public.cmo_lessons USING btree (run_id) WHERE (run_id IS NOT NULL);
 
 
 --
@@ -19267,6 +19346,13 @@ CREATE INDEX cmo_lessons_user_idx ON public.cmo_lessons USING btree (user_id, we
 --
 
 CREATE UNIQUE INDEX cmo_memories_source_outcome_key ON public.cmo_memories USING btree (source_outcome) WHERE (source_outcome IS NOT NULL);
+
+
+--
+-- Name: cmo_memories_source_run_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX cmo_memories_source_run_idx ON public.cmo_memories USING btree (source_run) WHERE (source_run IS NOT NULL);
 
 
 --
@@ -19312,6 +19398,20 @@ CREATE INDEX cmo_runs_user_created_idx ON public.cmo_runs USING btree (user_id, 
 
 
 --
+-- Name: cmo_voice_events_correction_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX cmo_voice_events_correction_id_idx ON public.cmo_voice_events USING btree (correction_id) WHERE (correction_id IS NOT NULL);
+
+
+--
+-- Name: cmo_voice_events_document_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX cmo_voice_events_document_id_idx ON public.cmo_voice_events USING btree (document_id) WHERE (document_id IS NOT NULL);
+
+
+--
 -- Name: cmo_voice_events_user_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -19330,6 +19430,13 @@ CREATE UNIQUE INDEX content_items_caption_key ON public.content_items USING btre
 --
 
 CREATE INDEX content_items_clip_idx ON public.content_items USING btree (clip_id) WHERE (clip_id IS NOT NULL);
+
+
+--
+-- Name: content_items_run_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX content_items_run_id_idx ON public.content_items USING btree (run_id) WHERE (run_id IS NOT NULL);
 
 
 --
@@ -19389,6 +19496,13 @@ CREATE INDEX credit_orders_user_idx ON public.credit_orders USING btree (user_id
 
 
 --
+-- Name: creem_customers_user_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX creem_customers_user_id_idx ON public.creem_customers USING btree (user_id) WHERE (user_id IS NOT NULL);
+
+
+--
 -- Name: creem_subscriptions_annual_due_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -19407,6 +19521,13 @@ CREATE INDEX creem_subscriptions_user_idx ON public.creem_subscriptions USING bt
 --
 
 CREATE INDEX creem_transactions_user_idx ON public.creem_transactions USING btree (user_id);
+
+
+--
+-- Name: creem_webhook_receipts_user_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX creem_webhook_receipts_user_id_idx ON public.creem_webhook_receipts USING btree (user_id) WHERE (user_id IS NOT NULL);
 
 
 --
@@ -19431,6 +19552,20 @@ CREATE INDEX deliverables_post_idx ON public.deliverables USING btree (post_id) 
 
 
 --
+-- Name: deliverables_user_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX deliverables_user_id_idx ON public.deliverables USING btree (user_id);
+
+
+--
+-- Name: editor_feedback_clip_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX editor_feedback_clip_id_idx ON public.editor_feedback USING btree (clip_id) WHERE (clip_id IS NOT NULL);
+
+
+--
 -- Name: editor_feedback_created_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -19438,17 +19573,17 @@ CREATE INDEX editor_feedback_created_idx ON public.editor_feedback USING btree (
 
 
 --
+-- Name: editor_feedback_user_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX editor_feedback_user_id_idx ON public.editor_feedback USING btree (user_id);
+
+
+--
 -- Name: editor_revisions_clip_created_idx; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX editor_revisions_clip_created_idx ON public.editor_revisions USING btree (clip_id, created_at);
-
-
---
--- Name: editor_revisions_clip_number_idx; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX editor_revisions_clip_number_idx ON public.editor_revisions USING btree (clip_id, number DESC);
 
 
 --
@@ -19480,6 +19615,13 @@ CREATE INDEX generations_after_idx ON public.generations USING btree (after_id) 
 
 
 --
+-- Name: generations_clip_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX generations_clip_id_idx ON public.generations USING btree (clip_id) WHERE (clip_id IS NOT NULL);
+
+
+--
 -- Name: generations_end_after_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -19491,6 +19633,13 @@ CREATE INDEX generations_end_after_idx ON public.generations USING btree (end_af
 --
 
 CREATE UNIQUE INDEX generations_live_hash_idx ON public.generations USING btree (job_id, spec_hash) WHERE (status = ANY (ARRAY['queued'::text, 'running'::text, 'done'::text]));
+
+
+--
+-- Name: generations_media_asset_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX generations_media_asset_id_idx ON public.generations USING btree (media_asset_id) WHERE (media_asset_id IS NOT NULL);
 
 
 --
@@ -19564,6 +19713,13 @@ CREATE UNIQUE INDEX look_checks_one_round ON public.look_checks USING btree (ref
 
 
 --
+-- Name: look_checks_order_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX look_checks_order_id_idx ON public.look_checks USING btree (order_id) WHERE (order_id IS NOT NULL);
+
+
+--
 -- Name: look_checks_sent_back_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -19575,6 +19731,13 @@ CREATE INDEX look_checks_sent_back_idx ON public.look_checks USING btree (create
 --
 
 CREATE INDEX look_checks_task_idx ON public.look_checks USING btree (task_id);
+
+
+--
+-- Name: look_checks_user_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX look_checks_user_id_idx ON public.look_checks USING btree (user_id);
 
 
 --
@@ -19606,10 +19769,24 @@ CREATE INDEX media_assets_user_idx ON public.media_assets USING btree (user_id, 
 
 
 --
+-- Name: media_transcripts_user_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX media_transcripts_user_id_idx ON public.media_transcripts USING btree (user_id);
+
+
+--
 -- Name: operation_log_user_at_idx; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX operation_log_user_at_idx ON public.operation_log USING btree (user_id, platform, action, at DESC);
+
+
+--
+-- Name: opportunities_run_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX opportunities_run_id_idx ON public.opportunities USING btree (run_id) WHERE (run_id IS NOT NULL);
 
 
 --
@@ -19690,6 +19867,20 @@ CREATE INDEX push_subscriptions_user_idx ON public.push_subscriptions USING btre
 
 
 --
+-- Name: schedule_slots_account_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX schedule_slots_account_id_idx ON public.schedule_slots USING btree (account_id) WHERE (account_id IS NOT NULL);
+
+
+--
+-- Name: schedule_slots_approval_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX schedule_slots_approval_id_idx ON public.schedule_slots USING btree (approval_id) WHERE (approval_id IS NOT NULL);
+
+
+--
 -- Name: schedule_slots_due_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -19704,6 +19895,13 @@ CREATE INDEX schedule_slots_external_idx ON public.schedule_slots USING btree (e
 
 
 --
+-- Name: schedule_slots_media_task_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX schedule_slots_media_task_id_idx ON public.schedule_slots USING btree (media_task_id) WHERE (media_task_id IS NOT NULL);
+
+
+--
 -- Name: schedule_slots_one_live; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -19715,6 +19913,13 @@ CREATE UNIQUE INDEX schedule_slots_one_live ON public.schedule_slots USING btree
 --
 
 CREATE INDEX schedule_slots_user_idx ON public.schedule_slots USING btree (user_id, publish_at);
+
+
+--
+-- Name: short_batches_order_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX short_batches_order_id_idx ON public.short_batches USING btree (order_id) WHERE (order_id IS NOT NULL);
 
 
 --
@@ -19736,6 +19941,13 @@ CREATE INDEX short_batches_user_idx ON public.short_batches USING btree (user_id
 --
 
 CREATE INDEX shorts_batch_idx ON public.shorts USING btree (batch_id);
+
+
+--
+-- Name: shorts_parent_clip_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX shorts_parent_clip_id_idx ON public.shorts USING btree (parent_clip_id) WHERE (parent_clip_id IS NOT NULL);
 
 
 --
@@ -19774,6 +19986,13 @@ CREATE INDEX studio_steps_order_idx ON public.studio_steps USING btree (order_id
 
 
 --
+-- Name: studio_steps_redo_of_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX studio_steps_redo_of_idx ON public.studio_steps USING btree (redo_of) WHERE (redo_of IS NOT NULL);
+
+
+--
 -- Name: studio_steps_user_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -19781,10 +20000,31 @@ CREATE INDEX studio_steps_user_idx ON public.studio_steps USING btree (user_id, 
 
 
 --
+-- Name: tasks_asset_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX tasks_asset_id_idx ON public.tasks USING btree (asset_id) WHERE (asset_id IS NOT NULL);
+
+
+--
+-- Name: tasks_clip_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX tasks_clip_id_idx ON public.tasks USING btree (clip_id) WHERE (clip_id IS NOT NULL);
+
+
+--
 -- Name: tasks_editor_revision_idx; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX tasks_editor_revision_idx ON public.tasks USING btree (editor_revision_id, created_at DESC) WHERE (editor_revision_id IS NOT NULL);
+
+
+--
+-- Name: tasks_job_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX tasks_job_id_idx ON public.tasks USING btree (job_id) WHERE (job_id IS NOT NULL);
 
 
 --
@@ -19809,10 +20049,24 @@ CREATE INDEX tasks_user_created_idx ON public.tasks USING btree (user_id, create
 
 
 --
+-- Name: upload_reservations_project_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX upload_reservations_project_id_idx ON public.upload_reservations USING btree (project_id);
+
+
+--
 -- Name: upload_reservations_user_status_idx; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX upload_reservations_user_status_idx ON public.upload_reservations USING btree (user_id, status, expires_at);
+
+
+--
+-- Name: work_order_events_order_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX work_order_events_order_id_idx ON public.work_order_events USING btree (order_id);
 
 
 --
@@ -19830,6 +20084,13 @@ CREATE INDEX work_order_usage_order_idx ON public.work_order_usage USING btree (
 
 
 --
+-- Name: work_order_usage_user_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX work_order_usage_user_id_idx ON public.work_order_usage USING btree (user_id);
+
+
+--
 -- Name: work_orders_item_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -19841,6 +20102,13 @@ CREATE INDEX work_orders_item_idx ON public.work_orders USING btree (item_id) WH
 --
 
 CREATE UNIQUE INDEX work_orders_one_root ON public.work_orders USING btree (user_id, week) WHERE (parent_id IS NULL);
+
+
+--
+-- Name: work_orders_parent_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX work_orders_parent_id_idx ON public.work_orders USING btree (parent_id) WHERE (parent_id IS NOT NULL);
 
 
 --
@@ -19862,6 +20130,13 @@ CREATE INDEX work_orders_run_idx ON public.work_orders USING btree (run_id) WHER
 --
 
 CREATE INDEX work_orders_user_idx ON public.work_orders USING btree (user_id, week, status);
+
+
+--
+-- Name: worker_operations_job_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX worker_operations_job_id_idx ON public.worker_operations USING btree (job_id);
 
 
 --
@@ -19889,7 +20164,7 @@ CREATE TRIGGER apply_credit_ledger_insert AFTER INSERT ON public.credit_ledger F
 -- Name: approvals approvals_autopilot; Type: TRIGGER; Schema: public; Owner: -
 --
 
-CREATE TRIGGER approvals_autopilot BEFORE INSERT ON public.approvals FOR EACH ROW EXECUTE FUNCTION public.approvals_autopilot();
+CREATE TRIGGER approvals_autopilot BEFORE INSERT OR UPDATE OF status ON public.approvals FOR EACH ROW EXECUTE FUNCTION public.approvals_autopilot();
 
 
 --

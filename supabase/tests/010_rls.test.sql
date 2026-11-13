@@ -99,14 +99,14 @@ select throws_ok(
   '42501', null, 'A không insert thẳng vào rate_limits'
 );
 
--- Update/delete không ném lỗi, chỉ không chạm được hàng nào — kể cả hàng của chính A.
-select is_empty(
+-- No UPDATE privilege on any table since 20270120010000, not even on A's own rows: writes are RPCs only.
+select throws_ok(
   $$ update public.tasks set status = 'done' where id = 'a6000000-0000-4000-8000-00000000000a' returning id $$,
-  'A không tự chốt task'
+  '42501', null, 'A không tự chốt task'
 );
-select is_empty(
+select throws_ok(
   $$ update public.clips set settings = '{"x": 1}'::jsonb where id = 'a2000000-0000-4000-8000-00000000000a' returning id $$,
-  'A không tự sửa settings gốc của clip'
+  '42501', null, 'A không tự sửa settings gốc của clip'
 );
 
 -- ---------------------------------------------------------------- storage
@@ -150,11 +150,12 @@ set local role postgres;
 reset request.jwt.claims;
 set local role anon;
 
-select is_empty($$ select job_id from public.artifacts $$, 'anon không đọc artifacts');
-select is_empty($$ select settings from public.clips $$, 'anon không đọc settings của clip');
-select is_empty($$ select id from public.media_assets $$, 'anon không đọc media_assets');
-select is_empty($$ select id from public.tasks $$, 'anon không đọc tasks');
-select is_empty($$ select bucket from public.rate_limits $$, 'anon không đọc rate_limits');
+-- anon has no SELECT on these tables at all since 20270120010000, so the read is refused rather than empty.
+select throws_ok($$ select job_id from public.artifacts $$, '42501', null, 'anon không đọc artifacts');
+select throws_ok($$ select settings from public.clips $$, '42501', null, 'anon không đọc settings của clip');
+select throws_ok($$ select id from public.media_assets $$, '42501', null, 'anon không đọc media_assets');
+select throws_ok($$ select id from public.tasks $$, '42501', null, 'anon không đọc tasks');
+select throws_ok($$ select bucket from public.rate_limits $$, '42501', null, 'anon không đọc rate_limits');
 select is_empty($$ select name from storage.objects $$, 'anon không đọc file nào');
 
 set local role postgres;

@@ -111,9 +111,10 @@ select ok(has_function_privilege('service_role', 'public.mark_generation_sent(uu
 select ok(not has_table_privilege('authenticated', 'public.write_budget_ledger', 'select'), 'a user cannot read the ledger');
 select ok(not has_table_privilege('authenticated', 'public.write_budget_ledger', 'delete'), 'a user cannot clear the ledger');
 select ok(has_table_privilege('service_role', 'public.write_budget_ledger', 'delete'), 'the server can');
--- Table grants are Supabase's defaults; RLS has no update policy on generations, so the update matches nothing.
+-- authenticated has no UPDATE on generations (20270120010000), and RLS has no update policy behind it either.
 set local role authenticated;
-update public.generations set sent_at = now() where id = (select (r->'generation'->>'id')::uuid from s3);
+select throws_ok($$ update public.generations set sent_at = now() where id = (select (r->'generation'->>'id')::uuid from s3) $$,
+  '42501', null, 'a user cannot update a generation');
 reset role;
 select is((select sent_at from public.generations where id = (select (r->'generation'->>'id')::uuid from s3)), null,
   'a user cannot set sent_at');
