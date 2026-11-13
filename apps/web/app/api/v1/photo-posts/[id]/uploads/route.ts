@@ -13,6 +13,8 @@ const EXT: Record<(typeof PHOTO_TYPES)[number], string> = { "image/jpeg": "jpg",
 
 const body = z.object({ size: z.number().int().positive().max(PHOTO_MAX_BYTES), type: z.enum(PHOTO_TYPES) });
 
+// TODO(storage): uploads move from Supabase Storage to DigitalOcean storage later this week
+// (owner, 2026-11-13); keep this path as it is until then.
 /**
  * A reservation for one photo of the post: the browser then sends the bytes to Storage over TUS (`upload-tus.ts`),
  * never through Next.js. The object name is ours, under the founder's folder and the post.
