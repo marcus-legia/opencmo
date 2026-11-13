@@ -9,6 +9,8 @@ import { PHOTO_LIMIT, PHOTO_MAX_BYTES, PHOTO_PLATFORMS, PHOTO_TYPES, photoPostPr
 import type { ScheduleScreen } from "@/lib/screens/schedule";
 import { uploadResumable } from "@/lib/upload-tus";
 
+import { PlatformLogo } from "./platform-logos";
+
 const LABEL: Record<PhotoPlatform, string> = { tiktok: "TikTok", instagram: "Instagram", threads: "Threads" };
 /** SQL `cmo_job_price('photo_caption')`: held before the caption is written. */
 const CAPTION_CREDITS = 1;
@@ -159,8 +161,17 @@ export function PhotoPostPanel({ accounts, live, onScheduled }: { accounts: Sche
   return (
     <section aria-label="Photo post" data-testid="photo-post" className="photo-post">
       <div className="photo-post-head">
-        <h2>Photo post</h2>
-        <span className="meta">Your own photos as a TikTok photo post or an Instagram or Threads carousel.</span>
+        <span className="photo-post-icon" aria-hidden="true">
+          <svg className="i" viewBox="0 0 24 24">
+            <rect width="18" height="18" x="3" y="3" rx="2" />
+            <circle cx="9" cy="9" r="2" />
+            <path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21" />
+          </svg>
+        </span>
+        <div className="photo-post-title">
+          <h2>Photo post</h2>
+          <p>Post your own photos as a swipeable set: a TikTok photo post, an Instagram carousel or a Threads post.</p>
+        </div>
         {open ? null : (
           <Button compact variant="secondary" onClick={() => void start()} disabled={busy === "starting"}>
             New photo post
@@ -169,6 +180,7 @@ export function PhotoPostPanel({ accounts, live, onScheduled }: { accounts: Sche
       </div>
       {open ? (
         <div className="photo-post-body">
+          <StepHead n={1} title="Add your photos" hint="They post in this order. Use the arrows to move one." />
           <div className="photo-post-grid" aria-label="Photos, in posting order">
             {photos.map((p, i) => (
               <figure key={p.key} className={p.failed ? "is-stuck" : undefined}>
@@ -198,23 +210,32 @@ export function PhotoPostPanel({ accounts, live, onScheduled }: { accounts: Sche
             </label>
           </div>
 
+          <StepHead n={2} title="Where it posts" hint="Each one you pick gets its own time to approve." />
           <fieldset className="photo-post-platforms">
-            <legend>Post it on</legend>
+            <legend className="v2-visually-hidden">Post it on</legend>
             {PHOTO_PLATFORMS.map((p) => (
-              <label key={p}>
+              <label key={p} data-on={platforms.includes(p) || undefined}>
                 <input type="checkbox" checked={platforms.includes(p)} onChange={() => toggle(p)} />
-                {LABEL[p]} <span className="meta">up to {PHOTO_LIMIT[p]} photos</span>
-                {connected(p) ? null : (
-                  <Link href="/app/settings#settings-connected-accounts" className="meta">
-                    Connect {LABEL[p]}
-                  </Link>
-                )}
+                <PlatformLogo platform={p} size={32} />
+                <span className="photo-post-where">
+                  <b>{LABEL[p]}</b>
+                  <span className="meta">
+                    Up to {PHOTO_LIMIT[p]} photos
+                    {connected(p) ? null : (
+                      <>
+                        {" · "}
+                        <Link href="/app/settings#settings-connected-accounts">Connect first</Link>
+                      </>
+                    )}
+                  </span>
+                </span>
               </label>
             ))}
           </fieldset>
 
+          <StepHead n={3} title="Write the caption" hint="Type it yourself, or say what the photos show and let your CMO write it." />
           <label className="v2-field">
-            <span>What do the photos show? The CMO writes the caption from your words.</span>
+            <span>What do the photos show?</span>
             <textarea className="v2-input" rows={2} maxLength={1000} value={notes} onChange={(e) => setNotes(e.target.value)} />
           </label>
           <div className="v2-actions">
@@ -241,5 +262,18 @@ export function PhotoPostPanel({ accounts, live, onScheduled }: { accounts: Sche
         </p>
       ) : null}
     </section>
+  );
+}
+
+/** One numbered step of the panel: a founder who has never made a carousel reads 1, 2, 3. */
+function StepHead({ n, title, hint }: { n: number; title: string; hint: string }) {
+  return (
+    <div className="photo-step">
+      <span aria-hidden="true">{n}</span>
+      <div>
+        <h3>{title}</h3>
+        <p>{hint}</p>
+      </div>
+    </div>
   );
 }

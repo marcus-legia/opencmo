@@ -570,23 +570,85 @@ html[data-theme="dark"] .k.pg-prompter{--bg:#121110;--panel:#181715;--raised:#20
 .pg-prompter .tap{position:absolute;inset:0;border:0;background:transparent;width:100%}
 
 /* Photo post (daily core drafts D7): the founder's own photos as a TikTok photo post or a carousel. */
-.photo-post { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: 12px 14px; margin-bottom: 14px; }
-.photo-post-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-.photo-post-head h2 { margin: 0; font-size: 15px; font-weight: 600; }
+.photo-post { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); padding: 16px; margin-bottom: 14px; }
+.photo-post-head { display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+.photo-post-icon { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 8px; background: var(--accent-wash); color: var(--accent); flex: 0 0 auto; }
+.photo-post-title { flex: 1 1 240px; min-width: 0; }
+.photo-post-head h2 { margin: 0; font-family: inherit; font-size: 16px; font-weight: 600; letter-spacing: -0.1px; }
+.photo-post-head p { margin: 2px 0 0; font-size: 13.5px; color: var(--muted); }
 .photo-post-head .v2-button { margin-left: auto; }
-.photo-post-body { display: flex; flex-direction: column; gap: 12px; margin-top: 10px; }
+.photo-post-body { display: flex; flex-direction: column; gap: 12px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
+/* A numbered step: the number in a small disc, the instruction next to it. */
+.photo-step { display: flex; align-items: flex-start; gap: 10px; }
+.photo-step:not(:first-child) { margin-top: 8px; padding-top: 16px; border-top: 1px solid var(--line); }
+.photo-step > span { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; background: var(--text); color: var(--panel); font-size: 12.5px; font-weight: 600; flex: 0 0 auto; }
+.photo-step h3 { margin: 0; font-family: inherit; font-size: 14.5px; font-weight: 600; }
+.photo-step p { margin: 1px 0 0; font-size: 13px; color: var(--muted); }
 .photo-post-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 8px; }
-.photo-post-grid figure { margin: 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--bg); }
+.photo-post-grid figure { margin: 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--bg); }
 .photo-post-grid figure.is-stuck { border-color: var(--warn); }
 .photo-post-grid img { display: block; width: 100%; aspect-ratio: 4 / 5; object-fit: cover; }
 .photo-post-grid figcaption { display: flex; align-items: center; gap: 6px; padding: 4px 6px; font-size: 12px; flex-wrap: wrap; }
+.photo-post-grid figcaption > span:first-child { font-weight: 600; font-variant-numeric: tabular-nums; }
 .photo-post-tools { margin-left: auto; display: flex; gap: 2px; }
 .photo-post-tools button { min-width: 28px; min-height: 28px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: inherit; cursor: pointer; }
+.photo-post-tools button:hover:not(:disabled) { background: var(--hover); }
 .photo-post-tools button:disabled { opacity: 0.4; cursor: default; }
-.photo-post-add { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 140px; border: 1px dashed var(--line); border-radius: 8px; cursor: pointer; text-align: center; padding: 8px; font-size: 13px; }
+.photo-post-add { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 140px; border: 1.5px dashed var(--line-2); border-radius: 10px; background: var(--bg); cursor: pointer; text-align: center; padding: 8px; font-size: 13.5px; font-weight: 500; }
+.photo-post-add:hover { border-color: var(--accent); color: var(--accent); }
 .photo-post-add input { position: absolute; width: 1px; height: 1px; opacity: 0; }
 .photo-post-add:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
-.photo-post-platforms { border: 0; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13.5px; }
-.photo-post-platforms legend { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
-.photo-post-platforms label { display: inline-flex; align-items: center; gap: 6px; }
+/* Where it posts: one tile a platform, its mark, its name and how many photos it takes. */
+.photo-post-platforms { border: 0; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; font-size: 13.5px; }
+.photo-post-platforms label { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); cursor: pointer; }
+.photo-post-platforms label:hover { border-color: var(--line-2); }
+.photo-post-platforms label[data-on] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); background: var(--panel); }
+.photo-post-platforms input { width: 16px; height: 16px; accent-color: var(--accent); flex: 0 0 auto; }
+.photo-post-where { display: flex; flex-direction: column; min-width: 0; }
+.photo-post-where b { font-weight: 500; font-size: 14px; }
 .photo-post-fail { color: var(--warn); font-size: 12.5px; }
+
+/* Platform marks (components/today/platform-logos.tsx): a small tile, the brand's colour on the app's own surface. */
+.pl-tile{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;border-radius:8px;background:var(--raised);border:1px solid var(--line)}
+.pl-tile[data-dim]{opacity:.7}
+/* The posting plan (calendar): two groups a founder reads without a manual: what is written, where, how often. */
+.pg-calendar .pp{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:16px;margin-bottom:14px;display:flex;flex-direction:column;gap:14px}
+.pg-calendar .pp-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.pg-calendar .pp-head h2{margin:0;font-family:inherit;font-size:16px;font-weight:600;letter-spacing:-.1px}
+.pg-calendar .pp-head p{margin:2px 0 0;font-size:13.5px;color:var(--muted)}
+.pg-calendar .pp-saved{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 9px;border-radius:999px;background:var(--raised);color:var(--subtle);font-size:12.5px;white-space:nowrap}
+.pg-calendar .pp-saved[data-live]{background:var(--ok-wash);color:var(--ok)}
+.pg-calendar .pp-groups{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px}
+.pg-calendar .pp-group{border:1px solid var(--line);border-radius:10px;background:var(--bg);padding:12px 12px 4px;display:flex;flex-direction:column}
+.pg-calendar .pp-group-head{display:flex;align-items:flex-start;gap:10px;padding-bottom:10px;border-bottom:1px solid var(--line)}
+.pg-calendar .pp-group-icon{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;background:var(--accent-wash);color:var(--accent);flex:0 0 auto}
+.pg-calendar .pp-group-head h3{margin:0;font-family:inherit;font-size:14.5px;font-weight:600}
+.pg-calendar .pp-group-head p{margin:1px 0 0;font-size:13px;line-height:1.4;color:var(--muted)}
+.pg-calendar .pp-row{display:flex;align-items:center;gap:10px;min-height:52px;padding:8px 0;border-bottom:1px solid var(--line)}
+.pg-calendar .pp-row:last-child{border-bottom:0}
+.pg-calendar .pp-who{display:flex;flex-direction:column;min-width:0;flex:1 1 auto}
+.pg-calendar .pp-name{font-size:14px;font-weight:500;color:var(--text)}
+.pg-calendar .pp-row[data-off] .pp-name{color:var(--muted)}
+.pg-calendar .pp-state{font-size:12.5px;line-height:1.35;color:var(--subtle)}
+.pg-calendar .pp-state.is-on{display:inline-flex;align-items:center;gap:5px;color:var(--ok)}
+.pg-calendar .pp-state.is-on i{width:6px;height:6px;border-radius:50%;background:var(--ok)}
+.pg-calendar .pp-step{display:inline-flex;align-items:center;gap:2px;padding:2px;border-radius:9px;border:1px solid var(--line);background:var(--panel);flex:0 0 auto}
+.pg-calendar .pp-step button{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:7px;border:0;background:transparent;color:var(--muted);cursor:pointer}
+.pg-calendar .pp-step button:hover:not(:disabled){background:var(--hover);color:var(--text)}
+.pg-calendar .pp-step button:disabled{opacity:.35;cursor:default}
+.pg-calendar .pp-step button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.pg-calendar .pp-step output{min-width:74px;text-align:center;font-size:13.5px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--text)}
+.pg-calendar .pp-row[data-off] .pp-step output{color:var(--subtle);font-weight:500}
+.pg-calendar .pp-sum{display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-radius:10px;background:var(--accent-wash);color:var(--accent)}
+.pg-calendar .pp-sum p{margin:0;font-size:13.5px;line-height:1.45;color:var(--text)}
+.pg-calendar .pp-sum b{font-weight:600}
+.pg-calendar .pp-sum span{color:var(--muted)}
+.pg-calendar .pp-error{margin:0;font-size:13px;color:var(--warn)}
+@media (max-width:480px){
+  .pg-calendar .pp{padding:12px}
+  .pg-calendar .pp-groups{grid-template-columns:1fr}
+  /* The logo keeps its place beside the name; the stepper drops under them, in line with the name. */
+  .pg-calendar .pp-row{display:grid;grid-template-columns:28px minmax(0,1fr);column-gap:10px;row-gap:8px;align-items:start}
+  .pg-calendar .pp-step{grid-column:2;justify-self:start}
+  .pg-calendar .pp-step button{width:36px;height:36px}
+}
