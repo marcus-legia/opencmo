@@ -25,7 +25,7 @@ const readAhead = (view: string) => () => VIEW_SCREENS[view]?.forEach((name) => 
  */
 export type TopVariant =
   | { kind: "home" }
-  | { kind: "views"; current: "feed" | "calendar" | "sales" | "analytics" | null }
+  | { kind: "views"; current: "feed" | "calendar" | "photos" | "sales" | "analytics" | null }
   | { kind: "crumbs"; trail: { label: string; href?: string }[]; logs?: boolean; chat?: boolean; credits?: boolean; back?: boolean };
 
 const Chevron = () => (
@@ -160,6 +160,18 @@ export function TopBar({
             <path d="M16 2v4" />
             <path d="M8 2v4" />
             <path d="M3 10h18" />
+          </svg>
+        ),
+      },
+      {
+        id: "photos",
+        label: "Photos",
+        href: "/app/photos",
+        icon: (
+          <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
+            <rect width="18" height="18" x="3" y="3" rx="2" />
+            <circle cx="9" cy="9" r="2" />
+            <path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21" />
           </svg>
         ),
       },
