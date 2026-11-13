@@ -1,13 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 
 import { Button, Tabs, Toggle } from "@/components/ui";
 import type { CardBody, ScheduleOptions } from "@/lib/screens/approval-card";
 import { DEPARTMENT_LABEL, PLATFORM_LABEL, type Platform } from "@/lib/screens/common";
 
+import { PlatformMark, hasLogo } from "@/components/today/platform-logos";
+import { THREADS_LIMIT, X_FREE_LIMIT, chainFor, xLength } from "@/lib/departments/publish/split";
+
 import { CaptionList, charCount, type SaveCaption } from "./captions";
+import { PhotoStrip } from "./post-photos";
 import { joinSlideText, slideTextProblem, splitSlideText } from "./slides";
 import { formatSeconds } from "./labels";
 import { AI_LABEL_PLATFORMS, PRIVACY_LABEL, TIKTOK_MUSIC_TERMS, formatWhen } from "./schedule";
@@ -22,6 +26,9 @@ export function PostBody({
   draft,
   onDraft,
   onPick,
+  onRewrite,
+  rewriting,
+  photos,
 }: {
   body: Body<"post">;
   cardId: string;
@@ -30,6 +37,12 @@ export function PostBody({
   onDraft: (text: string) => void;
   /** Reports the text on screen, so Approve sends what the founder saw. */
   onPick: (text: string) => void;
+  /** "Rewrite for <platform>" (D4): one paid rewrite for that platform; absent when the card cannot take one. */
+  onRewrite?: (platform: Platform) => void;
+  /** The platforms whose rewrite is being written now. */
+  rewriting?: ReadonlySet<string>;
+  /** The founder's own photos under the text (owner, 2026-11-13): an editor while the card waits, else the strip. */
+  photos?: ReactNode;
 }) {
   const [platform, setPlatform] = useState<Platform>(body.platforms[0]?.platform ?? "x");
   const [version, setVersion] = useState(0);
@@ -73,6 +86,7 @@ export function PostBody({
           <FoldedText text={text} fold={fold} />
         )}
       </div>
+      {photos}
       <div className="v2-card-chips">
         {limit ? (
           <span className={`v2-chip ${length > limit ? "is-stuck" : "is-posted"}`}>
@@ -97,32 +111,124 @@ export function PostBody({
         {body.why ? <span>Why: {body.why}</span> : null}
         {fold ? <span>The first {fold} characters show before “more” on a phone.</span> : null}
       </div>
+      {body.targets && body.targets.length ? <PostTargets targets={body.targets} onRewrite={editing ? undefined : onRewrite} rewriting={rewriting} /> : null}
     </>
   );
 }
 
+/** Rewrite price, as SQL `cmo_job_price('repurpose_post')` holds it before the model runs. */
+export const REWRITE_CREDITS = 1;
+
+/**
+ * Where the core post goes (daily core drafts D3): one line of platforms, then each platform's own rewrite when the
+ * founder asked for one (D4). A rewrite goes out on that platform only, after its own schedule card.
+ */
+function PostTargets({
+  targets,
+  onRewrite,
+  rewriting,
+}: {
+  targets: NonNullable<Body<"post">["targets"]>;
+  onRewrite?: (platform: Platform) => void;
+  rewriting?: ReadonlySet<string>;
+}) {
+  const several = targets.length > 1;
+  return (
+    <div className="v2-card-targets" data-testid="post-targets">
+      <div className="v2-card-goes">
+        <span className="v2-card-goes-label">{several ? "One post, goes out on" : "Goes out on"}</span>
+        <ul>
+          {targets.map((t) => (
+            <li key={t.platform} data-own={t.variant ? "" : undefined}>
+              {hasLogo(t.platform) ? <PlatformMark platform={t.platform} /> : null}
+              {PLATFORM_LABEL[t.platform]}
+              {t.variant ? <span className="v2-card-goes-own">own version</span> : null}
+            </li>
+          ))}
+        </ul>
+      </div>
+      {targets.map((t) =>
+        t.variant ? (
+          <details key={t.platform} className="v2-card-variant">
+            <summary>
+              {hasLogo(t.platform) ? <PlatformMark platform={t.platform} /> : null}
+              {PLATFORM_LABEL[t.platform]} gets its own version
+            </summary>
+            <FoldedText text={t.variant} fold={null} />
+            <p className="v2-card-meta">It goes out on {PLATFORM_LABEL[t.platform]} after you approve its time card.</p>
+          </details>
+        ) : null,
+      )}
+      {several && onRewrite ? (
+        <div className="v2-card-rewrite" role="group" aria-label="Rewrite for one platform">
+          <p>
+            <b>Want it to read differently on one platform?</b> Your CMO rewrites it for that platform only, {REWRITE_CREDITS} credit each.
+          </p>
+          <div className="v2-card-rewrite-row">
+            {targets.map((t) => {
+              const busy = rewriting?.has(t.platform);
+              const label = PLATFORM_LABEL[t.platform];
+              return (
+                <button key={t.platform} type="button" disabled={busy} onClick={() => onRewrite(t.platform)} aria-label={`${t.variant ? "Rewrite again" : "Rewrite"} for ${label}, ${REWRITE_CREDITS} credit`}>
+                  {hasLogo(t.platform) ? <PlatformMark platform={t.platform} /> : null}
+                  {busy ? `Rewriting for ${label}…` : `${t.variant ? "Rewrite again" : "Rewrite"} for ${label}`}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 /** An X thread (P6 W4): one numbered post per row, each with its own length; X shows them in this order. */
-function ThreadPosts({ posts, limit, why }: { posts: string[]; limit: number; why: string | null }) {
+function ThreadPosts({
+  posts,
+  limit,
+  why,
+  note,
+  onCopy,
+  platform = "x",
+}: {
+  posts: string[];
+  limit: number;
+  /** Whose count the chips show: X weighs links and emojis, Threads counts characters. */
+  platform?: "x" | "threads";
+  why: string | null;
+  /** What the row of posts is: an X thread by default, a Threads chain on a schedule card. */
+  note?: string;
+  /** Copy and open (no connected account): each post gets its own Copy button, in the order they are posted. */
+  onCopy?: (post: string, index: number) => void;
+}) {
   return (
     <>
       <ol className="v2-card-thread" aria-label={`Thread of ${posts.length} posts`} data-testid="thread-posts">
         {posts.map((post, i) => {
-          const length = charCount(post);
+          // The parts are cut by the platform's own count, so the chip shows that count: X's for an X thread.
+          const length = platform === "threads" ? charCount(post) : xLength(post);
           return (
             <li key={i}>
               <span className="v2-card-thread-n" aria-hidden="true">
                 {i + 1}
               </span>
               <p className="v2-card-text">{post}</p>
-              <span className={`v2-chip ${length > limit ? "is-stuck" : "is-posted"}`}>
-                {length}/{limit}
+              <span className="v2-card-thread-side">
+                <span className={`v2-chip ${length > limit ? "is-stuck" : "is-posted"}`}>
+                  {length}/{limit}
+                </span>
+                {onCopy ? (
+                  <Button variant="quiet" compact onClick={() => onCopy(post, i)} aria-label={`Copy post ${i + 1}`}>
+                    Copy
+                  </Button>
+                ) : null}
               </span>
             </li>
           );
         })}
       </ol>
       <div className="v2-card-meta">
-        <span>{posts.length} posts, posted as one thread on X.</span>
+        <span>{note ?? `${posts.length} posts, posted as one thread on X.`}</span>
         {why ? <span>Why: {why}</span> : null}
       </div>
     </>
@@ -276,7 +382,26 @@ export function ScriptBody({
         {body.aspect ? <span>{body.aspect}</span> : null}
         {body.nextPriceCredits !== null ? <span>Whole video: {body.nextPriceCredits} credits</span> : null}
       </div>
+      {body.caption ? <CopyCaption caption={body.caption} /> : null}
     </>
+  );
+}
+
+/** The caption written with a script: shown under it with Copy, for the day the founder posts the video. */
+function CopyCaption({ caption }: { caption: string }) {
+  const [copied, setCopied] = useState<boolean | null>(null);
+  const copy = async () => setCopied(navigator.clipboard ? await navigator.clipboard.writeText(caption).then(() => true, () => false) : false);
+  return (
+    <div className="v2-card-caption" data-testid="script-caption">
+      <div className="v2-card-caption-head">
+        <b>Caption to post with the video</b>
+        <Button variant="quiet" compact onClick={() => void copy()}>
+          {copied ? "Copied" : "Copy"}
+        </Button>
+      </div>
+      <p className="v2-card-text">{caption}</p>
+      {copied === false ? <p className="v2-muted">Copy did not work here. Select the caption and copy it yourself.</p> : null}
+    </div>
   );
 }
 
@@ -501,6 +626,7 @@ export function ScheduleBody({
   options,
   onOptions,
   editable,
+  onCopyPart,
 }: {
   body: Body<"schedule">;
   cardId: string;
@@ -508,8 +634,15 @@ export function ScheduleBody({
   onOptions: (options: ScheduleOptions) => void;
   /** Null when the fields may be changed now, else why not. */
   editable: string | null;
+  /** Copy and open of a chain: copies one part. */
+  onCopyPart?: (post: string, index: number) => void;
 }) {
   const platform = PLATFORM_LABEL[body.where.platform];
+  // A post longer than the platform takes is shown as the parts that go out (`publish/split.ts` cuts both).
+  const chain = useMemo(
+    () => (!body.preview.videoUrl && !body.preview.title && body.preview.text ? chainFor(body.where.platform, body.preview.text, body.options.as_thread === true) : null),
+    [body.preview.videoUrl, body.preview.title, body.preview.text, body.where.platform, body.options.as_thread],
+  );
   const tiktok = body.mode === "publish" && body.where.platform === "tiktok" ? body.tiktok : null;
   const aiLabel = body.mode === "publish" && AI_LABEL_PLATFORMS.has(body.where.platform);
   const set = (patch: Partial<ScheduleOptions>) => onOptions({ ...options, ...patch });
@@ -523,26 +656,44 @@ export function ScheduleBody({
           <video src={body.preview.videoUrl} controls preload="metadata" playsInline />
         </div>
       ) : null}
-      {body.preview.title || body.preview.text ? (
+      {chain ? (
+        <ThreadPosts
+          posts={chain}
+          platform={body.where.platform === "threads" ? "threads" : "x"}
+          limit={body.where.platform === "threads" ? THREADS_LIMIT : X_FREE_LIMIT}
+          why={null}
+          note={
+            body.mode === "publish"
+              ? `Longer than one ${platform} post: it goes out as ${chain.length} posts in a row, cut here, every word kept.`
+              : `Longer than one ${platform} post: post the first part, then reply to it with each next one.`
+          }
+          onCopy={body.mode === "intent" ? onCopyPart : undefined}
+        />
+      ) : body.preview.title || body.preview.text ? (
         <div className="v2-card-draft">
           {body.preview.title ? <b>{body.preview.title}</b> : null}
           {body.preview.title && body.preview.text ? <br /> : null}
           {body.preview.text}
         </div>
       ) : null}
+      {body.preview.photos?.length ? <PhotoStrip photos={body.preview.photos} label="The photos that go out with it, in order" /> : null}
       <dl className="v2-card-facts">
         <div>
           <dt>Where</dt>
           <dd className="v2-card-account">
             {body.mode === "publish" ? (
               <>
+                {hasLogo(body.where.platform) ? <PlatformMark platform={body.where.platform} size={16} /> : null}
                 {body.avatarUrl ? <img src={body.avatarUrl} alt="" width={20} height={20} /> : null}
                 <span>
                   {platform} · {body.where.handle}
                 </span>
               </>
             ) : (
-              <span>{platform} · no account connected</span>
+              <>
+                {hasLogo(body.where.platform) ? <PlatformMark platform={body.where.platform} size={16} /> : null}
+                <span>{platform} · you post it yourself</span>
+              </>
             )}
           </dd>
         </div>

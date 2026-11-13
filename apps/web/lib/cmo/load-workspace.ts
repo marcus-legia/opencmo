@@ -14,7 +14,8 @@ import { AGENTS, type CalendarItem, type GoalView, type InboxCard, type InsightV
 
 type CmoRunRow = {
   id: string;
-  kind: "onboard" | CmoJobKind;
+  /** `write_slides`: a run from before F2 (2026-11-13) still lists in Activity. */
+  kind: "onboard" | CmoJobKind | "write_slides";
   status: LogEntry["status"];
   input: { site?: string; idea?: string; source?: string };
   error: string | null;
@@ -23,7 +24,7 @@ type CmoRunRow = {
   created_at: string;
 };
 
-const JOB_OF: Record<CmoRunRow["kind"], JobId> = { onboard: "W0", plan_week: "W1", post_draft: "W2", sales_scan: "W4", pull_metrics: "W6", competitor_research: "W7", summarize_memory: "W8", review_week: "W9", write_video_brief: "W5", write_caption: "W5", write_slides: "W5", publish_post: "W3", niche_video_research: "W7", distill_ratings: "W8" };
+const JOB_OF: Record<CmoRunRow["kind"], JobId> = { onboard: "W0", plan_week: "W1", post_draft: "W2", sales_scan: "W4", pull_metrics: "W6", competitor_research: "W7", summarize_memory: "W8", review_week: "W9", write_video_brief: "W5", write_caption: "W5", write_slides: "W5", publish_post: "W3", niche_video_research: "W7", distill_ratings: "W8", repurpose_post: "W2", photo_caption: "W5" };
 
 type OpportunityRow = {
   id: string;
@@ -105,7 +106,7 @@ function toCalendar(item: ItemRow): CalendarItem {
 function statusLine(runs: CmoRunRow[], awaiting: number): Workspace["status"] {
   const active = runs.find((r) => r.status === "running" || r.status === "queued");
   if (active) {
-    const what = { plan_week: "planning your week", post_draft: "drafting a post for X", sales_scan: "scanning Reddit for conversations", onboard: "building your plan", competitor_research: "studying your competitors on X", pull_metrics: "reading the numbers on your posts", summarize_memory: "writing this week's lessons", review_week: "reviewing your week", write_video_brief: "writing a video brief", write_caption: "writing captions for your video", write_slides: "writing slide text", publish_post: "posting what you approved", niche_video_research: "studying short videos in your niche", distill_ratings: "learning from your ratings" }[active.kind];
+    const what = { plan_week: "planning your week", post_draft: "drafting a post for X", sales_scan: "scanning Reddit for conversations", onboard: "building your plan", competitor_research: "studying your competitors on X", pull_metrics: "reading the numbers on your posts", summarize_memory: "writing this week's lessons", review_week: "reviewing your week", write_video_brief: "writing a video brief", write_caption: "writing captions for your video", write_slides: "writing slide text", publish_post: "posting what you approved", niche_video_research: "studying short videos in your niche", distill_ratings: "learning from your ratings", repurpose_post: "rewriting a post for one platform", photo_caption: "writing the caption of your photos" }[active.kind];
     return { text: `Your CMO is ${what}. Follow along in Activity.`, tone: "running" };
   }
   const latest = runs[0];

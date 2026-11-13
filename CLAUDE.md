@@ -26,7 +26,7 @@ This replaces "the editor is the spearhead" (2026-10-19). After testing, the own
 too expensive to lead. The AI CMO makes value at a small cost, so it leads.
 
 - **The product follows the CMO loop, in this order:** business information (the website, the four documents) →
-  Writer (week plan, posts, slides, video scripts and storyboards) → approval → Video (slideshow, post image, short
+  Writer (week plan, posts, video scripts with captions and storyboards) → approval → Video (slideshow, post image, short
   clips from a finished edit, with the Brand Kit) → approval → Post (schedule and publish, captions and hashtags).
   Words are written before anything is built from them. The editor is the last step, where the founder fine-tunes
   by hand; it is not the entry point.
@@ -67,6 +67,15 @@ too expensive to lead. The AI CMO makes value at a small cost, so it leads.
   and fal NSFW), against Creem's rules quoted as they are (`packages/contracts/creem-policy.json`). Creem forbids NSFW and sexually suggestive content,
   face-swap, deepfake and face-manipulation tools, and "uncensored / no filter" marketing, so: premade voices
   only, no cloning, dubbing or lip-sync. Spec: `docs/plans/cmo/2026-11-05-agent-team-models-moderation-spec.md`.
+- **Daily core drafts** (owner, 2026-11-12; plan `docs/plans/cmo/2026-11-12-daily-core-drafts-plan.md`). The founder's
+  planner decides the platforms and counts; the CMO writes what it asks, nothing more (D2). The core is a text post of
+  real quality, and for video a script and its caption the founder records from (D1). **One core post serves every
+  platform of its slot**; a rewrite for one platform is an optional paid button, never the default (D3). X takes long
+  posts (X Premium) and autopilot may post them; a Threads chain is a thread and stays out of autopilot (D6). A
+  carousel or slideshow is photos the founder uploads (TikTok Photo Mode, Instagram carousel), **never a video**, made
+  on its own page (photos + caption); the CMO writes only its caption (D7). **A text post takes the founder's own photos
+  on its card** (owner, 2026-11-13): that is part of the post, not of the slideshow page. Facebook posts to a **Page**; a
+  personal profile gets copy-and-open, since Meta's API cannot post there (D9).
 - **Charge before running, then run in one go** (owner, 2026-11-05). A paid job shows its storyboard (or plan)
   and one credit estimate that covers everything it will spend: media, voice, music, renders and the agents'
   tokens. The user confirms once, the credits are held, and the job runs to the end without stopping for another

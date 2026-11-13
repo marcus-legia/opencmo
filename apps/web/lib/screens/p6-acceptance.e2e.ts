@@ -3,7 +3,9 @@
  * Resend or push service. A founder with a connected X account and ten published posts → `pull_metrics` reads the
  * fake Zernio → Analytics and Dashboard results are live → the best hour replaces the default slot and the schedule
  * card says why → past ten cards a day the rest are held → the digest lands in the local mail catcher, once → one
- * push to a test subscription, through a fake push service → a Hacker News reply is checked three days on.
+ * push to a test subscription, through a fake push service → a Hacker News reply is checked three days on → Phase A of
+ * the daily core drafts: one cron day with plan X 1 + Threads 1 + LinkedIn 1 gives one post card, approved into three
+ * schedule cards.
  *
  *     eval "$(supabase status -o env | grep -E '^(API_URL|ANON_KEY|SERVICE_ROLE_KEY|JWT_SECRET|INBUCKET_URL)=' | sed 's/^/export /')"
  *     NEXT_PUBLIC_SUPABASE_URL=$API_URL NEXT_PUBLIC_SUPABASE_ANON_KEY=$ANON_KEY SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY \
@@ -51,6 +53,45 @@ const HOUR = (h: number, daysAgo: number) => {
   d.setUTCHours(h, 0, 0, 0);
   return d.toISOString();
 };
+
+/**
+ * Phase A of the daily core drafts (plan 2026-11-12, "Phase A done when"; follow-ups Task 1): with plan X 1 + Threads 1
+ * + LinkedIn 1 and the fake brain, one cron day gives one post card, and approving it gives three schedule cards.
+ */
+async function coreDraftDay() {
+  const created = await admin.auth.admin.createUser({ email: `p6-core-${randomUUID()}@test.local`, password: `pw-${randomUUID()}`, email_confirm: true });
+  assert.equal(created.error, null);
+  const userId = created.data.user!.id;
+  ok(await admin.from("profiles").update({ plan: "starter", timezone: "UTC", credit_balance: 200 }).eq("id", userId), "profile");
+  ok(await admin.from("marketing_documents").insert({ user_id: userId, kind: "product", version: 1, created_by: "user", body: { name: "OpenCMO", one_liner: "An AI CMO for solo founders." } }), "document");
+  ok(await clientFor(userId).rpc("save_posting_plan", { p_plan: { text: { x: 1, threads: 1, linkedin: 1, facebook: 0 }, video: { tiktok: 0, instagram: 0, youtube: 0 } } }), "the founder's plan");
+  ok(await admin.rpc("zernio_profile_save", { p_user: userId, p_profile: `prof-${userId.slice(0, 8)}` }), "zernio profile");
+  for (const platform of ["x", "threads"]) {
+    ok(await admin.rpc("social_account_save", { p_user: userId, p_platform: platform, p_handle: "@core", p_avatar_url: null, p_zernio_account_id: `acc-${platform}-${userId.slice(0, 8)}` }), `${platform} account`);
+  }
+
+  // The cron's morning: the weekly plan (`loops.ts` weekly-plan), which queues the drafts of its own posts due today.
+  ok(await admin.rpc("enqueue_cmo_run_for", { p_user: userId, p_kind: "plan_week", p_input: { source: "schedule", loop: "weekly-plan" } }), "plan_week queued");
+  await drainCmoQueue(supabaseStore(admin as never), { budgetMs: 60_000 });
+  const runs = ok(await admin.from("cmo_runs").select("kind, status, error").eq("user_id", userId), "runs") as { kind: string; status: string; error: unknown }[];
+  assert.deepEqual(runs.map((r) => `${r.kind} ${r.status}`).sort(), ["plan_week done", "post_draft done"], JSON.stringify(runs));
+  const posts = ok(await admin.from("content_items").select("id, status, body").eq("user_id", userId).eq("department", "post"), "posts") as { id: string; status: string; body: { targets?: string[] } }[];
+  assert.ok(posts.length >= 1 && posts.every((p) => JSON.stringify(p.body.targets) === '["x","threads","linkedin"]'), "every post targets the three platforms");
+  const cards = ok(await admin.from("approvals").select("id, ref_id, content_hash").eq("user_id", userId).eq("kind", "post").eq("status", "waiting"), "post cards") as { id: string; ref_id: string; content_hash: string }[];
+  assert.equal(cards.length, 1, "one post card for the day, not one a platform");
+
+  ok(await clientFor(userId).rpc("approval_decide", { p_id: cards[0]!.id, p_action: "approve", p_payload: { content_hash: cards[0]!.content_hash, via: "app" } }), "approve the post");
+  const deliverable = ok(await admin.from("deliverables").select("id").eq("ref_kind", "content_item").eq("ref_id", cards[0]!.ref_id).single(), "deliverable") as { id: string };
+  const slots = ok(await admin.from("schedule_slots").select("id, platform, mode").eq("deliverable_id", deliverable.id), "slots") as { id: string; platform: string; mode: string }[];
+  const schedule = ok(await admin.from("approvals").select("ref_id, status").eq("ref_kind", "schedule_slot").in("ref_id", slots.map((s) => s.id)), "schedule cards") as { ref_id: string; status: string }[];
+  // X rides on the post card's time, so its schedule card is decided with it; Threads and LinkedIn wait on their own.
+  assert.deepEqual(
+    slots.map((s) => `${s.platform} ${s.mode} ${schedule.find((c) => c.ref_id === s.id)?.status}`).sort(),
+    ["linkedin intent waiting", "threads publish waiting", "x publish approved"],
+    "three schedule cards",
+  );
+  console.log("Phase A: one cron day, one post card, three schedule cards (X decided with the post, Threads and LinkedIn to decide)");
+}
 
 async function main() {
   const email = `p6-${randomUUID()}@test.local`;
@@ -168,6 +209,8 @@ async function main() {
   const memory = ok(await admin.from("cmo_memories").select("body").eq("user_id", userId).order("created_at", { ascending: false }).limit(1).single(), "memory") as { body: string };
   assert.match(memory.body, /^A reply on Hacker News that only helped got no vote count and 0 replies/);
   console.log(`F7: the HN reply was found three days on; memory: "${memory.body}"`);
+
+  await coreDraftDay();
 
   console.log(`P6 acceptance passed for ${userId}`);
 }

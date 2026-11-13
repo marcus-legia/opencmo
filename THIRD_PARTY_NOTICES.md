@@ -9,6 +9,7 @@ live next to the files.
 | Clip fonts (32 families, e.g. Inter, Montserrat, Raleway, Bebas Neue) | `packages/clip-media/fonts/`, `apps/web/assets/fonts/` | SIL Open Font License 1.1 (`LICENSE-OFL.txt`) |
 | Geist and Geist Mono (the app's UI type), Copyright (c) 2023 Vercel, in collaboration with basement.studio | `packages/clip-media/fonts/geist.woff2`, `geist-mono.woff2` | SIL Open Font License 1.1 (`LICENSE-geist.txt`) |
 | DejaVu fonts | `packages/clip-media/fonts/DejaVu*` | Bitstream Vera / DejaVu license (`LICENSE-DejaVu.txt`) |
+| Platform marks (X, Threads, LinkedIn, Facebook, TikTok, Instagram, YouTube) from Simple Icons 9.21.0. The marks are trademarks of their owners, used only to name the platform a post goes to | `apps/web/components/today/platform-logos.tsx` | CC0 1.0 |
 | Lucide icons | `packages/clip-icons/data/`, `apps/web/components/icons/` | ISC (`LUCIDE-LICENSE`, `LICENSE-lucide.txt`) |
 | Marketing skill library (adapted) | `apps/web/lib/cmo/skills/` | MIT (`apps/web/lib/cmo/skills/LICENSE.md`) |
 | No AI Slop writing guidance by Peter Yang (adapted), Copyright (c) 2026 Peter Yang | `apps/web/lib/cmo/skills/no-ai-slop.md` | MIT (`apps/web/lib/cmo/skills/LICENSE.md`) |

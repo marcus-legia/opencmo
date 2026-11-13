@@ -11,7 +11,7 @@ select plan(57);
 
 select is(public.cmo_job_price('write_caption'), 1, 'a caption run costs 1 credit');
 select is(public.cmo_job_price('write_video_brief'), 1, 'so does a brief');
-select is(public.cmo_job_daily_limit('write_slides'), 10, 'slides are registered for S3');
+select is(public.cmo_job_daily_limit('write_slides'), 0, 'slides are no longer written (20270121030000)');
 select is(public.work_order_department('write_caption'), 'writer', 'Writer''s orders are Writer''s');
 select ok(not has_function_privilege('authenticated', 'public.cmo_save_caption(uuid,uuid,uuid,text,text,text,jsonb)', 'execute'),
   'only Writer saves captions');

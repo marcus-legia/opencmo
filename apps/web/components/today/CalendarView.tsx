@@ -13,6 +13,7 @@ import { PLATFORM_LABEL, type SlotStatus } from "@/lib/screens/common";
 import type { ApprovalCard as Card } from "@/lib/screens/approval-card";
 import type { ScheduleScreen } from "@/lib/screens/schedule";
 
+import { PostingPlanPanel } from "./PostingPlanPanel";
 import { useDecide } from "./useDecide";
 
 type Slot = ScheduleScreen["slots"][number];
@@ -32,6 +33,7 @@ const CHANS = [
   { id: "all", label: "All", platforms: null },
   { id: "x", label: "X", platforms: ["x"] },
   { id: "linkedin", label: "LinkedIn", platforms: ["linkedin"] },
+  { id: "facebook", label: "Facebook", platforms: ["facebook"] },
   { id: "video", label: "Video", platforms: ["tiktok", "youtube", "instagram"] },
   { id: "threads", label: "Threads", platforms: ["threads"] },
 ] as const;
@@ -191,6 +193,18 @@ export function CalendarView() {
           </span>
           <span style={{ marginLeft: "auto" }}>Drag a card to another day to move it. Your CMO asks before it changes a time.</span>
         </div>
+
+        {data ? (
+          <PostingPlanPanel
+            initial={data.postingPlan}
+            accounts={data.accounts}
+            live={state.status === "ready" && state.live.postingPlan}
+            onSaved={reload}
+          />
+        ) : null}
+        <p className="meta" data-testid="calendar-photos-link">
+          A slideshow or carousel of your own photos is made on <Link href="/app/photos">Photos</Link>; it lands here once scheduled.
+        </p>
 
         {state.status === "error" ? <div className="meta">{state.message}</div> : null}
         {state.status === "loading" ? <div className="meta">Loading the week…</div> : null}

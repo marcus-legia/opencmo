@@ -25,7 +25,6 @@ const KIND_LABEL: Record<Draft["kind"], string> = { post: "post", caption: "Capt
 const BADGE: Record<Draft["column"], [string, string]> = { planned: ["Planned", "badge b-plan"], waiting: ["Waiting", "badge b-wait"], drafting: ["Drafting", "badge b-new"], scheduled: ["Scheduled", "badge b-ok"], posted: ["Posted", "badge b-ok"] };
 const ASK_KINDS = [
   { id: "post", label: "X post", prompt: "Write an X post" },
-  { id: "slides", label: "Slideshow", prompt: "Write a slideshow" },
   { id: "script", label: "Video script", prompt: "Write a short video script" },
 ] as const;
 
@@ -194,7 +193,7 @@ export function AgentWriter() {
               ) : null}
             </div>
             <p style={{ margin: "4px 0 8px", color: "var(--muted)", fontSize: "14px", maxWidth: "640px" }}>
-              Writes the week from your strategy: X posts, slideshows, and scripts with storyboards for the videos you film. Nothing is built or posted until you approve the words.
+              Writes the week from your strategy: posts, and scripts with storyboards for the videos you film. Nothing is built or posted until you approve the words.
             </p>
             <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
               <span className="meta">Reads</span>
@@ -221,7 +220,7 @@ export function AgentWriter() {
           <label htmlFor="ask-writer" style={{ position: "absolute", width: "1px", height: "1px", overflow: "hidden", clip: "rect(0 0 0 0)" }}>
             Ask for a post
           </label>
-          <input id="ask-writer" type="text" placeholder="Ask for a post, a slideshow or a video script" value={ask} onChange={(e) => setAsk(e.target.value)} />
+          <input id="ask-writer" type="text" placeholder="Ask for a post or a video script" value={ask} onChange={(e) => setAsk(e.target.value)} />
           <label htmlFor="ask-kind" style={{ position: "absolute", width: "1px", height: "1px", overflow: "hidden", clip: "rect(0 0 0 0)" }}>
             Kind
           </label>

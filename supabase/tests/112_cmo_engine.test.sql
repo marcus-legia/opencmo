@@ -105,10 +105,11 @@ select lives_ok($$ select public.cmo_remove_item((select id from public.content_
 select throws_ok($$ select public.cmo_remove_item((select id from d1)) $$,
   'P0002', 'This calendar item is no longer open.', 'không xoá bài đã thành nháp');
 
-select throws_ok($$ select public.cmo_decide_post((select id from d1), 'approve', repeat('a', 281)) $$,
-  '22023', 'Posts on X can be at most 280 characters.', 'quá 280 ký tự');
+-- X takes long posts since 20270120 (daily core drafts D6): 4,000 characters.
+select throws_ok($$ select public.cmo_decide_post((select id from d1), 'approve', repeat('a', 4001)) $$,
+  '22023', 'Posts on X can be at most 4,000 characters.', 'an X post over 4,000 characters is refused');
 select throws_ok($$ select public.cmo_mark_posted((select id from d1)) $$,
-  'P0001', 'Approve the post before marking it as posted.', 'chưa duyệt thì chưa đánh dấu đã đăng');
+  'P0001', 'Approve the post before marking it as posted.', 'a post is approved before it is marked posted');
 select is((public.cmo_decide_post((select id from d1), 'approve', 'We shipped reminders today.')).status, 'approved', 'duyệt');
 select is((select final_text from public.content_items where id = (select id from d1)), 'We shipped reminders today.', 'lưu bản đã sửa');
 select throws_ok($$ select public.cmo_decide_post((select id from d1), 'approve') $$,

@@ -18,7 +18,8 @@ import { mondayOf } from "./summarize-memory";
 import { goalBlock, knownNumbers, recall } from "./context";
 import { goalLine, nextGoalFallback } from "./review-week";
 import { pickDueItem } from "./draft-post";
-import { namedPlatforms, toPlanItems } from "./plan-week";
+import { toPlanItems } from "./plan-week";
+import type { PostingPlan } from "../posting-plan";
 import { drainCmoQueue, isPlainJson } from "./runner";
 import { factIssues } from "./check-post";
 import { openingLine } from "./competitor-research";
@@ -44,26 +45,64 @@ async function main() {
   assert.deepEqual(checkPost("Plans start at $12/month.", { avoid: [], known }), [], "giá có trong document");
   assert.deepEqual(checkPost("Since 2024 we invoice.", { avoid: [], known }), [], "năm không tính là số bịa");
 
-  // toPlanItems: kẹp ngày 0–6, ép nền tảng theo department; a post keeps X, Threads or LinkedIn (P3 A2).
+  // toPlanItems (daily core drafts, owner 2026-11-12): the code builds the week from the founder's posting plan; the
+  // model only fills ideas. Slot i of a day targets every platform whose count is above i.
   const today = new Date(Date.UTC(2026, 9, 5));
-  const plan = toPlanItems({ items: [
-    { day_offset: 9, department: "post", platform: "LinkedIn", idea: " Launch ", reason: "r" },
-    { day_offset: -2, department: "video", platform: "YouTube", idea: "Clip", reason: "r" },
-    { day_offset: 1, department: "sales", platform: "x", idea: "Thread", reason: "r" },
-    { day_offset: 1, department: "post", platform: "Mastodon", idea: "Elsewhere", reason: "r" },
-  ] }, today);
-  assert.deepEqual(plan.map((p) => [p.day, p.platform, p.idea]), [
-    ["2026-10-11", "LinkedIn", "Launch"], ["2026-10-05", "Shorts", "Clip"], ["2026-10-06", "Reddit", "Thread"], ["2026-10-06", "X", "Elsewhere"],
-  ]);
-  // One post per platform a day, at most 3 LinkedIn posts a week; the same idea may go to each platform.
-  const post = (day_offset: number, platform: string, idea = "Idea") => ({ day_offset, department: "post" as const, platform, idea, reason: "r" });
-  const capped = toPlanItems({ items: [
-    post(0, "X"), post(0, "Threads"), post(0, "LinkedIn"), post(0, "X", "Second X today"),
-    post(1, "LinkedIn"), post(2, "LinkedIn"), post(3, "LinkedIn", "A fourth LinkedIn post"),
-  ] }, today);
-  assert.deepEqual(capped.map((p) => `${p.day.slice(8)} ${p.platform} ${p.idea}`), [
-    "05 X Idea", "05 Threads Idea", "05 LinkedIn Idea", "06 LinkedIn Idea", "07 LinkedIn Idea",
-  ]);
+  const plan = (text: Partial<PostingPlan["text"]>, video: Partial<PostingPlan["video"]> = {}): PostingPlan => ({
+    text: { x: 0, threads: 0, linkedin: 0, facebook: 0, ...text },
+    video: { tiktok: 0, instagram: 0, youtube: 0, ...video },
+  });
+  const post = (day_offset: number, idea: string, slot?: number) => ({ day_offset, department: "post" as const, platform: "X", idea, reason: "r", ...(slot === undefined ? {} : { slot }) });
+  const both = toPlanItems({ items: [
+    post(0, "Monday's idea", 0), post(0, "A second idea for a one-slot day", 0), post(1, "Slot five is not asked for", 5), post(9, "Clamped to the last day"),
+  ] }, plan({ x: 1, linkedin: 1 }), { today, docs });
+  assert.equal(both.length, 7, "one post a day for seven days");
+  assert.ok(both.every((p) => p.department === "post" && p.platform === "X" && JSON.stringify(p.targets) === '["x","linkedin"]'), "each post goes to X and LinkedIn");
+  assert.deepEqual(both.map((p) => `${p.day.slice(8)} ${p.idea}`), [
+    "05 Monday's idea", "06 Slot five is not asked for", "07 The 3-7-14 reminder rule", "08 Why invoices go unpaid", "09 The 3-7-14 reminder rule", "10 Why invoices go unpaid", "11 Clamped to the last day",
+  ], "an idea for a slot not asked for takes its day's open slot; an empty slot is filled from the pillars");
+  const two = toPlanItems({ items: [] }, plan({ x: 2, threads: 1 }), { today, docs });
+  assert.equal(two.length, 14);
+  assert.deepEqual(two.slice(0, 2).map((p) => [p.platform, p.targets]), [["X", ["x", "threads"]], ["X", ["x"]]]);
+  assert.deepEqual(two.slice(0, 4).map((p) => p.slot), [0, 1, 0, 1], "each post keeps its slot's index in the day, the retarget's order");
+  assert.deepEqual(toPlanItems({ items: [post(0, "Anything")] }, plan({ threads: 1 }), { today, docs }).map((p) => [p.platform, p.targets]).slice(0, 1), [["Threads", ["threads"]]], "the label is the first target's");
+  assert.deepEqual(toPlanItems({ items: [post(0, "Anything", 0)] }, plan({}), { today, docs }), [], "a plan with every count at 0 writes no post");
+
+  // Video: the plan's scripts a week per platform, on the model's days; a slideshow is no longer planned (D7).
+  const video = (day_offset: number, platform: string, idea: string) => ({ day_offset, department: "video" as const, platform, idea, reason: "r" });
+  const scripts = toPlanItems({ items: [video(2, "TikTok", "Demo"), video(3, "Slideshow", "Five cuts"), video(4, "Reels", "Not asked for")] }, plan({}, { tiktok: 2 }), { today, docs });
+  assert.deepEqual(scripts.map((p) => `${p.platform} ${p.day.slice(8)}`), ["TikTok 07", "TikTok 05"], "two TikTok scripts; the missing one is filled");
+  assert.ok(!scripts.some((p) => p.platform === "Slideshow"), "no slideshow");
+  assert.deepEqual(toPlanItems({ items: [video(1, "Shorts", "a"), video(2, "TikTok", "b")] }, plan({}), { today, docs }).map((p) => p.platform), ["Shorts"],
+    "with no video in the plan, at most one script the week's brief asked for");
+
+  // C3: at most two posts a week get an image; never another kind of item.
+  const pictured = toPlanItems({ items: [
+    { ...post(0, "Launch", 0), image: true }, { ...post(1, "Screen", 0), image: true }, { ...post(2, "Third", 0), image: true },
+    { day_offset: 3, department: "sales", platform: "Reddit", idea: "Thread", reason: "r", image: true },
+  ] }, plan({ x: 1 }), { today, docs });
+  assert.deepEqual(pictured.filter((p) => p.image).map((p) => p.idea), ["Launch", "Screen"]);
+  assert.equal(pictured.filter((p) => p.department === "sales").length, 1);
+
+  // The fake week plan follows the founder's plan end to end, and the calendar keeps each post's targets.
+  {
+    const followed = memoryStore(docs);
+    followed.posting.plan = plan({ x: 1, linkedin: 1 }, { tiktok: 2 });
+    const run = followed.enqueue("plan_week");
+    await drainCmoQueue(followed.store);
+    assert.equal(run.status, "done", `the plan is done (${run.error})`);
+    const posts = followed.items.filter((i) => i.department === "post");
+    assert.equal(posts.length, 7, "seven post items");
+    assert.ok(posts.every((i) => JSON.stringify(i.body.targets) === '["x","linkedin"]'), "each with body.targets = [x, linkedin]");
+    assert.ok(posts.every((i) => i.body.slot === 0), "and body.slot = 0, as cmo_plan_week writes it");
+    assert.equal(followed.items.filter((i) => i.department === "video" && i.platform === "TikTok").length, 2, "two TikTok scripts");
+    assert.ok(!followed.items.some((i) => i.platform === "Slideshow"), "no slideshow");
+    const silent = memoryStore(docs);
+    silent.posting.plan = plan({});
+    silent.enqueue("plan_week");
+    await drainCmoQueue(silent.store);
+    assert.equal(silent.items.filter((i) => i.department === "post").length, 0, "every count at 0: no post, and no error");
+  }
 
   // cmo-review B3.3: each job kind runs under the registry's max_steps (every job in this file runs under them).
   const { maxSteps } = await import("../step-limits");
@@ -71,24 +110,6 @@ async function main() {
   assert.equal(maxSteps("sales_scan"), 30);
   assert.equal(maxSteps("build_video"), 40, "Studio kinds come from the same registry");
   assert.equal(maxSteps("not_a_kind"), null);
-
-  // The week plan orders no AI video: one slideshow and one script the founder records a week (owner, 2026-11-09).
-  const studio = toPlanItems({ items: [
-    { day_offset: 1, department: "video", platform: "Shorts", idea: "Demo", reason: "r" },
-    { day_offset: 2, department: "video", platform: "slideshow", idea: "Five cuts", reason: "r" },
-    { day_offset: 3, department: "video", platform: "Slideshow", idea: "A second slideshow", reason: "r" },
-    { day_offset: 4, department: "video", platform: "TikTok", idea: "A second video", reason: "r" },
-  ] }, today);
-  assert.deepEqual(studio.map((p) => `${p.platform} ${p.idea}`), ["Shorts Demo", "Slideshow Five cuts"]);
-
-  // C3: at most two posts a week get an image; never another kind of item.
-  const pictured = toPlanItems({ items: [
-    { day_offset: 0, department: "post", platform: "X", idea: "Launch", reason: "r", image: true },
-    { day_offset: 1, department: "post", platform: "X", idea: "Screen", reason: "r", image: true },
-    { day_offset: 2, department: "post", platform: "X", idea: "Third", reason: "r", image: true },
-    { day_offset: 3, department: "sales", platform: "Reddit", idea: "Thread", reason: "r", image: true },
-  ] }, today);
-  assert.deepEqual(pictured.map((p) => p.image ?? false), [true, true, false, false]);
 
   // cmo-review B3.5: stage fit in code. With no proof in the documents, an item that needs customers is dropped.
   const { fitStage } = await import("./plan-week");
@@ -99,11 +120,6 @@ async function main() {
   ];
   assert.deepEqual(fitStage(staged, proofless).map((i) => i.idea), ["How cutting by words works"]);
   assert.equal(fitStage(staged, { ...proofless, strategy: { proof: "Testimonials: “Saved me hours” (Ana, freelancer)" } } as Documents).length, 2, "with proof in the documents it stays");
-
-  // The fake plan reads which post platforms besides X the founder names (strategy, rhythm, goal, brief).
-  assert.deepEqual(namedPlatforms({ cadence: "X daily, LinkedIn twice a week" }, undefined), ["LinkedIn"]);
-  assert.deepEqual(namedPlatforms("Post on threads and linkedin too"), ["Threads", "LinkedIn"]);
-  assert.deepEqual(namedPlatforms({ cadence: "Ship threads of tweets on X" }, "LinkedInfluencer"), ["Threads"], "a word, not part of one");
 
   // pickDueItem: mục X planned cũ nhất có ngày ≤ hôm nay.
   const mk = (day: string, status: ItemRow["status"], department: ItemRow["department"] = "post") =>
@@ -474,6 +490,26 @@ async function main() {
     await drainCmoQueue(asked.store);
     assert.equal(asked.runs.filter((r) => r.kind === "post_draft").length, 0, "a plan asked for in the chat drafts nothing by itself");
   }
+  // Daily core drafts, the main flow (core-drafts follow-ups Task 1): a slot for three platforms is one item and one
+  // draft. Three drafts would cost the founder three times and put three cards on the Feed for the same post.
+  {
+    const three = memoryStore(docs);
+    three.posting.plan = plan({ x: 1, threads: 1, linkedin: 1 });
+    const week = three.enqueue("plan_week", { source: "schedule", loop: "weekly-plan" });
+    await drainCmoQueue(three.store);
+    assert.equal(week.status, "done", `the three-platform plan is done (${week.error})`);
+    const posts = three.items.filter((i) => i.department === "post");
+    assert.equal(posts.length, 7, "seven post items, one a day");
+    assert.ok(posts.every((i) => JSON.stringify(i.body.targets) === '["x","threads","linkedin"]'), "each targets X, Threads and LinkedIn");
+    assert.equal(new Set(posts.map((i) => i.day)).size, 7, "on seven different days");
+    const drafts = three.runs.filter((r) => r.kind === "post_draft");
+    assert.equal(drafts.length, 1, "one cron day queues one draft, not one a platform");
+    assert.equal(drafts[0]!.status, "done", `the draft ran (${drafts[0]!.error})`);
+    const cards = three.items.filter((i) => i.department === "post" && i.status === "in_review");
+    assert.equal(cards.length, 1, "one card for the day");
+    assert.equal(cards[0]!.id, drafts[0]!.input.item_id, "the card is the day's item");
+    assert.deepEqual(cards[0]!.body.targets, ["x", "threads", "linkedin"], "and the draft keeps its three targets");
+  }
   // CMO review 3, 3.1: an unpaid account gets no loop at all.
   assert.deepEqual(dueLoops({ ...base, weekday: 1, paid: false }), []);
   assert.deepEqual(
@@ -673,6 +709,35 @@ async function main() {
   assert.equal(eventLine({ ...rule, before_status: "active", before: "Old words." }), "Rule changed: “Old words.” → “Help first.”");
   assert.equal(eventLine({ ...rule, before_status: "active", after_status: "rejected", before: "Help first." }), "Rule turned off: “Help first.”");
   assert.equal(eventLine({ correction_id: null, field: "avoid", before_status: null, after_status: null, before: null, after: ["hype", "synergy"] }), "Words to avoid: hype, synergy");
+
+  // Daily core drafts D4: a rewrite for one platform saves one variant within that platform's limit, and nothing else
+  // about the post changes; a post that is gone, or a platform that takes no post, spends nothing.
+  {
+    const rep = memoryStore(docs);
+    rep.enqueue("post_draft");
+    await drainCmoQueue(rep.store);
+    const post = rep.items.find((i) => i.department === "post" && i.status === "in_review")!;
+    const core = String(post.body.text);
+    const run = rep.enqueue("repurpose_post", { item_id: post.id, platform: "linkedin" });
+    await drainCmoQueue(rep.store);
+    assert.equal(run.status, "done", `repurpose run (${run.error})`);
+    assert.equal(rep.variants.length, 1, "one variant");
+    const variant = rep.variants[0]!;
+    assert.deepEqual([variant.itemId, variant.platform], [post.id, "linkedin"]);
+    assert.ok(variant.text.length > 0 && [...variant.text].length <= 3000, "within LinkedIn's limit");
+    assert.equal(String(post.body.text), core, "the core post is untouched");
+    const again = rep.enqueue("repurpose_post", { item_id: post.id, platform: "linkedin" });
+    await drainCmoQueue(rep.store);
+    assert.equal(again.status, "done");
+    assert.equal(rep.variants.length, 1, "a second rewrite replaces the first");
+    const gone = rep.enqueue("repurpose_post", { item_id: "00000000-0000-4000-8000-00000000dead", platform: "linkedin" });
+    await drainCmoQueue(rep.store);
+    assert.deepEqual([gone.status, (gone.output as { refund?: boolean } | null)?.refund], ["done", true], "a post that is gone refunds");
+    const bad = rep.enqueue("repurpose_post", { item_id: post.id, platform: "tiktok_caption" });
+    await drainCmoQueue(rep.store);
+    assert.equal(bad.status, "failed", "a caption profile is not a post platform");
+    assert.equal(rep.variants.length, 1);
+  }
 
   // The chips are the same list in the card, the route and SQL.
   const reasons = readFileSync(new URL("../../../../../supabase/migrations/20270113020000_draft_reasons.sql", import.meta.url), "utf8");

@@ -7,7 +7,10 @@ import "server-only";
  * read stays empty; the card still shows and still decides.
  */
 
+import { createHash } from "node:crypto";
+
 import type { SupabaseClient } from "@/lib/api/handler";
+import { profileOf } from "@/lib/cmo/platforms";
 import { publishAdapter } from "@/lib/departments/publish/adapter";
 import type { CreatorInfo } from "@/lib/departments/publish/types";
 
@@ -90,7 +93,71 @@ function withPostTimezone(card: ApprovalCard, timezone: string): ApprovalCard {
   return { ...card, body: { ...card.body, proposed: { ...card.body.proposed, timezone } } };
 }
 
-export async function enrichScheduleCards(supabase: SupabaseClient, userId: string, cards: ApprovalCard[]): Promise<ApprovalCard[]> {
+/** A founder's script card gets the caption written with the script, from its order (read under RLS). */
+async function withScriptCaptions(supabase: SupabaseClient, cards: ApprovalCard[]): Promise<ApprovalCard[]> {
+  const ids = cards.flatMap((c) => (c.body.kind === "script" && c.body.forFounder ? [c.body.stepId] : []));
+  if (!ids.length) return cards;
+  const { data } = await supabase.from("work_orders").select("id, brief").in("id", ids);
+  const captions = new Map(
+    ((data ?? []) as { id: string; brief: { caption?: unknown } | null }[]).flatMap((row) =>
+      typeof row.brief?.caption === "string" && row.brief.caption.trim() ? [[row.id, row.brief.caption.trim().slice(0, 2200)] as const] : [],
+    ),
+  );
+  return cards.map((card) => {
+    const caption = card.body.kind === "script" ? captions.get(card.body.stepId) : undefined;
+    return caption && card.body.kind === "script" ? { ...card, body: { ...card.body, caption } } : card;
+  });
+}
+
+const TEXT_TARGETS = ["x", "threads", "linkedin", "facebook"] as const;
+type TextTarget = (typeof TEXT_TARGETS)[number];
+const isTextTarget = (p: unknown): p is TextTarget => (TEXT_TARGETS as readonly unknown[]).includes(p);
+const CORE = profileOf("core")!;
+
+/** SQL `post_core_hash`: a rewrite is current only while the core text it was written from is unchanged. */
+export const coreHash = (text: string): string => createHash("md5").update(text, "utf8").digest("hex");
+
+/**
+ * A post card's targets (the planner's, else its one platform) and each platform's current rewrite (daily core drafts
+ * D3, D4). A post for two or more platforms is the core post, so the card shows the core profile's limit.
+ */
+export async function withPostTargets(supabase: SupabaseClient, cards: ApprovalCard[]): Promise<ApprovalCard[]> {
+  const ids = cards.flatMap((c) => (c.body.kind === "post" && c.body.itemId ? [c.body.itemId] : []));
+  if (!ids.length) return cards;
+  const [items, variants] = await Promise.all([
+    supabase.from("content_items").select("id, body").in("id", ids),
+    supabase.from("post_variants").select("item_id, platform, text, source_hash").in("item_id", ids),
+  ]);
+  type ItemRow = { id: string; body: { targets?: unknown; text?: unknown; thread?: unknown } | null };
+  type VariantRow = { item_id: string; platform: string; text: string; source_hash: string };
+  const itemOf = new Map(((items.data ?? []) as ItemRow[]).map((r) => [r.id, r]));
+  const variantRows = (variants.data ?? []) as VariantRow[];
+  return cards.map((card) => {
+    if (card.body.kind !== "post" || !card.body.itemId) return card;
+    const itemId = card.body.itemId;
+    const item = itemOf.get(itemId);
+    const first = card.body.platforms[0];
+    const listed = Array.isArray(item?.body?.targets) ? item.body.targets.filter(isTextTarget) : [];
+    const targets: TextTarget[] = listed.length ? [...new Set(listed)] : first && isTextTarget(first.platform) ? [first.platform] : [];
+    if (!targets.length) return card;
+    const text = typeof item?.body?.text === "string" ? item.body.text : "";
+    // As SQL `post_variant_text`: a thread is never rewritten, and a rewrite of older words is not shown.
+    const current = (platform: string) =>
+      item?.body?.thread ? null : variantRows.find((v) => v.item_id === itemId && v.platform === platform && v.source_hash === coreHash(text))?.text ?? null;
+    const core = targets.length > 1 && first;
+    return {
+      ...card,
+      body: {
+        ...card.body,
+        platforms: core ? [{ ...first, limit: CORE.limit, visibleBeforeMore: CORE.visibleBeforeMore }, ...card.body.platforms.slice(1)] : card.body.platforms,
+        targets: targets.map((platform) => ({ platform, variant: current(platform) })),
+      },
+    };
+  });
+}
+
+export async function enrichScheduleCards(supabase: SupabaseClient, userId: string, given: ApprovalCard[]): Promise<ApprovalCard[]> {
+  const cards = await withPostTargets(supabase, await withScriptCaptions(supabase, given));
   const schedule = cards.filter((c) => c.body.kind === "schedule");
   if (!schedule.length) {
     if (!cards.some((c) => c.body.kind === "post" && c.body.proposed)) return cards;
@@ -148,6 +215,7 @@ export async function enrichScheduleCards(supabase: SupabaseClient, userId: stri
         avatarUrl: (b.accountId ? avatar.get(b.accountId) : null) ?? null,
         preview: { ...b.preview, videoUrl: render ? signed.get(render) ?? null : null },
         state: slot ? slotState(slot) : b.state,
+        ...(slot?.status === "failed" && slot.error?.code === "too_long" && b.where.platform === "x" ? { canThread: true } : {}),
         publishedUrl: slot?.status === "published" && slot.external_url?.startsWith("https://") ? slot.external_url : null,
         tiktok:
           creator && creator.privacyLevels.length > 0

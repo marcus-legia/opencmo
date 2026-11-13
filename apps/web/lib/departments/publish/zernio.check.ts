@@ -102,6 +102,8 @@ async function main() {
     assert.deepEqual(await createZernioAdapter({ apiKey: "k", fetch: f }).accounts("prof_1"), [
       { zernioAccountId: "acc_x", platform: "x", handle: "founder", avatarUrl: "https://pbs.twimg.com/a.jpg" },
       { zernioAccountId: "acc_tt", platform: "tiktok", handle: "Founder", avatarUrl: null },
+      // A Facebook Page (D9, 2026-11-12): the founder picked the Page in Zernio's connect flow.
+      { zernioAccountId: "acc_fb", platform: "facebook", handle: "page", avatarUrl: null },
     ]);
   }
 
@@ -164,6 +166,48 @@ async function main() {
     assert.deepEqual(yt.platforms[0]!.platformSpecificData, { title: "Half the editing time", containsSyntheticMedia: false });
     const x = postBody({ ...post, kind: "post", media: [] }, { ...slot, platform: "x", fields: { platform: "x", aiGenerated: false } }) as { platforms: object[] };
     assert.deepEqual(x.platforms[0], { platform: "twitter", accountId: ACC });
+    // A Facebook Page post: Zernio's slug is ours and the Page is the account, no page id in the body.
+    const fb = postBody({ ...post, kind: "post", media: [], text: "x".repeat(4000) }, { ...slot, platform: "facebook", fields: { platform: "facebook", aiGenerated: false } }) as { content: string; platforms: object[] };
+    assert.deepEqual([fb.platforms[0], fb.content.length], [{ platform: "facebook", accountId: ACC }, 4000], "a long Facebook post goes as one");
+
+    // A photo post (D7): every photo as an image, in order; TikTok gets Photo Mode in a top-level `tiktokSettings`.
+    const photos = [1, 2, 3].map((i) => ({ url: `https://storage.example/p/${i}.jpg`, contentType: "image/jpeg" as const }));
+    const photoPost = { ...post, kind: "photo_post" as const, text: "Demo day, in three photos.", media: photos };
+    const tt = postBody(photoPost, slot) as { mediaItems: unknown; platforms: object[]; tiktokSettings: Record<string, unknown> };
+    assert.deepEqual(tt.mediaItems, photos.map((p) => ({ url: p.url, type: "image" })), "every photo as an image");
+    assert.deepEqual(tt.platforms, [{ platform: "tiktok", accountId: ACC }]);
+    assert.deepEqual([tt.tiktokSettings.mediaType, tt.tiktokSettings.photoCoverIndex, tt.tiktokSettings.description, tt.tiktokSettings.privacyLevel], ["photo", 0, "Demo day, in three photos.", "SELF_ONLY"]);
+    // docs.zernio.com/platforms/tiktok/posts (read 2026-11-13): "allow_duet and allow_stitch do not apply" to photos.
+    assert.ok(!("allowDuet" in tt.tiktokSettings) && !("allowStitch" in tt.tiktokSettings), "no duet or stitch on a photo post");
+    const ig = postBody(photoPost, { ...slot, platform: "instagram", fields: { platform: "instagram", aiGenerated: false } }) as { mediaItems: unknown[]; tiktokSettings?: unknown };
+    assert.deepEqual([ig.mediaItems.length, "tiktokSettings" in ig], [3, false], "an Instagram carousel is the images alone");
+
+    // A Threads post over 500 characters goes out as a chain, the image on its first part; 500 or under is one post.
+    type Chain = { content?: string; mediaItems?: unknown; platforms: { platform: string; platformSpecificData?: { threadItems: { content: string; mediaItems?: unknown }[] } }[] };
+    const long = `${"One sentence that fills the post up. ".repeat(24)}`.trim();
+    assert.ok([...long].length > 800 && [...long].length <= 1000);
+    const image = [{ url: "https://media.zernio.com/temp/1_a.png", contentType: "image/png" as const }];
+    const threadsSlot = { ...slot, platform: "threads" as const, fields: { platform: "threads" as const, aiGenerated: false } };
+    const chain = postBody({ ...post, kind: "post", text: long, media: image }, threadsSlot) as Chain;
+    const items = chain.platforms[0]!.platformSpecificData!.threadItems;
+    assert.equal(items.length, 2);
+    assert.ok(items.every((item) => [...item.content].length <= 500));
+    assert.equal(items.map((item) => item.content).join(" "), long);
+    assert.deepEqual(items.map((item) => Boolean(item.mediaItems)), [true, false]);
+    assert.equal(chain.mediaItems, undefined);
+    const short = postBody({ ...post, kind: "post", text: "x".repeat(500), media: [] }, threadsSlot) as Chain;
+    assert.equal(short.platforms[0]!.platformSpecificData, undefined);
+    // X takes a long post as one (X Premium); a thread only when the founder asked for one after a refusal.
+    const xSlot = { ...slot, platform: "x" as const, fields: { platform: "x" as const, aiGenerated: false } };
+    const one = postBody({ ...post, kind: "post", text: long, media: [] }, xSlot) as Chain;
+    assert.equal(one.platforms[0]!.platformSpecificData, undefined);
+    assert.equal(one.content, long);
+    const asked = postBody({ ...post, kind: "post", text: long, media: [] }, { ...xSlot, fields: { ...xSlot.fields, asThread: true } }) as Chain;
+    assert.ok(asked.platforms[0]!.platformSpecificData!.threadItems.length >= 4);
+    assert.ok(asked.platforms[0]!.platformSpecificData!.threadItems.every((item) => [...item.content].length <= 280));
+    // A video's caption is never cut into a chain.
+    const caption = postBody({ ...post, text: long }, { ...slot, platform: "threads", fields: { platform: "threads", aiGenerated: false } }) as Chain;
+    assert.equal(caption.platforms[0]!.platformSpecificData, undefined);
   }
 
   // Publish: published now, retried once on a 5xx with the same key, pending → accepted, refused → failed.

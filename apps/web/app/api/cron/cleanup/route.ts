@@ -127,6 +127,12 @@ export async function GET(request: NextRequest) {
   if (parkedError) console.error("[cron] releasing parked CMO runs failed", parkedError.code);
   const { error: captionsError } = await supabase.rpc("refund_stale_caption_translations");
   if (captionsError) console.error("[cron] refunding stale caption translations failed", captionsError.code);
+  // Photo drafts untouched for a week (F3): closed, their photos queued for the next run's file sweep.
+  const { error: draftsError } = await supabase.rpc("photo_drafts_sweep", { p_days: 7 });
+  if (draftsError) console.error("[cron] sweeping photo drafts failed", draftsError.code);
+  // Photos nothing will post (an upload never saved, a skipped post's), a week on (2026-11-13).
+  const { error: photosError } = await supabase.rpc("post_photos_sweep", { p_days: 7 });
+  if (photosError) console.error("[cron] sweeping unused photos failed", photosError.code);
 
   const orphans =
     (await sweepOrphans(supabase, SOURCES_BUCKET, deadline)) + (await sweepOrphans(supabase, "media", deadline));

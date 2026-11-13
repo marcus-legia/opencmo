@@ -17,7 +17,7 @@ import { join } from "node:path";
 const DIR = join(import.meta.dirname, "..", "lib", "cmo", "skills");
 const OUT = join(DIR, "index.gen.ts");
 // Same ids as AGENT_SPECS in lib/cmo/agents/registry.ts (that file is server-only, so it cannot be imported here).
-const AGENTS = new Set(["cmo", "onboarding", "planner", "x_writer", "threads_writer", "linkedin_writer", "instagram_writer", "tiktok_writer", "youtube_writer", "brief_writer", "slides_writer", "sales", "research", "checker", "captions", "writer", "motion", "director", "moderation", "shorts"]);
+const AGENTS = new Set(["cmo", "onboarding", "planner", "x_writer", "threads_writer", "linkedin_writer", "facebook_writer", "instagram_writer", "tiktok_writer", "youtube_writer", "brief_writer", "slides_writer", "sales", "research", "checker", "captions", "writer", "motion", "director", "moderation", "shorts"]);
 
 type Skill = { name: string; description: string; agents: string[]; source: string; license: string; kind: "playbook" | "marketing"; body: string };
 

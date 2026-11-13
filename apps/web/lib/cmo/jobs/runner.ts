@@ -10,6 +10,8 @@ import type { z } from "zod";
 
 import { competitorResearch } from "./competitor-research";
 import { distillRatings } from "./distill-ratings";
+import { photoCaption } from "./photo-caption";
+import { repurposePost } from "./repurpose-post";
 import { nicheVideoResearch } from "./niche-video-research";
 import { draftPost } from "./draft-post";
 import { LlmError } from "./llm-error";
@@ -21,7 +23,7 @@ import type { HnThread } from "../social/hn";
 import { maxSteps } from "../step-limits";
 import type { RedditThread } from "../social/reddit";
 import { summarizeMemory } from "./summarize-memory";
-import { writeCaption, writeSlides, writeVideoBrief } from "../writer/jobs";
+import { writeCaption, writeVideoBrief } from "../writer/jobs";
 import type { PublishAnalytics } from "@/lib/departments/publish/analytics";
 import { publishPost } from "@/lib/departments/publish/job";
 import { NeedsClaude, think, type ThinkOptions } from "./think";
@@ -104,12 +106,15 @@ export const JOBS: Record<CmoJobKind, Job> = {
   review_week: reviewWeek,
   write_video_brief: writeVideoBrief,
   write_caption: writeCaption,
-  write_slides: writeSlides,
   // P4: only Schedule's sweep queues it (enqueue_cmo_run refuses it), for one approved slot.
   publish_post: publishPost,
   niche_video_research: nicheVideoResearch,
   // cmo-review-3 2.2: only `cmo_rate_drafts` queues it, for one round of the founder's ratings.
   distill_ratings: distillRatings,
+  // Daily core drafts D4: only the founder's Rewrite button queues it (SQL `repurpose_post`), for one post and platform.
+  repurpose_post: repurposePost,
+  // Daily core drafts D7: only the founder's "Write the caption" on a photo post queues it (SQL `photo_post_caption`).
+  photo_caption: photoCaption,
 };
 
 /** The run was claimed again by another worker (its lease ran out): stop quietly and write nothing more. */

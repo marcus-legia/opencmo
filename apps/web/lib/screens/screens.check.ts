@@ -162,7 +162,7 @@ check("cards: a post planned with the calendar's label shows, with its platform'
     approvalToCard(row("post", { kind: "post", platform, day: "2026-10-29", idea: "Idea", text: "One line.", alternates: [], rationale: "" }));
   const x = post("X");
   assert.ok(x && x.body.kind === "post", "a post planned as X is shown");
-  assert.deepEqual(x.body.platforms.map((p) => [p.platform, p.limit]), [["x", 280]]);
+  assert.deepEqual(x.body.platforms.map((p) => [p.platform, p.limit]), [["x", 4000]]);
   const linkedin = post("LinkedIn");
   assert.ok(linkedin && linkedin.body.kind === "post");
   assert.deepEqual(linkedin.body.platforms.map((p) => [p.platform, p.limit, p.visibleBeforeMore]), [["linkedin", 3000, 140]]);

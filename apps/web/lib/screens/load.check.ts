@@ -184,7 +184,7 @@ async function main(): Promise<void> {
   assert.ok(settings.live.accounts, "Settings → Accounts is live");
   assert.deepEqual(
     settings.data.accounts.map((a) => [a.platform, a.status, a.avatarUrl ?? null]),
-    [["x", "connected", "https://pbs.example/x.png"], ["threads", "not_connected", null], ["linkedin", "not_connected", null], ["tiktok", "reconnect", null], ["youtube", "not_connected", null], ["instagram", "not_connected", null]],
+    [["x", "connected", "https://pbs.example/x.png"], ["threads", "not_connected", null], ["linkedin", "not_connected", null], ["facebook", "not_connected", null], ["tiktok", "reconnect", null], ["youtube", "not_connected", null], ["instagram", "not_connected", null]],
     "every platform OpenCMO posts to, in one order",
   );
 

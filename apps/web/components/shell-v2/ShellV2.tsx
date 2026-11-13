@@ -64,6 +64,9 @@ function screenFor(segment: string | null): Screen {
       return { page: "main", top: { kind: "home" }, chat: "column" };
     case "schedule":
       return { page: "main", view: "calendar", top: { kind: "views", current: "calendar" }, chat: "column" };
+    // Slideshows and carousels (D7, owner 2026-11-13): the founder's photos and a caption, on a page of their own.
+    case "photos":
+      return { page: "main", view: "calendar", top: { kind: "views", current: "photos" }, chat: "column" };
     case "analytics":
       return { page: "main", view: "analytics", top: { kind: "views", current: "analytics" }, chat: "column" };
     case "sales":

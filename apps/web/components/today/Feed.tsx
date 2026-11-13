@@ -30,7 +30,7 @@ import type { WriterScreen } from "@/lib/screens/writer";
 import type { DashboardScreen, TodayRowData } from "@/lib/screens/dashboard";
 import type { ScreenName } from "@/lib/screens/registry";
 
-import { KIND_ICON, PLATFORM_ICON, kindLabel, whenLabel } from "./cards";
+import { KIND_ICON, PLATFORM_ICON, cardIcon, kindLabel, whenLabel } from "./cards";
 import { dayLabel, draftsLeftOver, draftsThisWeek } from "./week";
 
 type Draft = WriterScreen["drafts"][number];
@@ -170,7 +170,7 @@ function CardRow({ card, inv, open, onToggle, onLater, onDecide, sample }: { car
     <Row
       cardId={card.id}
       inv={inv}
-      icon={card.kind === "post" && card.account ? (PLATFORM_ICON[card.account.platform] ?? KIND_ICON.post) : KIND_ICON[card.kind]}
+      icon={cardIcon(card)}
       kind={label}
       title={card.title}
       meta={meta}
@@ -571,6 +571,20 @@ export function Feed({ email }: { email?: string | null }) {
                     : `${needs} ${needs === 1 ? "item needs" : "items need"} your attention today. Approve, edit or skip.`}
               </p>
             </div>
+            {/* The planner lives on the calendar: a founder who lands here first needs a way to it (which platforms, how often). */}
+            <Link href="/app/schedule#posting-plan" className="ib" aria-label="Posting plan: pick your platforms and how often" title="Posting plan: pick your platforms and how often" data-testid="feed-posting-plan">
+              <svg className="i" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 21v-7" />
+                <path d="M4 10V3" />
+                <path d="M12 21v-9" />
+                <path d="M12 8V3" />
+                <path d="M20 21v-5" />
+                <path d="M20 12V3" />
+                <path d="M2 14h4" />
+                <path d="M10 8h4" />
+                <path d="M18 16h4" />
+              </svg>
+            </Link>
             <button type="button" className="ib" aria-label="Refresh" onClick={() => void reload()}>
               <svg className="i" viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />

@@ -50,6 +50,16 @@ export async function readVideoSource(userId: string, clipId: string): Promise<V
   const spoken = words.length ? words[words.length - 1]!.end : 0;
   const seconds = Math.max(spoken, Number(clip.end_seconds) - Number(clip.start_seconds), 1);
   const hook = firstLine(transcript);
+  // An edit recorded from a script: the caption written with that script is the first draft of each platform's.
+  const { data: order } = await supabase
+    .from("work_orders")
+    .select("brief")
+    .eq("kind", "write_video_brief")
+    .eq("brief->>clip_id", clipId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<{ brief: { caption?: unknown } | null }>();
+  const scriptCaption = typeof order?.brief?.caption === "string" ? order.brief.caption.trim().slice(0, 2200) : "";
   return {
     clipId,
     kind: clip.kind === "short" ? "short" : "video",
@@ -57,5 +67,6 @@ export async function readVideoSource(userId: string, clipId: string): Promise<V
     ...(hook ? { hook } : {}),
     transcript,
     seconds,
+    ...(scriptCaption ? { scriptCaption } : {}),
   };
 }

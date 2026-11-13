@@ -12,6 +12,7 @@ import { createHash, randomUUID } from "node:crypto";
 
 import { PLATFORM_LABEL } from "@/lib/screens/common";
 
+import { chainFor } from "./split";
 import {
   PublishDeliverableSchema,
   PublishError,
@@ -35,7 +36,7 @@ const PUBLISH_TIMEOUT_MS = 120_000;
 const MAX_UPLOAD_BYTES = 2 * 1024 ** 3;
 
 /** Zernio names X `twitter`; every other platform keeps our id. */
-const SLUG: Record<PublishPlatform, string> = { x: "twitter", threads: "threads", linkedin: "linkedin", tiktok: "tiktok", youtube: "youtube", instagram: "instagram" };
+const SLUG: Record<PublishPlatform, string> = { x: "twitter", threads: "threads", linkedin: "linkedin", facebook: "facebook", tiktok: "tiktok", youtube: "youtube", instagram: "instagram" };
 const FROM_SLUG = new Map(Object.entries(SLUG).map(([ours, theirs]) => [theirs, ours as PublishPlatform]));
 
 export const fromZernioSlug = (slug: string): PublishPlatform | null => FROM_SLUG.get(slug) ?? null;
@@ -131,7 +132,37 @@ export function postBody(deliverable: PublishDeliverable, slot: PublishSlot): Js
       metadata: { opencmoSlotId: slot.id, opencmoDeliverableId: deliverable.id },
     };
   }
+  // A Threads post over 500 characters goes out as a chain, and a long X post as a thread when the founder asked for
+  // one: the same `threadItems`, cut by code so every approved word is posted, in order.
+  const chain = deliverable.kind === "post" ? chainFor(slot.platform, deliverable.text, slot.fields.platform === "x" && slot.fields.asThread === true) : null;
+  if (chain && chain.length > 1) {
+    return {
+      content: deliverable.text,
+      platforms: [{
+        platform: SLUG[slot.platform],
+        accountId: slot.zernioAccountId,
+        platformSpecificData: { threadItems: chain.map((content, i) => ({ content, ...(i === 0 && media.length ? { mediaItems: media } : {}) })) },
+      }],
+      publishNow: true,
+      metadata: { opencmoSlotId: slot.id, opencmoDeliverableId: deliverable.id },
+    };
+  }
   const data = platformData(deliverable, slot);
+  // A photo post on TikTok (D7) is Photo Mode: Zernio reads the photo settings from a top-level `tiktokSettings`
+  // (docs.zernio.com/platforms/tiktok/posts, read 2026-11-12); the caption is its description, as TikTok's title
+  // takes only 90 characters. Instagram and Threads make a carousel from the images alone.
+  if (deliverable.kind === "photo_post" && slot.platform === "tiktok" && data) {
+    // The same page: "allow_duet and allow_stitch do not apply" to photos (read 2026-11-13).
+    const { allowDuet: _duet, allowStitch: _stitch, ...photo } = data;
+    return {
+      ...(deliverable.text.trim() ? { content: deliverable.text } : {}),
+      mediaItems: media,
+      platforms: [{ platform: SLUG[slot.platform], accountId: slot.zernioAccountId }],
+      tiktokSettings: { ...photo, mediaType: "photo", photoCoverIndex: 0, description: deliverable.text },
+      publishNow: true,
+      metadata: { opencmoSlotId: slot.id, opencmoDeliverableId: deliverable.id },
+    };
+  }
   return {
     ...(deliverable.text.trim() ? { content: deliverable.text } : {}),
     mediaItems: media,

@@ -27,7 +27,7 @@ export type OrderLedgerRow = {
  * that needs credits and was given none is over budget. `build_video` is `studio_video_budget()`: what a video order
  * budgets before its cards price it (P2 A2).
  */
-export const JOB_PRICES: Readonly<Record<string, number>> = { plan_week: 1, post_draft: 1, sales_scan: 5, competitor_research: 2, niche_video_research: 2, write_video_brief: 1, build_video: 60 };
+export const JOB_PRICES: Readonly<Record<string, number>> = { plan_week: 1, post_draft: 1, sales_scan: 5, competitor_research: 2, niche_video_research: 2, write_video_brief: 1, repurpose_post: 1, photo_caption: 1, build_video: 60 };
 
 export type Verdict = "done" | "on_track" | "waiting_founder" | "over_budget" | "stuck";
 
@@ -42,7 +42,7 @@ const LATE_MS = 24 * HOUR;
  * Kinds the Planner can plan around: the orders of calendar items (posts, Reddit, a video, a slideshow). Other kinds
  * (captions, metrics, research) are retried by their own loop or follow the order they serve.
  */
-export const REPLANNABLE: ReadonlySet<string> = new Set(["post_draft", "sales_scan", "build_video", "build_slideshow"]);
+export const REPLANNABLE: ReadonlySet<string> = new Set(["post_draft", "sales_scan", "build_video"]);
 
 /**
  * One order's state. `price` is what the order's kind costs (`cmo_job_price`); an order that needs credits and was

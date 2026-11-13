@@ -1,5 +1,7 @@
 "use client";
 
+// TODO(storage): uploads move from Supabase Storage to DigitalOcean storage later this week
+// (owner, 2026-11-13); keep this path as it is until then.
 /**
  * Upload resumable thẳng từ trình duyệt lên Supabase Storage.
  *
@@ -37,11 +39,14 @@ export function uploadResumable({
   objectName,
   file,
   onProgress,
+  contentType = "video/x-upload",
 }: {
   bucket: string;
   objectName: string;
   file: File;
   onProgress?: (fraction: number) => void;
+  /** The type the reservation was made for: a photo post's photos are images (`photos` bucket). */
+  contentType?: string;
 }): UploadHandle {
   const supabase = createClient();
   let upload: tus.Upload | null = null;
@@ -75,9 +80,9 @@ export function uploadResumable({
         metadata: {
           bucketName: bucket,
           objectName,
-          // Bucket chỉ nhận video/*; MIME do trình duyệt suy đoán không đáng
-          // tin với container lạ. Worker FFprobe byte thật trước khi dùng.
-          contentType: "video/x-upload",
+          // Video buckets take video/* only, and the browser's guess is not trusted for an odd container: the worker
+          // probes the real bytes before use. A photo carries its own image type, which the `photos` bucket checks.
+          contentType,
           cacheControl: "3600",
         },
         /**

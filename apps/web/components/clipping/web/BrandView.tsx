@@ -187,6 +187,8 @@ async function toPng(file: File): Promise<{ blob: Blob; width: number; height: n
 async function uploadLogo(userId: string, blob: Blob): Promise<string> {
   if (blob.size > 2 * 1024 * 1024) throw new Error("Logos must be under 2 MB.");
   const object = `${userId}/logo-${crypto.randomUUID()}.png`;
+  // TODO(storage): uploads move from Supabase Storage to DigitalOcean storage later this week
+  // (owner, 2026-11-13); keep this path as it is until then.
   const { error } = await createClient().storage.from("brand").upload(object, blob, { contentType: "image/png", upsert: false });
   if (error) throw new Error("The logo could not be uploaded. Please try again.");
   return object;

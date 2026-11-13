@@ -49,7 +49,7 @@ export type Decision =
 const DECLINES: ReadonlySet<Decision["action"]> = new Set(["skip", "dismissed", "reject", "cancel", "send_back"]);
 
 /** What a schedule card whose post failed still offers: try again, move it, or drop it. */
-const AFTER_FAILURE: ReadonlySet<Decision["action"]> = new Set(["retry", "change_time", "cancel", "posted"]);
+const AFTER_FAILURE: ReadonlySet<Decision["action"]> = new Set(["retry", "change_time", "cancel", "posted", "set_options"]);
 
 /** Why the card cannot be decided here (with `action`, that decision), or null when it can. */
 export function blockedReason(card: ApprovalCard, sample: boolean, action?: Decision["action"]): string | null {
@@ -130,6 +130,7 @@ export function decidedMessage(card: ApprovalCard, decision: Decision, sample: b
     case "change_time":
       return card.kind === "post" ? `New time saved. Approve the post when it is right${suffix}.` : `New time saved. A new card asks you to approve it${suffix}.`;
     case "set_options":
+      if (decision.options.as_thread && !(card.body.kind === "schedule" && card.body.options.as_thread)) return `Cut into a thread. A new card shows its posts: approve it to send them${suffix}.`;
       return `Changes saved. A new card asks you to approve them${suffix}.`;
     case "posted_self":
       return `Marked as posted. Nothing else goes out for it${suffix}.`;

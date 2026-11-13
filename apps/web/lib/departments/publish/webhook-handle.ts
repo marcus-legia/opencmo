@@ -7,6 +7,7 @@
  * running. If applying fails, the receipt is given back, so Zernio's retry of the same event is not lost.
  */
 
+import { X_TOO_LONG, saysTooLong } from "./split";
 import { WebhookPayloadError, parseZernioEvent, verifyZernioSignature, type ZernioUpdate } from "./webhook";
 
 /** The few calls the webhook makes, as supabase-js answers them. */
@@ -21,12 +22,17 @@ async function apply(db: WebhookDb, update: Exclude<ZernioUpdate, { kind: "ignor
   if (update.kind === "account") {
     return db.rpc("social_account_mark", { p_zernio_account_id: update.zernioAccountId, p_status: update.status });
   }
+  // X refused it later, for its length: the same sentence and thread button as a refusal at posting time.
+  const tooLong = update.status === "failed" && update.platform === "x" && saysTooLong(update.error ?? "");
+  const failure = tooLong
+    ? { code: "too_long", message: X_TOO_LONG, retryable: true }
+    : { code: "refused", message: update.error ?? "The platform refused the post.", retryable: true };
   return db.rpc("publish_status", {
     p_slot: update.slotId,
     p_status: update.status,
     p_external_id: update.externalId,
     p_url: update.url,
-    p_error: update.status === "failed" ? { code: "refused", message: update.error ?? "The platform refused the post.", retryable: true } : null,
+    p_error: update.status === "failed" ? failure : null,
     p_zernio_account_id: update.zernioAccountId,
   });
 }

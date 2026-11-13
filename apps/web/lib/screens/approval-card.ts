@@ -52,7 +52,7 @@ const PostBody = z.object({
     .array(
       z.object({
         platform: PlatformSchema,
-        versions: z.array(z.string().max(3000)).min(1).max(3),
+        versions: z.array(z.string().max(4000)).min(1).max(3),
         limit: z.number().int().positive(),
         /** Characters shown before the platform's "more" on a phone (LinkedIn); null when the whole post shows. */
         visibleBeforeMore: z.number().int().positive().nullable(),
@@ -72,7 +72,7 @@ const PostBody = z.object({
    */
   proposed: z
     .object({
-      platform: PlatformSchema.extract(["x", "threads", "linkedin"]),
+      platform: PlatformSchema.extract(["x", "threads", "linkedin", "facebook"]),
       at: iso,
       /** `publish`: from the connected account; `intent`: at that time the founder gets the post to copy and open. */
       mode: z.enum(["publish", "intent"]),
@@ -81,6 +81,19 @@ const PostBody = z.object({
       /** IANA name the time is shown and picked in (`profiles.timezone`), added on the server like a schedule card's. */
       timezone: z.string().max(64),
     })
+    .optional(),
+  // --- targets (daily core drafts D3, D4; 2026-11-12) ---
+  /** The calendar item: the Rewrite button's address. Absent on a post card made outside the calendar (older cards). */
+  itemId: z.string().optional(),
+  /** The founder's own photos on the post (owner, 2026-11-13), `photos` bucket objects in order; part of the hash. */
+  photos: z.array(z.string().max(500)).max(4).optional(),
+  /**
+   * Every platform the core post goes to, added when the card loads. `variant`: the platform's own rewrite, current
+   * with the core text, which its slot posts instead (a schedule card shows it before it goes out).
+   */
+  targets: z
+    .array(z.object({ platform: PlatformSchema.extract(["x", "threads", "linkedin", "facebook"]), variant: z.string().max(25000).nullable() }))
+    .max(4)
     .optional(),
 });
 
@@ -281,6 +294,11 @@ const ScriptBody = z.object({
   nextPriceCredits: z.number().int().min(0).nullable(),
   /** A script the founder records (owner, 2026-11-09): free, and approving it opens the editor. `stepId` is its order. */
   forFounder: z.boolean().default(false),
+  /**
+   * The caption written with the script, read from its order when the card loads (`schedule-enrich.ts`): the founder
+   * posts it with the video they record. Not part of what the card approves; the editor's Script tab has it too.
+   */
+  caption: z.string().max(2200).optional(),
 });
 
 const PriceBody = z.object({
@@ -385,6 +403,8 @@ export const ScheduleOptionsSchema = z
     brand_organic: z.boolean().optional(),
     brand_content: z.boolean().optional(),
     ai_label: z.boolean().optional(),
+    /** X only: a post too long for the account goes out as a thread, cut by code (`publish/split.ts`). */
+    as_thread: z.boolean().optional(),
   })
   .strict();
 export type ScheduleOptions = z.infer<typeof ScheduleOptionsSchema>;
@@ -398,7 +418,7 @@ export const ScheduleSnapshotSchema = z.object({
   kind: z.literal("schedule"),
   slot_id: z.string(),
   deliverable_id: z.string(),
-  deliverable_kind: z.enum(["post", "video", "short", "slideshow"]),
+  deliverable_kind: z.enum(["post", "video", "short", "slideshow", "photo_post"]),
   platform: PlatformSchema.exclude(["reddit"]),
   /** `intent`: no connected account for the platform, so the founder copies and opens it themselves. */
   mode: z.enum(["publish", "intent"]),
@@ -423,6 +443,8 @@ export const ScheduleSnapshotSchema = z.object({
   image: z.object({ clip_id: z.string(), object: z.string().max(500), bytes: z.number().int().positive().nullable() }).optional(),
   /** An X thread (P6 W4): its 5 to 8 posts, the first being `text`; part of `content_hash`. Absent for a single post. */
   thread: z.array(z.string().max(280)).min(5).max(8).optional(),
+  /** A photo post (D7), or a text post with the founder's photos (2026-11-13): the photos in order (`photos` bucket objects), part of `content_hash`. */
+  photos: z.array(z.string().max(500)).min(1).max(35).optional(),
 });
 export type ScheduleSnapshot = z.infer<typeof ScheduleSnapshotSchema>;
 
@@ -448,7 +470,13 @@ const ScheduleBody = z.object({
   timezone: z.string().max(64),
   why: z.string().max(200).nullable(),
   /** What goes out: the words, the YouTube title, and the video's signed preview URL (null for a text post). */
-  preview: z.object({ text: z.string().max(5000).nullable(), title: z.string().max(100).nullable(), videoUrl: z.url().nullable() }),
+  preview: z.object({
+    text: z.string().max(5000).nullable(),
+    title: z.string().max(100).nullable(),
+    videoUrl: z.url().nullable(),
+    /** The founder's own photos that go out with it (a photo post, or a text post's), `photos` bucket objects in order. */
+    photos: z.array(z.string().max(500)).max(35).optional(),
+  }),
   options: ScheduleOptionsSchema,
   /**
    * TikTok's creator info for the account (read live through the publish adapter, not part of the hash): the privacy
@@ -470,6 +498,8 @@ const ScheduleBody = z.object({
    * `unconfirmed` is a post Zernio took but never confirmed (the founder checks; never a blind Retry).
    */
   state: z.enum(["waiting", "failed", "missed", "no_account", "unconfirmed"]),
+  /** X refused the post as too long for the account (the slot's error is `too_long`): the card offers a thread. */
+  canThread: z.boolean().optional(),
   /** The live post, once it went out. */
   publishedUrl: z.url().nullable(),
 });

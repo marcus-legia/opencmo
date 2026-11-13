@@ -7,6 +7,7 @@ import type { VideoSource } from "../writer/types";
 import { latestPerTopic } from "./context";
 import { isoDay, type CmoStore, type DraftRating, type CompetitorInsight, type ConnectedAccountRow, type ReplyOutcomeDue, type MetricRow, type ZernioPostRow, type NicheVideoInsight, type SalesSettings, type SubredditRule, type Documents, type Goal, type InboxRequest, type ItemRow, type Lesson, type MemoryEvent, type Opportunity, type QueuedRun, type Step, type VoiceNoteRow, type WeekResults } from "./types";
 import type { AccountMetricRow } from "./metrics-source";
+import { defaultPostingPlan, type PostingPlan } from "../posting-plan";
 
 export type InboxItem = {
   id: string;
@@ -28,6 +29,10 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
   const voice: VoiceNoteRow[] = [];
   /** Edits a caption run can read, and the captions it saved (`edited`: the founder's own, never overwritten). */
   const videos: VideoSource[] = [];
+  /** One platform's rewrite of a post (`post_variants`). */
+  const variants: { runId: string; itemId: string; platform: string; text: string; gen: Record<string, unknown> }[] = [];
+  /** Photo posts' captions, by post id. */
+  const photoCaptions = new Map<string, string>();
   const captions: { runId: string; clipId: string; profile: string; text: string; title: string | null; gen: Record<string, unknown>; edited: boolean }[] = [];
   const lessons: Lesson[] = [];
   const goals: Goal[] = [];
@@ -52,6 +57,8 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
   const ratings = new Map<string, DraftRating[]>();
   const ratingRules = new Map<string, string[]>();
   const replies: (ReplyOutcomeDue & { check?: { status: string; votes: number | null; replies: number | null } })[] = [];
+  /** The founder's saved posting plan; null = never chosen, the default for the connected accounts applies. */
+  const posting: { plan: PostingPlan | null } = { plan: null };
   let seq = 0;
   const id = () => `id-${++seq}`;
   const store: CmoStore = {
@@ -126,16 +133,31 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
     async planWeek(_u, runId, plan) {
       for (let i = items.length - 1; i >= 0; i--) if (items[i].status === "planned") items.splice(i, 1);
       for (const p of plan) {
-        items.push({ id: id(), run_id: runId, ...p, status: "planned", priority: "medium", body: {}, final_text: null, external_url: null, decided_at: null, published_at: null, created_at: new Date().toISOString() });
+        const { targets, slot, ...item } = p;
+        // As `cmo_plan_week` writes it: a post keeps its slot's platforms in `body.targets` and its index in `body.slot`.
+        items.push({ id: id(), run_id: runId, ...item, status: "planned", priority: "medium", body: targets?.length ? { targets, ...(slot === undefined ? {} : { slot }) } : {}, final_text: null, external_url: null, decided_at: null, published_at: null, created_at: new Date().toISOString() });
       }
       return plan.length;
     },
+    postingPlan: async () => posting.plan ?? defaultPostingPlan(zernio.accounts.map((a) => a.platform)),
     async queueDueDrafts(run) {
-      const seen = new Set<string>();
-      const due = items.filter((i) => i.run_id === run.id && i.department === "post" && i.status === "planned" && i.day <= isoDay())
-        .filter((i) => (seen.has(i.platform.toLowerCase()) ? false : (seen.add(i.platform.toLowerCase()), true)));
-      for (const item of due) enqueue("post_draft", { source: "schedule", loop: "daily-x-draft", item_id: item.id, ...(run.input.brain === "claude" ? { brain: "claude" } : {}) });
+      // As `enqueueDueDrafts`: one run per due item, at most three a day.
+      const due = items.filter((i) => i.run_id === run.id && i.department === "post" && i.status === "planned" && i.day <= isoDay()).slice(0, 3);
+      for (const item of due) enqueue("post_draft", { source: "schedule", loop: "daily-post-draft", item_id: item.id, ...(run.input.brain === "claude" ? { brain: "claude" } : {}) });
       return due.length;
+    },
+    async variantSource(_u, itemId) {
+      const item = items.find((i) => i.id === itemId && i.department === "post" && (i.status === "in_review" || i.status === "approved"));
+      return item && typeof item.body.text === "string" ? { text: item.body.text, platform: item.platform } : null;
+    },
+    async savePhotoCaption(_u, _run, postId, caption) {
+      photoCaptions.set(postId, caption);
+    },
+    async saveVariant(_u, runId, itemId, platform, text, gen) {
+      const at = variants.findIndex((v) => v.itemId === itemId && v.platform === platform);
+      const row = { runId, itemId, platform, text, gen };
+      if (at >= 0) variants[at] = row;
+      else variants.push(row);
     },
     async saveDraft(_u, runId, itemId, idea, body, priority) {
       let item = itemId ? items.find((i) => i.id === itemId) : undefined;
@@ -143,7 +165,9 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
         item = { id: id(), run_id: runId, department: "post", platform: "x", day: isoDay(), idea, reason: "", status: "planned", priority, body: {}, final_text: null, external_url: null, decided_at: null, published_at: null, created_at: new Date().toISOString() };
         items.push(item);
       }
-      Object.assign(item, { status: "in_review", body, priority, run_id: runId });
+      // As `cmo_save_draft`: the draft keeps the planner's targets and slot, so the post still goes to every platform.
+      const kept = Object.fromEntries(Object.entries(item.body).filter(([k]) => k === "targets" || k === "slot"));
+      Object.assign(item, { status: "in_review", body: { ...body, ...kept }, priority, run_id: runId });
       return item;
     },
     seenUrls: async () => new Set(opps.map((o) => o.url)),
@@ -244,5 +268,5 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
     runs.push(run);
     return run;
   };
-  return { store, runs, items, opps, rules, salesSettings, mentions, insights, niche, metrics, zernio, replies, lessons, goals, results, enqueue, inbox, submit, voice, videos, captions, ratings, ratingRules };
+  return { store, posting, runs, items, opps, rules, salesSettings, mentions, insights, niche, metrics, zernio, replies, lessons, goals, results, enqueue, inbox, submit, voice, videos, captions, variants, photoCaptions, ratings, ratingRules };
 }

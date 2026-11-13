@@ -13,6 +13,8 @@ const body = z.object({
   project_id: z.string().uuid().optional(),
 });
 
+// TODO(storage): uploads move from Supabase Storage to DigitalOcean storage later this week
+// (owner, 2026-11-13); keep this path as it is until then.
 /**
  * Cấp phép một lượt upload — KHÔNG nhận file.
  *

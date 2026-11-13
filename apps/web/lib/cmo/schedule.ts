@@ -6,7 +6,6 @@ import { brainModes } from "@/lib/cmo/brain";
 import { readAll } from "@/lib/cmo/jobs/progress-run";
 import { isoDay, type CmoJobKind } from "@/lib/cmo/jobs/types";
 import { dueLoops, type LoopState } from "@/lib/cmo/loops";
-import { profileIdOf } from "@/lib/cmo/platforms";
 import { socialReaderReady } from "@/lib/cmo/social/reddit";
 
 /**
@@ -43,23 +42,19 @@ export function loopHour(timezone: string | null | undefined, now = new Date()):
   return east ? Math.max(0, MORNING_HOUR - hour) : 24 - hour + MORNING_HOUR;
 }
 
-/** Posts drafted for one founder in a day: one run per due item (X, Threads, LinkedIn), the oldest first. */
+/**
+ * Posts drafted for one founder in a day: one run per due item, the oldest first, up to the planner's most posts a day
+ * (`posting-plan.ts`). Each item is one core post for every platform of its slot (daily core drafts, 2026-11-12).
+ */
 const POST_RUNS_A_DAY = 3;
-const DRAFT_LOOP = "daily-x-draft";
+export const DRAFT_LOOP = "daily-post-draft";
+/** The loop's name before 2026-11-12: a day in flight then is not drafted twice. Drop it after 2026-11-19. */
+const OLD_DRAFT_LOOP = "daily-x-draft";
 
 type DueRow = { id: string; user_id: string; department: string; idea: string; platform: string | null };
 
 /** Loops that call a model: for a founder in mode B they go to the inbox instead. */
 const THINKING: ReadonlySet<CmoJobKind> = new Set(["plan_week", "post_draft", "sales_scan", "competitor_research", "summarize_memory", "review_week"]);
-
-/** The first item of each post profile, in the given order (oldest due first); an unknown label counts as X. */
-export function duePerPlatform<T extends { platform: string | null }>(rows: readonly T[]): T[] {
-  const seen = new Set<string>();
-  return rows.filter((row) => {
-    const profile = profileIdOf(row.platform) ?? "x";
-    return seen.has(profile) ? false : (seen.add(profile), true);
-  });
-}
 
 /**
  * The open work order of each due calendar item. The run carries it (`input.order_id`), so a failed run fails its
@@ -87,13 +82,15 @@ async function queuedToday(admin: SupabaseClient, today: string): Promise<Set<st
   );
   const out = new Set<string>();
   for (const row of rows) {
-    if (typeof row.input?.loop === "string") out.add(loopKey(row.user_id, row.input.loop, typeof row.input.item_id === "string" ? row.input.item_id : null));
+    if (typeof row.input?.loop !== "string") continue;
+    const loop = row.input.loop === OLD_DRAFT_LOOP ? DRAFT_LOOP : row.input.loop;
+    out.add(loopKey(row.user_id, loop, typeof row.input.item_id === "string" ? row.input.item_id : null));
   }
   return out;
 }
 
 /**
- * Queues the drafts of the posts due today, one per platform, each linked to its calendar item and work order. The
+ * Queues the drafts of the posts due today, one per item, each linked to its calendar item and work order. The
  * daily schedule calls it for every founder; the weekly plan calls it for the week it just wrote (`runId`), so
  * Monday's post is the plan's, drafted the day it is planned for. Returns `[queued, of them to the inbox]`.
  */
@@ -103,7 +100,7 @@ export async function enqueueDueDrafts(
   due: readonly { id: string; platform: string | null }[],
   opts: { claude: boolean; done?: Set<string> },
 ): Promise<[number, number]> {
-  const posts = duePerPlatform(due).slice(0, POST_RUNS_A_DAY);
+  const posts = due.slice(0, POST_RUNS_A_DAY);
   const links = await dueLinks(admin, posts.map((d) => d.id));
   let queued = 0;
   for (const post of posts) {
@@ -220,9 +217,8 @@ export async function enqueueDueLoops(admin: SupabaseClient, now = new Date()): 
     // Mode B: the run reads what it needs, then waits in the founder's inbox for their Claude.
     const claude = modes.get(user)?.brain === "claude";
     for (const run of dueLoops(state)) {
-      // One post per platform gets its own run (`cmo_enqueue` waits per item), the oldest due first as `pickDueItem`
-      // drafts: a day with an X, a Threads and a LinkedIn post drafts all three, and a backlog on X never crowds out
-      // the other platforms.
+      // Each due item gets its own run (`cmo_enqueue` waits per item), the oldest first as `pickDueItem` drafts: one
+      // core post per slot, which goes to every platform of the slot.
       if (run.kind === "post_draft") {
         const [drafts, toInbox] = await enqueueDueDrafts(admin, user, duePosts, { claude, done });
         queued += drafts;

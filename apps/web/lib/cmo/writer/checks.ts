@@ -7,11 +7,9 @@
  * Facts and product rules only: No AI Slop is advice in the prompt, never a check here.
  */
 
-import { SLIDE_TEXT_MAX } from "@opencmo/editor-core";
-
 import { checkPost, factIssues, hashtagCount, hasLink, type CheckRules } from "../jobs/check-post";
 import { slopIssues } from "../slop";
-import { SCRIPT_BEATS, type CaptionDraft, type Slide, type VideoBrief, type WriterProfile, type YoutubeDraft } from "./types";
+import { SCRIPT_BEATS, SCRIPT_CAPTION, type CaptionDraft, type VideoBrief, type WriterProfile, type YoutubeDraft } from "./types";
 
 const chars = (text: string) => [...text].length;
 
@@ -85,6 +83,20 @@ export function checkYoutube(draft: Pick<YoutubeDraft, "title" | "description" |
   ];
 }
 
+/** The caption written with a script: there, within the limit, at most five hashtags, no link, no invented fact. */
+export function checkScriptCaption(caption: string, rules: CheckRules): string[] {
+  const text = caption.trim();
+  if (!text) return ["It has no caption."];
+  const tags = hashtagCount(text);
+  return [
+    ...(chars(text) > SCRIPT_CAPTION.max ? [`The caption is ${chars(text)} characters; a caption is at most ${SCRIPT_CAPTION.max}.`] : []),
+    ...(tags > SCRIPT_CAPTION.hashtags ? [`The caption has ${tags} hashtags; it takes at most ${SCRIPT_CAPTION.hashtags}.`] : []),
+    ...(hasLink(text, rules.names) ? ["The caption has a link."] : []),
+    ...factIssues(text, rules),
+    ...slopIssues(text.replace(/#[\p{L}\p{N}_]+/gu, "").trim(), rules.allowSlop).map((issue) => `The caption: ${issue}`),
+  ];
+}
+
 /** The brief's hooks and key points reach the Director as facts: no invented numbers, no words to avoid. */
 export function checkVideoBrief(brief: VideoBrief, rules: CheckRules): string[] {
   const issues: string[] = [];
@@ -105,20 +117,7 @@ export function checkVideoBrief(brief: VideoBrief, rules: CheckRules): string[] 
   const spoken = [...brief.hooks, brief.cta, ...beats.map((beat) => beat.say)];
   const said = new Set(spoken.flatMap((line) => slopIssues(line, new Set([...(rules.allowSlop ?? []), "closing_question"]))));
   issues.push(...[...said].map((issue) => `The script: ${issue}`));
+  issues.push(...checkScriptCaption(brief.caption, rules));
   return issues;
 }
 
-/** 5 to 10 slides, each with a heading; facts from the documents only; no links or hashtags on a slide. */
-export function checkSlides(slides: readonly Slide[], rules: CheckRules): string[] {
-  const issues: string[] = [];
-  if (slides.length < 5 || slides.length > 10) issues.push(`It has ${slides.length} slides; a slideshow has 5 to 10.`);
-  if (slides.some((slide) => !slide.heading.trim())) issues.push("A slide has no heading.");
-  if (slides.some((slide) => slide.heading.length > SLIDE_TEXT_MAX.heading)) issues.push(`A heading is over ${SLIDE_TEXT_MAX.heading} characters; it would not fit the frame.`);
-  if (slides.some((slide) => slide.body.length > SLIDE_TEXT_MAX.body)) issues.push(`A body is over ${SLIDE_TEXT_MAX.body} characters; it would not fit the frame.`);
-  const text = slides.map((slide) => `${slide.heading}\n${slide.body}`).join("\n");
-  if (hasLink(text, rules.names)) issues.push("A slide has a link.");
-  if (hashtagCount(text)) issues.push("A slide has a hashtag.");
-  issues.push(...factIssues(text, rules));
-  issues.push(...slopIssues(text, rules.allowSlop).map((issue) => `A slide: ${issue}`));
-  return issues;
-}

@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 
 import { createFakePublishAdapter, fakeAccountId, fakePublishCount, resetFakePublish } from "@/lib/departments/publish/fake";
 import { publishDeps } from "@/lib/departments/publish/job";
-import type { PublishAdapter } from "@/lib/departments/publish/types";
+import type { PublishAdapter, PublishDeliverable } from "@/lib/departments/publish/types";
 import type { ScheduleSnapshot } from "@/lib/screens/approval-card";
 
 import { platformFields, runPublishPost, type FiredSlot, type MediaUpload, type PublishPostDeps, type PublishStatusUpdate } from "./publish-post";
@@ -72,6 +72,7 @@ async function main() {
       exportFor: async () => ({ object: "u/c/t.mp4", bytes: 1234, contentType: "video/mp4" as const }),
       media: async () => ({ state: "none" }),
       startMedia: async () => "task-1",
+      photoUrls: async (objects) => objects.map((o) => ({ url: `https://storage.example/${o}?token=t`, contentType: "image/jpeg" as const })),
       status: async (_id, u) => void updates.push(u),
       ...extra,
     };
@@ -85,6 +86,25 @@ async function main() {
     assert.equal(updates[0]!.status, "published");
     await runPublishPost(deps([fired()]).d, SLOT);
     assert.equal(fakePublishCount(), 1);
+  }
+
+  // A photo post (D7): every approved photo goes, in order, as a signed link; nothing is uploaded first.
+  {
+    const photos = ["u/p/1.jpg", "u/p/2.jpg", "u/p/3.jpg"];
+    let sent: PublishDeliverable | null = null;
+    const watching = { ...adapter, publish: async (deliverable: PublishDeliverable, slot: Parameters<typeof adapter.publish>[1]) => ((sent = deliverable), adapter.publish(deliverable, slot)) };
+    const slot = fired({
+      platform: "instagram",
+      snapshot: snapshot({ deliverable_kind: "photo_post", platform: "instagram", text: "Demo day.", photos }),
+      current: { content_hash: HASH, text: "Demo day.", title: null, clip_id: null, photos },
+    });
+    const { d } = deps([slot], { adapter: watching, startMedia: async () => assert.fail("a photo post uploads nothing") });
+    assert.equal((await runPublishPost(d, SLOT)).kind, "done");
+    assert.deepEqual((sent as PublishDeliverable | null)?.media.map((m) => m.url), photos.map((o) => `https://storage.example/${o}?token=t`), "every photo, in order");
+    // A photo that is gone fails the slot with a sentence the founder can act on.
+    const { d: short, updates } = deps([slot], { photoUrls: async () => [] });
+    await runPublishPost(short, SLOT);
+    assert.match(updates[0]!.status === "failed" ? updates[0]!.error.message : "", /photo of this post is missing/);
   }
 
   // Refusals: nothing reaches the adapter.
@@ -105,6 +125,37 @@ async function main() {
     assert.equal(updates[0]!.status, "failed", why);
   }
   assert.equal(fakePublishCount(), before, "no refused slot posted");
+
+  // A free X account refuses a long post: the card gets a sentence to act on and the thread button, not X's words.
+  {
+    const long = "A long post about one true thing. ".repeat(18).trim();
+    const refusing = (message: string): PublishAdapter => ({
+      ...adapter,
+      publish: async () => ({ status: "failed", externalId: null, url: null, error: { code: "invalid", message, retryable: false } }),
+    });
+    const longSlot = (options: FiredSlot["options"] = { ai_label: false }) =>
+      fired({ options, snapshot: snapshot({ text: long, options }), current: { content_hash: HASH, text: long, title: null, clip_id: null } });
+    const run = async (slot: FiredSlot, message: string) => {
+      const { d, updates } = deps([slot], { adapter: refusing(message) });
+      await runPublishPost(d, SLOT);
+      return updates[0] as Extract<PublishStatusUpdate, { status: "failed" }>;
+    };
+    const tooLong = await run(longSlot(), "X refused the post: Tweet text is too long (612 characters, limit 280)");
+    assert.deepEqual(tooLong.error, { code: "too_long", message: "Your X account takes 280 characters per post. Post it as a thread, or turn on X Premium.", retryable: true });
+    // Another refusal of the same post keeps its own words; so does a short post, and a post already sent as a thread.
+    assert.equal((await run(longSlot(), "X refused the post: duplicate content")).error.code, "invalid");
+    assert.equal((await run(fired(), "X refused the post: too long")).error.code, "invalid");
+    assert.equal((await run(longSlot({ ai_label: false, as_thread: true }), "X refused the post: too long")).error.code, "invalid");
+    // Too long even for a thread: no button, a sentence that says to shorten it.
+    const huge = "word ".repeat(2000).trim();
+    const hugeSlot = fired({ snapshot: snapshot({ text: huge.slice(0, 5000) }), current: { content_hash: HASH, text: huge, title: null, clip_id: null } });
+    const h = await run(hugeSlot, "X refused the post: text exceeds the character limit");
+    assert.equal(h.error.code, "invalid");
+    assert.match(h.error.message, /too long for a thread/);
+    // The founder's "Post as a thread" reaches the adapter as the slot's field; on another platform it is dropped.
+    assert.deepEqual(platformFields("x", { as_thread: true }), { platform: "x", aiGenerated: false, asThread: true });
+    assert.deepEqual(platformFields("threads", { as_thread: true }), { platform: "threads", aiGenerated: false });
+  }
 
   // Not ours to touch: cancelled, paused or settled slots are skipped without a status change.
   for (const status of ["cancelled", "waiting", "published"]) {

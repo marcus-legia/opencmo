@@ -11,6 +11,7 @@ import { readyStyles } from "@/lib/agent/styles";
 import { DOCUMENTS, DOCUMENT_KINDS, type DocumentKind } from "@/lib/cmo/documents";
 import { JOB_PRICES, classifyOrder, nextCheckAt, type OrderLedgerRow } from "@/lib/cmo/jobs/progress";
 import { mondayOf } from "@/lib/cmo/jobs/summarize-memory";
+import { planOrDefault } from "@/lib/cmo/posting-plan";
 import { localDay, localMidnight, localMonday } from "@/lib/time-zone";
 import { PUBLISH_PLATFORMS } from "@/lib/departments/publish/types";
 import { SITE_URL } from "@/lib/site";
@@ -722,13 +723,23 @@ async function schedule({ supabase, userId, params }: LoadContext): Promise<Part
   const nextMonday = new Date(Date.parse(`${monday}T12:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
   const from = new Date(localMidnight(monday, timezone) ?? `${monday}T00:00:00Z`);
   const to = new Date(localMidnight(nextMonday, timezone) ?? `${nextMonday}T00:00:00Z`);
+  // One read of the accounts for the list and the plan's default (connected text platforms at one a day).
+  const accounts = socialAccounts(supabase);
   return parts<ScheduleScreen>("schedule", {
     timezone: async () => (await prof).timezone,
     from: async () => from.toISOString(),
     to: async () => to.toISOString(),
     slots: async () => scheduleSlots(supabase, from, to),
-    accounts: async () => accountList(await socialAccounts(supabase), false),
+    accounts: async () => accountList(await accounts, false),
     rules: async () => SCHEDULE_RULES,
+    postingPlan: async () => {
+      const [saved, rows] = await Promise.all([
+        supabase.from("profiles").select("posting_plan").eq("id", userId).maybeSingle<{ posting_plan: unknown }>(),
+        accounts,
+      ]);
+      if (saved.error) throw new Error(`profiles: ${saved.error.message}`);
+      return planOrDefault(saved.data?.posting_plan, rows.filter((r) => r.status === "connected").map((r) => r.platform));
+    },
   });
 }
 

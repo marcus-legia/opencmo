@@ -13,7 +13,7 @@ export type MetricsSourceName = "public" | "zernio";
 export type AccountMetricRow = {
   /** `social_accounts.id`; the row stays when the account is disconnected later. */
   social_account_id: string;
-  platform: "x" | "threads" | "linkedin" | "tiktok" | "youtube" | "instagram";
+  platform: "x" | "threads" | "linkedin" | "facebook" | "tiktok" | "youtube" | "instagram";
   handle: string;
   /** The founder's local day, `YYYY-MM-DD`. */
   day: string;
