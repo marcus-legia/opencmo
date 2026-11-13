@@ -7,7 +7,7 @@
  */
 import assert from "node:assert/strict";
 
-import { connectUrl, disconnectAccount, ensureProfile, finishConnect, type AccountRow, type AccountsStore } from "./accounts";
+import { connectUrl, disconnectAccount, ensureProfile, finishConnect, syncAccounts, type AccountRow, type AccountsStore } from "./accounts";
 import { createFakePublishAdapter, fakeAccountId, resetFakePublish } from "./fake";
 import type { ConnectedAccount, PublishAdapter } from "./types";
 
@@ -30,6 +30,9 @@ function memoryStore() {
     },
     async account(id) {
       return rows.get(id) ?? null;
+    },
+    async platforms(userId) {
+      return [...rows.values()].filter((r) => r.userId === userId).map((r) => r.platform);
     },
     async removeAccount(id) {
       log.push(`remove ${id}`);
@@ -73,6 +76,14 @@ async function main() {
   assert.equal((await finishConnect(me, wrongPlatform)).kind, "refused");
   assert.equal((await finishConnect(me, new URLSearchParams({ platform: "reddit", accountId: "a" }))).kind, "refused");
   assert.equal(rows.size, 2, "nothing forged was stored");
+
+  // A connect whose callback never came back (2026-11-13): the account is at Zernio under this founder's profile.
+  // Sync saves it once; platforms with a row, and another founder's accounts, stay as they are.
+  await adapter.connectLink(p1, "linkedin", "http://127.0.0.1:3000/cb");
+  assert.deepEqual((await syncAccounts(me)).map((a) => a.platform), ["linkedin"]);
+  assert.equal(rows.size, 3);
+  assert.deepEqual(await syncAccounts(me), [], "nothing new the second time");
+  assert.ok(![...rows.values()].some((r) => r.zernioAccountId === fakeAccountId(otherProfile, "x")), "another founder's account is never synced");
 
   // Zernio's own error text never reaches the page.
   const failed = await finishConnect(me, new URLSearchParams({ platform: "linkedin", error: "access_denied", error_message: "<script>x</script>" }));

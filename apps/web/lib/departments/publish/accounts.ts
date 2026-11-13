@@ -19,6 +19,8 @@ export type AccountsStore = {
   saveProfile(userId: string, zernioProfileId: string): Promise<void>;
   saveAccount(userId: string, account: ConnectedAccount): Promise<{ id: string }>;
   account(id: string): Promise<AccountRow | null>;
+  /** The platforms the founder already has a row for (connected or to reconnect): one account per platform. */
+  platforms(userId: string): Promise<string[]>;
   removeAccount(id: string): Promise<void>;
 };
 
@@ -61,6 +63,25 @@ export async function finishConnect(deps: AccountsDeps, query: URLSearchParams):
   if (!account) return { kind: "refused", message: `${label} was not connected. Start again from Settings.` };
   await deps.store.saveAccount(deps.userId, account);
   return { kind: "connected", platform, handle: account.handle };
+}
+
+/**
+ * Accounts Zernio lists under this founder's profile that are not here yet: a connect whose callback never saved it
+ * (closed tab, an error on our side) shows up without asking the platform again. The same trust as the callback:
+ * only Zernio's list of this founder's own profile, never the browser. A platform with a row keeps it.
+ */
+export async function syncAccounts(deps: AccountsDeps): Promise<{ id: string; platform: PublishPlatform; handle: string; avatarUrl: string | null }[]> {
+  const profile = await deps.store.profileId(deps.userId);
+  if (!profile) return [];
+  const known = new Set(await deps.store.platforms(deps.userId));
+  const saved: { id: string; platform: PublishPlatform; handle: string; avatarUrl: string | null }[] = [];
+  for (const account of await deps.adapter.accounts(profile)) {
+    if (known.has(account.platform)) continue;
+    known.add(account.platform);
+    const { id } = await deps.store.saveAccount(deps.userId, account);
+    saved.push({ id, platform: account.platform, handle: account.handle, avatarUrl: account.avatarUrl });
+  }
+  return saved;
 }
 
 /**

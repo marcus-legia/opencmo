@@ -189,9 +189,6 @@ export function TopBar({
   onLogs: () => void;
   onChat: () => void;
 }) {
-  const ws = useWorkspace();
-  const x = ws.accounts.find((a) => a.platform === "x");
-  const linkedin = ws.accounts.some((a) => a.platform === "linkedin");
   // On a phone the word goes (the coin and the number stay; the link keeps "credits" for screen readers).
   const creditsLabel = (
     <span>
@@ -269,33 +266,6 @@ export function TopBar({
     return (
       <header className="top td-viewsbar">
         <Project menu={MORE} />
-        <span style={{ width: "1px", height: "18px", background: "var(--line-2)", margin: "0 4px" }}></span>
-        {x ? (
-          <span className="pill" style={{ cursor: "default" }}>
-            <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M17.5 3h3l-6.6 7.5L21.6 21h-6l-4.7-6.1L5.5 21h-3l7.1-8.1L2.4 3h6.1l4.2 5.6z" />
-            </svg>
-            @{x.handle.replace(/^@/, "")}
-            <span className="live" style={{ marginLeft: "2px" }}></span>
-          </span>
-        ) : (
-          <Link href="/app/settings#settings-connected-accounts" className="pill" style={{ textDecoration: "none" }}>
-            <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M17.5 3h3l-6.6 7.5L21.6 21h-6l-4.7-6.1L5.5 21h-3l7.1-8.1L2.4 3h6.1l4.2 5.6z" />
-            </svg>
-            Connect X
-          </Link>
-        )}
-        {linkedin ? null : (
-          <Link href="/app/settings#settings-connected-accounts" className="pill" style={{ textDecoration: "none" }}>
-            <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-4 0v7h-4v-7a6 6 0 0 1 6-6z" />
-              <rect width="4" height="12" x="2" y="9" />
-              <circle cx="4" cy="4" r="2" />
-            </svg>
-            Connect LinkedIn
-          </Link>
-        )}
         <div style={{ flex: "1 1 auto" }}></div>
         <nav className="td-views" aria-label="View">
           {views.map((v) => (

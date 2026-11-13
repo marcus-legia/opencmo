@@ -49,6 +49,28 @@ export function AccountsPanel({ accounts: given, live }: { accounts: Account[]; 
     setNote(back);
     document.getElementById(ACCOUNTS_PANEL_ID)?.scrollIntoView({ block: "start" });
   }, []);
+  // An account connected at Zernio whose callback never saved it shows up here without connecting again.
+  useEffect(() => {
+    if (!live) return;
+    let gone = false;
+    void api<{ saved: { id: string; platform: Platform; handle: string; avatarUrl: string | null }[] }>("/accounts/sync", jsonBody({}))
+      .then(({ saved }) => {
+        if (gone || !saved.length) return;
+        setAccounts((list) =>
+          list.map((a) => {
+            const found = saved.find((s) => s.platform === a.platform);
+            return found && a.status === "not_connected"
+              ? { ...a, id: found.id, handle: found.handle, status: "connected" as const, avatarUrl: found.avatarUrl, syncedAt: new Date().toISOString(), noDataSince: null }
+              : a;
+          }),
+        );
+        setNote({ ok: true, text: `${saved.map((s) => PLATFORM_LABEL[s.platform]).join(" and ")} ${saved.length === 1 ? "is" : "are"} connected.` });
+      })
+      .catch(() => undefined);
+    return () => {
+      gone = true;
+    };
+  }, [live]);
 
   async function connect(account: Account) {
     if (!live || busy) return;
