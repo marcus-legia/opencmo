@@ -10,9 +10,10 @@ seed function in `apps/web/e2e/ui-v2-seed.ts`, one new block in `apps/web/lib/cm
 - [x] Step 1: pgTAP `312_core_draft_flow` (plan → targets → one card → approve → three slots → published; and with no
   account at all)
 - [x] Step 2: `jobs.check.ts` (one draft run for a three-platform slot)
-- [ ] Step 3: Playwright `ui-v2-core-drafts.spec.ts` (run locally, or written and marked not run)
-- [ ] Step 4: the Phase A step in `p6-acceptance.e2e.ts`
-- [ ] Step 5: commit and push
+- [ ] Step 3: Playwright `ui-v2-core-drafts.spec.ts` (run locally, or written and marked not run) — **written, not run**
+  (no Supabase stack here; see below)
+- [ ] Step 4: the Phase A step in `p6-acceptance.e2e.ts` — **written, not run** (needs GoTrue and PostgREST)
+- [x] Step 5: commit and push
 
 A test that fails because the product is wrong is a finding: write it under "Found" below with the steps, leave the
 assertion in, and do not change another session's code to make it pass.
@@ -27,6 +28,18 @@ assertion in, and do not change another session's code to make it pass.
   until Session B's Task 2 lands and the TODO starts passing. Then the `todo_start`/`todo_end` pair can go.
 - `jobs.check.ts`: `NODE_OPTIONS=--conditions=react-server npx tsx lib/cmo/jobs/jobs.check.ts` passes; I flipped the
   one-draft assertion once to see the new block fail, then put it back.
+- `apps/web`: `npx tsc --noEmit` is clean with the new spec, the seed function and the p6 step.
+- **Not run:** `ui-v2-core-drafts.spec.ts` (`npm run test:e2e:v2`) and `p6-acceptance.e2e.ts` (its own command in the
+  file's header). Both need GoTrue (`auth.admin.createUser`, sign-in) and PostgREST, which only the Supabase stack
+  gives, and CI does not run them. Their boxes stay open for a session with Docker. What each asserts:
+  - the spec: the planner has seven rows with a logo each, "More posts a day on LinkedIn" saves 2 a day to
+    `profiles.posting_plan`; the Feed row of the seeded three-target post reads "Post for 3 platforms", its card lists
+    X, Threads and LinkedIn; Approve gives X's slot decided with the post and a waiting card each for Threads and
+    LinkedIn, both on the Feed after a reload; the icon next to Refresh lands on `/app/schedule#posting-plan`.
+  - p6 `coreDraftDay()`: `plan_week` from the schedule (fake brain) → one `post_draft` run, every post item targets the
+    three platforms, one post card → approved through `approval_decide` → three schedule cards.
+- "Three schedule cards" (the plan's words) are three `schedule_slot` approvals: X's is `approved` with the post card
+  (its time was on that card, cmo-review-3 1.2), Threads' and LinkedIn's are `waiting`. Both tests assert exactly that.
 
 ## Found
 
