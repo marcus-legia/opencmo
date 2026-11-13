@@ -10,9 +10,8 @@ seed function in `apps/web/e2e/ui-v2-seed.ts`, one new block in `apps/web/lib/cm
 - [x] Step 1: pgTAP `312_core_draft_flow` (plan → targets → one card → approve → three slots → published; and with no
   account at all)
 - [x] Step 2: `jobs.check.ts` (one draft run for a three-platform slot)
-- [ ] Step 3: Playwright `ui-v2-core-drafts.spec.ts` (run locally, or written and marked not run) — **written, not run**
-  (no Supabase stack here; see below)
-- [ ] Step 4: the Phase A step in `p6-acceptance.e2e.ts` — **written, not run** (needs GoTrue and PostgREST)
+- [x] Step 3: Playwright `ui-v2-core-drafts.spec.ts` — run by Session B in the closing round, 3/3 (see below)
+- [x] Step 4: the Phase A step in `p6-acceptance.e2e.ts` — run by Session B in the closing round, passed
 - [x] Step 5: commit and push
 
 A test that fails because the product is wrong is a finding: write it under "Found" below with the steps, leave the
@@ -40,6 +39,13 @@ assertion in, and do not change another session's code to make it pass.
     three platforms, one post card → approved through `approval_decide` → three schedule cards.
 - "Three schedule cards" (the plan's words) are three `schedule_slot` approvals: X's is `approved` with the post card
   (its time was on that card, cmo-review-3 1.2), Threads' and LinkedIn's are `waiting`. Both tests assert exactly that.
+
+- **Closing round (Session B, 2026-11-13), on a full local Supabase stack** (CLI 2.117.0, images from Docker Hub;
+  studio, logflare, vector, imgproxy, edge-runtime, supavisor, realtime and postgres-meta left out):
+  `npx tsx e2e/run.ts ui-v2-core-drafts ui-v2-slides` 8/8, and `p6-acceptance.e2e.ts` passed through Phase A. The
+  spec's second test first timed out on `Review`: the only waiting card opens on its own, so the row has no Review
+  button. It now opens the card with `openFeedCard`, as the other specs do. The product was right, the spec was not.
+- `312`'s F1 assertion is a plain assertion now (309 is in).
 
 ## Found
 

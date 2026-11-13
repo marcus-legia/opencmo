@@ -44,6 +44,37 @@ All 224 migrations applied in order (`psql -1 -v ON_ERROR_STOP=1`), then every f
 - Choice in Task 2: a published post asks for a new time again only when one of its slots posted, not just when it
   has a slot. A post marked posted by hand on its card ("I posted it") is not scheduled again by a stale Retry card.
 
+## Closing round (owner's ask, 2026-11-13): every session finished, the whole branch reviewed
+
+Run on a full local Supabase stack this time (CLI 2.117.0 with `SUPABASE_INTERNAL_IMAGE_REGISTRY=docker.io`, since
+AWS ECR is blocked here): `supabase db reset` + `supabase test db` → 205 files, 3,449 tests, PASS. `npm run
+check:contracts` green, `tsc --noEmit` clean, `npx tsx e2e/run.ts ui-v2-core-drafts ui-v2-slides` 8/8,
+`p6-acceptance.e2e.ts` passed. `supabase/schema/current.sql` dumped by `scripts/dump-schema.sh` against that stack.
+
+Left open by the sessions, now done: `112`, `212`, `250` brought up to D6 and F2; `312`'s F1 TODO made plain; A's
+Steps 3 and 4 run (see `A.md`).
+
+`/code-review` (high) of the branch against #204's, ten findings, all fixed:
+
+1. `hardCut` summed per-grapheme sizes, so a link glued to a long word came out as a 293-character X part. Each piece
+   is now measured whole.
+2. `xLength` counted bare domains as letters and every code point as 1. It now follows twitter-text's v3 weights
+   (CJK, "…", "→", Vietnamese tone marks are 2) and counts a bare domain as at least 23.
+3. The thread chips on a schedule card counted code points; an X thread now shows X's count.
+4. Drafts cancelled before F3 kept their photos: `photo_draft_release` takes a cancelled post, and the migration
+   releases those once.
+5. A closed draft answered "already scheduled": save and schedule now say "This draft was closed. Start a new photo
+   post."
+6. Writer's `checkPost` counted X by code point: it takes the larger of that and `xLength`, so the 280-code-point
+   thread schemas still hold.
+7. `Intl.Segmenter` was built on every call: built once; the card memoises `chainFor`.
+8. `split.ts` needs Segmenter and a lookbehind in client code: a code-point fallback, and no lookbehind.
+9. `writer.html` and `studio.html` were not changed with their markdown twins: they are now.
+10. The F1 schedulable rule was copied in two functions: one helper, `post_schedules`.
+
+Storage (owner, 2026-11-13): uploads stay on Supabase Storage, the image buckets included, and move to DigitalOcean
+storage later this week. Each upload entry point and `BUCKETS` carry a `TODO(storage)` line; nothing else changed.
+
 ## Seen, not mine
 
 - C (Task 4): `212_p3_writer_orders` test 3 (`cmo_job_daily_limit('write_slides')` is 10) and

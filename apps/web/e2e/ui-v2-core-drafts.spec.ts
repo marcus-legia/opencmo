@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 
-import { signIn, state } from "./helpers";
+import { openFeedCard, signIn, state } from "./helpers";
 import { seedCoreDraft } from "./ui-v2-seed";
 
 /**
@@ -67,7 +67,8 @@ test("one Feed card for three platforms; approving it gives the three schedule c
     `[data-testid="feed-row"][data-card-id="${cardId}"]`,
   );
   await expect(row).toContainText("Post for 3 platforms");
-  await row.getByRole("button", { name: "Review" }).click();
+  // The one waiting card opens on its own; `openFeedCard` clicks Review only when the row is closed.
+  await openFeedCard(page, "Post for 3 platforms");
   const targets = row.getByTestId("post-targets");
   await expect(targets).toContainText("One post, goes out on");
   await expect(targets.locator(".v2-card-goes li")).toHaveText([

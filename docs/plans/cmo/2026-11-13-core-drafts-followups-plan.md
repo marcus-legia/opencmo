@@ -66,21 +66,21 @@ step to `apps/web/lib/screens/p6-acceptance.e2e.ts`.
 
 Three layers, because only the first two run in CI:
 
-- [ ] **Step 1, pgTAP (runs in CI):** `312_core_draft_flow`. One founder, plan X 1 + Threads 1 + LinkedIn 1 saved with
+- [x] **Step 1, pgTAP (runs in CI):** `312_core_draft_flow`. One founder, plan X 1 + Threads 1 + LinkedIn 1 saved with
   `save_posting_plan`, X and Threads connected. `cmo_plan_week` with one post item → the item's `targets` are the
   three platforms. `cmo_save_draft` → one card, `kind = 'post'`. `approval_decide(card, 'approve')` as the founder →
   three slots: X and Threads `publish`, LinkedIn `intent`; the proposed platform's slot is `waiting` with no schedule
   card, the other two have a card each. Approve both. `publish_status` each → all three `published`. Also: the same
   flow with no account at all → three `intent` slots and nothing errors.
-- [ ] **Step 2, job check (runs in CI):** in `jobs.check.ts`, a memory-store week with plan X 1 + Threads 1 +
+- [x] **Step 2, job check (runs in CI):** in `jobs.check.ts`, a memory-store week with plan X 1 + Threads 1 +
   LinkedIn 1 → 7 post items each with three targets, and one cron day queues **one** `post_draft` run for the day's
   item (not three).
-- [ ] **Step 3, Playwright (local stack only):** `ui-v2-core-drafts.spec.ts`: the planner shows seven rows with a
+- [x] **Step 3, Playwright (local stack only):** `ui-v2-core-drafts.spec.ts`: the planner shows seven rows with a
   logo each and saves a change; the Feed row of a three-target post reads "Post for 3 platforms" and its card lists
   three chips; Approve gives the three schedule cards; the icon next to Refresh opens the calendar at the planner. Run
   it if your environment has the stack; if not, say so in `A.md` and in the PR, and do not tick the box as run.
-- [ ] **Step 4:** the Phase A step in `p6-acceptance.e2e.ts` ("one cron day, one card, three schedule cards").
-- [ ] **Step 5: Commit** `Tests: the daily core draft, from the plan to three platforms`.
+- [x] **Step 4:** the Phase A step in `p6-acceptance.e2e.ts` ("one cron day, one card, three schedule cards").
+- [x] **Step 5: Commit** `Tests: the daily core draft, from the plan to three platforms`.
 
 ### Task 2: A post is published when its first platform posts (Session B)
 
@@ -95,9 +95,9 @@ assert the old rule).
 - `schedule_propose` and `schedule_take_proposal` read the post with `status in ('approved', 'published')` when the
   deliverable already has a slot, so a missed or expired slot of a published post still gets a new time.
 - Drop `post_slots_open` and the trigger `schedule_slots_settle_post` (review fix 1): the new rule makes them dead.
-- [ ] **Step 1: Failing pgTAP** `309`: Review focus 1 and 2, plus: a single-platform post behaves as before.
-- [ ] **Step 2: Implement**, change `308`'s cases to the new rule, dump the schema.
-- [ ] **Step 3: Commit** `Posts: published when the first platform posts; the others keep their slots`.
+- [x] **Step 1: Failing pgTAP** `309`: Review focus 1 and 2, plus: a single-platform post behaves as before.
+- [x] **Step 2: Implement**, change `308`'s cases to the new rule, dump the schema.
+- [x] **Step 3: Commit** `Posts: published when the first platform posts; the others keep their slots`.
 
 ### Task 3: Photo drafts are cleaned up (Session B)
 
@@ -109,10 +109,10 @@ assert the old rule).
 - `photo_post_create` calls it for the draft it empties; `photo_post_save` calls it for photos dropped from the list.
 - `photo_drafts_sweep(p_days integer default 7)` (service role only): drafts not updated for `p_days` become
   `cancelled` and are released. The cleanup cron calls it once a run.
-- [ ] **Step 1: Failing pgTAP** `310`: Review focus 4; a sweep run twice queues nothing twice; `authenticated` cannot
+- [x] **Step 1: Failing pgTAP** `310`: Review focus 4; a sweep run twice queues nothing twice; `authenticated` cannot
   call either function.
-- [ ] **Step 2: Implement**, dump the schema.
-- [ ] **Step 3: Commit** `Photo posts: an abandoned draft's photos are deleted`.
+- [x] **Step 2: Implement**, dump the schema.
+- [x] **Step 3: Commit** `Photo posts: an abandoned draft's photos are deleted`.
 
 ### Task 4: Remove "Write a slideshow" (Session C)
 
@@ -127,9 +127,9 @@ create `supabase/migrations/20270121030000_drop_write_slides.sql`, `supabase/tes
   stays in `cmo_runs_kind_check`: old rows keep it.
 - Kept: everything that opens, renders or posts a slideshow already made (`SlidesView`, `components/cards/slides.ts`,
   `renderSlideshow`, the Studio list, `ui-v2-slides.spec.ts`), and Writer's list still shows old `slide_text` drafts.
-- [ ] **Step 1: Failing pgTAP** `311`: Review focus 3; a new `write_slides` is refused.
-- [ ] **Step 2: Implement**, `npm run check:contracts`, typecheck, dump the schema.
-- [ ] **Step 3: Commit** `Writer: no slideshow to write; a photo post replaces it`.
+- [x] **Step 1: Failing pgTAP** `311`: Review focus 3; a new `write_slides` is refused.
+- [x] **Step 2: Implement**, `npm run check:contracts`, typecheck, dump the schema.
+- [x] **Step 3: Commit** `Writer: no slideshow to write; a photo post replaces it`.
 
 ### Task 5: Ready for the owner's real accounts (Session C)
 
@@ -144,9 +144,9 @@ documents disagree with the code.
 - The checklist is for a founder, not an engineer: for each of the three flows (a 900-character post to X free,
   Threads and LinkedIn; "Post as a thread"; a 4-photo post to TikTok), what to click, what they should see, and what
   to send back when it differs (the card's words and the time).
-- [ ] **Step 1:** documents read, differences fixed with a failing check first.
-- [ ] **Step 2:** the checklist.
-- [ ] **Step 3: Commit** `Publish: checked against Zernio's documents; a checklist for the first real posts`.
+- [x] **Step 1:** documents read, differences fixed with a failing check first.
+- [x] **Step 2:** the checklist.
+- [x] **Step 3: Commit** `Publish: checked against Zernio's documents; a checklist for the first real posts`.
 
 ### Review (the controller, after every box is ticked)
 
