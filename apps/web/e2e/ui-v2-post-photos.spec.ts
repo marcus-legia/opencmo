@@ -88,6 +88,13 @@ test("a slideshow or carousel has its own page; the Calendar points to it", asyn
   await expect(page.getByTestId("photo-post")).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("photos-page.png") });
 
+  // A picked photo shows once uploaded, from its signed link (never a link made from the picked file).
+  const panel = page.getByTestId("photo-post");
+  await panel.getByRole("button", { name: "New photo post" }).click();
+  await expect(panel.locator('input[type="file"]')).toBeEnabled();
+  await panel.locator('input[type="file"]').setInputFiles({ name: "desk.png", mimeType: "image/png", buffer: png() });
+  await expect(panel.getByRole("img", { name: "Photo 1: desk.png" })).toHaveAttribute("src", /^http/, { timeout: 30_000 });
+
   // Five views in the bar: on a phone the row scrolls inside itself, never the page.
   await page.setViewportSize({ width: 390, height: 844 });
   for (const path of ["/app", "/app/schedule", "/app/photos"]) {

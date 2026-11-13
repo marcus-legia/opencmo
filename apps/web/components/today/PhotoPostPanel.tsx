@@ -1,12 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 
 import { ApiError, api, jsonBody } from "@/components/clipping/api";
 import { Button } from "@/components/ui";
 import { PHOTO_LIMIT, PHOTO_MAX_BYTES, PHOTO_PLATFORMS, PHOTO_TYPES, photoPostProblem, type PhotoPlatform, type PhotoPost } from "@/lib/photo-posts";
 import { uploadPhoto } from "@/lib/photo-upload-client";
+
+import { useSignedPhotos } from "@/components/cards/post-photos";
 
 import { PlatformLogo } from "./platform-logos";
 
@@ -14,7 +16,7 @@ const LABEL: Record<PhotoPlatform, string> = { tiktok: "TikTok", instagram: "Ins
 /** SQL `cmo_job_price('photo_caption')`: held before the caption is written. */
 const CAPTION_CREDITS = 1;
 
-type Photo = { key: string; name: string; preview: string; object: string | null; progress: number; failed: string | null };
+type Photo = { key: string; name: string; object: string | null; progress: number; failed: string | null };
 
 /**
  * A photo post (daily core drafts D7, owner 2026-11-12): the founder's own photos as a TikTok photo post or an Instagram
@@ -31,11 +33,10 @@ export function PhotoPostPanel({ connectedPlatforms, live, onScheduled }: { conn
   const [busy, setBusy] = useState<null | "starting" | "caption" | "schedule">(null);
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
   const input = useRef<HTMLInputElement>(null);
-  const previews = useRef<string[]>([]);
 
-  useEffect(() => () => previews.current.forEach((url) => URL.revokeObjectURL(url)), []);
 
   const connected = (p: PhotoPlatform) => connectedPlatforms.includes(p);
+  const urls = useSignedPhotos(photos.flatMap((p) => (p.object ? [p.object] : [])));
   const ready = photos.filter((p) => p.object);
   const uploading = photos.some((p) => !p.object && !p.failed);
   const problem = photoPostProblem(ready.length, platforms, caption);
@@ -61,14 +62,12 @@ export function PhotoPostPanel({ connectedPlatforms, live, onScheduled }: { conn
     setNote(null);
     for (const file of Array.from(files)) {
       const key = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      const preview = URL.createObjectURL(file);
-      previews.current.push(preview);
       const bad = !(PHOTO_TYPES as readonly string[]).includes(file.type)
         ? "Use a JPEG, PNG or WebP photo."
         : file.size > PHOTO_MAX_BYTES
           ? "This photo is over 10 MB."
           : null;
-      setPhotos((now) => [...now, { key, name: file.name, preview, object: null, progress: 0, failed: bad ?? (live ? null : "Sample: nothing is uploaded.") }]);
+      setPhotos((now) => [...now, { key, name: file.name, object: null, progress: 0, failed: bad ?? (live ? null : "Sample: nothing is uploaded.") }]);
       if (!bad && live && postId) void upload(key, file, postId);
     }
     if (input.current) input.current.value = "";
@@ -182,8 +181,13 @@ export function PhotoPostPanel({ connectedPlatforms, live, onScheduled }: { conn
           <div className="photo-post-grid" aria-label="Photos, in posting order">
             {photos.map((p, i) => (
               <figure key={p.key} className={p.failed ? "is-stuck" : undefined}>
-                {/* eslint-disable-next-line @next/next/no-img-element -- a local preview of a file not uploaded yet */}
-                <img src={p.preview} alt={`Photo ${i + 1}: ${p.name}`} />
+                {/* The thumbnail is the uploaded photo's signed link, never a link made from the picked file. */}
+                {p.object && urls[p.object] ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- a signed link to the founder's own photo
+                  <img src={urls[p.object]} alt={`Photo ${i + 1}: ${p.name}`} />
+                ) : (
+                  <span className="photo-post-wait">{p.failed ? p.name : `Uploading ${p.name}`}</span>
+                )}
                 <figcaption>
                   <span>{i + 1}</span>
                   {p.failed ? <span className="photo-post-fail">{p.failed}</span> : p.object ? null : <span>{Math.round(p.progress * 100)}%</span>}

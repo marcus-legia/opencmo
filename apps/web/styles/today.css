@@ -588,6 +588,7 @@ html[data-theme="dark"] .k.pg-prompter{--bg:#121110;--panel:#181715;--raised:#20
 .photo-post-grid figure { margin: 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--bg); }
 .photo-post-grid figure.is-stuck { border-color: var(--warn); }
 .photo-post-grid img { display: block; width: 100%; aspect-ratio: 4 / 5; object-fit: cover; }
+.photo-post-wait { display: flex; align-items: center; justify-content: center; aspect-ratio: 4 / 5; padding: 8px; font-size: 12px; color: var(--muted); text-align: center; overflow-wrap: anywhere; }
 .photo-post-grid figcaption { display: flex; align-items: center; gap: 6px; padding: 4px 6px; font-size: 12px; flex-wrap: wrap; }
 .photo-post-grid figcaption > span:first-child { font-weight: 600; font-variant-numeric: tabular-nums; }
 .photo-post-tools { margin-left: auto; display: flex; gap: 2px; }

@@ -12,7 +12,7 @@ import { uploadPhoto } from "@/lib/photo-upload-client";
 export const POST_PHOTO_LIMIT = 4;
 
 /** Short-lived links to the founder's own photos; the `photos` bucket lets a founder read only their own folder. */
-function useSignedPhotos(objects: readonly string[]): Record<string, string> {
+export function useSignedPhotos(objects: readonly string[]): Record<string, string> {
   const [urls, setUrls] = useState<Record<string, string>>({});
   const key = objects.join("\n");
   useEffect(() => {
