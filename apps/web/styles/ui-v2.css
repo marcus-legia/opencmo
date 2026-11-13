@@ -571,3 +571,17 @@ html[data-ui="v2"] body { background: var(--v2-paper); }
 .v2-new-choices button span { color: var(--v2-ink2); font-size: 12px; }
 .v2-new-choices button:hover, .v2-new-choices button:focus-visible { background: var(--v2-paper2); outline: none; }
 .v2-new-choices button:focus-visible { box-shadow: inset 0 0 0 2px var(--v2-ink); }
+/* The founder's own photos on a text post (owner, 2026-11-13), and on a schedule card: thumbnails in posting order. */
+.v2-card-photos { list-style: none; margin: 8px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 6px; max-width: 420px; }
+.v2-card-photos li { position: relative; border: 1px solid var(--v2-line); border-radius: 8px; overflow: hidden; background: var(--v2-paper); aspect-ratio: 1; }
+.v2-card-photos img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.v2-card-photos button { position: absolute; top: 4px; right: 4px; width: 26px; height: 26px; border: 0; border-radius: 50%; background: rgba(0, 0, 0, 0.6); color: #fff; font-size: 15px; line-height: 1; cursor: pointer; }
+.v2-card-photos button:focus-visible { outline: 2px solid var(--v2-brand-deep); outline-offset: 1px; }
+.v2-card-photo-wait { display: flex; align-items: center; justify-content: center; height: 100%; font: 500 11px var(--v2-mono); color: var(--v2-ink2); }
+.v2-card-photo-edit { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
+.v2-card-photo-add { position: relative; display: inline-flex; flex-direction: column; gap: 2px; align-self: flex-start; padding: 8px 12px; border: 1px dashed var(--v2-line2); border-radius: 8px; font: 500 13px var(--v2-sans); color: var(--v2-ink); cursor: pointer; }
+.v2-card-photo-add:hover { border-color: var(--v2-brand-deep); }
+.v2-card-photo-add:focus-within { outline: 2px solid var(--v2-brand-deep); outline-offset: 2px; }
+.v2-card-photo-add.is-busy { cursor: progress; }
+.v2-card-photo-add input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.v2-card-photo-hint { font-size: 12px; color: var(--v2-ink2); }

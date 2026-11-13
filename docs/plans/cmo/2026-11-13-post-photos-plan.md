@@ -25,19 +25,30 @@ images plus a caption." Recorded in `CLAUDE.md` (Daily core drafts, D7).
 
 ## Tasks
 
-- [ ] **A. The page.** `app/app/photos/page.tsx` renders `PhotoPostPanel` with the accounts it needs; the top bar gets
+- [x] **A. The page.** `app/app/photos/page.tsx` renders `PhotoPostPanel` with the accounts it needs; the top bar gets
   "Photos"; the Calendar drops the panel and links to the page. Playwright: the page opens and the panel is there.
-- [ ] **B1. SQL** `20270121040000_post_photos` + pgTAP `313_post_photos`: `content_items.photos` (≤ 4);
+- [x] **B1. SQL** `20270121040000_post_photos` + pgTAP `313_post_photos`: `content_items.photos` (≤ 4);
   `reserve_upload` takes a post the founder owns that is in review or approved; `post_photos_save(item, photos)` checks
   owner, status, count, folder, existence and the deletion queue, releases dropped photos, raises the post card again
   (in review) or the schedule cards (approved); the post card's snapshot and `schedule_content` carry `photos`.
-- [ ] **B2. API** `POST /api/v1/posts/[id]/photos/uploads` (reservation) and `PUT /api/v1/posts/[id]/photos` (save).
-- [ ] **B3. Card**: the post body shows the photos (signed links), "Add photos", remove; the schedule card shows them.
-- [ ] **B4. Publish**: nothing new: a slot whose snapshot has `photos` already posts them (`publish-post.ts`), on the
-  first part of a chain or thread. Check it with a publish check.
-- [ ] **Verify**: pgTAP, `check:contracts`, `tsc`, Playwright on the local stack, a screenshot of the card with photos.
+- [x] **B2. API** `POST /api/v1/cmo/items/[id]/photos/uploads` (reservation) and `PUT /api/v1/cmo/items/[id]/photos` (save,
+  answers the post card that now waits with the photos).
+- [x] **B3. Card**: the post body shows the photos (signed links), "Add photos", remove; the schedule card shows them.
+- [x] **B4. Publish**: nothing new: a slot whose snapshot has `photos` already posts them (`publish-post.ts`), on the
+  first part of a chain or thread. Checked: the Playwright spec reads each slot's `schedule_content` (the photos, in
+  order, on X, Threads and LinkedIn); `publish-post.check.ts` already covers posting a snapshot's photos.
+- [x] **Verify**: pgTAP, `check:contracts`, `tsc`, Playwright on the local stack, a screenshot of the card with photos.
 
 ## Not in this plan
 
 - Moving uploads to DigitalOcean (the owner, this week).
 - Photos on a Reddit reply, a video caption or a thread the Writer drafts.
+
+## What was run (2026-11-13)
+
+On a full local Supabase stack: `supabase test db` 206 files PASS (`313_post_photos` 18/18); `npm run check:contracts`
+green; `tsc --noEmit` clean; `npx tsx e2e/run.ts ui-v2-post-photos ui-v2-core-drafts` 5/5. Screenshots in
+[`2026-11-13-post-photos-shots/`](2026-11-13-post-photos-shots/): the post card with a photo, the Threads schedule card
+carrying it, and the Photos page.
+
+Left for later: a photo of a post that is skipped or deleted stays in Storage (the post keeps it; no sweep yet).

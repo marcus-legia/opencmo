@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 
 import { Button, Tabs, Toggle } from "@/components/ui";
 import type { CardBody, ScheduleOptions } from "@/lib/screens/approval-card";
@@ -11,6 +11,7 @@ import { PlatformMark, hasLogo } from "@/components/today/platform-logos";
 import { THREADS_LIMIT, X_FREE_LIMIT, chainFor, xLength } from "@/lib/departments/publish/split";
 
 import { CaptionList, charCount, type SaveCaption } from "./captions";
+import { PhotoStrip } from "./post-photos";
 import { joinSlideText, slideTextProblem, splitSlideText } from "./slides";
 import { formatSeconds } from "./labels";
 import { AI_LABEL_PLATFORMS, PRIVACY_LABEL, TIKTOK_MUSIC_TERMS, formatWhen } from "./schedule";
@@ -27,6 +28,7 @@ export function PostBody({
   onPick,
   onRewrite,
   rewriting,
+  photos,
 }: {
   body: Body<"post">;
   cardId: string;
@@ -39,6 +41,8 @@ export function PostBody({
   onRewrite?: (platform: Platform) => void;
   /** The platforms whose rewrite is being written now. */
   rewriting?: ReadonlySet<string>;
+  /** The founder's own photos under the text (owner, 2026-11-13): an editor while the card waits, else the strip. */
+  photos?: ReactNode;
 }) {
   const [platform, setPlatform] = useState<Platform>(body.platforms[0]?.platform ?? "x");
   const [version, setVersion] = useState(0);
@@ -82,6 +86,7 @@ export function PostBody({
           <FoldedText text={text} fold={fold} />
         )}
       </div>
+      {photos}
       <div className="v2-card-chips">
         {limit ? (
           <span className={`v2-chip ${length > limit ? "is-stuck" : "is-posted"}`}>
@@ -671,6 +676,7 @@ export function ScheduleBody({
           {body.preview.text}
         </div>
       ) : null}
+      {body.preview.photos?.length ? <PhotoStrip photos={body.preview.photos} label="The photos that go out with it, in order" /> : null}
       <dl className="v2-card-facts">
         <div>
           <dt>Where</dt>
