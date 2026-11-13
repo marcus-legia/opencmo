@@ -25,7 +25,7 @@ prepares the one only the owner can do (posting from real accounts).
 
 | # | Decision | Who |
 |---|---|---|
-| F1 | **A post is `published` when its first platform posts.** The other platforms keep their slots and post at their own times; a failed one keeps its Retry card. The founder's own "I posted it" on the post card still stops everything, as it says. This replaces "published when the last open slot is" (`post_slots_open`, review fix 1), which left a post `approved` for ever behind one ignored failure. | recommended here; **owner to confirm on the PR** |
+| F1 | **A post is `published` when its first platform posts.** The other platforms keep their slots and post at their own times; a failed one keeps its Retry card. The founder's own "I posted it" on the post card still stops everything, as it says. This replaces "published when the last open slot is" (`post_slots_open`, review fix 1), which left a post `approved` for ever behind one ignored failure. | **decided: kept** (owner left it to the agent, 2026-11-13) |
 | F2 | **"Write a slideshow" and the `write_slides` job are removed.** Slideshows already made still open and post. A photo post with a caption is what replaces it (D7). | recommended here; **owner to confirm on the PR** |
 | F3 | **A photo draft untouched for 7 days is closed and its photos are deleted.** Starting a photo post again deletes the photos of the draft it empties. | recommended here |
 | F4 | **X stays at 4,000 characters.** A core post is 3,000 anyway; nobody has asked for longer. | not in this plan |
