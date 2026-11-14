@@ -221,7 +221,7 @@ async function main() {
   const block = threadBlock(breakout, 3);
   assert.equal(block.match(/<thread\b/g)?.length, 1, "exactly one opening tag");
   assert.equal(block.match(/<\/thread>/g)?.length, 1, "exactly one closing tag");
-  assert.ok(block.startsWith('<thread index="3" community="freelance&quot; index=&quot;0">'), block);
+  assert.ok(block.startsWith('<thread index="3" community="freelance&quot; index=&quot;0" platform="Reddit">'), block);
   assert.ok(block.endsWith("</thread>"), block);
   assert.ok(quoteIn("Tips</thread>", breakout) && quoteIn("Tips&lt;/thread&gt;", breakout), "a quote of escaped text still counts");
 
@@ -230,7 +230,7 @@ async function main() {
   const w4 = mem3.enqueue("sales_scan");
   await drainCmoQueue(mem3.store);
   assert.equal(w4.status, "done", `W4 xong (${w4.error})`);
-  assert.deepEqual(w4.steps.map((s) => s.tool), ["read_doc", "make_queries", "reddit_search", "hn_search", "score_thread", "check_rules", "draft_reply", "create_card"]);
+  assert.deepEqual(w4.steps.map((s) => s.tool), ["read_doc", "make_queries", "reddit_search", "hn_search", "facebook_search", "threads_search", "score_thread", "check_rules", "draft_reply", "create_card"]);
   assert.ok(mem3.opps.length > 0 && mem3.opps.length <= 5, `1–5 thẻ (${mem3.opps.length})`);
   assert.ok(mem3.opps.every((o) => o.score >= PASS_SCORE && o.reply.length > 0 && o.score_parts.length === 5), "thẻ đủ điểm, có trả lời");
   assert.ok(mem3.opps.every((o) => (o.platform === "hn" ? new URL(o.url).hostname === "news.ycombinator.com" : new URL(o.url).hostname === "www.reddit.com")), "only reddit.com or HN discussion links");
@@ -320,11 +320,12 @@ async function main() {
 
   // Không thread mới nào: lượt vẫn xong và được hoàn credit.
   const mem4 = memoryStore(docs);
-  mem4.store.seenUrls = async () => ({ has: () => true }) as unknown as Set<string>;
+  // Every URL is seen: `has` says yes to all, and nothing to list.
+  mem4.store.seenUrls = async () => new (class extends Set<string> { override has() { return true; } })();
   const empty = mem4.enqueue("sales_scan");
   await drainCmoQueue(mem4.store);
   assert.equal(empty.status, "done", `lượt rỗng vẫn xong (${empty.error})`);
-  assert.deepEqual(empty.output, { cards: 0, refund: true }, "lượt rỗng hoàn credit");
+  assert.deepEqual(empty.output, { cards: 0, refund: true, platforms: ["reddit", "hn", "facebook", "threads"], failed: [] }, "lượt rỗng hoàn credit");
   assert.equal(empty.steps.at(-1)!.label, "No conversations worth joining today");
 
   // An injected search (the evals' seam) replaces Reddit: only its threads become cards.
@@ -340,6 +341,73 @@ async function main() {
   assert.equal(inj.status, "done", `W4 with an injected search (${inj.error})`);
   assert.ok(queried.length > 0, "the injected search was asked");
   assert.deepEqual(memInj.opps.map((o) => o.url).sort(), [injected(1).url, injected(2).url], "only injected threads become cards");
+
+  // Sales finder B1: one scan over the platforms the run asks for and the founder allows.
+  const { SocialReadError } = await import("../social/scrapecreators");
+  const { scanPlatforms } = await import("./sales-scan");
+  type Platform = import("../social/conversations").SalesPlatform;
+  type Conv = import("../social/conversations").ConversationThread;
+  const social = (platform: "facebook" | "threads", n: number, url?: string): Conv => ({
+    platform,
+    url: url ?? (platform === "facebook" ? `https://www.facebook.com/groups/freelancers/posts/${n}/` : `https://www.threads.com/@someone/post/C${n}`),
+    community: platform === "facebook" ? "Freelancers United" : "Threads",
+    title: `Clients pay me late ${platform} ${n}`,
+    author: "someone",
+    text: "Every month the same story. My clients pay invoices weeks late and I hate chasing them.",
+    comments: 3,
+    postedAt: new Date().toISOString(),
+  });
+  const scanWith = async (
+    platforms: Platform[],
+    input: Record<string, unknown>,
+    stubs: { reddit?: () => Promise<RedditThread[]>; hn?: () => Promise<never[]>; social?: (p: "facebook" | "threads") => Promise<Conv[]> } = {},
+    seen: string[] = [],
+  ) => {
+    const calls: string[] = [];
+    const mem = memoryStore({ ...docs, strategy: { ...docs.strategy, pains: ["late invoice payments"] } });
+    mem.salesSettings.platforms = platforms;
+    if (seen.length) mem.store.seenUrls = async () => new Set(seen);
+    const run = mem.enqueue("sales_scan", input);
+    await drainCmoQueue(mem.store, {
+      searchReddit: async () => (calls.push("reddit"), stubs.reddit ? stubs.reddit() : [injected(10)]),
+      searchHn: async () => (calls.push("hn"), stubs.hn ? stubs.hn() : []),
+      searchConversations: async (platform) => (calls.push(platform), stubs.social ? stubs.social(platform) : [social(platform, 1)]),
+    });
+    return { mem, run, calls: [...new Set(calls)] };
+  };
+  assert.deepEqual(scanPlatforms({}, { excluded: [], pairs: [], platforms: ["reddit", "threads"] }), ["reddit", "threads"], "no input: the founder's switches");
+  assert.deepEqual(scanPlatforms({ platforms: ["threads", "x", "hn"] }, { excluded: [], pairs: [], platforms: ["hn", "threads"] }), ["hn", "threads"]);
+  // The founder's switches decide: Reddit and Facebook are searched, Threads and HN are not.
+  const twoOn = await scanWith(["reddit", "facebook"], {});
+  assert.equal(twoOn.run.status, "done", `reddit + facebook (${twoOn.run.error})`);
+  assert.deepEqual(twoOn.calls, ["reddit", "facebook"]);
+  assert.deepEqual(twoOn.run.steps.map((s) => s.tool).slice(0, 4), ["read_doc", "make_queries", "reddit_search", "facebook_search"]);
+  assert.deepEqual((twoOn.run.output as { platforms: Platform[] }).platforms, ["reddit", "facebook"]);
+  // A saved Facebook card says where it is and only helps.
+  const fb = twoOn.mem.opps.find((o) => o.platform === "facebook");
+  assert.ok(fb && fb.rule === "no_product_mention" && /Facebook group/.test(fb.rule_why ?? ""), `a help-only Facebook card (${JSON.stringify(fb)})`);
+  // A chat brief that asks only for a platform the founder turned off: refused before any read.
+  const nowhere = await scanWith(["reddit"], { platforms: ["threads"] });
+  assert.equal(nowhere.run.status, "failed");
+  assert.match(String(nowhere.run.error), /^Sales has nowhere to look/);
+  assert.deepEqual(nowhere.calls, [], "no search ran");
+  // One platform failing never fails the scan.
+  const fbDown = await scanWith(["reddit", "facebook"], {}, { social: async () => { throw new SocialReadError("Facebook did not answer."); } });
+  assert.equal(fbDown.run.status, "done", `facebook down (${fbDown.run.error})`);
+  assert.deepEqual((fbDown.run.output as { failed: Platform[] }).failed, ["facebook"]);
+  assert.ok(fbDown.mem.opps.length > 0, "Reddit's threads still made cards");
+  // Every platform failing fails the run, and a failed run's credits come back.
+  const allDown = await scanWith(["reddit", "facebook"], {}, {
+    reddit: async () => { throw new SocialReadError("Reddit did not answer."); },
+    social: async () => { throw new SocialReadError("Facebook did not answer."); },
+  });
+  assert.equal(allDown.run.status, "failed", "every platform failed: the run fails (refund)");
+  assert.equal(allDown.run.error, "Facebook did not answer.", "the last platform's message");
+  // The same Threads post under threads.net with a tracking param is the one already seen: nothing new is scored.
+  const dup = await scanWith(["threads"], {}, { social: async () => [social("threads", 7, "https://threads.net/@someone/post/C7?xmt=abc")] }, ["https://www.threads.com/@someone/post/C7"]);
+  assert.equal(dup.run.status, "done", `dup (${dup.run.error})`);
+  assert.deepEqual(dup.run.output, { cards: 0, refund: true, platforms: ["threads"], failed: [] });
+  assert.ok(!dup.run.steps.some((s) => s.tool === "score_thread"), "nothing was scored");
 
   // CMO chat không bao giờ có tool đăng/trả lời: mọi thứ ra ngoài đi qua Approvals.
   const { CMO_TOOL_SPECS } = await import("../../agent/cmo-tools");

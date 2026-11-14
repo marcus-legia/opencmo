@@ -11,7 +11,7 @@ B1's last step wires the real finders once A3 is pushed.
 
 ## Tasks
 
-### - [ ] B1. One scan over every platform the run and the founder allow
+### - [x] B1. One scan over every platform the run and the founder allow
 
 **Consumes:** `SALES_PLATFORMS`, `SalesPlatform`, `ConversationThread`, `normalizeConversationUrl`, `parsePlatforms`
 (A1); `SalesSettings.platforms` (A1); `searchFacebookGroups`, `searchThreadsConversations` (A3).
@@ -46,21 +46,21 @@ Decisions:
   as a forum answer. `REPLY_VERSION` changes by itself; the `no-ai-slop.check.ts` entry stays green.
 - `Opportunity.platform` is set for every non-Reddit item.
 
-- [ ] Failing checks in `jobs.check.ts` (memory store, `searchReddit`/`searchHn`/`searchConversations` stubs, fake model):
+- [x] Failing checks in `jobs.check.ts` (memory store, `searchReddit`/`searchHn`/`searchConversations` stubs, fake model):
   - platforms `{reddit, facebook}` in settings and none in the input: Reddit and Facebook are searched, Threads and HN are not;
   - input `platforms: ["threads"]` with settings `{reddit}`: throws "Sales has nowhere to look…" and no stub was called;
   - Facebook stub throws `SocialReadError`, Reddit returns threads: the run is `done`, `output.failed = ["facebook"]`;
   - every enabled stub throws: the run fails and its credits are refunded;
   - a Threads thread and a `threads.net` copy of a URL already in `seen`: nothing new is scored (Review focus 5);
   - a saved Facebook opportunity has `platform: "facebook"` and `rule: "no_product_mention"`.
-- [ ] Run `cd apps/web && npx tsx lib/cmo/jobs/jobs.check.ts`: the new checks fail.
-- [ ] Implement in `sales-scan.ts` and the hook in `runner.ts`. Until A3 is pushed the default for
+- [x] Run `cd apps/web && npx tsx lib/cmo/jobs/jobs.check.ts`: the new checks fail.
+- [x] Implement in `sales-scan.ts` and the hook in `runner.ts` (default `searchConversations` still returns `[]`: A3 not pushed yet, wiring left for when it is). Until A3 is pushed the default for
   `searchConversations` is a function that returns `[]`; after A3, the default calls `searchFacebookGroups` /
   `searchThreadsConversations` with the shared budget.
-- [ ] `reply-outcomes.ts`: outcomes are checked for `reddit` and `hn` only; a due Facebook or Threads outcome is left
+- [x] `reply-outcomes.ts`: outcomes are checked for `reddit` and `hn` only; a due Facebook or Threads outcome is left
   unchecked (filter, same place as the existing `socialReaderReady` filter), with a one-line comment why.
-- [ ] `npx tsx lib/cmo/jobs/jobs.check.ts`, `npx tsx lib/cmo/skills/no-ai-slop.check.ts`, `npm run typecheck`.
-- [ ] Commit `Sales finder B1: one scan over Reddit, Hacker News, Facebook groups and Threads`, push.
+- [x] `npx tsx lib/cmo/jobs/jobs.check.ts`, `npx tsx lib/cmo/skills/no-ai-slop.check.ts`, `npm run typecheck`.
+- [x] Commit `Sales finder B1: one scan over Reddit, Hacker News, Facebook groups and Threads`, push.
 
 ### - [ ] B2. The price card names the places, and the eval covers them
 
