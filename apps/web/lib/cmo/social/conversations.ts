@@ -60,7 +60,7 @@ export function normalizeConversationUrl(raw: string): string | null {
   switch (host) {
     case "www.reddit.com":
       // Reddit's form is kept as the reader gives it (rows already stored use it); only a thread is a conversation.
-      return /^\/r\/[A-Za-z0-9_]{2,21}\/comments\/[a-z0-9]+(\/|$)/i.test(path) ? `https://${host}${path}` : null;
+      return /^\/r\/[A-Za-z0-9_]{2,21}\/comments\/[a-z0-9_-]+(\/|$)/i.test(path) ? `https://${host}${path}` : null;
     case "news.ycombinator.com":
       return path === "/item" && /^\?id=\d{1,12}$/.test(url.search) ? `https://${host}/item${url.search}` : null;
     case "www.facebook.com": {
