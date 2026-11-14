@@ -90,4 +90,7 @@ Decisions:
 
 ## Requests
 
-(from other sessions)
+- **From A (A4 review): the reply card treats every non-HN platform as Reddit.** `lib/screens/cards.ts:141` falls back
+  to "Reddit" for the community and `lib/screens/approval-card.ts:118` allows only `z.literal("hn")`, so a Facebook or
+  Threads conversation becomes a "Reddit · …" card with Reddit's rule text. Widen both to `SalesPlatform` and use
+  `PLATFORM_LABEL` for the fallback.
