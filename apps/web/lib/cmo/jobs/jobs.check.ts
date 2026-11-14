@@ -20,7 +20,7 @@ import { goalLine, nextGoalFallback } from "./review-week";
 import { pickDueItem } from "./draft-post";
 import { toPlanItems } from "./plan-week";
 import type { PostingPlan } from "../posting-plan";
-import { drainCmoQueue, isPlainJson } from "./runner";
+import { drainCmoQueue } from "./runner";
 import { factIssues } from "./check-post";
 import { openingLine } from "./competitor-research";
 import { PASS_SCORE, quoteIn, reachScore, scoreThread, threadBlock, timingScore } from "./sales-scan";
@@ -262,9 +262,6 @@ async function main() {
   for (const made of ["Used by 2,000 freelancers", "1,950 founders joined", "5k users", "3M views"]) assert.equal(factIssues(made, noNumbers).length, 1, made);
   assert.deepEqual(factIssues("We started in 2024 with 3 people", noNumbers), [], "a year and a small number");
   assert.deepEqual(factIssues("5,000 users", { avoid: [], known: knownNumbers({ product: { proof: "5k users" } } as unknown as Documents) }), [], "5k in the documents covers 5,000");
-  // Inbox memo: only values that survive JSON unchanged are kept for replays.
-  assert.ok(isPlainJson({ a: [1, "x", null, { b: true }] }));
-  for (const value of [new Set([1]), new Map(), new Date(), { a: undefined }, Number.NaN]) assert.ok(!isPlainJson(value), String(value));
   // A competitor's opening line, not the whole post.
   assert.equal(openingLine("Stop chasing invoices by hand. Here is the 3-step system we use every Friday."), "Stop chasing invoices by hand.");
 
@@ -300,11 +297,6 @@ async function main() {
   // The one requirement line the reply card and the Sales screen show (review of #188: no second copy to drift).
   assert.equal(salesNeeds(50, 30), "Posting there needs 50 karma and an account 30 days old");
   assert.equal(salesNeeds(null, null), undefined);
-  // Review of #188: an inbox item made before 5.1 is answered in the old shape, and still reads.
-  const { parseAnswer } = await import("./steps");
-  const legacy = parseAnswer("check_rules", { rules: [{ index: 0, verdict: "help_only", summary: "r/x forbids self-promotion" }] });
-  assert.ok(legacy.ok, "an old-shape rules answer is accepted");
-  assert.deepEqual(legacy.ok && legacy.data, { rules: [{ index: 0, verdict: "no_product_mention", summary: "r/x forbids self-promotion", minKarma: null, minAccountAgeDays: null, megathread: false }] });
   const { toVerdict } = await import("./types");
   assert.deepEqual(["mention_ok", "help_only", "skip", "not_verified", "nonsense"].map(toVerdict), ["safe", "no_product_mention", "skip", "not_verified", "not_verified"], "old values map, unknown is not verified");
   // One mention already in the last ten replies: every draft is help only, and says why.
@@ -569,80 +561,16 @@ async function main() {
   assert.ok(goalBlock(mem9.goals[0]!).includes("Approve 3 posts on X"));
   assert.equal(goalBlock(proposal ?? null), "", "a goal still proposed does not steer the plan");
 
-  // Inbox ("Continue in Claude"): the run stops at its model call, Claude's answer replays it.
-  const memIn = memoryStore(docs);
-  const ask = memIn.enqueue("post_draft", { brain: "claude", idea: "The 3-7-14 reminder rule" });
-  await drainCmoQueue(memIn.store);
-  assert.equal(ask.status, "done", `the inbox run ends cleanly (${ask.error})`);
-  assert.equal(memIn.inbox.length, 1, "one inbox item");
-  const waiting = memIn.inbox[0]!;
-  assert.equal(waiting.step, "draft_post", "it waits for the draft");
-  assert.ok(waiting.request.prompt.includes("3-7-14") && waiting.request.system.includes("<skill name=\"post\">"), "with the prompt the job would have sent");
-  assert.equal((waiting.request.schema as { type?: string }).type, "object", "and the answer's JSON schema");
-  assert.equal(memIn.items.filter((i) => i.status === "in_review").length, 0, "no card before the answer");
-  assert.equal(ask.steps.at(-1)!.status, "skipped", "Activity shows the waiting step");
-
-  // A bad answer: every version breaks a rule. The item reopens with the reasons.
-  const bad = memIn.submit(waiting.id, "draft_post", { versions: [{ text: "A revolutionary way to invoice", angle: "a" }], rationale: "r" });
-  await drainCmoQueue(memIn.store);
-  assert.equal(bad.status, "failed");
-  assert.equal(waiting.status, "open", "a failed check reopens the item");
-  assert.ok(waiting.feedback?.includes("revolutionary"), `with the reason (${waiting.feedback})`);
-  assert.ok(!("draft_post" in waiting.answers), "without the failed answer");
-
-  const good = memIn.submit(waiting.id, "draft_post", {
-    versions: [
-      { text: "Send reminders on day 3, 7 and 14. It feels like a process, not a chase.", angle: "rule" },
-      { text: "Late invoices are a process problem.", angle: "contrarian" },
-      { text: "A revolutionary reminder", angle: "bad" },
-    ],
-    rationale: "From today's item.",
-  });
-  await drainCmoQueue(memIn.store);
-  assert.equal(good.status, "done", `the replay makes the card (${good.error})`);
-  assert.equal(waiting.status, "done");
-  const fromClaude = memIn.items.find((i) => i.status === "in_review")!;
-  assert.equal(fromClaude.body.text, "Send reminders on day 3, 7 and 14. It feels like a process, not a chase.");
-  assert.deepEqual(fromClaude.body.alternates, ["Late invoices are a process problem."], "a version that breaks a rule is dropped");
-  assert.equal((fromClaude.body.gen as { model: string }).model, "founder-claude", "an inbox draft is the founder's Claude's");
-  assert.ok(!good.steps.some((s) => s.tool === "fix_post"), "no second model call to fix");
-
-  // Sales: four rounds; the Reddit search runs once and its threads stay the same.
-  const memS = memoryStore({ ...docs, strategy: { ...docs.strategy, pains: ["late invoice payments"] } });
-  memS.enqueue("sales_scan", { brain: "claude" });
-  await drainCmoQueue(memS.store);
-  const scan = memS.inbox[0]!;
-  assert.equal(scan.step, "make_queries");
-  memS.submit(scan.id, "make_queries", { queries: ["clients pay late", "chasing invoices"] });
-  await drainCmoQueue(memS.store);
-  assert.equal(scan.step, "score_thread", "round two: scoring");
-  const found = scan.memo.reddit_search as { title: string; text: string }[];
-  assert.ok(found.length > 0, "the threads are kept for the replays");
-  memS.submit(scan.id, "score_thread", {
-    scores: found.map((t, index) => ({ index, exclude: false, pain: { score: 24, quote: t.title }, fit: { score: 24, why: "Fits." }, evidence: { score: 14, quote: t.title } })),
-  });
-  await drainCmoQueue(memS.store);
-  assert.equal(scan.step, "check_rules", "round three: the communities' rules (P5 R1)");
-  const communities = (scan.request.prompt.match(/<rules index=/g) ?? []).length;
-  memS.submit(scan.id, "check_rules", { rules: Array.from({ length: communities }, (_, index) => ({ index, verdict: "no_product_mention", summary: "No self-promotion", minKarma: null, minAccountAgeDays: null, megathread: false })) });
-  await drainCmoQueue(memS.store);
-  assert.equal(scan.step, "draft_reply", "round four: replies");
-  assert.equal(memS.rules.size, 0, "a verdict from the founder's Claude never enters the shared rules cache");
-  assert.deepEqual(scan.memo.reddit_search, found, "the same threads");
-  const toReply = (scan.request.prompt.match(/<thread index=/g) ?? []).length;
-  memS.submit(scan.id, "draft_reply", { replies: Array.from({ length: toReply }, (_, index) => ({ index, reply: "Put the due date on the invoice and remind on day 3, 7 and 14." })) });
-  await drainCmoQueue(memS.store);
-  assert.equal(scan.status, "done", `the scan finishes (${scan.feedback})`);
-  assert.equal(memS.opps.length, toReply, "one card per reply");
-
-  // An answer that does not match the schema fails the replay, not the server.
-  const memX = memoryStore(docs);
-  memX.enqueue("plan_week", { brain: "claude" });
-  await drainCmoQueue(memX.store);
-  const badPlan = memX.submit(memX.inbox[0]!.id, "plan_week", { items: "soon" });
-  await drainCmoQueue(memX.store);
-  assert.equal(badPlan.status, "failed");
-  assert.ok(memX.inbox[0]!.feedback?.startsWith("The answer does not match"), `${memX.inbox[0]!.feedback}`);
+  // The founder's Claude inbox is gone (2026-11-14): a run queued before that with `brain: "claude"` thinks with
+  // OpenCMO like any other, makes its card and records our model, never "founder-claude".
+  const memOld = memoryStore(docs);
+  const old = memOld.enqueue("post_draft", { brain: "claude", inbox: "gone", idea: "The 3-7-14 reminder rule" });
+  await drainCmoQueue(memOld.store);
+  assert.equal(old.status, "done", `an old Claude run still finishes (${old.error})`);
+  const oldCard = memOld.items.find((i) => i.status === "in_review");
+  assert.ok(oldCard, "and makes its card");
+  assert.notEqual((oldCard!.body.gen as { model: string }).model, "founder-claude");
+  assert.ok(!old.steps.some((step) => step.status === "skipped"), "no step waits for anyone");
 
   // classify_edits: labels each edited approval once, within the limit, with a known label.
   const pairs = [
@@ -745,7 +673,7 @@ async function main() {
   assert.deepEqual(sqlReasons, DRAFT_REASONS.map((r) => r.code), "DRAFT_REASONS matches the SQL constraint");
   for (const r of DRAFT_REASONS) assert.ok(reasons.includes(`when '${r.code}' then '${r.label.replaceAll("'", "''")}'`), `SQL names ${r.code} as the card does`);
 
-  console.log("jobs.check — hàng đợi CMO: W1, W2, W4, W6-lite, W7, W8 memory, W9 review, inbox, vòng lặp, kiểm bài, lease, hoãn, classify_edits đều đúng.");
+  console.log("jobs.check — hàng đợi CMO: W1, W2, W4, W6-lite, W7, W8 memory, W9 review, vòng lặp, kiểm bài, lease, hoãn, classify_edits đều đúng.");
 }
 
 main().catch((error) => {

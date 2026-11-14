@@ -90,7 +90,7 @@ export async function photoCaption(ctx: JobContext): Promise<JobOutput> {
   await ctx.step(
     "create_card",
     "Saving the caption on your photo post",
-    () => store.savePhotoCaption(run.user_id, run.id, postId, caption, { model: genModel(answered, ctx.brain, fakeAllowed()), prompt_version: PHOTO_CAPTION_VERSION }),
+    () => store.savePhotoCaption(run.user_id, run.id, postId, caption, { model: genModel(answered, fakeAllowed()), prompt_version: PHOTO_CAPTION_VERSION }),
     () => "Caption ready",
   );
   return { photo_post_id: postId };

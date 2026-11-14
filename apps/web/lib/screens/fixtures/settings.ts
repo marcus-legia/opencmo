@@ -4,7 +4,7 @@ import { ACCOUNTS, TZ } from "./shared";
 /** `Settings.dc.html`. */
 export const settingsFixture: SettingsScreen = {
   accounts: ACCOUNTS.filter((a) => a.platform !== "youtube"),
-  cmo: { mode: "opencmo", pausedAt: null },
+  cmo: { pausedAt: null },
   weeklyCreditBudget: 80,
   timezone: TZ,
   digestHour: 7,
@@ -14,7 +14,7 @@ export const settingsFixture: SettingsScreen = {
 
 export const settingsEmpty: SettingsScreen = {
   accounts: [],
-  cmo: { mode: "opencmo", pausedAt: null },
+  cmo: { pausedAt: null },
   weeklyCreditBudget: 0,
   timezone: "UTC",
   digestHour: null,

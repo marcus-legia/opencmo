@@ -2,8 +2,7 @@
  * Which LLM provider can answer right now.
  *
  * The product runs on Claude only. When it cannot answer (no credit, a revoked key, rate limits, an outage), the
- * failure is remembered for a while: the CMO's brain hands work to the founder's own Claude, and the next user does
- * not wait for the same failure. The memory is per server instance: every instance learns from its own first failure.
+ * failure is remembered for a while, so the next user does not wait for the same failure. The memory is per server instance: every instance learns from its own first failure.
  *
  * Content moderation does NOT use this memory (`lib/generate/moderation.ts`): it asks its primary
  * checker every time, so nothing another feature does can move it to the standby.

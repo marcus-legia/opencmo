@@ -6881,60 +6881,6 @@ html[data-theme] .ed2-zoom {
 .retention-banner a { font-weight: 600; white-space: nowrap; }
 .retention-banner.is-urgent { color: var(--ds-danger-fg); }
 
-/* "Continue in Claude" card (Assistant panel, CMO chat). */
-.cic {
-  flex: none;
-  margin: 10px;
-  padding: 12px 14px;
-  border: 1px solid var(--ds-line);
-  border-radius: 10px;
-  background: var(--ds-raised);
-  color: var(--ds-text);
-  font-size: var(--ds-text-12);
-}
-.cic-title {
-  margin: 0 0 6px;
-  font-weight: 600;
-}
-.cic-text {
-  margin: 0 0 8px;
-  color: var(--ds-muted);
-}
-.cic-text strong {
-  color: var(--ds-text);
-}
-.cic-steps {
-  margin: 0 0 8px;
-  padding-left: 18px;
-  list-style: decimal;
-  display: grid;
-  gap: 6px;
-}
-/* A link inside a sentence is told apart by more than its colour (WCAG 1.4.1, axe `link-in-text-block`); `.v2` too, whose
-   `.v2 a` drops underlines. */
-.cic-steps a,
-.v2 .cic-steps a {
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-.cic-code {
-  display: block;
-  margin-top: 4px;
-  padding: 6px 8px;
-  border-radius: 6px;
-  background: var(--ds-line);
-  font-size: 11px;
-  overflow-wrap: anywhere;
-}
-.cic-copy {
-  height: 24px;
-  padding: 0 8px;
-  border-radius: 6px;
-  border: 1px solid var(--ds-line);
-  background: transparent;
-  color: var(--ds-text);
-  cursor: pointer;
-}
 .ed2-asst-sheet {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));

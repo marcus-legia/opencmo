@@ -36,18 +36,11 @@ const runTime = (iso: string) => {
 function ScanNow() {
   const card = salesScanCard();
   const [step, setStep] = useState<"idle" | "confirm" | "busy" | "started">("idle");
-  const [claude, setClaude] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function open() {
+  function open() {
     setError(null);
-    try {
-      const mode = (await api("/cmo/mode")) as { brain?: string };
-      setClaude(mode.brain === "claude");
-      setStep("confirm");
-    } catch {
-      setError("Could not check where your scan would run. Try again in a moment.");
-    }
+    setStep("confirm");
   }
   async function start() {
     setStep("busy");
@@ -62,12 +55,12 @@ function ScanNow() {
   }
 
   if (step === "started") {
-    return <span className="chip">{claude ? "Sent to your Claude inbox" : "Scanning: threads land here within a few minutes"}</span>;
+    return <span className="chip">Scanning: threads land here within a few minutes</span>;
   }
   if (step === "idle") {
     return (
       <span style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-end", gap: "6px" }}>
-        <button type="button" className="primary" onClick={() => void open()}>
+        <button type="button" className="primary" onClick={open}>
           <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
             <circle cx="11" cy="11" r="8" />
             <path d="m21 21-4.3-4.3" />
@@ -81,7 +74,7 @@ function ScanNow() {
   return (
     <div className="card" role="group" aria-labelledby="scan-now-title" style={{ maxWidth: "360px" }}>
       <h2 id="scan-now-title" style={{ margin: "0 0 6px", fontSize: "14px", fontWeight: "600" }}>
-        {claude ? "Scan now · in your Claude, no OpenCMO credits" : `Scan now · ${card.credits} credits`}
+        Scan now · {card.credits} credits
       </h2>
       <ul style={{ margin: "0 0 10px", paddingLeft: "18px", fontSize: "13.5px", color: "var(--muted)" }}>
         {card.changes.map((line) => (
@@ -94,7 +87,7 @@ function ScanNow() {
           Cancel
         </button>
         <button type="button" className="primary" disabled={step === "busy"} onClick={() => void start()}>
-          {step === "busy" ? "Starting…" : claude ? "Send to my Claude" : `Approve and spend ${card.credits} credits`}
+          {step === "busy" ? "Starting…" : `Approve and spend ${card.credits} credits`}
         </button>
       </div>
     </div>

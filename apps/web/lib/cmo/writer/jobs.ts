@@ -40,13 +40,13 @@ function runWriter(ctx: JobContext, labelSuffix = "") {
   const deps: WriterDeps = {
     think: (opts) => ctx.think(opts),
     agentFor: writerAgent,
-    canFix: !fakeAllowed() && ctx.brain === "opencmo",
+    canFix: !fakeAllowed(),
     onUsage: (usage) => {
       seen.model = usage.model;
     },
     ...(labelSuffix ? { labelSuffix } : {}),
   };
-  return { writer: createWriter(deps), gen: (kind: WriterKind) => ({ model: genModel(seen.model, ctx.brain, fakeAllowed()), prompt_version: writerPromptVersion(kind) }) };
+  return { writer: createWriter(deps), gen: (kind: WriterKind) => ({ model: genModel(seen.model, fakeAllowed()), prompt_version: writerPromptVersion(kind) }) };
 }
 
 async function readContext(ctx: JobContext, topic: "post" | "video", withInsight: boolean, withNiche = false): Promise<WriterContext> {
@@ -156,9 +156,9 @@ export async function writeCaption(ctx: JobContext): Promise<JobOutput> {
       });
     }
   }
-  // Up to 6 clips × 4 profiles is 24 captions, each one to three model calls: a few at a time keeps a run short. The founder's
-  // Claude answers one inbox question at a time, so an inbox run asks in order.
-  await inPool(tasks, ctx.brain === "opencmo" && !fakeAllowed() ? CAPTION_CONCURRENCY : 1);
+  // Up to 6 clips × 4 profiles is 24 captions, each one to three model calls: a few at a time keeps a run short. The
+  // fake answers in order, so checks see the same order every time.
+  await inPool(tasks, !fakeAllowed() ? CAPTION_CONCURRENCY : 1);
   if (!saved) throw new LlmError(`No caption passed our checks. ${failed.join(" ")}`.slice(0, 480));
   const reason = `${saved} ${saved === 1 ? "caption" : "captions"} on the card${failed.length ? `; ${failed.length} left out` : ""}.`;
   return { reason, saved, failed };

@@ -78,7 +78,7 @@ const CORE_PROFILE = BY_ID.get("core")!;
 /**
  * The profile a post is written for: the core post when it goes to more than one platform (`body.targets`, the
  * planner's), else its platform's own profile, since one target is cheaper and better written for that platform. A
- * calendar label ("LinkedIn") or a profile id (`core` too: the MCP inbox reads it back from the `<platform>` block); X for
+ * calendar label ("LinkedIn") or a profile id (`core` too, read back from the `<platform>` block); X for
  * a brief without an item (it becomes an X item) or an unknown one.
  */
 export function postProfile(platform: string | null | undefined, targets?: readonly unknown[] | null): PlatformProfile {

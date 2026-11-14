@@ -24,7 +24,7 @@ import { fakeAllowed, LlmError, structured } from "./llm";
 import type { JobContext, JobOutput } from "./runner";
 import { isoDay, type ItemRow } from "./types";
 
-/** Writer's post shape; the inbox (`steps.ts`) checks the founder's Claude's answer against it. */
+/** Writer's post shape: three versions and why. */
 export const DraftSchema = PostDraftSchema;
 
 const ReviewSchema = z.object({
@@ -170,8 +170,7 @@ export async function draftPost(ctx: JobContext): Promise<JobOutput> {
   const problems = await ctx.step("check_post", "Checking against your strategy", async () => {
     // The "more" cut is advice for the fix round, never a reason to drop a version.
     const found = draft.versions.map((v) => [...checkPostFor(v.text, profile, rules), ...moreAdvice(v.text, profile)]);
-    // The founder's Claude reviewed its own drafts against the rubric; the code checks still run.
-    if (fakeAllowed() || ctx.brain === "claude") return found;
+    if (fakeAllowed()) return found;
     const review = await structured({
       agent: "checker",
       system: REVIEW_SYSTEM,
@@ -190,7 +189,7 @@ export async function draftPost(ctx: JobContext): Promise<JobOutput> {
     return bad ? `${bad} of ${found.length} needed a fix` : `All ${found.length} passed`;
   });
 
-  if (problems.some((p) => p.length) && !fakeAllowed() && ctx.brain === "opencmo") {
+  if (problems.some((p) => p.length) && !fakeAllowed()) {
     draft = await ctx.step("fix_post", "Fixing what the check found", async () => {
       const fixed = await structured({
         agent,
@@ -210,11 +209,6 @@ export async function draftPost(ctx: JobContext): Promise<JobOutput> {
   // A version that still fails the code checks is dropped; with none left the run fails (and its credits come back).
   const passing = draft.versions.map((v) => ({ ...v, text: v.text.trim() })).filter((v) => checkPostFor(v.text, profile, rules).length === 0);
   if (!passing.length) {
-    // Claude gets the reasons with the reopened inbox item, to fix them in its next answer.
-    if (ctx.brain === "claude") {
-      const reasons = problems.map((p, i) => `Version ${i + 1}: ${p.join(" ")}`).join(" ");
-      throw new LlmError(`Every version failed our checks. ${reasons}`.slice(0, 480));
-    }
     throw new LlmError("The drafts did not pass our checks. Try again, or add more detail to your strategy.");
   }
 
@@ -227,7 +221,7 @@ export async function draftPost(ctx: JobContext): Promise<JobOutput> {
         text: passing[0].text,
         alternates: passing.slice(1).map((v) => v.text),
         rationale: draft.rationale,
-        gen: { model: genModel(answered, ctx.brain, fakeAllowed()), prompt_version: SYSTEM_VERSION },
+        gen: { model: genModel(answered, fakeAllowed()), prompt_version: SYSTEM_VERSION },
       }, priority),
     () => "1 card in Approvals",
   );

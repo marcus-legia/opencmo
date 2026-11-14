@@ -9,8 +9,8 @@ import "server-only";
  *   address or never-public name;
  * - resolve DNS once and refuse unless every answer is public;
  * - connect to exactly the address that passed (a pinned `lookup`), so a DNS-rebinding answer
- *   between check and connect cannot steer us inward. Over MCP the page text goes back to the
- *   caller, so "nothing is returned" no longer holds;
+ *   between check and connect cannot steer us inward. The CMO chat hands the page text to its
+ *   model, so "nothing is returned" does not hold;
  * - time and size caps per page.
  */
 

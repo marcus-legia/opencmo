@@ -3,7 +3,7 @@ import { at } from "./shared";
 
 /** `Brain.dc.html`, This week tab. */
 export const brainFixture: BrainScreen = {
-  cmo: { mode: "opencmo", pausedAt: null },
+  cmo: { pausedAt: null },
   week: { goal: "Launch the editor", done: 9, total: 14, credits: { used: 38, budget: 80 }, nextCheckAt: at("2026-10-29", "18:00") },
   orders: [
     { id: "o-video", parentId: null, title: "Long video “Editor launch”", department: "studio", dueAt: at("2026-10-29", "18:00"), dueText: null, credits: { used: 22, budget: 40 }, state: "running", stateText: "Running", approvalId: null },
@@ -36,7 +36,7 @@ export const brainFixture: BrainScreen = {
 };
 
 export const brainEmpty: BrainScreen = {
-  cmo: { mode: "opencmo", pausedAt: null },
+  cmo: { pausedAt: null },
   week: { goal: null, done: 0, total: 0, credits: { used: 0, budget: 0 }, nextCheckAt: null },
   orders: [],
   learned: [],

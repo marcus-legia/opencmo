@@ -119,7 +119,7 @@ export async function writeThread(ctx: JobContext, input: ThreadInput): Promise<
 
   const problems = await ctx.step("check_post", "Checking every post", async () => {
     const found = threadIssues(draft.posts.map((p) => p.trim()), profile, rules);
-    if (fakeAllowed() || ctx.brain === "claude") return found;
+    if (fakeAllowed()) return found;
     const review = await structured({
       agent: "checker",
       system: THREAD_REVIEW,
@@ -132,7 +132,7 @@ export async function writeThread(ctx: JobContext, input: ThreadInput): Promise<
     return !review.ok && review.problem ? [...found, review.problem] : found;
   }, (found) => (found.length ? `${found.length} to fix` : "Every post passed"));
 
-  if (problems.length && !fakeAllowed() && ctx.brain === "opencmo") {
+  if (problems.length && !fakeAllowed()) {
     draft = await ctx.step("fix_post", "Fixing what the check found", async () => {
       const fixed = await structured({
         agent,
@@ -150,8 +150,7 @@ export async function writeThread(ctx: JobContext, input: ThreadInput): Promise<
   const posts = draft.posts.map((p) => p.trim());
   const left = threadIssues(posts, profile, rules);
   if (left.length) {
-    if (ctx.brain === "claude") throw new LlmError(`The thread failed our checks. ${left.join(" ")}`.slice(0, 480));
     throw new LlmError("The thread did not pass our checks. Try again, or add more detail to your strategy.");
   }
-  return { text: posts[0]!, thread: posts, rationale: draft.rationale, gen: { model: genModel(answered, ctx.brain, fakeAllowed()), prompt_version: THREAD_VERSION } };
+  return { text: posts[0]!, thread: posts, rationale: draft.rationale, gen: { model: genModel(answered, fakeAllowed()), prompt_version: THREAD_VERSION } };
 }

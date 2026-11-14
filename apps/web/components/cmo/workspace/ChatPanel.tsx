@@ -16,7 +16,6 @@ import { ApiError, api, jsonBody } from "@/components/clipping/api";
 import { readStream } from "@/components/clipping/agent-stream";
 import { PlanSheet, isPlanRequired } from "@/components/billing/PlanSheet";
 import { useLive } from "@/components/clipping/useLive";
-import { ContinueInClaude } from "@/components/editor/assistant/ContinueInClaude";
 import { Markdown } from "@/components/editor/assistant/Markdown";
 import { Icon } from "@/components/icons";
 import { panelHref, screenOfPath, targetIds, type ScreenContext } from "@/lib/agent/panel";
@@ -478,7 +477,6 @@ export function ChatPanel({
           </div>
         ) : null}
       </header>
-      <ContinueInClaude where="cmo" />
 
       <ol className="cmo-messages" aria-live="polite" ref={listRef}>
         {loading ? (

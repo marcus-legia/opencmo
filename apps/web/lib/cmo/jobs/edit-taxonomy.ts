@@ -8,8 +8,6 @@
 
 import { createHash } from "node:crypto";
 
-import type { Brain } from "./types";
-
 export const EDIT_MODES = [
   "NO_MEANINGFUL_EDIT",
   "TOO_SALESY",
@@ -42,9 +40,8 @@ export function promptVersion(system: string): string {
   return createHash("sha256").update(system).digest("hex").slice(0, 12);
 }
 
-/** The model to record for a call: what answered, else who was asked to think. */
-export function genModel(answered: string | null, brain: Brain, fake: boolean): string {
-  if (brain === "claude") return "founder-claude";
+/** The model to record for a call: what answered. */
+export function genModel(answered: string | null, fake: boolean): string {
   if (fake) return "fake";
   return answered ?? "unknown";
 }

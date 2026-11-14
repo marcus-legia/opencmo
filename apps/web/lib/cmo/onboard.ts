@@ -16,12 +16,10 @@ import "server-only";
 import { ApiError } from "@/lib/api/errors";
 import { firstRow, rpcOrThrow, type SupabaseClient } from "@/lib/api/handler";
 
-import { brainMode } from "./brain";
 import { DOCUMENT_KINDS } from "./documents";
 import { draftDocuments, GenerateError } from "./generate";
 import { kickFirstWeek, startCmoRun, type StartedRun } from "./jobs/start";
 import { readSite, SiteError } from "./site";
-import { isPaidPlan } from "../pricing";
 
 type RunRow = { id: string };
 
@@ -65,12 +63,15 @@ export async function runOnboarding(supabase: SupabaseClient, userId: string, si
   const live = (kind: "plan_week" | "post_draft") =>
     supabase.from("cmo_runs").select("status, input").eq("kind", kind).neq("status", "failed").limit(20);
   const [{ data: plans }, { data: drafts }] = await Promise.all([live("plan_week"), live("post_draft")]);
-  const planRows = (plans ?? []) as { status: string; input: { brain?: unknown } }[];
+  // A run sent to the founder's Claude inbox (removed 2026-11-14) ended "done" without writing anything: it does not
+  // count, so a founder left with one gets their first week now.
+  type Row = { status: string; input: { brain?: unknown } | null };
+  const real = (rows: unknown) => ((rows ?? []) as Row[]).filter((row) => row.input?.brain !== "claude");
+  const planRows = real(plans);
   if (planRows.length === 0) return { runId: run.id, firstWeek: await startFirstWeek(supabase, userId, started) };
-  // The plan is done and its draft failed: draft again. Not while the plan still runs (its own trigger drafts), and not
-  // after a Mode B plan (the founder's Claude drafts).
-  const planDone = planRows.some((row) => row.status === "done" && row.input?.brain !== "claude");
-  if (planDone && (drafts ?? []).length === 0) return { runId: run.id, firstWeek: await startFirstDraft(supabase) };
+  // The plan is done and its draft failed: draft again. Not while the plan still runs (its own trigger drafts).
+  const planDone = planRows.some((row) => row.status === "done");
+  if (planDone && real(drafts).length === 0) return { runId: run.id, firstWeek: await startFirstDraft(supabase) };
   return { runId: run.id, firstWeek: false };
 }
 
@@ -124,14 +125,6 @@ const ROUTE_MS = 280_000;
  */
 async function startFirstWeek(supabase: SupabaseClient, userId: string, started: number): Promise<boolean> {
   const input: Record<string, unknown> = { source: "onboarding" };
-  // Mode B: the plan waits in the founder's Claude inbox (`/api/v1/cmo/runs` does the same); the sweep opens it. Only on
-  // a plan: Mode B runs over MCP, which is paid only, and an account with no credits reads as Mode B ("credits"). The
-  // free first week (CMO review 3, 3.1) thinks with OpenCMO and runs at once; SQL drops `brain` for it anyway.
-  const [mode, { data: profile }] = await Promise.all([
-    brainMode(supabase, userId).catch(() => null),
-    supabase.from("profiles").select("plan").eq("id", userId).maybeSingle<{ plan: string | null }>(),
-  ]);
-  if (mode?.brain === "claude" && isPaidPlan(profile?.plan)) input.brain = "claude";
   let plan: StartedRun;
   try {
     plan = await startCmoRun(supabase, "plan_week", input, { kick: false });
@@ -139,6 +132,6 @@ async function startFirstWeek(supabase: SupabaseClient, userId: string, started:
     console.error("[cmo] could not queue the first week's plan", error);
     return false;
   }
-  if (input.brain !== "claude" && plan.status === "queued") kickFirstWeek(userId, plan.id, started + ROUTE_MS);
+  if (plan.status === "queued") kickFirstWeek(userId, plan.id, started + ROUTE_MS);
   return true;
 }

@@ -19,7 +19,7 @@ import { startCmoRun } from "@/lib/cmo/jobs/start";
 import { insightBlock, latestPerTopic } from "@/lib/cmo/jobs/context";
 import { mondayOf } from "@/lib/cmo/jobs/summarize-memory";
 import { readSite, SiteError } from "@/lib/cmo/site";
-import { isoDay, type Brain, type CompetitorInsight, type Lesson } from "@/lib/cmo/jobs/types";
+import { isoDay, type CompetitorInsight, type Lesson } from "@/lib/cmo/jobs/types";
 
 import { CMO_SKILLS } from "@/lib/cmo/skills/index.gen";
 import { SKILL_NAMES, skillText, type SkillName } from "@/lib/cmo/skills";
@@ -297,11 +297,10 @@ const data = (value: unknown) => JSON.stringify({ untrusted_data: value });
 export const SITE_READS_PER_TURN = 3;
 
 /**
- * Counters that live for one request (the scope is rebuilt every turn). `brain: "claude"`: the
- * caller is the founder's own Claude (MCP), so tasks it hands out think with it, through the inbox.
+ * Counters that live for one request (the scope is rebuilt every turn). `startedAt`: when this request began; past
+ * `KICK_UNTIL_MS` a started task is left to the sweep.
  */
-/** `startedAt`: when this request began; past `KICK_UNTIL_MS` a started task is left to the sweep. */
-export type CmoTurn = { siteReads: number; brain?: Brain; startedAt?: number };
+export type CmoTurn = { siteReads: number; startedAt?: number };
 
 /** A chat request runs up to 300 s; an `after()` drain started later than this would be cut off mid-job. */
 const KICK_UNTIL_MS = 200_000;
@@ -393,7 +392,6 @@ async function runTool(supabase: SupabaseClient, name: string, input: unknown, t
           const order = await rpcOrThrow<{ item_id: string; order_id: string; run_id: string; day: string; credits: number }>(supabase, "cmo_order_script", {
             p_brief: task.brief,
             p_day: task.when === "now" ? null : task.when,
-            p_brain: turn.brain === "claude" ? "claude" : null,
           });
           return {
             ok: true,
@@ -424,7 +422,7 @@ async function runTool(supabase: SupabaseClient, name: string, input: unknown, t
         const input =
           kind === "post_draft" ? { idea: task.brief, brief: task.brief, ...(task.thread ? { thread: true } : {}) } : kind === "competitor_research" ? { brief: task.brief, handles: task.handles ?? [] } : { brief: task.brief };
         const late = turn.startedAt !== undefined && Date.now() - turn.startedAt > KICK_UNTIL_MS;
-        const run = await startCmoRun(supabase, kind, turn.brain === "claude" ? { ...input, brain: "claude" } : input, { kick: !late });
+        const run = await startCmoRun(supabase, kind, input, { kick: !late });
         const label = { plan_week: "Planning the week", post_draft: task.thread ? "Writing an X thread" : "Drafting a post for X", sales_scan: "Scanning Reddit", competitor_research: "Researching competitors" }[kind];
         return { ok: true, content: JSON.stringify({ started: true, run_id: run.id, status: run.status }), summary: label, ...opens({ screen: SCREEN_OF_AGENT[task.agent], ids: [run.id] }) };
       } catch (error) {
@@ -442,8 +440,7 @@ async function runTool(supabase: SupabaseClient, name: string, input: unknown, t
         const risk = parsed.error.issues.find((issue) => issue.code === "custom");
         return invalid(risk ? risk.message : "note must be 1 to 600 characters.");
       }
-      // 'agent': ranks below the founder's own notes. MCP lands here too, and cannot see what a
-      // stateless caller read before, so it never saves at the founder's weight.
+      // 'agent': ranks below the founder's own notes, so the chat never saves at the founder's weight.
       await rpcOrThrow(supabase, "cmo_remember", { p_body: parsed.data.note, p_topic: parsed.data.topic, p_source: "agent" });
       return { ok: true, content: JSON.stringify({ saved: true }), summary: "Saved to memory" };
     }
