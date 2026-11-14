@@ -20,6 +20,8 @@ import {
   xTweet,
   youtubeSearch,
 } from "../research";
+import { facebookCandidates, readFacebookPost } from "../facebook";
+import { readThreadsPost, threadsCandidates } from "../threads-search";
 
 export type Fixture = {
   source: "assumed" | "real";
@@ -37,7 +39,7 @@ const nonEmpty = (what: string): Expect => (result) => {
 };
 
 /** Earlier answers a later call reads its input from (a thread link from a search, a video link from a search). */
-export type Found = Partial<Record<"redditThread" | "tweet" | "youtubeVideo" | "tiktokVideo" | "instagramPost" | "xVideo", string>>;
+export type Found = Partial<Record<"redditThread" | "tweet" | "youtubeVideo" | "tiktokVideo" | "instagramPost" | "xVideo" | "facebookPost" | "threadsPost", string>>;
 
 export type Endpoint = {
   name: string;
@@ -145,6 +147,45 @@ export const ENDPOINTS: Endpoint[] = [
       },
     }),
   ),
+  // Sales finder A3: Facebook group and Threads posts are found through Google, then read one by one.
+  {
+    name: "google-facebook-groups",
+    path: "/v1/google/search",
+    params: () => ({ query: "site:facebook.com/groups need help with invoicing clients", date_posted: "last-month" }),
+    read: (p) => googleSearch(p.query!, undefined, { datePosted: "last-month" }),
+    expect: nonEmpty("google facebook groups"),
+    find: (result, found) => {
+      found.facebookPost = facebookCandidates(result as Parameters<typeof facebookCandidates>[0])[0]?.url;
+    },
+  },
+  {
+    name: "facebook-post",
+    path: "/v1/facebook/post",
+    params: (found) => (found.facebookPost ? { url: found.facebookPost, cache_max_age: "7d" } : null),
+    read: (p) => readFacebookPost(p.url!),
+    expect: (result) => {
+      if (!(result as { text: string }).text) throw new Error("facebook post: no text");
+    },
+  },
+  {
+    name: "google-threads",
+    path: "/v1/google/search",
+    params: () => ({ query: "site:threads.com need help with invoicing clients", date_posted: "last-month" }),
+    read: (p) => googleSearch(p.query!, undefined, { datePosted: "last-month" }),
+    expect: nonEmpty("google threads"),
+    find: (result, found) => {
+      found.threadsPost = threadsCandidates(result as Parameters<typeof threadsCandidates>[0])[0]?.url;
+    },
+  },
+  {
+    name: "threads-post",
+    path: "/v1/threads/post",
+    params: (found) => (found.threadsPost ? { url: found.threadsPost, cache_max_age: "7d" } : null),
+    read: (p) => readThreadsPost(p.url!),
+    expect: (result) => {
+      if (!(result as { text: string }).text) throw new Error("threads post: no text");
+    },
+  },
   {
     name: "credit-balance",
     path: "/v1/credit/balance",

@@ -8,6 +8,7 @@ import type { CmoStore, DraftRating, CompetitorInsight, ConnectedAccountRow, Rep
 import { isoDay, toVerdict } from "./types";
 import { enqueueDueDrafts } from "../schedule";
 import { planOrDefault } from "../posting-plan";
+import { SALES_PLATFORMS, parsePlatforms } from "../social/conversations";
 
 const ITEM_COLUMNS =
   "id, run_id, department, platform, day, idea, reason, status, priority, body, final_text, external_url, decided_at, published_at, created_at";
@@ -240,10 +241,12 @@ export function supabaseStore(admin: BaseClient): CmoStore {
       if (error) throw new Error(`subreddit_rules: ${error.message}`);
     },
     async salesSettings(userId) {
-      const { data, error } = await admin.from("sales_settings").select("excluded_subreddits, co_occurrence").eq("user_id", userId).maybeSingle();
+      const { data, error } = await admin.from("sales_settings").select("excluded_subreddits, co_occurrence, platforms").eq("user_id", userId).maybeSingle();
       if (error) throw new Error(`sales_settings: ${error.message}`);
-      const row = data as { excluded_subreddits: string[]; co_occurrence: [string, string][] } | null;
-      return { excluded: row?.excluded_subreddits ?? [], pairs: row?.co_occurrence ?? [] };
+      const row = data as { excluded_subreddits: string[]; co_occurrence: [string, string][]; platforms: string[] } | null;
+      // No row yet means the defaults: every platform on. An empty list cannot be saved (`sales_settings_platforms_check`).
+      const platforms = row ? parsePlatforms(row.platforms) : [...SALES_PLATFORMS];
+      return { excluded: row?.excluded_subreddits ?? [], pairs: row?.co_occurrence ?? [], platforms: platforms.length ? platforms : [...SALES_PLATFORMS] };
     },
     recentMentions: (userId) => rpc<number>("sales_mention_count_for", { p_user: userId }),
     async waitingMentions(userId) {

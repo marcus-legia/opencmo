@@ -25,7 +25,7 @@ import { ScBudget } from "@/lib/cmo/social/scrapecreators";
 import type { LlmUsage } from "@/lib/cmo/jobs/llm";
 
 import { RESEARCH_CALLS_PER_TURN, RESEARCH_TOOLS, runResearchTool } from "./cmo-research";
-import { CMO_TOOL_SPECS, cmoContext, cmoState, isCmoWrite, pricedTaskCard, runCmoTool, type CmoTurn } from "./cmo-tools";
+import { CMO_TOOL_SPECS, cmoContext, cmoState, isCmoWrite, pricedTaskCard, runCmoTool, salesNowhere, salesPlatformsAllowed, type CmoTurn } from "./cmo-tools";
 import { DECISION_WRITES, prepareDecision, readCredits, runDecision, type DecisionCard, type Prepared } from "./cmo-decisions";
 import { CMO_SYSTEM_PROMPT, SYSTEM_PROMPT, projectStateBlock } from "./prompt";
 import type { ToolCall } from "./providers/types";
@@ -648,7 +648,15 @@ export function cmoScope(supabase: SupabaseClient, sessionId?: string): Scope {
       // A Sales scan or competitor research shows its price first; nothing is held until the founder approves it.
       if (call.name === "create_task") {
         const priced = pricedTaskCard(call.input);
-        return priced ? { kind: "approval", input: priced.input, card: priced.card } : { kind: "run" };
+        if (!priced) return { kind: "run" };
+        if (priced.input.agent !== "sales") return { kind: "approval", input: priced.input, card: priced.card };
+        // Sales finder C1: the card names only the places the founder's switches allow, and a scan with nowhere to
+        // look is refused before the founder is asked to pay for it (Review focus 4).
+        const allowed = await salesPlatformsAllowed(supabase);
+        const nowhere = allowed ? salesNowhere(priced.input.platforms, allowed) : "Could not read your Sales settings right now. Try again in a moment.";
+        if (nowhere) return { kind: "invalid", content: JSON.stringify({ INVALID_INPUT: nowhere }), summary: "Sales has nowhere to look" };
+        const card = pricedTaskCard(call.input, allowed!)!;
+        return { kind: "approval", input: card.input, card: card.card };
       }
       // A decision (plan 2026-11-02-cmo-chat-decisions) is a confirmation card: nothing writes until the founder
       // confirms it. The prepared input, with the card's hash read now, stays on the server with the pending call.

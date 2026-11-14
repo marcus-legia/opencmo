@@ -66,7 +66,11 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
 const found: Found = { instagramPost: args.instagram, xVideo: args["x-video"] };
 await mkdir(OUT, { recursive: true });
 let failed = 0;
+// `--only=facebook,threads`: capture only the endpoints whose name contains one of these words (new readers, without
+// paying again for the ones already saved).
+const only = args.only ? args.only.split(",").filter(Boolean) : [];
 for (const endpoint of ENDPOINTS) {
+  if (only.length && !only.some((word) => endpoint.name.includes(word))) continue;
   const params = endpoint.params(found);
   if (!params) {
     console.log(`skip  ${endpoint.name}: no input link (see the header of this script)`);

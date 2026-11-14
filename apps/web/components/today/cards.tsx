@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import type { ApprovalCard as Card, CardKind } from "@/lib/screens/approval-card";
 import { PLATFORM_LABEL } from "@/lib/screens/common";
+import { PLATFORM_LABEL as SALES_LABEL } from "@/lib/cmo/social/conversations";
 
 import { PlatformMark } from "./platform-logos";
 
@@ -116,7 +117,7 @@ export const KIND_ICON: Record<CardKind, ReactNode> = {
 
 const where = (card: Card) => (card.account ? PLATFORM_LABEL[card.account.platform] : null);
 
-/** The grey kind before the title: "X post", "Script · you record", "Reddit · r/SaaS". */
+/** The grey kind before the title: "X post", "Script · you record", "Reddit · r/SaaS", "Threads". */
 export function kindLabel(card: Card): string {
   const platform = where(card);
   switch (card.kind) {
@@ -125,7 +126,11 @@ export function kindLabel(card: Card): string {
       if (targetCount(card) > 1) return `Post for ${targetCount(card)} platforms`;
       return `${platform ?? "Post"}${platform ? " post" : ""}`;
     case "reply":
-      return card.body.kind === "reply" ? `Reddit · ${card.body.community}` : "Reddit reply";
+      if (card.body.kind !== "reply") return "Reply";
+      {
+        const label = SALES_LABEL[card.body.platform ?? "reddit"];
+        return card.body.community && card.body.community !== label ? `${label} · ${card.body.community}` : label;
+      }
     case "script":
       return "Script · you record";
     case "price":

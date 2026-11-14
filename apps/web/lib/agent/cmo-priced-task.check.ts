@@ -14,10 +14,15 @@ import { cmoScope } from "./scope";
 
 const RUN = "33333333-3333-4333-8333-333333333333";
 
-/** Records every RPC; `enqueue_cmo_run` answers a finished run so no background drain starts. */
-function fake() {
+/**
+ * Records every RPC; `enqueue_cmo_run` answers a finished run so no background drain starts. `platforms`: the
+ * founder's saved Sales switches (`sales_settings.platforms`); undefined is a founder who never saved any.
+ */
+function fake(platforms?: string[]) {
   const rpcs: { name: string; args: Record<string, unknown> }[] = [];
+  const query = { select: () => query, maybeSingle: async () => ({ data: platforms ? { platforms } : null, error: null }) };
   const client = {
+    from: () => query,
     rpc: async (name: string, args: Record<string, unknown>) => {
       rpcs.push({ name, args });
       return { data: { id: RUN, kind: args.p_kind, status: "done", created_at: "2026-11-08T10:00:00Z" }, error: null };
@@ -53,6 +58,13 @@ async function main() {
     // A video the founder already has is a free reminder, not a script.
     { agent: "video", brief: "Post the demo I recorded", have_video: true },
   ]) assert.equal(pricedTaskCard(input), null, JSON.stringify(input));
+  // Sales finder C1: the card names the places asked for; platforms belong to sales, and only known ones pass.
+  assert.ok(pricedTaskCard({ agent: "sales", brief: "find x", platforms: ["threads"] })?.card.changes[0]?.startsWith("Scan Threads"));
+  assert.equal(pricedTaskCard({ agent: "x_writer", brief: "x", platforms: ["reddit"] }), null);
+  assert.equal(pricedTaskCard({ agent: "research", brief: "What hooks work", platforms: ["reddit"] }), null, "research takes no platforms");
+  assert.equal(pricedTaskCard({ agent: "sales", brief: "find x", platforms: ["x"] }), null, "X is not a place Sales looks");
+  assert.equal(pricedTaskCard({ agent: "sales", brief: "find x", platforms: [] }), null, "an empty list is refused");
+  assert.equal(pricedTaskCard({ agent: "sales", brief: "find x" }, ["reddit", "hn"])?.card.changes[0], "Scan Reddit and Hacker News: find x", "only the switches that are on");
   // A script (I0) is priced on any day: the day is when the founder means to film.
   const script = pricedTaskCard({ agent: "video", brief: "A 30 second demo", when: "2026-11-20" });
   assert.equal(script?.card.credits, JOB_PRICES.write_video_brief);
@@ -78,6 +90,27 @@ async function main() {
   assert.equal(queued.length, 1);
   assert.equal(queued[0]?.args.p_kind, "sales_scan");
   assert.equal((queued[0]?.args.p_input as { brief?: string }).brief, "Founders who chase late invoices", "the task on the card runs, not a changed one");
+
+  // Review focus 4: a scan asked only where the founder turned Sales off is refused at the card, and again at run,
+  // before anything is queued or held.
+  const off = fake(["reddit"]);
+  const offScope = cmoScope(off.client);
+  const threadsOnly = call({ agent: "sales", brief: "Founders who chase late invoices", when: "now", platforms: ["threads"] });
+  const refused = await offScope.plan!(threadsOnly);
+  assert.equal(refused.kind, "invalid");
+  assert.match(refused.kind === "invalid" ? refused.content : "", /Sales is turned off for Threads\. Turn it on in Sales settings/);
+  const { runCmoTool } = await import("./cmo-tools");
+  const direct = await runCmoTool(off.client, "create_task", threadsOnly.input);
+  assert.ok(!direct.ok && /turned off for Threads/.test(direct.content), direct.content);
+  const dated = await runCmoTool(off.client, "create_task", { agent: "sales", brief: "Founders who chase late invoices", when: "2026-11-20", platforms: ["reddit"] });
+  assert.ok(!dated.ok && /later day uses your Sales settings/.test(dated.content), "a dated scan does not drop the places asked for");
+  assert.equal(off.rpcs.length, 0, "nothing queued or held");
+  // With Reddit on, the card names Reddit only, and the run is asked for the places the founder named.
+  const onePlace = await offScope.plan!(call({ agent: "sales", brief: "Founders who chase late invoices", when: "now" }));
+  assert.equal(onePlace.kind === "approval" ? onePlace.card?.changes[0] : null, "Scan Reddit: Founders who chase late invoices");
+  const named = await runCmoTool(fake(["reddit", "threads"]).client, "create_task", threadsOnly.input);
+  assert.ok(named.ok, named.content);
+  assert.equal(JSON.parse(named.content).run_id, RUN);
 
   delete process.env.SCRAPECREATORS_API_KEY;
   console.log("cmo priced tasks: ok");

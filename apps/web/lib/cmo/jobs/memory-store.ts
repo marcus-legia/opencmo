@@ -8,6 +8,7 @@ import { latestPerTopic } from "./context";
 import { isoDay, type CmoStore, type DraftRating, type CompetitorInsight, type ConnectedAccountRow, type ReplyOutcomeDue, type MetricRow, type ZernioPostRow, type NicheVideoInsight, type SalesSettings, type SubredditRule, type Documents, type Goal, type ItemRow, type Lesson, type MemoryEvent, type Opportunity, type QueuedRun, type Step, type VoiceNoteRow, type WeekResults } from "./types";
 import type { AccountMetricRow } from "./metrics-source";
 import { defaultPostingPlan, type PostingPlan } from "../posting-plan";
+import { SALES_PLATFORMS } from "../social/conversations";
 
 export type RunState = QueuedRun & { status: string; steps: Step[]; error: string | null; output: unknown; notBefore?: number };
 
@@ -28,7 +29,7 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
   const items: ItemRow[] = [];
   const opps: Opportunity[] = [];
   const rules = new Map<string, SubredditRule>();
-  const salesSettings: SalesSettings = { excluded: [], pairs: [] };
+  const salesSettings: SalesSettings = { excluded: [], pairs: [], platforms: [...SALES_PLATFORMS] };
   const mentions = { used: 0 };
   const insights: CompetitorInsight[] = [];
   const niche: NicheVideoInsight[] = [];

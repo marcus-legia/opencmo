@@ -10,7 +10,7 @@ export const NUMERAL: Record<Department, string> = { brain: "", research: "I", w
 
 const KIND_LABEL: Record<ApprovalCard["kind"], string> = {
   post: "Post",
-  reply: "Reddit reply",
+  reply: "Reply",
   goal: "Goal + week plan",
   script: "Script",
   price: "Price",

@@ -6,6 +6,7 @@
  */
 
 import { profileIdOf, profileOf } from "../cmo/platforms";
+import { PLATFORM_LABEL as SALES_LABEL, SALES_PLATFORMS } from "../cmo/social/conversations";
 
 import {
   FinishedVideoSnapshotSchema,
@@ -138,8 +139,8 @@ function build(row: ApprovalRow): Built | null {
       const parts = (Array.isArray(s.score_parts) ? s.score_parts : []) as Partial<ScorePart & { evidence: string }>[];
       const valid = parts.filter((p) => typeof p.label === "string" && typeof p.score === "number" && typeof p.max === "number" && p.max > 0);
       const quotes = valid.filter((p) => typeof p.evidence === "string" && p.evidence).map((p) => ({ text: clip(p.evidence!, 400), from: p.label!.toLowerCase() }));
-      const hn = s.platform === "hn";
-      const community = clip(str(s.community) || (hn ? "Hacker News" : "Reddit"), 80);
+      const platform = SALES_PLATFORMS.find((p) => p === s.platform) ?? "reddit";
+      const community = clip(str(s.community) || SALES_LABEL[platform], 80);
       const score = typeof s.score === "number" ? Math.min(100, Math.max(0, Math.round(s.score))) : 0;
       return {
         title: clip(`${community} · “${str(s.title)}”`, 300),
@@ -155,7 +156,7 @@ function build(row: ApprovalRow): Built | null {
           quotes,
           draft: clip(str(s.reply), 10000),
           rules: "you post it yourself",
-          ...(hn ? { platform: "hn" as const } : {}),
+          ...(platform !== "reddit" ? { platform } : {}),
           // Cards raised before P5 have no rule; a skipped thread has no card.
           ...(typeof s.rule === "string" && s.rule !== "skip"
             ? {

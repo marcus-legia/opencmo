@@ -310,6 +310,17 @@ check("cards: an X thread reaches the post card, and an HN reply says where it i
   ApprovalCardSchema.parse(hn);
   assert.equal(hn.body.platform, "hn");
   assert.equal(hn.body.community, "Hacker News");
+  // Sales finder: a Facebook group or Threads reply says where it is; it is never labelled Reddit.
+  for (const [platform, url, label] of [
+    ["facebook", "https://www.facebook.com/groups/saasfounders/posts/123", "Facebook groups"],
+    ["threads", "https://www.threads.com/@maker/post/C9abc", "Threads"],
+  ] as const) {
+    const card = approvalToCard(row("reply", { kind: "reply", platform, url, community: "", title: "Demo videos", reply: "Record once.", score: 70, score_parts: [] }));
+    assert.ok(card && card.body.kind === "reply");
+    ApprovalCardSchema.parse(card);
+    assert.equal(card.body.platform, platform);
+    assert.equal(card.body.community, label);
+  }
 
   // 270 code points with 15 emoji is 285 UTF-16 units: within X's 280, as SQL counts it. zod 4's `max` counts code
   // points too; this pins that, so a zod change that counted UTF-16 units would not silently drop thread cards.

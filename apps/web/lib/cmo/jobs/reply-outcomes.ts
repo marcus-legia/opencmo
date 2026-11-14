@@ -81,7 +81,11 @@ export async function checkReply(due: ReplyOutcomeDue, readers: ReplyReaders): P
 /** The `pull_metrics` step: every reply due, checked once. Reddit replies wait while the reader is not set up. */
 export async function checkReplies(ctx: JobContext, readers: ReplyReaders = defaultReaders()): Promise<{ checked: number; found: number }> {
   const { store, run } = ctx;
-  const due = (await store.replyOutcomesDue(run.user_id, MAX_REPLY_CHECKS)).filter((d) => d.platform === "hn" || socialReaderReady());
+  // Facebook groups and Threads have no reader that lists a post's comments by text yet (Sales finder v1): their
+  // outcomes stay unchecked instead of being read as Reddit threads and marked gone.
+  const due = (await store.replyOutcomesDue(run.user_id, MAX_REPLY_CHECKS)).filter(
+    (d) => d.platform === "hn" || (d.platform === "reddit" && socialReaderReady()),
+  );
   if (!due.length) return { checked: 0, found: 0 };
   return ctx.step(
     "check_replies",

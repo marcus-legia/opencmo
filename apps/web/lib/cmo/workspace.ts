@@ -174,7 +174,7 @@ export const JOB_TITLE: Record<JobId, string> = {
   W1: "Plan the week",
   W2: "Draft X post",
   W3: "Publish",
-  W4: "Scan Reddit",
+  W4: "Scan conversations",
   W5: "Write for video",
   W6: "Pull numbers",
   W7: "Competitor research",

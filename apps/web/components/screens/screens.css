@@ -401,6 +401,10 @@
 .scr-settings-title { margin: 0; font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
 .scr-settings-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; }
 .scr-settings-row .v2-field { flex: 1 1 180px; min-width: 0; }
+.scr-sales-platforms { margin: 0; padding: 0; border: 0; display: flex; flex-wrap: wrap; gap: 6px 18px; }
+.scr-sales-platforms legend { width: 100%; padding: 0 0 6px; font-weight: 600; }
+.scr-sales-platforms label { display: inline-flex; align-items: center; gap: 8px; min-height: 32px; cursor: pointer; }
+.scr-sales-platforms label:has(input:disabled) { cursor: not-allowed; }
 .scr-chips { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 6px; }
 .scr-chips li { display: inline-flex; align-items: center; gap: 4px; padding: 0 0 0 10px; border: 1px solid var(--v2-line); border-radius: var(--v2-pill); font: 500 12px var(--v2-mono); }
 .scr-chips button { all: unset; box-sizing: border-box; width: 32px; height: 32px; display: inline-grid; place-items: center; border-radius: var(--v2-pill); cursor: pointer; }

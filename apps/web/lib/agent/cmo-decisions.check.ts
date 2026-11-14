@@ -77,6 +77,13 @@ async function main() {
   assert.ok(merged.ok);
   assert.deepEqual(merged.prepared, { tool: "set_sales_settings", excluded: ["saas", "memes"], pairs: [["invoice", "late"], ["demo", "video"]] });
   assert.equal((await prepareDecision(sales.client, "set_sales_settings", { exclude: ["saas"] })).ok, false, "already excluded");
+  // Sales finder C1: the places Sales looks, at least one, named on the card and saved whole.
+  assert.equal((await prepareDecision(sales.client, "set_sales_settings", { platforms: [] })).ok, false, "no place at all");
+  assert.equal((await prepareDecision(sales.client, "set_sales_settings", { platforms: ["x"] })).ok, false, "X is not a place");
+  const places = await prepareDecision(sales.client, "set_sales_settings", { platforms: ["reddit"] });
+  assert.ok(places.ok && places.card.changes.includes("Look on: Reddit"), JSON.stringify(places));
+  assert.deepEqual(places.ok && places.prepared, { tool: "set_sales_settings", excluded: ["saas"], pairs: [["invoice", "late"]], platforms: ["reddit"] });
+  assert.equal((await prepareDecision(sales.client, "set_sales_settings", { platforms: ["threads", "reddit", "facebook", "hn"] })).ok, false, "all four are already on");
 
   // CMO settings: only the given fields change; a bad time zone is refused.
   const profile = fake({ profiles: { weekly_credit_budget: 80, timezone: "Europe/Berlin", digest_hour: 7 } });

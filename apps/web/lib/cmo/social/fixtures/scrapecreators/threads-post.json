@@ -1,0 +1,333 @@
+{
+  "source": "real",
+  "path": "/v1/threads/post",
+  "params": {
+    "url": "https://www.threads.com/@user_redacted/post/DffS26VHz-0",
+    "cache_max_age": "7d"
+  },
+  "capturedAt": "2026-11-14",
+  "body": {
+    "success": true,
+    "credits_remaining": 24,
+    "credits_charged": 1,
+    "post": {
+      "id": "4026019530212851636_37499049032",
+      "pk": "4026019530212851636",
+      "caption": {
+        "text": "Biggest flex? Not a CPA nor an accounting graduate, no license, no board exams but working as a US Accountant 😉 .. and I know I'm not the only one 🏆 Our hardwork has paid off 🙂‍↔️",
+        "can_translate": null,
+        "has_translation": null,
+        "pk": "18359709781172253",
+        "text_translation": null
+      },
+      "code": "DffS26VHz-0",
+      "like_count": 612,
+      "taken_at": 1794158949,
+      "user": {
+        "pk": "37499049032",
+        "profile_pic_url": "https://example.invalid/avatar.jpg",
+        "friendship_status": null,
+        "username": "user_redacted",
+        "id": "37499049032",
+        "biography": "Travelled to 14 countries so far, the rest of the world soon!",
+        "full_name": "",
+        "is_verified": false,
+        "text_app_cover_photo_url": null,
+        "text_app_biography": {
+          "text_fragments": {
+            "fragments": [
+              {
+                "fragment_type": "plaintext",
+                "link_fragment": null,
+                "mention_fragment": null,
+                "plaintext": "Travelled to 14 countries so far, the rest of the world soon!",
+                "looking_for_recs_fragment": null,
+                "cashtag_fragment": null,
+                "inline_sticker_fragment": null,
+                "linkified_web_url": null,
+                "linkified_in_app_url": null,
+                "styling_info": null
+              }
+            ]
+          }
+        },
+        "interop_messaging_user_fbid": "18071664047249033",
+        "is_meta_ai_bot": false,
+        "transparency_label": null,
+        "transparency_product": null,
+        "transparency_product_enabled": false,
+        "has_onboarded_to_text_post_app": true,
+        "text_post_app_is_private": false,
+        "platform_podcast_episode_info": null,
+        "platform_podcast_info": null
+      },
+      "url": "https://www.threads.com/@user_redacted/post/DffS26VHz-0"
+    },
+    "comments": [
+      {
+        "id": "4026116694049250792_72204396297",
+        "pk": "4026116694049250792",
+        "caption": {
+          "text": "high school grad lang here, pero working as manager, remotely haha",
+          "can_translate": null,
+          "has_translation": null,
+          "pk": "18082021709400812",
+          "text_translation": null
+        },
+        "code": "Dffo81NE13o",
+        "like_count": 23,
+        "taken_at": 1794170532,
+        "user": {
+          "pk": "72204396297",
+          "profile_pic_url": "https://example.invalid/avatar.jpg",
+          "friendship_status": null,
+          "username": "user_redacted",
+          "id": "72204396297",
+          "biography": "You're a man. No one is going to push you except yourself.",
+          "full_name": "user_redacted",
+          "is_verified": false,
+          "text_app_cover_photo_url": null,
+          "text_app_biography": {
+            "text_fragments": {
+              "fragments": [
+                {
+                  "fragment_type": "plaintext",
+                  "link_fragment": null,
+                  "mention_fragment": null,
+                  "plaintext": "You're a man. No one is going to push you except yourself.",
+                  "looking_for_recs_fragment": null,
+                  "cashtag_fragment": null,
+                  "inline_sticker_fragment": null,
+                  "linkified_web_url": null,
+                  "linkified_in_app_url": null,
+                  "styling_info": null
+                }
+              ]
+            }
+          },
+          "interop_messaging_user_fbid": "17857237077404298",
+          "is_meta_ai_bot": false,
+          "transparency_label": null,
+          "transparency_product": null,
+          "transparency_product_enabled": false,
+          "has_onboarded_to_text_post_app": true,
+          "text_post_app_is_private": false
+        }
+      },
+      {
+        "id": "4026378089080752638_80439558334",
+        "pk": "4026378089080752638",
+        "caption": {
+          "text": "HS grad here, Admin Operations in accounting before ✋🏻 and it leads me to Law Firm as Legal Admin/Ops 🩷✨",
+          "can_translate": null,
+          "has_translation": null,
+          "pk": "17950805214356929",
+          "text_translation": null
+        },
+        "code": "DfgkYoTEwn-",
+        "like_count": 3,
+        "taken_at": 1794201693,
+        "user": {
+          "pk": "80439558334",
+          "profile_pic_url": "https://example.invalid/avatar.jpg",
+          "friendship_status": null,
+          "username": "user_redacted",
+          "id": "80439558334",
+          "biography": "♒\n🐅",
+          "full_name": "user_redacted",
+          "is_verified": false,
+          "text_app_cover_photo_url": null,
+          "text_app_biography": {
+            "text_fragments": {
+              "fragments": [
+                {
+                  "fragment_type": "plaintext",
+                  "link_fragment": null,
+                  "mention_fragment": null,
+                  "plaintext": "♒\n🐅",
+                  "looking_for_recs_fragment": null,
+                  "cashtag_fragment": null,
+                  "inline_sticker_fragment": null,
+                  "linkified_web_url": null,
+                  "linkified_in_app_url": null,
+                  "styling_info": null
+                }
+              ]
+            }
+          },
+          "interop_messaging_user_fbid": "17842856850686335",
+          "is_meta_ai_bot": false,
+          "transparency_label": null,
+          "transparency_product": null,
+          "transparency_product_enabled": false,
+          "has_onboarded_to_text_post_app": true,
+          "text_post_app_is_private": false
+        }
+      },
+      {
+        "id": "4026033681818973600_72695180240",
+        "pk": "4026033681818973600",
+        "caption": {
+          "text": "Can you give advice on how to start? Been planning to study Accounting by starting with Bookkeeping. I am in my 40s and sana kayanin pa and shift career 🙏🏻",
+          "can_translate": null,
+          "has_translation": null,
+          "pk": "17905885968656290",
+          "text_translation": null
+        },
+        "code": "DffWE2Ck_Wg",
+        "like_count": 2,
+        "taken_at": 1794160636,
+        "user": {
+          "pk": "72695180240",
+          "profile_pic_url": "https://example.invalid/avatar.jpg",
+          "friendship_status": null,
+          "username": "user_redacted",
+          "id": "72695180240",
+          "biography": "",
+          "full_name": "",
+          "is_verified": false,
+          "text_app_cover_photo_url": null,
+          "text_app_biography": {
+            "text_fragments": {
+              "fragments": []
+            }
+          },
+          "interop_messaging_user_fbid": "17853601587420241",
+          "is_meta_ai_bot": false,
+          "transparency_label": null,
+          "transparency_product": null,
+          "transparency_product_enabled": false,
+          "has_onboarded_to_text_post_app": true,
+          "text_post_app_is_private": false
+        }
+      }
+    ],
+    "relatedPosts": [
+      {
+        "id": "4026352199957404007_17281953948",
+        "pk": "4026352199957404007",
+        "caption": null,
+        "code": "Dfgef5LEtln",
+        "like_count": 0,
+        "taken_at": 1794198606,
+        "user": {
+          "profile_pic_url": "https://example.invalid/avatar.jpg",
+          "id": "17281953948",
+          "pk": "17281953948",
+          "friendship_status": null,
+          "username": "user_redacted",
+          "biography": "",
+          "full_name": "user_redacted",
+          "is_verified": false,
+          "text_app_cover_photo_url": null,
+          "text_app_biography": {
+            "text_fragments": {
+              "fragments": []
+            }
+          },
+          "interop_messaging_user_fbid": "18119127589577949",
+          "is_meta_ai_bot": false,
+          "transparency_label": null,
+          "transparency_product": null,
+          "transparency_product_enabled": false,
+          "has_onboarded_to_text_post_app": true,
+          "text_post_app_is_private": false,
+          "platform_podcast_episode_info": null,
+          "platform_podcast_info": null
+        }
+      },
+      {
+        "id": "4018612190562069256_73628965834",
+        "pk": "4018612190562069256",
+        "caption": {
+          "text": "Being an accountant/auditor is such a practical career choice. You can work across different industries, explore so many opportunities, and most of the time, job offers find you instead of the other way around. \n\nThe journey to finishing this course, especially earning the license, was one heck of a tough ride. But becoming a CPA has got to be one of the best decisions i’ve ever made. 🤍 It gets better, I promise!",
+          "can_translate": null,
+          "has_translation": null,
+          "pk": "18116696174130307",
+          "text_translation": null
+        },
+        "code": "DfE-n7sgasI",
+        "like_count": 43,
+        "taken_at": 1793275925,
+        "user": {
+          "profile_pic_url": "https://example.invalid/avatar.jpg",
+          "id": "73628965834",
+          "pk": "73628965834",
+          "friendship_status": null,
+          "username": "user_redacted",
+          "biography": "all plans that come after working hours 🍃🧚🏻‍♀️🐚👩‍💻",
+          "full_name": "user_redacted",
+          "is_verified": false,
+          "text_app_cover_photo_url": null,
+          "text_app_biography": {
+            "text_fragments": {
+              "fragments": [
+                {
+                  "fragment_type": "plaintext",
+                  "link_fragment": null,
+                  "mention_fragment": null,
+                  "plaintext": "all plans that come after working hours 🍃🧚🏻‍♀️🐚👩‍💻",
+                  "looking_for_recs_fragment": null,
+                  "cashtag_fragment": null,
+                  "inline_sticker_fragment": null,
+                  "linkified_web_url": null,
+                  "linkified_in_app_url": null,
+                  "styling_info": null
+                }
+              ]
+            }
+          },
+          "interop_messaging_user_fbid": "17849506122453835",
+          "is_meta_ai_bot": false,
+          "transparency_label": null,
+          "transparency_product": null,
+          "transparency_product_enabled": false,
+          "has_onboarded_to_text_post_app": true,
+          "text_post_app_is_private": false,
+          "platform_podcast_episode_info": null,
+          "platform_podcast_info": null
+        }
+      },
+      {
+        "id": "4020003387101922839_73449028849",
+        "pk": "4020003387101922839",
+        "caption": {
+          "text": "Any other future CPAs who studied for HOURS today but only managed to cover a couple of pages? 😭. Accounting is life 💀.",
+          "can_translate": null,
+          "has_translation": null,
+          "pk": "18112939061270907",
+          "text_translation": null
+        },
+        "code": "DfJ68gcE8YX",
+        "like_count": 8,
+        "taken_at": 1793441769,
+        "user": {
+          "profile_pic_url": "https://example.invalid/avatar.jpg",
+          "id": "73449028849",
+          "pk": "73449028849",
+          "friendship_status": null,
+          "username": "user_redacted",
+          "biography": "",
+          "full_name": "user_redacted",
+          "is_verified": false,
+          "text_app_cover_photo_url": null,
+          "text_app_biography": {
+            "text_fragments": {
+              "fragments": []
+            }
+          },
+          "interop_messaging_user_fbid": "17843284218452850",
+          "is_meta_ai_bot": false,
+          "transparency_label": null,
+          "transparency_product": null,
+          "transparency_product_enabled": false,
+          "has_onboarded_to_text_post_app": true,
+          "text_post_app_is_private": false,
+          "platform_podcast_episode_info": null,
+          "platform_podcast_info": null
+        }
+      }
+    ],
+    "threadItems": []
+  }
+}

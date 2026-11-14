@@ -16,6 +16,7 @@ import { firstRow, rpcOrThrow, type SupabaseClient } from "@/lib/api/handler";
 import { clampDocument, DOCUMENT_KINDS, DOCUMENT_SCHEMAS, DOCUMENTS, wasCut, type DocumentKind } from "@/lib/cmo/documents";
 import { researchCard, salesScanCard, scriptCard, type PriceCard } from "@/lib/cmo/jobs/price-card";
 import { startCmoRun } from "@/lib/cmo/jobs/start";
+import { PLATFORM_LABEL, SALES_PLATFORMS, type SalesPlatform } from "@/lib/cmo/social/conversations";
 import { insightBlock, latestPerTopic } from "@/lib/cmo/jobs/context";
 import { mondayOf } from "@/lib/cmo/jobs/summarize-memory";
 import { readSite, SiteError } from "@/lib/cmo/site";
@@ -60,7 +61,7 @@ export const CMO_TOOL_SPECS: ToolSpec[] = [
   {
     name: "list_approvals",
     description:
-      "List the cards waiting on the founder in Approvals (every kind: post, reply, goal, schedule, script, price, finished video, shorts, slideshow, correction), posts drafted, approved or published in the last 14 days, and Reddit conversations (community, score, status) waiting for a reply.",
+      "List the cards waiting on the founder in Approvals (every kind: post, reply, goal, schedule, script, price, finished video, shorts, slideshow, correction), posts drafted, approved or published in the last 14 days, and Sales conversations (Reddit, Hacker News, Facebook groups, Threads: community, score, status) waiting for a reply.",
     schema: EMPTY,
     strict: true,
   },
@@ -70,7 +71,7 @@ export const CMO_TOOL_SPECS: ToolSpec[] = [
       "Hand a task to one of your agents. Each task needs a specific brief: what to make, for whom, and the angle or evidence from your research (with URLs).",
       "planner: plan the next seven days into the calendar (1 credit; when = now only).",
       "x_writer: draft an X post, three versions, into Approvals (1 credit). With thread: true, one X thread of 5 to 8 posts instead (1 credit; only when the founder asks for a thread; when = now only).",
-      "sales: search Reddit for people describing the problem, score threads with quotes, draft replies the founder posts themselves (5 credits; only when the founder asks).",
+      "sales: find people describing the problem in conversations on Reddit, Hacker News, public Facebook groups and Threads (not X), score them with quotes, draft replies the founder posts themselves (5 credits; only when the founder asks).",
       "research: study competitors' X accounts, find posts that beat their baseline and the hooks behind them, and save what works for the planner and X writer (2 credits; pass handles, or it uses the X handles in Competitor Analysis; when = now only).",
       "video: write the script and storyboard of a short video the founder records themselves (1 credit): 3 to 8 beats of what to say and show, on a script card in Approvals. You never make the video. When the founder already has the video and only wants a reminder to post it, set have_video: true: that adds a calendar item with an \"Upload video\" button and costs nothing.",
       "when: \"now\" runs it in the background, usually within a minute: x_writer and sales results land in Approvals, the planner's on the calendar, research's in what the planner and X writer read. A date (YYYY-MM-DD, within 13 days) puts it on the calendar and it runs that morning. Nothing is posted until the founder approves.",
@@ -84,6 +85,11 @@ export const CMO_TOOL_SPECS: ToolSpec[] = [
         handles: { type: "array", items: { type: "string" }, description: "Research only: up to 4 X handles to study." },
         thread: { type: "boolean", description: "x_writer only: true when the founder asked for an X thread." },
         have_video: { type: "boolean", description: "video only: true when the founder already has the video and wants a reminder, not a script." },
+        platforms: {
+          type: "array",
+          items: { type: "string", enum: [...SALES_PLATFORMS] },
+          description: "sales only: where to look. Leave it out to use the founder's Sales settings.",
+        },
       },
       required: ["agent", "brief"],
       additionalProperties: false,
@@ -229,6 +235,7 @@ const taskInput = z.object({
   handles: z.array(z.string().trim().min(1).max(80)).max(4).optional(),
   thread: z.boolean().optional(),
   have_video: z.boolean().optional(),
+  platforms: z.array(z.enum(SALES_PLATFORMS)).min(1).max(4).optional(),
 });
 const JOB_OF = { planner: "plan_week", x_writer: "post_draft", sales: "sales_scan", research: "competitor_research" } as const;
 const DEPARTMENT_OF = { x_writer: "post", sales: "sales", video: "video" } as const;
@@ -242,18 +249,48 @@ export const PRICED_AGENTS = { sales: "sales_scan", research: "competitor_resear
 
 export type PricedTask = { input: z.infer<typeof taskInput>; card: PriceCard };
 
-/** The card for a priced task, or null when `create_task` runs at once (a free or dated task, or input it refuses). */
-export function pricedTaskCard(input: unknown): PricedTask | null {
+/** The places a Sales scan asked for (none means all) that the founder's switches allow, in list order. */
+export function salesPlaces(asked: SalesPlatform[] | undefined, allowed: readonly SalesPlatform[] = SALES_PLATFORMS): SalesPlatform[] {
+  return (asked?.length ? asked : [...SALES_PLATFORMS]).filter((p) => allowed.includes(p));
+}
+
+/** Why a scan cannot run, naming the switch to turn on, or null when it has somewhere to look (Review focus 4). */
+export function salesNowhere(asked: SalesPlatform[] | undefined, allowed: readonly SalesPlatform[]): string | null {
+  if (salesPlaces(asked, allowed).length) return null;
+  const off = (asked?.length ? asked : [...SALES_PLATFORMS]).map((p) => PLATFORM_LABEL[p]);
+  const names = off.length <= 1 ? off.join("") : `${off.slice(0, -1).join(", ")} and ${off.at(-1)}`;
+  return `Sales is turned off for ${names}. Turn it on in Sales settings, or ask for another place.`;
+}
+
+/** The founder's Sales switches under RLS: every place when they never saved any, null when the read failed. */
+export async function salesPlatformsAllowed(supabase: SupabaseClient): Promise<SalesPlatform[] | null> {
+  const { data, error } = await supabase.from("sales_settings").select("platforms").maybeSingle<{ platforms: string[] | null }>();
+  if (error) return null;
+  const saved = SALES_PLATFORMS.filter((p) => (data?.platforms ?? SALES_PLATFORMS).includes(p));
+  return saved.length ? saved : [...SALES_PLATFORMS];
+}
+
+/**
+ * The card for a priced task, or null when `create_task` runs at once (a free or dated task, or input it refuses).
+ * `allowed`: the founder's Sales switches, so the card names only the places the scan will search.
+ */
+export function pricedTaskCard(input: unknown, allowed?: readonly SalesPlatform[]): PricedTask | null {
   const parsed = taskInput.safeParse(input);
-  // `thread` belongs to x_writer and `have_video` to video: let create_task refuse them now instead of after the
-  // founder approved a card for a task that could never start.
-  if (!parsed.success || !(parsed.data.agent in PRICED_AGENTS) || parsed.data.thread || (parsed.data.have_video && parsed.data.agent !== "video")) return null;
+  // `thread` belongs to x_writer, `have_video` to video and `platforms` to sales: let create_task refuse them now
+  // instead of after the founder approved a card for a task that could never start.
+  if (
+    !parsed.success ||
+    !(parsed.data.agent in PRICED_AGENTS) ||
+    parsed.data.thread ||
+    (parsed.data.have_video && parsed.data.agent !== "video") ||
+    (parsed.data.platforms && parsed.data.agent !== "sales")
+  ) return null;
   const task = parsed.data;
   // A script is written at once whatever its day (the day is when the founder means to film), so it is priced on any
   // `when`; a reminder for a video the founder has costs nothing. Sales and research are priced when they run now.
   if (task.agent === "video") return task.have_video ? null : { input: task, card: scriptCard(task.brief) };
   if (task.when !== "now") return null;
-  return { input: task, card: task.agent === "sales" ? salesScanCard(task.brief) : researchCard(task.brief, task.handles) };
+  return { input: task, card: task.agent === "sales" ? salesScanCard(task.brief, salesPlaces(task.platforms, allowed)) : researchCard(task.brief, task.handles) };
 }
 
 // 5.3: a note that would get the founder's Reddit account banned is refused with the reason (SQL checks it again).
@@ -385,6 +422,7 @@ async function runTool(supabase: SupabaseClient, name: string, input: unknown, t
       if (task.thread && task.agent !== "x_writer") return invalid("thread is for x_writer only.");
       if (task.thread && task.when !== "now") return invalid("A thread is written now; when must be \"now\".");
       if (task.have_video && task.agent !== "video") return invalid("have_video is for video only.");
+      if (task.platforms && task.agent !== "sales") return invalid("platforms is for sales only.");
       // A script (cmo-review-3 I0): the item, the Writer order and its hold in one transaction (`cmo_order_script`);
       // the script card arrives when Writer is done. The founder records the video; nothing builds it.
       if (task.agent === "video" && !task.have_video) {
@@ -408,6 +446,8 @@ async function runTool(supabase: SupabaseClient, name: string, input: unknown, t
       try {
         if (scheduled) {
           if (task.agent === "planner" || task.agent === "research") return invalid(`The ${task.agent} only runs now.`);
+          // A dated scan runs from the calendar with the founder's Sales settings: places asked for would be lost.
+          if (task.platforms) return invalid("A scan on a later day uses your Sales settings. Leave platforms out, or run it now.");
           const day = task.when === "now" ? isoDay() : task.when;
           const item = await rpcOrThrow<{ id: string; day: string }>(supabase, "cmo_add_item", {
             p_department: DEPARTMENT_OF[task.agent],
@@ -419,11 +459,21 @@ async function runTool(supabase: SupabaseClient, name: string, input: unknown, t
           return { ok: true, content: JSON.stringify({ scheduled: true, item_id: item.id, day: item.day }), summary: task.agent === "video" ? "Added a video task to the calendar" : `Scheduled for ${item.day}`, ...opens({ screen: "schedule" }) };
         }
         const kind = JOB_OF[task.agent as keyof typeof JOB_OF];
+        // A scan with nowhere to look is refused here, before `enqueue_cmo_run` holds a credit (Review focus 4).
+        if (kind === "sales_scan") {
+          const allowed = await salesPlatformsAllowed(supabase);
+          if (!allowed) return readFailed;
+          const nowhere = salesNowhere(task.platforms, allowed);
+          if (nowhere) return invalid(nowhere);
+        }
         const input =
-          kind === "post_draft" ? { idea: task.brief, brief: task.brief, ...(task.thread ? { thread: true } : {}) } : kind === "competitor_research" ? { brief: task.brief, handles: task.handles ?? [] } : { brief: task.brief };
+          kind === "post_draft" ? { idea: task.brief, brief: task.brief, ...(task.thread ? { thread: true } : {}) }
+          : kind === "competitor_research" ? { brief: task.brief, handles: task.handles ?? [] }
+          : kind === "sales_scan" && task.platforms ? { brief: task.brief, platforms: task.platforms }
+          : { brief: task.brief };
         const late = turn.startedAt !== undefined && Date.now() - turn.startedAt > KICK_UNTIL_MS;
         const run = await startCmoRun(supabase, kind, input, { kick: !late });
-        const label = { plan_week: "Planning the week", post_draft: task.thread ? "Writing an X thread" : "Drafting a post for X", sales_scan: "Scanning Reddit", competitor_research: "Researching competitors" }[kind];
+        const label = { plan_week: "Planning the week", post_draft: task.thread ? "Writing an X thread" : "Drafting a post for X", sales_scan: "Scanning conversations", competitor_research: "Researching competitors" }[kind];
         return { ok: true, content: JSON.stringify({ started: true, run_id: run.id, status: run.status }), summary: label, ...opens({ screen: SCREEN_OF_AGENT[task.agent], ids: [run.id] }) };
       } catch (error) {
         return { ok: false, content: JSON.stringify({ error: error instanceof Error ? error.message : "Could not start this task." }), summary: "Could not start" };

@@ -8,6 +8,7 @@ import { useLive } from "@/components/clipping/useLive";
 import { SalesSettings } from "@/components/screens/sales/SalesSettings";
 import { useScreen } from "@/components/screens/useScreen";
 import { salesScanCard } from "@/lib/cmo/jobs/price-card";
+import { PLATFORM_LABEL, SALES_PLATFORMS, type SalesPlatform } from "@/lib/cmo/social/conversations";
 import type { SalesScreen } from "@/lib/screens/sales";
 import { createClient } from "@/lib/supabase/client";
 
@@ -131,8 +132,9 @@ function ScanProgress({ scan, onClose }: { scan: Scan; onClose: () => void }) {
 }
 
 /** Scan now: the same price card as a scan asked in the CMO chat; nothing is held until the founder approves it. */
-function ScanNow({ scanning, onStarted }: { scanning: boolean; onStarted: (run: { id: string; status: string; created_at: string }) => void }) {
-  const card = salesScanCard();
+function ScanNow({ scanning, platforms, onStarted }: { scanning: boolean; platforms?: SalesPlatform[]; onStarted: (run: { id: string; status: string; created_at: string }) => void }) {
+  // The card names the places the founder's switches leave on: the scan searches those only.
+  const card = salesScanCard(undefined, platforms);
   const [step, setStep] = useState<"idle" | "confirm" | "busy">("idle");
   const [error, setError] = useState<string | null>(null);
 
@@ -231,7 +233,7 @@ function ThreadRow({ t, open, onToggle, onDecide }: { t: Thread; open: boolean; 
         <span style={{ flex: "1 1 auto", minWidth: "0" }}>
           <span style={{ display: "block", fontSize: "14.5px", fontWeight: "500", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: done ? "var(--muted)" : undefined }}>{t.title}</span>
           <span className="meta">
-            {[t.community, t.postedAt ? ago(t.postedAt) : null, t.comments != null ? `${t.comments} comments` : null, done ? (t.status === "replied" ? "you replied" : "dismissed") : null].filter(Boolean).join(" · ")}
+            {[PLATFORM_LABEL[t.platform], t.community !== PLATFORM_LABEL[t.platform] ? t.community : null, t.postedAt ? ago(t.postedAt) : null, t.comments != null ? `${t.comments} comments` : null, done ? (t.status === "replied" ? "you replied" : "dismissed") : null].filter(Boolean).join(" · ")}
           </span>
         </span>
         <svg className="i s" viewBox="0 0 24 24" aria-hidden="true" style={{ color: "var(--subtle)" }}>
@@ -447,7 +449,7 @@ export function AgentSales() {
               <span className="chip">Brand voice</span>
             </div>
           </div>
-          <ScanNow scanning={scanActive(scan)} onStarted={startedScan} />
+          <ScanNow scanning={scanActive(scan)} platforms={data?.settings.platforms} onStarted={startedScan} />
         </div>
         {scan ? <ScanProgress scan={scan} onClose={() => setScan(null)} /> : null}
 
@@ -515,7 +517,7 @@ export function AgentSales() {
 
         {tab === "settings" && data ? (
           <div className="v2" style={{ marginTop: "14px" }}>
-            <SalesSettings initial={data.settings} live={Boolean(state.status === "ready" && state.live.settings)} />
+            <SalesSettings initial={data.settings} live={Boolean(state.status === "ready" && state.live.settings)} onSaved={reload} />
           </div>
         ) : null}
       </main>
@@ -555,14 +557,16 @@ export function AgentSales() {
         </section>
         <section className="card">
           <h2 style={{ margin: "0 0 8px", fontSize: "14px", fontWeight: "600" }}>Where it looks</h2>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 0" }}>
-            <span>Reddit</span>
-            <span className="meta">{data?.settings.excludedSubreddits.length ? `all but ${data.settings.excludedSubreddits.length} excluded` : "on"}</span>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 0" }}>
-            <span>Hacker News</span>
-            <span className="meta">on</span>
-          </div>
+          {SALES_PLATFORMS.map((p) => {
+            const on = (data?.settings.platforms ?? SALES_PLATFORMS).includes(p);
+            const excluded = data?.settings.excludedSubreddits.length ?? 0;
+            return (
+              <div key={p} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 0" }}>
+                <span>{PLATFORM_LABEL[p]}</span>
+                <span className="meta">{!on ? "off" : p === "reddit" && excluded ? `all but ${excluded} excluded` : "on"}</span>
+              </div>
+            );
+          })}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 0 0", marginTop: "6px", borderTop: "1px solid var(--line)" }}>
             <span>Term pairs</span>
             <button type="button" className="pill" onClick={() => setTab("settings")}>

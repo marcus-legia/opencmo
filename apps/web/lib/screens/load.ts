@@ -31,6 +31,7 @@ import { SKILL_READERS, type LibraryScreen } from "./library";
 import type { RailStatus } from "./rail";
 import type { ResearchScreen } from "./research";
 import type { SalesScreen } from "./sales";
+import { SALES_PLATFORMS } from "../cmo/social/conversations";
 import type { ScreenData, ScreenName } from "./registry";
 import type { ScheduleScreen } from "./schedule";
 import { AUTOPILOT_HOURS, AUTOPILOT_PLATFORMS, type SettingsScreen } from "./settings";
@@ -1360,11 +1361,11 @@ async function sales({ supabase }: LoadContext): Promise<Partial<SalesScreen>> {
   return parts<SalesScreen>("sales", {
     threads: async () => {
       const [rows, cards] = await Promise.all([
-        supabase.from("opportunities").select("id, url, community, title, posted_at, comments, score, score_parts, reply, status, rule, rule_why, min_karma, min_account_age_days").order("created_at", { ascending: false }).limit(30),
+        supabase.from("opportunities").select("id, platform, url, community, title, posted_at, comments, score, score_parts, reply, status, rule, rule_why, min_karma, min_account_age_days").order("created_at", { ascending: false }).limit(30),
         waitingByRef(supabase, "opportunity"),
       ]);
       type Part = { label?: string; score?: number; max?: number; evidence?: string };
-      return (must(rows, "opportunities") as { id: string; url: string; community: string; title: string; posted_at: string | null; comments: number; score: number; score_parts: Part[] | null; reply: string | null; status: "in_review" | "replied" | "dismissed"; rule: string | null; rule_why: string | null; min_karma: number | null; min_account_age_days: number | null }[])
+      return (must(rows, "opportunities") as { id: string; platform: string | null; url: string; community: string; title: string; posted_at: string | null; comments: number; score: number; score_parts: Part[] | null; reply: string | null; status: "in_review" | "replied" | "dismissed"; rule: string | null; rule_why: string | null; min_karma: number | null; min_account_age_days: number | null }[])
         .map((r) => {
           const kind = salesRuleKind(r.rule);
           const needs = salesNeeds(r.min_karma, r.min_account_age_days);
@@ -1372,6 +1373,7 @@ async function sales({ supabase }: LoadContext): Promise<Partial<SalesScreen>> {
           return {
             id: r.id,
             score: Math.max(0, Math.min(100, Math.round(r.score))),
+            platform: SALES_PLATFORMS.find((p) => p === r.platform) ?? "reddit",
             community: (r.community || "Reddit").slice(0, 80),
             postedAt: iso(r.posted_at),
             comments: r.comments,
@@ -1421,10 +1423,16 @@ async function sales({ supabase }: LoadContext): Promise<Partial<SalesScreen>> {
       return { text: "Your last two scans found no conversation worth joining. Try a different brief, or fewer excluded subreddits.", creditsToFinish: 5, found: 0 };
     },
     settings: async () => {
-      const r = await supabase.from("sales_settings").select("excluded_subreddits, co_occurrence").maybeSingle();
+      const r = await supabase.from("sales_settings").select("excluded_subreddits, co_occurrence, platforms").maybeSingle();
       if (r.error) throw new Error(`sales_settings: ${r.error.message}`);
-      const row = r.data as { excluded_subreddits: string[]; co_occurrence: [string, string][] } | null;
-      return { excludedSubreddits: (row?.excluded_subreddits ?? []).slice(0, 50), pairs: (row?.co_occurrence ?? []).slice(0, 20) };
+      const row = r.data as { excluded_subreddits: string[]; co_occurrence: [string, string][]; platforms: string[] | null } | null;
+      // No row yet: every place is on (the column's default).
+      const platforms = SALES_PLATFORMS.filter((p) => (row?.platforms ?? SALES_PLATFORMS).includes(p));
+      return {
+        excludedSubreddits: (row?.excluded_subreddits ?? []).slice(0, 50),
+        pairs: (row?.co_occurrence ?? []).slice(0, 20),
+        platforms: platforms.length ? platforms : [...SALES_PLATFORMS],
+      };
     },
   });
 }

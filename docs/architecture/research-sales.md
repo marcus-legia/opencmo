@@ -18,10 +18,13 @@ once at the end, have no links and no post button; outside text is data; every r
 
 **Built since:** niche video research for Studio; Sales safety (subreddit rules before drafting, rare product
 mentions, excluded subreddits, co-occurrence); the closed loop (reply outcomes, Zernio metrics); Hacker News as a free
-source for both departments.
+source for both departments; Sales finder v1 (2026-11-14): Sales reads four platforms, Reddit, Hacker News, public
+Facebook groups and Threads, the last two found through Google and read through ScrapeCreators; the founder turns each
+on or off in Sales settings, and the CMO chat can ask for some of them.
 
 **Left:** R0, the data check (owner: whether ScrapeCreators' terms and Reddit's data terms allow a paid product to
-read them), before new Sales lead types. Sales charges before running since S3.5–S3.6: a scan asked in the CMO chat stops at a price card, "Scan now" on the Sales screen shows the same card, and the dead "Add N credits and finish" button is removed (a scan holds its credits before it starts and runs in one go).
+read them), before Sales is sold or new lead types are added. Also left: X conversations (the official X API, paid per
+post read: its own plan), creators and their emails (spec §2, §4a.5). Sales charges before running since S3.5–S3.6: a scan asked in the CMO chat stops at a price card, "Scan now" on the Sales screen shows the same card, and the dead "Add N credits and finish" button is removed (a scan holds its credits before it starts and runs in one go).
 
 ## 2. Research and Sales as built (`main`, `4f70a59`)
 
@@ -34,7 +37,7 @@ State: ✅ done · 🟡 partial · ❌ not built.
 | Competitor research | `jobs/competitor-research.ts`, `cmo_insights` (`kind = competitors`) | Sundays: top posts of up to 4 competitor X accounts; outliers vs each account's median; 3–6 hooks each with a real URL; ideas; Hacker News too | ✅ |
 | Niche video research | `jobs/niche-video-research.ts`, `cmo_insights` (`kind = niche_video`) | top shorts on TikTok and YouTube for the strategy's topics: hook, format, lift, URL; the week's briefs wait on it | ✅ |
 | Metrics | `jobs/pull-metrics.ts`, `metrics-source.ts`, `post_metrics`, `account_metrics` | public numbers of published posts, and Zernio analytics for connected accounts | ✅ |
-| Sales scan | `jobs/sales-scan.ts`, `opportunities` | queries from pains and competitors → threads from 30 days on Reddit and Hacker News → excluded subreddits and co-occurrence → score (pain 25, evidence 15 with exact quotes; fit 25; timing 20, reach 15 in code) → ≥ 60 passes → reply drafts for the best | ✅ |
+| Sales scan | `jobs/sales-scan.ts`, `opportunities` | queries from pains and competitors → conversations from 30 days on Reddit, Hacker News, Facebook groups and Threads (the run's places that the founder's switches allow; one that fails to answer never fails the scan) → excluded subreddits and co-occurrence → score (pain 25, evidence 15 with exact quotes; fit 25; timing 20, reach 15 in code) → ≥ 60 passes → reply drafts for the best | ✅ |
 | Subreddit rules | `subreddit_rules` | before drafting: `mention_ok`, `help_only` or `skip` | ✅ |
 | Rare product mentions | `sales-scan.ts` (`recentMentions`, `waitingMentions`) | about 1 reply in 10 may name the product; past it, help only | ✅ |
 | Decisions | `cmo_decide_opportunity` | replied or dismissed; dismiss reason → memory; outcome row | ✅ |
@@ -91,7 +94,7 @@ An insight without a URL from the data read is dropped. `cmo_insights.kind` is `
 | Reply in the founder's voice | voice notes and no-ai-slop guidance, as in Writer; < 120 words; no links (decided) | ✅ |
 | Outcome check | a few days after "replied", re-read the thread for replies or votes on the founder's reply; store it with the outcome | ✅ |
 | Excluded subreddits and co-occurrence | per-founder lists (`sales_settings`); queries needing two terms together | ✅ |
-| More sources | Hacker News (free) | ✅; X and Threads conversations wait on R0 |
+| More sources | Hacker News (free); Facebook groups and Threads through Google + ScrapeCreators (Sales finder v1) | ✅; X waits on its paid API |
 | A price card before every scan | `cmoScope.plan()` prices `create_task{agent:"sales"}` like every paid tool | ✅ S3.5 |
 
 Unchanged by design: Sales has no post button; the card copies the reply and opens the thread; the founder posts by
