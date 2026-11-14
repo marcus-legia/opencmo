@@ -1,14 +1,13 @@
 /**
  * CMO chat → editor handoff (plan 2026-11-02-cmo-chat-editor-handoff): the tools read under RLS, open the editor only
  * on a clip that exists, start a New edit through the button's RPC and limit, wait for the founder after outside
- * content, and never reach MCP.
+ * content.
  *
  *     NODE_OPTIONS=--conditions=react-server tsx lib/agent/cmo-editor.check.ts
  */
 import assert from "node:assert/strict";
 
 import type { SupabaseClient } from "@/lib/api/handler";
-import { CMO_TOOLS } from "@/lib/cmo/mcp/cmo";
 
 import { EDITOR_TOOLS, runEditorTool } from "./cmo-editor";
 import { CMO_TOOL_SPECS, TAINT_GATED_TOOLS, isCmoWrite } from "./cmo-tools";
@@ -60,10 +59,9 @@ async function main() {
     assert.ok(!outcome.ok && outcome.content.includes("INVALID_INPUT"), JSON.stringify(bad).slice(0, 60));
   }
 
-  // The tools sit at the end of the list, wait for the founder after outside content, and stay out of MCP.
+  // The tools sit at the end of the list, and wait for the founder after outside content.
   assert.deepEqual(CMO_TOOL_SPECS.slice(-EDITOR_TOOLS.size).map((spec) => spec.name), [...EDITOR_TOOLS]);
   assert.ok(isCmoWrite("open_editor") && TAINT_GATED_TOOLS.has("open_editor"));
-  for (const name of EDITOR_TOOLS) assert.ok(!CMO_TOOLS.some((tool) => tool.name === name), `${name} is not an MCP CMO tool`);
 
   console.log("cmo-editor.check ok");
 }

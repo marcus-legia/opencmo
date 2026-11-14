@@ -1,6 +1,6 @@
 /**
- * Every group of the MCP server, in the order clients list them. Session A owns this file; the
- * `cmo`, `inbox` and `account` groups are Session B's (docs/mcp-agent-team-sessions.md).
+ * Every group of the MCP server, in the order clients list them. The server is the editor's: the
+ * AI CMO's tools left it on 2026-11-14 (docs/plans/cmo/2026-11-14-remove-cmo-mcp-plan.md).
  */
 
 import "./find";
@@ -11,6 +11,4 @@ import "./generations";
 import "./explainer";
 import "./export";
 import "./guides";
-import "./cmo";
-import "./inbox";
-import "./account";
+import "./credits";

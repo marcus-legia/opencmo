@@ -37,7 +37,7 @@ import "./groups/index";
 import { errorResult, registry, type McpQuote, type McpResult, type McpTool, type McpToolContext } from "./registry";
 
 export const SERVER_NAME = "opencmo";
-export const SERVER_VERSION = "2.0.0";
+export const SERVER_VERSION = "3.0.0";
 
 /** The short workflow every client gets at `initialize` (plan: "Server instructions"). */
 export const INSTRUCTIONS = [
@@ -47,7 +47,7 @@ export const INSTRUCTIONS = [
   "Credits: a tool marked as costing credits first answers with the price and a confirm code, spending nothing. Show the price to the user and call it again with only clip_id and confirm after they agree. Never confirm on your own.",
   "Slow work (generations, explainers, exports) returns an id at once: poll with get_generation, wait_for_media or get_export instead of calling the tool again.",
   "Look before you say done: capture_frame draws the clip as the export will (frames, visible layers and their boxes). Call it after changing the frame, cutting, or adding text or media. inspect_color, media_grab and media_waveform measure color, look inside library files and find pauses. If looking is not set up, give the user open_in_editor's link.",
-  "Words a person reads or hears (scripts, voice-overs, storyboards, on-screen text, captions, posts, titles): read_cmo_playbook no-ai-slop once per conversation before writing them, and follow it.",
+  "Words a person reads or hears (scripts, voice-overs, storyboards, on-screen text, captions, posts, titles): read_guide no-ai-slop once per conversation before writing them, and follow it.",
   "Nothing is ever posted for the user: OpenCMO drafts, the user publishes.",
 ].join("\n");
 

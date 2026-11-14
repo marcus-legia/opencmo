@@ -10,7 +10,7 @@ import { randomUUID } from "node:crypto";
 import type { LongTakePlan } from "@opencmo/editor-core";
 
 import { ApiError } from "@/lib/api/errors";
-import { mediaCreditsShort } from "@/lib/cmo/mcp/account";
+import { mediaCreditsShort } from "@/lib/mcp/credits";
 
 import { markFinished, orderShorts } from "./finished";
 import { renderShort } from "./render";

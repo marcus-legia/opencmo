@@ -85,6 +85,17 @@ for (const name of ["capture_frame", "inspect_color", "media_grab", "media_wavef
 for (const name of ["capture", "preview_3d", "find_lotties", "add_3d_scene", "ask_user", "update_plan", "undo", "request_export"]) {
   assert.ok(!names.includes(name), `${name} is not offered over MCP`);
 }
+// The server is the editor's: the AI CMO's tools, inbox and prompts left it on 2026-11-14. Credits stay.
+assert.ok(names.includes("get_credits"), "get_credits is offered");
+for (const name of ["create_task", "read_cmo_playbook", "list_calendar", "search_reddit", "list_inbox", "get_inbox_item", "get_check_rubric", "get_mode"]) {
+  assert.ok(!names.includes(name), `${name} (AI CMO) is not offered over MCP`);
+}
+for (const name of ["onboard", "plan-week", "sales-scan", "inbox"]) assert.ok(!registry.prompt(name), `the /${name} prompt (AI CMO) is gone`);
+assert.ok(!registry.resources().some((resource) => resource.uri.startsWith("opencmo://skills/cmo/") || resource.uri.startsWith("opencmo://skills/library/")), "no CMO playbook resources");
+// The writing rules the instructions point to are still reachable.
+assert.match(INSTRUCTIONS, /read_guide no-ai-slop/);
+assert.match(JSON.stringify((await callTool(tools.find((item) => item.name === "read_guide")!, { name: "no-ai-slop" }, ctx)).content), /skill name=\\"no-ai-slop\\"/);
+assert.ok(registry.resource("opencmo://guides/no-ai-slop"), "no-ai-slop is a guide resource");
 for (const tool of tools) {
   const described = describeTool(tool);
   assert.equal(described.inputSchema.type, "object", `${tool.name}: an object schema`);

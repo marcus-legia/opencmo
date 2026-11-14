@@ -1,13 +1,12 @@
 /**
  * Decisions from the CMO chat (plan 2026-11-02-cmo-chat-decisions): the card's hash is read when the card is shown,
- * a decision calls the button's RPC with it, the tools never reach MCP, and the taint gate covers them.
+ * a decision calls the button's RPC with it, and the taint gate covers them.
  *
  *     NODE_OPTIONS=--conditions=react-server tsx lib/agent/cmo-decisions.check.ts
  */
 import assert from "node:assert/strict";
 
 import type { SupabaseClient } from "@/lib/api/handler";
-import { CMO_TOOLS } from "@/lib/cmo/mcp/cmo";
 
 import { prepareDecision, runDecision, localToIso, DECISION_WRITES, type Prepared } from "./cmo-decisions";
 import { CMO_TOOL_SPECS, TAINT_GATED_TOOLS, isCmoWrite } from "./cmo-tools";
@@ -40,11 +39,10 @@ const postRow = {
 };
 
 async function main() {
-  // Contracts: decisions are writes, gated after outside content, last in the tool list, never on MCP.
+  // Contracts: decisions are writes, gated after outside content, last in the tool list.
   for (const name of DECISION_WRITES) {
     assert.ok(isCmoWrite(name), `${name} is a write`);
     assert.ok(TAINT_GATED_TOOLS.has(name), `${name} waits for the founder after outside content`);
-    assert.ok(!CMO_TOOLS.some((tool) => tool.name === name), `${name} is not offered over MCP`);
   }
   assert.ok(CMO_TOOL_SPECS.some((spec) => spec.name === "get_credits"));
 
