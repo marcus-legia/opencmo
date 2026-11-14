@@ -87,7 +87,11 @@ Decisions:
 - [x] `docs/plans/cmo/README.md`: this plan's row says `claude/sales-finder` → `main` and the PR number.
 - [x] Commit `Sales finder C4: docs`, push.
 
-### - [ ] C5. Review of C's own commits (plan §Code review after each session)
+### - [x] C5. Review of C's own commits (plan §Code review after each session)
+
+C's commits (C1, C2, the review fixes) were inside the C4 whole-PR review above; read once more on their own:
+nothing new to fix. Noted: `scope.plan` calls `pricedTaskCard` twice for a sales task (cheap, pure); a failed read of
+`sales_settings` refuses the card ("Could not read your Sales settings") instead of guessing every place is on.
 
 ## Review
 
