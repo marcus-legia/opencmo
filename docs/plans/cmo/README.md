@@ -6,6 +6,7 @@ Newest first.
 
 | Date | Plan | Source | PR |
 |---|---|---|---|
+| 2026-11-14 | [Sales finder v1](2026-11-14-sales-finder-plan.md) · [sessions](2026-11-14-sales-finder-sessions/): conversations on Reddit, Hacker News, Facebook groups and Threads, asked from the CMO chat; X later through its paid API | [Spec 2026-10-31](2026-10-31-sales-finder-spec.md) cut down by the owner 2026-11-14 | `claude/sales-finder` → `main` |
 | 2026-11-14 | [Remove the AI CMO's MCP; keep the editor's](2026-11-14-remove-cmo-mcp-plan.md) · [sessions](2026-11-14-remove-cmo-mcp-sessions/): CMO, inbox and account MCP groups, mode B (the founder's Claude as the brain) and the `cmo_inbox` table go; `get_credits` moves to the editor MCP | Owner 2026-11-14 | `claude/remove-ai-cmo-mcp-plan-5jwr85` → `main` |
 | 2026-11-12 | [Autopilot for posts, and one working screen](2026-11-12-autopilot-one-screen-plan.md) · [screenshots](2026-11-12-autopilot-one-screen-shots/) | Owner conversation 2026-11-12, and the owner's own account read over MCP | this PR |
 | 2026-11-11 | [The feed after an approval](2026-11-11-approve-flow-feed-plan.md): Approve leads on a post, the week and the activity on the feed, live after every decision, the chat stays on the feed, a local sweep for `npm run dev` | Owner 2026-11-11 after testing | `claude/approve-flow-dashboard-jv2rjx` → `main` |
