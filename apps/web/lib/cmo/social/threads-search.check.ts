@@ -53,6 +53,9 @@ async function main() {
     assert.match(t.text, /\n— /, "replies follow the post");
     assert.ok(t.postedAt && t.postedAt.startsWith("2026-11-"));
     assert.ok(t.title.length > 0 && t.title.length <= 120);
+    // Review A4: the trimmed answer has no reply count; the replies it carries are the count, never 0.
+    assert.equal(t.comments, (post.body as { comments: unknown[] }).comments.length);
+    assert.ok(t.comments > 0);
 
     // readPosts 0: Google only, and the post keeps Google's words.
     asked = stub(answers);

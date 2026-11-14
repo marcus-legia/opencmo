@@ -6,6 +6,8 @@
 -- 2. `sales_settings.platforms`: at least one place, from the fixed list; every place is on by default.
 -- 3. `sales_settings_save` takes the platforms as an optional third argument. The two-argument function is dropped,
 --    because both existing would make every two-argument call ambiguous; callers that pass two still resolve here.
+-- 4. `cmo_reply_outcomes_due` returns Reddit and Hacker News replies only: no reader checks a Facebook or Threads reply,
+--    and those would otherwise fill its ten slots for good (session B's review).
 
 -- 1 -----------------------------------------------------------------------------------------------------------------
 
@@ -159,3 +161,18 @@ $_$;
 
 revoke all on function public.sales_settings_save(text[], jsonb, text[]) from public, anon;
 grant execute on function public.sales_settings_save(text[], jsonb, text[]) to authenticated;
+
+-- 4 -----------------------------------------------------------------------------------------------------------------
+
+create or replace function public.cmo_reply_outcomes_due(p_user uuid, p_limit integer)
+returns table(outcome_id uuid, opportunity_id uuid, platform text, url text, community text, reply text, outcome_url text)
+language sql stable security definer set search_path = public as $$
+  select o.id, p.id, p.platform, p.url, p.community, p.reply, o.outcome_url
+  from public.cmo_draft_outcomes o
+  join public.opportunities p on p.id = o.item_id and p.user_id = o.user_id
+  where o.user_id = p_user and o.department = 'sales' and o.action = 'replied' and o.outcome_checked_at is null
+    and o.decided_at <= now() - interval '3 days' and p.reply is not null
+    and p.platform in ('reddit', 'hn')
+  order by o.decided_at desc
+  limit greatest(1, least(coalesce(p_limit, 10), 50));
+$$;

@@ -5453,6 +5453,7 @@ CREATE FUNCTION public.cmo_reply_outcomes_due(p_user uuid, p_limit integer) RETU
   join public.opportunities p on p.id = o.item_id and p.user_id = o.user_id
   where o.user_id = p_user and o.department = 'sales' and o.action = 'replied' and o.outcome_checked_at is null
     and o.decided_at <= now() - interval '3 days' and p.reply is not null
+    and p.platform in ('reddit', 'hn')
   order by o.decided_at desc
   limit greatest(1, least(coalesce(p_limit, 10), 50));
 $$;

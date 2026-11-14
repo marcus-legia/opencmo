@@ -12,7 +12,7 @@ option only), `apps/web/lib/cmo/jobs/types.ts` (only the blocks named below),
 
 ## Tasks
 
-### - [ ] A1. The shared building block (push this first: B and C wait on it)
+### - [x] A1. The shared building block (push this first: B and C wait on it)
 
 **Files:** create `apps/web/lib/cmo/social/conversations.ts`, `conversations.check.ts`; modify `apps/web/lib/cmo/jobs/types.ts`
 (`Opportunity.platform`, `ReplyOutcomeDue.platform`, `SalesSettings`), `store.ts` and `memory-store.ts` (`salesSettings`).
@@ -36,7 +36,7 @@ option only), `apps/web/lib/cmo/jobs/types.ts` (only the blocks named below),
 - [ ] `npx tsx lib/cmo/social/conversations.check.ts` passes; `npm run typecheck` passes.
 - [ ] Commit `Sales finder A1: one conversation shape and the platform list` and push.
 
-### - [ ] A2. SQL: the new platforms, and the founder's platform switches
+### - [x] A2. SQL: the new platforms, and the founder's platform switches
 
 **Files:** create `supabase/migrations/20270125010000_sales_finder_platforms.sql`, `supabase/tests/317_sales_finder_platforms.test.sql`;
 modify `supabase/schema/current.sql` (dump), `store.ts` / `memory-store.ts` (read the column).
@@ -64,7 +64,7 @@ Load the `supabase-migrations` skill before writing SQL.
 - [ ] `store.salesSettings` selects `platforms` (fallback `[...SALES_PLATFORMS]` when there is no row); same in the memory store.
 - [ ] `npm run typecheck`. Commit `Sales finder A2: Facebook and Threads conversations, platform switches in Sales settings`, push.
 
-### - [ ] A3. Finders: Facebook groups and Threads
+### - [x] A3. Finders: Facebook groups and Threads
 
 **Files:** create `apps/web/lib/cmo/social/facebook.ts`, `threads-search.ts`, `facebook.check.ts`, `threads-search.check.ts`,
 `apps/web/scripts/sales-finder-fixtures.mts`, fixtures `apps/web/lib/cmo/social/fixtures/{google-facebook-groups,facebook-post,facebook-post-comments,google-threads,threads-post}.json`.
@@ -102,11 +102,37 @@ description as `text` (Review focus 2). Posts older than 30 days (when the time 
 - [ ] Fake mode (`scFakeAllowed()`): each finder returns two fixed `ConversationThread`s, as `fakePosts` does in `research.ts`.
 - [ ] `npx tsx` both checks, `npm run typecheck`. Commit `Sales finder A3: Facebook group and Threads finders`, push.
 
-### - [ ] A4. Review (plan §Code review after each session)
+### - [x] A4. Review (plan §Code review after each session)
 
 ## Review
 
-(findings and what was done)
+`/code-review high` on A1–A3 (`0b3e2114`, `124e57c1`, `44a74c1b`) and `security-review-checklist` (clean: the key only
+goes to ScrapeCreators, the migration is new, the new column inherits the table grants, budget and cap are checked
+before each lookup). Fixed in `A: review fixes`:
+
+1. **Threads posts always had 0 comments**: `scGet` asks for the trimmed answer, which has no reply count. Fixed: the
+   replies it carries are the count (`threads-search.check.ts`).
+2. **`normalizeConversationUrl` let non-posts through** (a Threads profile, a group's home, an HN link with another
+   query), which `opportunities_url_check` refuses and would fail a whole save. Fixed: it returns only a post's own page
+   per platform, else null (`conversations.check.ts`).
+3. **One Facebook post under several URLs** (slash, `permalink`/`posts`, case of the group name). Fixed: one form,
+   `/groups/<name lower-cased>/posts/<id>`. A group's numeric id and vanity name still differ (needs a lookup): kept.
+4. **Paid reads spent on posts the founder had seen.** Fixed: the finders take `skip(url)` and spend their reads on the
+   rest (Request to B below to pass it).
+5. **Out of credits and the daily cap were swallowed per post.** Fixed: `setup`, `credits` and `cap` stop the step.
+6. **The group name was always "Facebook group"**: Google's titles end in " - Facebook" and name no group. Fixed: a
+   vanity group name from the link; a numeric id still reads "Facebook group" (no source of the real name).
+7. **Post reads ran one after another.** Fixed: in parallel (`Promise.allSettled`).
+8. **The two finders were copies.** Fixed: `google-posts.ts` (`findPostsViaGoogle`, `postCandidates`). The chat's
+   older `threadsSearch` in `research.ts` is left as it is (out of this plan).
+9. **The reply card treats every non-HN platform as Reddit** (`lib/screens/cards.ts:141`, `approval-card.ts:118`):
+   Request to C below.
+10. **`PLATFORM_LABEL` shares a name with `lib/screens/common.ts`**: kept. B already imports it, and it is typed
+    `Record<SalesPlatform, string>`, so a wrong auto-import fails the typecheck.
+
+B's request (outcome check fills with Facebook/Threads replies) is done in the same migration (unmerged, so edited in
+place): `cmo_reply_outcomes_due` returns Reddit and Hacker News only; pgTAP 317 has the case. `jobs.check.ts` line 428
+now expects the Facebook URL without its trailing slash (the new one form).
 
 ## Requests
 

@@ -56,10 +56,25 @@ export function normalizeConversationUrl(raw: string): string | null {
   }
   const host = HOSTS[url.hostname.toLowerCase()];
   if (url.protocol !== "https:" || !host || url.username || url.password || url.port) return null;
-  const query = host === "news.ycombinator.com" && /^\?id=\d+$/.test(url.search) ? url.search : "";
-  // Google links a Threads post as /@user/post/<code>/<slug>/: the code is the post, the slug is only words.
-  const path = host === "www.threads.com" ? url.pathname.replace(/^(\/@[^/]+\/post\/[^/]+)\/.*$/, "$1") : url.pathname;
-  return `https://${host}${path}${query}`;
+  const path = url.pathname;
+  switch (host) {
+    case "www.reddit.com":
+      // Reddit's form is kept as the reader gives it (rows already stored use it); only a thread is a conversation.
+      return /^\/r\/[A-Za-z0-9_]{2,21}\/comments\/[a-z0-9]+(\/|$)/i.test(path) ? `https://${host}${path}` : null;
+    case "news.ycombinator.com":
+      return path === "/item" && /^\?id=\d{1,12}$/.test(url.search) ? `https://${host}/item${url.search}` : null;
+    case "www.facebook.com": {
+      // One post, one URL: `permalink` and `posts` are the same page, and so are a trailing slash and any case of the
+      // group's name. A group's numeric id and its vanity name cannot be matched without a lookup.
+      const m = /^\/groups\/([A-Za-z0-9._-]{1,100})\/(?:posts|permalink)\/([0-9]{1,30})\/?$/.exec(path);
+      return m ? `https://${host}/groups/${m[1]!.toLowerCase()}/posts/${m[2]}` : null;
+    }
+    default: {
+      // Google links a Threads post as /@user/post/<code>/<slug>/: the code is the post, the slug is only words.
+      const m = /^\/@([A-Za-z0-9._]{1,30})\/post\/([A-Za-z0-9_-]{1,40})(?:\/.*)?$/.exec(path);
+      return m ? `https://${host}/@${m[1]}/post/${m[2]}` : null;
+    }
+  }
 }
 
 /** The known platforms in `raw`, once each, in list order; anything that is not a list gives none. */

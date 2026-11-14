@@ -41,9 +41,11 @@ async function main() {
       { url: "https://m.facebook.com/groups/123/posts/456/?__cft__=x", title: "Need help | Freelancers | Facebook", description: "" },
       { url: "https://www.facebook.com/groups/123/posts/456/", title: "Same post again", description: "" },
     ]);
-    assert.deepEqual(kept.map((c) => c.url), ["https://www.facebook.com/groups/123/posts/456/"]);
-    assert.equal(groupName("Need help | Freelancers | Facebook"), "Freelancers");
-    assert.equal(groupName("Just a title"), "Facebook group");
+    assert.deepEqual(kept.map((c) => c.url), ["https://www.facebook.com/groups/123/posts/456"]);
+    // Review A4: Google's titles end in " - Facebook" and name no group; a vanity group name in the link is the best
+    // there is, a numeric id is not a name.
+    assert.equal(groupName("https://www.facebook.com/groups/vaworkersph/posts/1"), "vaworkersph");
+    assert.equal(groupName("https://www.facebook.com/groups/1753756208440623/posts/1"), "Facebook group");
 
     const answers = { "/v1/google/search": () => ({ status: 200, body: google.body }), "/v1/facebook/post": () => ({ status: 200, body: post.body }) };
 
@@ -54,7 +56,7 @@ async function main() {
     assert.ok(threads.length >= 1);
     const first = threads[0]!;
     assert.equal(first.platform, "facebook");
-    assert.match(first.url, /^https:\/\/www\.facebook\.com\/groups\/[^/]+\/posts\/\d+\/$/);
+    assert.match(first.url, /^https:\/\/www\.facebook\.com\/groups\/[^/]+\/posts\/\d+$/);
     assert.match(first.text, /hard time finding clients/);
     assert.equal(first.comments, 36);
     assert.equal(first.postedAt, "2026-11-06T00:33:28.000Z");
@@ -88,6 +90,17 @@ async function main() {
     const tight = await searchFacebookGroups("finding clients", new ScBudget(1), { readPosts: 4 });
     assert.deepEqual(asked, ["/v1/google/search"]);
     assert.ok(tight.length >= 1);
+
+    // Review A4: posts the founder has already seen are not paid for; the reads go to the next ones.
+    asked = stub(answers);
+    const all = facebookCandidates(google.body.results);
+    const skipped = await searchFacebookGroups("finding clients", new ScBudget(10), { readPosts: 1, skip: (url) => url === all[0]!.url });
+    assert.ok(!skipped.some((t) => t.url === all[0]!.url), "a seen post is not returned");
+    assert.equal(asked.filter((p) => p === "/v1/facebook/post").length, 1, "the one read goes to an unseen post");
+
+    // Review A4: out of lookup credits stops the step instead of trying every post again.
+    stub({ ...answers, "/v1/facebook/post": () => ({ status: 402, body: null }) });
+    await assert.rejects(searchFacebookGroups("finding clients", new ScBudget(10)), /out of lookup credits/);
 
     // A refused key is not "no posts": it stops the scan's Facebook step.
     stub({ ...answers, "/v1/facebook/post": () => ({ status: 401, body: null }) });

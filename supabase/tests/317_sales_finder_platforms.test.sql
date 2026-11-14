@@ -5,7 +5,7 @@ create extension if not exists pgtap with schema extensions;
 begin;
 set search_path to public, extensions;
 
-select plan(15);
+select plan(16);
 
 insert into auth.users (id, email) values
   ('e3170000-0000-4000-8000-00000000000a', 'sales-finder-a@example.com'),
@@ -30,6 +30,20 @@ select throws_ok($$ insert into public.opportunities (user_id, platform, url, ti
 select throws_ok($$ insert into public.opportunities (user_id, platform, url, title, score, reply)
   values ('e3170000-0000-4000-8000-00000000000a', 'facebook', 'https://www.facebook.com/groups/1/', 't', 70, 'r') $$,
   '23514', null, 'a group''s home page is not a conversation');
+
+-- B3's request: replies on Facebook or Threads are never checked for an outcome, so they must not take the ten slots
+-- of the outcome check from Reddit and Hacker News replies.
+select public.cmo_save_opportunities('e3170000-0000-4000-8000-00000000000b', null, (
+  select jsonb_agg(jsonb_build_object('platform', 'facebook', 'url', 'https://www.facebook.com/groups/g/posts/' || g,
+    'title', 't', 'score', 70, 'reply', 'r', 'rule', 'no_product_mention'))
+  from generate_series(1, 10) g));
+select public.cmo_save_opportunities('e3170000-0000-4000-8000-00000000000b', null, jsonb_build_array(jsonb_build_object(
+  'url', 'https://www.reddit.com/r/SaaS/comments/abc/t/', 'title', 't', 'score', 70, 'reply', 'r', 'rule', 'no_product_mention')));
+insert into public.cmo_draft_outcomes (user_id, item_id, department, action, decided_at)
+select user_id, id, 'sales', 'replied', now() - interval '4 days' - (case when platform = 'reddit' then interval '1 hour' else interval '0' end)
+from public.opportunities where user_id = 'e3170000-0000-4000-8000-00000000000b';
+select is((select array_agg(platform) from public.cmo_reply_outcomes_due('e3170000-0000-4000-8000-00000000000b', 10)), array['reddit'],
+  'the outcome check reads Reddit and Hacker News replies only, whatever else waits');
 
 -- Settings, as the founder.
 set local role authenticated;

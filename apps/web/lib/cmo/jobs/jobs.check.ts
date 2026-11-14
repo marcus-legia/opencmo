@@ -425,7 +425,7 @@ async function main() {
       : [social("threads", 4, "https://threads.net/@someone/post/C4/")],
   });
   assert.equal(odd.run.status, "done", `odd urls (${odd.run.error})`);
-  assert.deepEqual(odd.mem.opps.map((o) => o.url).sort(), ["https://www.facebook.com/groups/freelancers/posts/3/", "https://www.threads.com/@someone/post/C4"]);
+  assert.deepEqual(odd.mem.opps.map((o) => o.url).sort(), ["https://www.facebook.com/groups/freelancers/posts/3", "https://www.threads.com/@someone/post/C4"]);
   // Review focus 3: no ScrapeCreators key fails Reddit only; Hacker News still answers.
   const noKey = await scanWith(["reddit", "hn"], {}, {
     reddit: async () => { throw new SocialReadError("Social research is not set up on this server yet.", "setup"); },
