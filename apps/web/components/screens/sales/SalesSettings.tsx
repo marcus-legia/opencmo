@@ -4,7 +4,11 @@ import { useState } from "react";
 
 import { api, jsonBody } from "@/components/clipping/api";
 import { Button } from "@/components/ui";
+import { PLATFORM_LABEL, SALES_PLATFORMS, type SalesPlatform } from "@/lib/cmo/social/conversations";
 import type { SalesScreen } from "@/lib/screens/sales";
+
+// The Sales page renders this panel without `parts.tsx`, which is what loads the screens' styles elsewhere.
+import "../screens.css";
 
 type Settings = SalesScreen["settings"];
 
@@ -13,7 +17,7 @@ const clean = (name: string) => name.trim().toLowerCase().replace(/^\/?r\//, "")
 const same = (a: Settings, b: Settings) => JSON.stringify(a) === JSON.stringify(b);
 
 /**
- * Where Sales looks (P5 R1): subreddits it never reads, and pairs of words a thread must both contain. The scan applies
+ * Where Sales looks (P5 R1; Sales finder C2): the platforms it searches (at least one), subreddits it never reads, and pairs of words a thread must both contain. The scan applies
  * them before scoring, so a ruled-out thread costs nothing. Sample settings change on this screen only.
  */
 export function SalesSettings({ initial, live }: { initial: Settings; live: boolean }) {
@@ -36,6 +40,13 @@ export function SalesSettings({ initial, live }: { initial: Settings; live: bool
           ? "Exclude at most 50 subreddits."
           : null;
   const pair: [string, string] = [first.trim().toLowerCase(), second.trim().toLowerCase()];
+  // Sales needs somewhere to look: the last place that is on cannot be turned off.
+  const togglePlatform = (p: SalesPlatform) =>
+    setSettings((s) => {
+      const on = s.platforms.includes(p);
+      if (on && s.platforms.length === 1) return s;
+      return { ...s, platforms: SALES_PLATFORMS.filter((x) => (x === p ? !on : s.platforms.includes(x))) };
+    });
   const pairReady = !!pair[0] && !!pair[1] && settings.pairs.length < 20 && !settings.pairs.some(([a, b]) => a === pair[0] && b === pair[1]);
 
   async function save() {
@@ -43,7 +54,7 @@ export function SalesSettings({ initial, live }: { initial: Settings; live: bool
     setNote(null);
     try {
       const next = live
-        ? await api<Settings>("/sales/settings", jsonBody({ excluded: settings.excludedSubreddits, pairs: settings.pairs }))
+        ? await api<Settings>("/sales/settings", jsonBody({ excluded: settings.excludedSubreddits, pairs: settings.pairs, platforms: settings.platforms }))
         : settings;
       setSaved(next);
       setSettings(next);
@@ -62,6 +73,20 @@ export function SalesSettings({ initial, live }: { initial: Settings; live: bool
           Where Sales looks
         </h2>
         <p className="scr-small scr-muted">Ruled out before scoring: a skipped subreddit or a thread without both words costs nothing.</p>
+
+        <fieldset className="scr-sales-platforms">
+          <legend className="scr-small">Look on</legend>
+          {SALES_PLATFORMS.map((p) => {
+            const on = settings.platforms.includes(p);
+            const last = on && settings.platforms.length === 1;
+            return (
+              <label key={p} title={last ? "Keep at least one place" : undefined}>
+                <input type="checkbox" checked={on} disabled={last} onChange={() => togglePlatform(p)} />
+                {PLATFORM_LABEL[p]}
+              </label>
+            );
+          })}
+        </fieldset>
 
         <form
           className="scr-settings-row"

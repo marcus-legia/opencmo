@@ -4,11 +4,14 @@
 
 import { z } from "zod";
 
+import { SALES_PLATFORMS } from "../cmo/social/conversations";
 import { QuoteSchema, SalesRuleSchema, ScorePartSchema, iso } from "./common";
 
 export const ThreadSchema = z.object({
   id: z.string(),
   score: z.number().int().min(0).max(100),
+  /** Sales finder: where the conversation is. */
+  platform: z.enum(SALES_PLATFORMS),
   community: z.string().max(80),
   postedAt: iso.nullable(),
   comments: z.number().int().min(0).nullable(),
@@ -38,6 +41,8 @@ export const SalesScreenSchema = z.object({
   settings: z.object({
     excludedSubreddits: z.array(z.string().max(21)).max(50),
     pairs: z.array(z.tuple([z.string().max(60), z.string().max(60)])).max(20),
+    /** The places Sales looks (`sales_settings.platforms`), at least one. */
+    platforms: z.array(z.enum(SALES_PLATFORMS)).min(1).max(4),
   }),
   week: z.object({ replied: z.number().int().min(0), dismissed: z.number().int().min(0) }),
 });

@@ -47,7 +47,7 @@ Decisions:
   the places the founder's switches allow, and a scan with nowhere to look is refused before the card is shown.
 - [x] Commit `Sales finder C1: the CMO chat asks Sales to look on Facebook groups and Threads`, push.
 
-### - [ ] C2. The Sales screen shows where each thread is, and the switches
+### - [x] C2. The Sales screen shows where each thread is, and the switches
 
 Decisions:
 - `ThreadSchema` gains `platform: z.enum(SALES_PLATFORMS)`; `settings` gains `platforms: z.array(z.enum(SALES_PLATFORMS)).min(1).max(4)`.
@@ -59,10 +59,15 @@ Decisions:
   route; the last checked box cannot be unchecked (disabled, with the title "Keep at least one place").
 - `ScanNow` builds its card with `salesScanCard(undefined, data.settings.platforms)`.
 
-- [ ] Run `npm run typecheck`, `cd apps/web && npm run check:contracts`.
-- [ ] Look at it: `npm run dev`, open `/app/sales?sample=1` at 1440 and 390 wide, light and dark; the four platforms,
+- [x] Run `npm run typecheck`, `cd apps/web && npm run check:contracts`.
+- [x] Look at it: `npm run dev`, open `/app/sales?sample=1` at 1440 and 390 wide, light and dark; the four platforms,
   a Facebook and a Threads row, the settings checkboxes. Put the screenshots in the PR description (not the repo).
-- [ ] Commit `Sales finder C2: platforms on the Sales screen and in its settings`, push.
+  Looked at 2026-11-14 on a local dev server (sample data): 1440 and 390, light and dark, no horizontal scroll; the
+  last checked box is disabled with its title; Scan now names the four places. The Sales settings panel had no styles
+  on `/app/sales` (`screens.css` is loaded by `parts.tsx`, which this page does not use; the excluded chips showed as
+  bullets before this change): `SalesSettings.tsx` now imports it. Screenshots were not attached to the PR (no upload
+  from this session).
+- [x] Commit `Sales finder C2: platforms on the Sales screen and in its settings`, push.
 
 ### - [ ] C3. End to end on the owner's account (needs the owner, spends about 5 OpenCMO credits)
 
