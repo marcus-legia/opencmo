@@ -4029,7 +4029,7 @@ CREATE TABLE public.opportunities (
     CONSTRAINT opportunities_gen_check CHECK (((jsonb_typeof(gen) = 'object'::text) AND (octet_length((gen)::text) <= 256))),
     CONSTRAINT opportunities_min_account_age_days_check CHECK (((min_account_age_days >= 0) AND (min_account_age_days <= 3650))),
     CONSTRAINT opportunities_min_karma_check CHECK (((min_karma >= 0) AND (min_karma <= 1000000))),
-    CONSTRAINT opportunities_platform_check CHECK ((platform = ANY (ARRAY['reddit'::text, 'hn'::text]))),
+    CONSTRAINT opportunities_platform_check CHECK ((platform = ANY (ARRAY['reddit'::text, 'hn'::text, 'facebook'::text, 'threads'::text]))),
     CONSTRAINT opportunities_priority_check CHECK ((priority = ANY (ARRAY['high'::text, 'medium'::text, 'low'::text]))),
     CONSTRAINT opportunities_reply_check CHECK (((char_length(reply) >= 1) AND (char_length(reply) <= 3000))),
     CONSTRAINT opportunities_reply_or_skip CHECK (((reply IS NOT NULL) OR (rule = 'skip'::text))),
@@ -4040,7 +4040,7 @@ CREATE TABLE public.opportunities (
     CONSTRAINT opportunities_snippet_check CHECK ((char_length(snippet) <= 1200)),
     CONSTRAINT opportunities_status_check CHECK ((status = ANY (ARRAY['in_review'::text, 'replied'::text, 'dismissed'::text]))),
     CONSTRAINT opportunities_title_check CHECK (((char_length(title) >= 1) AND (char_length(title) <= 400))),
-    CONSTRAINT opportunities_url_check CHECK (((char_length(url) <= 500) AND (((platform = 'reddit'::text) AND (url ~ '^https://(www\.|old\.)?reddit\.com/'::text)) OR ((platform = 'hn'::text) AND (url ~ '^https://news\.ycombinator\.com/item\?id=[0-9]{1,12}$'::text)))))
+    CONSTRAINT opportunities_url_check CHECK (((char_length(url) <= 500) AND (((platform = 'reddit'::text) AND (url ~ '^https://(www\.|old\.)?reddit\.com/'::text)) OR ((platform = 'hn'::text) AND (url ~ '^https://news\.ycombinator\.com/item\?id=[0-9]{1,12}$'::text)) OR ((platform = 'facebook'::text) AND (url ~ '^https://www\.facebook\.com/groups/[A-Za-z0-9._-]{1,100}/(posts|permalink)/[0-9]{1,30}/?$'::text)) OR ((platform = 'threads'::text) AND (url ~ '^https://www\.threads\.com/@[A-Za-z0-9._]{1,30}/post/[A-Za-z0-9_-]{1,40}$'::text)))))
 );
 
 
@@ -5842,8 +5842,8 @@ begin
     if v_rule is distinct from 'skip' and coalesce(v_item->>'reply', '') = '' then
       continue;
     end if;
-    if coalesce(v_item->>'platform', 'reddit') not in ('reddit', 'hn') then
-      raise exception 'A conversation comes from Reddit or Hacker News.' using errcode = '22023';
+    if coalesce(v_item->>'platform', 'reddit') not in ('reddit', 'hn', 'facebook', 'threads') then
+      raise exception 'A conversation comes from Reddit, Hacker News, a Facebook group or Threads.' using errcode = '22023';
     end if;
     -- Clamped while still numeric: a huge number (1e10) cast to integer first would abort the whole scan's save.
     v_karma := case when jsonb_typeof(v_item->'min_karma') = 'number' and (v_item->>'min_karma')::numeric between 0 and 1000000
@@ -13431,16 +13431,18 @@ CREATE TABLE public.sales_settings (
     excluded_subreddits text[] DEFAULT '{}'::text[] NOT NULL,
     co_occurrence jsonb DEFAULT '[]'::jsonb NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    platforms text[] DEFAULT '{reddit,hn,facebook,threads}'::text[] NOT NULL,
     CONSTRAINT sales_settings_co_occurrence_check CHECK (((jsonb_typeof(co_occurrence) = 'array'::text) AND (jsonb_array_length(co_occurrence) <= 20) AND (octet_length((co_occurrence)::text) <= 4096))),
-    CONSTRAINT sales_settings_excluded_subreddits_check CHECK ((cardinality(excluded_subreddits) <= 50))
+    CONSTRAINT sales_settings_excluded_subreddits_check CHECK ((cardinality(excluded_subreddits) <= 50)),
+    CONSTRAINT sales_settings_platforms_check CHECK ((((cardinality(platforms) >= 1) AND (cardinality(platforms) <= 4)) AND (platforms <@ ARRAY['reddit'::text, 'hn'::text, 'facebook'::text, 'threads'::text])))
 );
 
 
 --
--- Name: sales_settings_save(text[], jsonb); Type: FUNCTION; Schema: public; Owner: -
+-- Name: sales_settings_save(text[], jsonb, text[]); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.sales_settings_save(p_excluded text[], p_pairs jsonb) RETURNS public.sales_settings
+CREATE FUNCTION public.sales_settings_save(p_excluded text[], p_pairs jsonb, p_platforms text[] DEFAULT NULL::text[]) RETURNS public.sales_settings
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
     AS $_$
@@ -13448,6 +13450,8 @@ declare
   v_user uuid := public.require_user();
   v_excluded text[];
   v_pairs jsonb;
+  v_all constant text[] := array['reddit', 'hn', 'facebook', 'threads'];
+  v_platforms text[];
   v_row public.sales_settings;
 begin
   select coalesce(array_agg(distinct n order by n), '{}') into v_excluded
@@ -13476,10 +13480,23 @@ begin
              where char_length(p->>0) not between 1 and 60 or char_length(p->>1) not between 1 and 60 or p->>0 = p->>1) then
     raise exception 'Each term has 1 to 60 characters, and the two terms of a pair differ.' using errcode = '22023';
   end if;
-  insert into public.sales_settings (user_id, excluded_subreddits, co_occurrence, updated_at)
-  values (v_user, v_excluded, v_pairs, now())
+  -- Null keeps what is saved (an old client, or a form that does not show the switches). The list order is the app's
+  -- (`SALES_PLATFORMS`), so the screen and the scan read the same order back.
+  if p_platforms is not null then
+    select coalesce(array_agg(p order by array_position(v_all, p)), '{}') into v_platforms
+    from (select distinct lower(btrim(e)) as p from unnest(p_platforms) e) s;
+    if cardinality(v_platforms) = 0 then
+      raise exception 'Keep at least one place for Sales to look.' using errcode = '22023';
+    end if;
+    if not v_platforms <@ v_all then
+      raise exception 'Sales can look on Reddit, Hacker News, Facebook groups and Threads.' using errcode = '22023';
+    end if;
+  end if;
+  insert into public.sales_settings (user_id, excluded_subreddits, co_occurrence, platforms, updated_at)
+  values (v_user, v_excluded, v_pairs, coalesce(v_platforms, v_all), now())
   on conflict (user_id) do update
-    set excluded_subreddits = excluded.excluded_subreddits, co_occurrence = excluded.co_occurrence, updated_at = now()
+    set excluded_subreddits = excluded.excluded_subreddits, co_occurrence = excluded.co_occurrence,
+        platforms = coalesce(v_platforms, public.sales_settings.platforms), updated_at = now()
   returning * into v_row;
   return v_row;
 end;
