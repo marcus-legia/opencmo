@@ -411,7 +411,7 @@ async function main() {
     social: async () => { throw new SocialReadError("Facebook did not answer."); },
   });
   assert.equal(allDown.run.status, "failed", "every platform failed: the run fails (refund)");
-  assert.equal(allDown.run.error, "Facebook did not answer.", "the last platform's message");
+  assert.equal(allDown.run.error, "Facebook groups did not answer. Try again in a minute.", "the last platform's message, in the founder's words");
   // The same Threads post under threads.net with a tracking param is the one already seen: nothing new is scored.
   const dup = await scanWith(["threads"], {}, { social: async () => [social("threads", 7, "https://threads.net/@someone/post/C7?xmt=abc")] }, ["https://www.threads.com/@someone/post/C7"]);
   assert.equal(dup.run.status, "done", `dup (${dup.run.error})`);

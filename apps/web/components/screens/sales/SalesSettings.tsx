@@ -20,7 +20,7 @@ const same = (a: Settings, b: Settings) => JSON.stringify(a) === JSON.stringify(
  * Where Sales looks (P5 R1; Sales finder C2): the platforms it searches (at least one), subreddits it never reads, and pairs of words a thread must both contain. The scan applies
  * them before scoring, so a ruled-out thread costs nothing. Sample settings change on this screen only.
  */
-export function SalesSettings({ initial, live }: { initial: Settings; live: boolean }) {
+export function SalesSettings({ initial, live, onSaved }: { initial: Settings; live: boolean; onSaved?: () => void }) {
   const [saved, setSaved] = useState(initial);
   const [settings, setSettings] = useState(initial);
   const [subreddit, setSubreddit] = useState("");
@@ -59,6 +59,8 @@ export function SalesSettings({ initial, live }: { initial: Settings; live: bool
       setSaved(next);
       setSettings(next);
       setNote(live ? "Saved. The next scan skips these." : "Saved (sample, nothing was sent).");
+      // Scan now's card and "Where it looks" read the screen's copy of the settings.
+      if (live) onSaved?.();
     } catch (error) {
       setNote(error instanceof Error ? error.message : "Could not save that. Please try again.");
     } finally {

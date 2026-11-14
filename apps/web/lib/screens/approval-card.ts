@@ -9,6 +9,7 @@
 import { z } from "zod";
 
 import { profileOf } from "../cmo/platforms";
+import { SALES_PLATFORMS } from "../cmo/social/conversations";
 
 import { DepartmentSchema, PlatformSchema, QuoteSchema, SalesRuleSchema, ScorePartSchema, WhereSchema, day, iso } from "./common";
 
@@ -114,8 +115,8 @@ const ReplyBody = z.object({
    * P5. A skipped thread has no card (it shows on the Sales screen only).
    */
   rule: SalesRuleSchema.optional(),
-  /** Where the thread is (P6 R4): absent for Reddit, so cards raised before P6 parse as they did. */
-  platform: z.literal("hn").optional(),
+  /** Where the thread is (P6 R4, Sales finder): absent for Reddit, so cards raised before P6 parse as they did. */
+  platform: z.enum(SALES_PLATFORMS).optional(),
 });
 
 const GoalBody = z.object({

@@ -77,25 +77,50 @@ Decisions:
   labelled by platform, replies with no link.
 - [ ] Write what happened (and the run id) in this file. A failure is a Request to the session that owns the code.
 
-### - [ ] C4. Whole-PR review, then the docs
+### - [x] C4. Whole-PR review, then the docs
 
-- [ ] `/code-review high` on `origin/main...claude/sales-finder` and `security-review-checklist`; fix CONFIRMED findings
+- [x] `/code-review high` on `origin/main...claude/sales-finder` and `security-review-checklist`; fix CONFIRMED findings
   in C's files, route the rest as Requests; write them under Review.
-- [ ] `docs/architecture/research-sales.md` and `.html` (same change in both): Sales reads four platforms; the table row
+- [x] `docs/architecture/research-sales.md` and `.html` (same change in both): Sales reads four platforms; the table row
   "Sales scan"; "Left": X (official API, paid), creators, R0.
-- [ ] Spec status line: "v1 built (conversations; Reddit, HN, Facebook groups, Threads): `2026-11-14-sales-finder-plan.md`".
-- [ ] `docs/plans/cmo/README.md`: this plan's row says `claude/sales-finder` → `main` and the PR number.
-- [ ] Commit `Sales finder C4: docs`, push.
+- [x] Spec status line: "v1 built (conversations; Reddit, HN, Facebook groups, Threads): `2026-11-14-sales-finder-plan.md`".
+- [x] `docs/plans/cmo/README.md`: this plan's row says `claude/sales-finder` → `main` and the PR number.
+- [x] Commit `Sales finder C4: docs`, push.
 
 ### - [ ] C5. Review of C's own commits (plan §Code review after each session)
 
 ## Review
 
-(findings and what was done)
+**C3 is not done:** it needs the owner on a preview with the migration applied, and spends real credits.
+
+**C4, `/code-review high` on `origin/main...claude/sales-finder`** (after A, B and C pushed), then `security-review-checklist`.
+Fixed in `C: review fixes`:
+
+1. **Fixed (A's request to C).** Reply cards called every conversation Reddit: `approval-card.ts` took only `hn`,
+   `cards.ts` fell back to "Reddit", the kind line was `Reddit · <community>` and the kind label "Reddit reply". The card
+   now carries any `SalesPlatform`, the line is `<platform> · <community>` (the community only when it differs), the
+   label is "Reply". Check in `screens.check.ts`.
+2. **Fixed (A's request to B, in `sales-scan.ts`).** The finders paid to read posts the founder had already seen; the
+   scan now passes `skip` (raw and normalised seen URLs).
+3. **Fixed.** Facebook could spend 15 of the 16 shared lookups before Threads ran; each now has 8.
+4. **Fixed.** A lookup-budget error text ("… Summarize what you found.") could become the run's error; a social
+   platform that fails now says "<platform> did not answer. Try again in a minute." (a missing key keeps its own text).
+5. **Fixed.** After saving Sales settings, Scan now's card and "Where it looks" kept the old platforms until a reload;
+   the settings panel now reloads the screen after a live save.
+6. **Fixed.** A dated scan from the chat dropped the places asked for without a word; it is now refused with the reason.
+7. **Fixed.** Copy still said Reddit only: W4 is "Scan conversations", `list_approvals` names the four places.
+8. **Fixed** with 1 (the check).
+
+Security checklist: the migration is new in this PR (not applied anywhere yet); no new table; `sales_settings_save`
+keeps `authenticated` only; no credit moves; a scan with nowhere to look is refused before `enqueue_cmo_run` holds a
+credit; outside text from Facebook and Threads goes through `cleanUntrusted` and `threadBlock`.
+
+Not run here: `pnpm lint`/`eslint` (fails to resolve modules through this worktree's symlinked `node_modules`), e2e,
+`db:test`.
 
 ## Requests
 
-- **From A (A4 review): the reply card treats every non-HN platform as Reddit.** `lib/screens/cards.ts:141` falls back
+- **Done (C4 review fixes).** **From A (A4 review): the reply card treats every non-HN platform as Reddit.** `lib/screens/cards.ts:141` falls back
   to "Reddit" for the community and `lib/screens/approval-card.ts:118` allows only `z.literal("hn")`, so a Facebook or
   Threads conversation becomes a "Reddit · …" card with Reddit's rule text. Widen both to `SalesPlatform` and use
   `PLATFORM_LABEL` for the fallback.

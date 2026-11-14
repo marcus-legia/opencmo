@@ -112,7 +112,7 @@ lookups, so Threads often gets one search; split the budget per platform if live
 
 ## Requests
 
-- **From A (A4 review): pass the seen URLs to the finders.** `searchFacebookGroups` and `searchThreadsConversations`
+- **Done (C4 review fixes, `defaultConversationSearch`).** **From A (A4 review): pass the seen URLs to the finders.** `searchFacebookGroups` and `searchThreadsConversations`
   now take `opts.skip?: (url: string) => boolean`; a skipped post is neither read nor returned. In
   `defaultConversationSearch`, pass `skip: (url) => seen.has(url) || seenNorm.has(url)`, so the scan's paid post reads
   go to posts the founder has not seen. Stored Facebook URLs no longer end in `/` (one form per post).

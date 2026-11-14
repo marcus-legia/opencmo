@@ -96,10 +96,16 @@ export function scanPlatforms(input: Record<string, unknown>, settings: SalesSet
   return wanted.filter((p) => settings.platforms.includes(p));
 }
 
-/** The real finders (A3), both on one budget: what Facebook spends, Threads cannot. */
-function defaultConversationSearch(budget: ScBudget, readPosts: number): ConversationSearch {
+/**
+ * The real finders (A3), each on its own half of the social budget (Facebook runs first and would otherwise leave
+ * Threads nothing to read), and never paying to read a post the founder has already seen.
+ */
+function defaultConversationSearch(readPosts: number, skip: (url: string) => boolean): ConversationSearch {
+  const budgets = { facebook: new ScBudget(SC_SCAN_LIMIT_SOCIAL / 2), threads: new ScBudget(SC_SCAN_LIMIT_SOCIAL / 2) };
   return (platform, query) =>
-    platform === "facebook" ? searchFacebookGroups(query, budget, { readPosts }) : searchThreadsConversations(query, budget, { readPosts });
+    platform === "facebook"
+      ? searchFacebookGroups(query, budgets.facebook, { readPosts, skip })
+      : searchThreadsConversations(query, budgets.threads, { readPosts, skip });
 }
 
 export const fromHn = (t: HnThread): ScanThread => ({
@@ -472,9 +478,8 @@ export async function salesScan(ctx: JobContext): Promise<JobOutput> {
     return found.slice(0, HN_MAX);
   }, (t) => (failed.includes("hn") ? "Hacker News did not answer" : t.length ? `${t.length} new Hacker News threads found` : "No new Hacker News threads"));
 
-  // Sales finder B1: Facebook groups and Threads, on one shared ScrapeCreators budget.
-  const socialBudget = new ScBudget(SC_SCAN_LIMIT_SOCIAL);
-  const searchSocial = ctx.searchConversations ?? defaultConversationSearch(socialBudget, SOCIAL_READ_POSTS);
+  // Sales finder B1: Facebook groups and Threads, within one ScrapeCreators budget.
+  const searchSocial = ctx.searchConversations ?? defaultConversationSearch(SOCIAL_READ_POSTS, (url) => seen.has(url) || seenNorm.has(url));
   const social = async (platform: "facebook" | "threads", tool: string, label: string, noun: string): Promise<ScanThread[]> =>
     !platforms.includes(platform) ? [] : ctx.step(tool, label, async () => {
       const found: ScanThread[] = [];
@@ -486,7 +491,9 @@ export async function salesScan(ctx: JobContext): Promise<JobOutput> {
           results = await searchSocial(platform, query);
         } catch (error) {
           if (!(error instanceof SocialReadError) || error.kind === "cap") throw error;
-          message = error.message;
+          // A missing key says what to fix; any other reason (the lookup budget, a 5xx) is "did not answer" to the
+          // founder, who cannot act on a lookup count.
+          if (error.kind === "setup") message = error.message;
           // The budget ran out after some reads: keep what was found.
           if (answered) break;
           continue;

@@ -61,7 +61,7 @@ export const CMO_TOOL_SPECS: ToolSpec[] = [
   {
     name: "list_approvals",
     description:
-      "List the cards waiting on the founder in Approvals (every kind: post, reply, goal, schedule, script, price, finished video, shorts, slideshow, correction), posts drafted, approved or published in the last 14 days, and Reddit conversations (community, score, status) waiting for a reply.",
+      "List the cards waiting on the founder in Approvals (every kind: post, reply, goal, schedule, script, price, finished video, shorts, slideshow, correction), posts drafted, approved or published in the last 14 days, and Sales conversations (Reddit, Hacker News, Facebook groups, Threads: community, score, status) waiting for a reply.",
     schema: EMPTY,
     strict: true,
   },
@@ -446,6 +446,8 @@ async function runTool(supabase: SupabaseClient, name: string, input: unknown, t
       try {
         if (scheduled) {
           if (task.agent === "planner" || task.agent === "research") return invalid(`The ${task.agent} only runs now.`);
+          // A dated scan runs from the calendar with the founder's Sales settings: places asked for would be lost.
+          if (task.platforms) return invalid("A scan on a later day uses your Sales settings. Leave platforms out, or run it now.");
           const day = task.when === "now" ? isoDay() : task.when;
           const item = await rpcOrThrow<{ id: string; day: string }>(supabase, "cmo_add_item", {
             p_department: DEPARTMENT_OF[task.agent],

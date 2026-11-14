@@ -102,6 +102,8 @@ async function main() {
   const { runCmoTool } = await import("./cmo-tools");
   const direct = await runCmoTool(off.client, "create_task", threadsOnly.input);
   assert.ok(!direct.ok && /turned off for Threads/.test(direct.content), direct.content);
+  const dated = await runCmoTool(off.client, "create_task", { agent: "sales", brief: "Founders who chase late invoices", when: "2026-11-20", platforms: ["reddit"] });
+  assert.ok(!dated.ok && /later day uses your Sales settings/.test(dated.content), "a dated scan does not drop the places asked for");
   assert.equal(off.rpcs.length, 0, "nothing queued or held");
   // With Reddit on, the card names Reddit only, and the run is asked for the places the founder named.
   const onePlace = await offScope.plan!(call({ agent: "sales", brief: "Founders who chase late invoices", when: "now" }));

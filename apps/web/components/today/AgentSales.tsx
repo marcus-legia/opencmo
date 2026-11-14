@@ -517,7 +517,7 @@ export function AgentSales() {
 
         {tab === "settings" && data ? (
           <div className="v2" style={{ marginTop: "14px" }}>
-            <SalesSettings initial={data.settings} live={Boolean(state.status === "ready" && state.live.settings)} />
+            <SalesSettings initial={data.settings} live={Boolean(state.status === "ready" && state.live.settings)} onSaved={reload} />
           </div>
         ) : null}
       </main>
