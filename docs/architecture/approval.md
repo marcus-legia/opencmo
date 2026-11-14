@@ -36,7 +36,6 @@ State: ✅ done · 🟡 partial · ❌ not built.
 | MCP confirm codes | `packages/mcp-server/src/confirm.ts` | the same priced tools; a signed code valid 600 s (`CONFIRM_SECONDS`) | ✅ (not in `approvals`) |
 | Reminders | `lib/cmo/digest.ts`, `lib/notify/` (email through Resend, web push through VAPID), `email_log`, `push_subscriptions` | open the card, never decide it | ✅ (live with the owner's keys) |
 | Card budget | `card_budget`, `card_budget_take`, `approval_release_held` | about ten new cards a founder's local day; past it a card is `held` until the next day; time-bound cards are never held | ✅ |
-| Founder's Claude inbox | `cmo_inbox`, `inbox_submit` | not an approval: model calls waiting for the founder's Claude | ✅ |
 
 ## 3. What others teach
 

@@ -6,9 +6,9 @@ create extension if not exists pgtap with schema extensions;
 begin;
 set search_path to public, extensions;
 
-select plan(14);
+select plan(13);
 
-select ok(not has_function_privilege('anon', 'public.cmo_order_script(text,date,text)', 'execute'), 'anon cannot order a script');
+select ok(not has_function_privilege('anon', 'public.cmo_order_script(text,date)', 'execute'), 'anon cannot order a script');
 
 insert into auth.users (id, email) values
   ('e2900000-0000-4000-8000-00000000000a', 'script-paid@test.local'),
@@ -22,7 +22,6 @@ set local role authenticated;
 set local request.jwt.claims = '{"sub":"e2900000-0000-4000-8000-00000000000a","role":"authenticated"}';
 insert into t_order select public.cmo_order_script('A 30 second demo: cut a video by deleting words.');
 select throws_ok($$ select public.cmo_order_script(repeat('x', 301)) $$, '22023', null, 'a brief over 300 characters is refused');
-select throws_ok($$ select public.cmo_order_script('A demo of the editor.', null, 'gemini') $$, '22023', null, 'only the founder''s own Claude is another brain');
 select throws_ok($$ select public.cmo_order_script('A demo of the editor.', current_date - 1) $$, '22023', null, 'a day in the past is refused');
 reset role;
 

@@ -10,8 +10,9 @@ The design: a small LLM planner on top of deterministic code that owns dispatch,
 
 **Kept from before**
 - One loop, many configurations: the CMO chat runs on the Assistant loop with its own scope (`lib/agent/scope.ts`).
-- One place that asks a model (`jobs/think.ts`), with two brains: our models, or the founder's own Claude through the
-  inbox. No competitor we read has the second.
+- One place that asks a model (`jobs/think.ts`). The second brain (the founder's own Claude through an inbox, over
+  MCP) was removed on 2026-11-14: with no credits the CMO asks for a top-up instead
+  (`docs/plans/cmo/2026-11-14-remove-cmo-mcp-plan.md`).
 - Steps logged before and after each call, leases, `Deferred`, credit hold per run, daily limits in SQL.
 - Three memory tiers with a Sunday summary (what Letta calls sleep-time compute).
 - Learning from the founder's edits (`cmo_draft_outcomes`, `classify-edits.ts`).
@@ -19,8 +20,8 @@ The design: a small LLM planner on top of deterministic code that owns dispatch,
 **Added, and built**
 - A **work order tree** with briefs, dependencies and budgets (`work_orders`).
 - A **progress ledger**: a daily, code-only check of the tree; a replan only when work is stuck (`jobs/progress.ts`).
-- A **capability registry** so the brain reaches Studio, Schedule and Publish through the same tools as buttons and
-  MCP (`packages/contracts/capabilities.json`).
+- A **capability registry** so the brain reaches Studio, Schedule and Publish through the same tools as buttons, the
+  Assistant and the editor's MCP (`packages/contracts/capabilities.json`).
 - **Event rules** (SQL triggers), a **weekly budget** that is a hard gate with a cost ceiling, a **kill switch**, and a
   **corrections log** read first (`cmo_corrections`).
 
@@ -35,7 +36,7 @@ State: ✅ done · 🟡 partial · ❌ not built.
 | Part | Where | What it does | State |
 |---|---|---|---|
 | Agents | `lib/cmo/agents/registry.ts` | 20 agents in two tiers, all on Claude: Sonnet for drafting and planning, Haiku for checks, translation and picks. The only per-agent setting is `CMO_AGENT_<ID>_MODEL` (and its own `CMO_AGENT_<ID>_API_KEY`) | ✅ |
-| Two brains | `lib/cmo/brain.ts`, `jobs/think.ts` | `opencmo` (our keys, credits) or `claude` (founder's Claude over MCP; model calls become inbox requests and replay with the answer) | ✅ |
+| One brain | `jobs/think.ts` | our keys, paid with credits; a founder without credits gets no run (`cmo_enqueue` refuses it). The `claude` brain over MCP was removed on 2026-11-14 | ✅ |
 | CMO chat | `lib/agent/scope.ts` (`cmoScope`), `cmo-tools.ts` | Assistant loop, 11 CMO tools (`read_doc`, `list_calendar`, `list_approvals`, `create_task`, `remember`, `read_skill`, `read_site`, `get_run_result`, `set_week_goal`, `update_document`, `open_screen`) + the research tools | ✅; a Sales scan or competitor research stops at a price card (S3.5) |
 | Job queue | `cmo_runs`, `jobs/runner.ts` | 12 job kinds (`lib/cmo/jobs/types.ts`) plus `onboard`; steps logged, lease, defer, credit hold, daily limit | ✅ |
 | Loops | `lib/cmo/loops.ts` | 7 loops with cadence and condition; the daily cron enqueues what is due | ✅ |
@@ -60,7 +61,7 @@ State: ✅ done · 🟡 partial · ❌ not built.
 | 12-factor agents (HumanLayer) | principles for production agents | own the control flow; contact humans through a tool call that pauses and resumes; small focused agents; state in your database | — |
 | Magentic-One (Microsoft) | orchestrator with two ledgers | task ledger (facts, guesses, plan) + progress ledger (done? looping? progressing? next step); replan only when progress stalls | free-form "next speaker" selection |
 | Letta / Hermes Agent / Anthropic context engineering | agent memory designs | always-visible core blocks + searchable archive; sleep-time memory work; just-in-time retrieval; skills that improve after use | self-editing skills without review |
-| Inngest, Vercel Workflow, Temporal | durable execution engines | memoized steps, durable sleep, wait-for-event, copied onto `cmo_runs.steps`, `Deferred` and the inbox | the engines (a second runtime) |
+| Inngest, Vercel Workflow, Temporal | durable execution engines | memoized steps, durable sleep, wait-for-event, copied onto `cmo_runs.steps` and `Deferred` | the engines (a second runtime) |
 
 ## 4. Design
 
@@ -68,7 +69,7 @@ Only the **Planner** and the **Reviewer** call a model. Everything else is code.
 
 | Component | Does | Calls a model | Built in |
 |---|---|---|---|
-| Triggers | clock (Modal hourly schedule from each founder's 06:00, hourly digest, every minute) · founder (chat, buttons, approvals) · founder's Claude (MCP) · events (a deliverable's status changed) | — | `modal_app.py`, SQL triggers |
+| Triggers | clock (Modal hourly schedule from each founder's 06:00, hourly digest, every minute) · founder (chat, buttons, approvals) · events (a deliverable's status changed) | — | `modal_app.py`, SQL triggers |
 | Planner | `plan_week`, replan, chat orders; writes the plan and a tree of work order briefs | yes | `jobs/plan-week.ts`, `work_orders_plan_week` |
 | Reviewer | `review_week`, `summarize_memory`; measures the goal, writes lessons, proposes the next goal | yes | `jobs/review-week.ts`, `summarize-memory.ts` |
 | Task ledger | goal (`cmo_goals`), plan (calendar), facts (documents, last week's results, open questions) | no | `cmo_goals`, `content_items` |
@@ -77,7 +78,7 @@ Only the **Planner** and the **Reviewer** call a model. Everything else is code.
 | Event rules | finished → shorts; approved → Schedule; due → Publish; posted + 24 h → measure | no | SQL triggers (§4b) |
 | Gatekeeper | weekly budget, cost ceiling, kill switch, paid or outbound → approval; RPC gates underneath (`cmo_enqueue`, `credit_hold`); the brain never posts | no | §9 |
 | Memory | what the brain learns: archive by topic, lessons, corrections log; reads the Library (section 8b) for documents, brand, voice and skills | — | §8 |
-| Think router | `think()`: `opencmo` → registry models; `claude` → founder's inbox | — | `jobs/think.ts` |
+| Think | `think()`: the registry's model, or the fake on CI | — | `jobs/think.ts` |
 
 Output: work orders to Research, Writer, Sales, Studio, Schedule, Publish and Approval (the founder). Deliverables
 with a status feed event rules; metrics, edits and outcomes feed memory and next week's plan.
@@ -98,7 +99,6 @@ every minute      Modal sweep()      ──POST─▶ Vercel /api/internal/cmo/r
                   sweep() also: reclaims expired leases, closes stuck Assistant turns and open credit jobs
 heavy work        Vercel ──submit──▶ Modal worker; worker claims rows in `tasks` with a lease
 browser           reads cards and approves under RLS; when closed, cards wait in `waiting_founder`
-founder's Claude  (claude brain mode) requests wait in `cmo_inbox` until it answers
 ```
 
 | Wire | What travels on it | Built in |
@@ -136,7 +136,7 @@ when a row is waiting: idle costs nothing, a crash resumes from the last logged 
 | Monday | `plan_week` → the plan card + the work order tree (one order per calendar item, children per department: brief → Studio order → shorts → captions); `niche_video_research` once a week when the plan has a new video item, and the briefs wait on it; the drafts of the plan's posts due that day are queued when the calendar is written (`queueDueDrafts`) | once | as priced; research 2 | `work_orders_plan_week`, `20261231110000_p5_niche_research.sql` |
 | Every day | progress check over the tree; only a stuck order costs a model call (one replan) | rarely | free | `jobs/progress.ts` |
 | Every day, when due | `post_draft`, `sales_scan`, `pull_metrics` (loops), one run per loop a day however often the cron is called (`schedule.ts`); a planned post or scan more than two days late is dropped (`cmo_expire_planned`); `write_caption`, `write_video_brief`, `write_slides` and Studio orders (from the work order tree and event rules) | yes | per kind | `loops.ts`, `work_orders`, `studio-orders.ts` |
-| Any time | event rules; founder orders from chat or MCP land under the week's root | no | free | SQL triggers |
+| Any time | event rules; founder orders from the chat land under the week's root | no | free | SQL triggers |
 | Every morning, founder's time | digest: what waits on you, what the brain did, today's plan | no (template) | free | `lib/cmo/digest.ts` |
 
 ## 6. Work orders
@@ -211,7 +211,7 @@ edit finished is the founder's call only.
 - The brain is the team's third caller. It sends a brief from the week plan; the adapter runs the squad and raises the
   same cards in the Approval inbox.
 - The work order waits in `waiting_founder` on a card and in `waiting_order` while generations run.
-- In `claude` brain mode the founder's Claude may write the Director's plan (as MCP allows); the code Reviewer checks it.
+- Over the editor's MCP the founder's Claude may write the Director's plan; the code Reviewer checks it.
 
 **Rejected:** the brain calling `create_video` itself (it skips the team; every pipeline change would break the brain)
 and a hidden Assistant chat (open loop, unpredictable cost, unseen cards). The team owns how a video is made; the

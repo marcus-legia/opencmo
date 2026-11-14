@@ -90,10 +90,10 @@ export function cmoSwitches(env: Env = process.env): Switch[] {
         : "Set CRON_SECRET here and in the Modal secret; without it every cron route refuses.",
     },
     {
-      // The web app only needs the URL (it shows "Connect Claude"); the confirm key is read by the MCP server on Modal
+      // The web app only needs the URL (Settings shows it with the API keys); the confirm key is read by the MCP server on Modal
       // (secret `opencmo-mcp`), so it is not checked here.
       id: "mcp",
-      label: "Connect Claude (MCP)",
+      label: "Editor MCP (Connect Claude)",
       on: mcp,
       detail: mcp
         ? "On. The MCP server on Modal also needs OPENCMO_MCP_CONFIRM_KEY in its secret opencmo-mcp."
