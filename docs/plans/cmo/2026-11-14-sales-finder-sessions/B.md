@@ -62,21 +62,23 @@ Decisions:
 - [x] `npx tsx lib/cmo/jobs/jobs.check.ts`, `npx tsx lib/cmo/skills/no-ai-slop.check.ts`, `npm run typecheck`.
 - [x] Commit `Sales finder B1: one scan over Reddit, Hacker News, Facebook groups and Threads`, push.
 
-### - [ ] B2. The price card names the places, and the eval covers them
+### - [x] B2. The price card names the places, and the eval covers them
 
 **Produces:** `salesScanCard(brief?: string, platforms?: SalesPlatform[]): PriceCard` — missing or empty means every
 platform. First line: `Scan <labels joined with ", " and " and ">: <brief>` (or `… for people who describe the problem
 you solve`). Second line unchanged except "skipping the subreddits and term pairs" stays. Third line unchanged.
 Credits unchanged (`JOB_PRICES.sales_scan`).
 
-- [ ] Failing checks (in `jobs.check.ts`, or `price-card.check.ts` if you create it):
+- [x] Failing checks (in `jobs.check.ts`, or `price-card.check.ts` if you create it):
   `salesScanCard("x", ["reddit", "threads"]).changes[0] === "Scan Reddit and Threads: x"`;
   `salesScanCard().changes[0]` names all four.
-- [ ] Implement. `ScanNow` in `AgentSales.tsx` still calls `salesScanCard()` with no argument (C owns that file).
-- [ ] Eval: in `eval/cases/sales.ts` add a fake-mode case where the stubs return one Facebook and one Threads thread
+- [x] Implement. `ScanNow` in `AgentSales.tsx` still calls `salesScanCard()` with no argument (C owns that file).
+- [x] Eval: in `eval/cases/sales.ts` add a fake-mode case where the stubs return one Facebook and one Threads thread
   with a clear pain; it expects two cards, both `no_product_mention`, each reply under 120 words with no link.
-  Run the sales eval the way `docs/plans/agents/2026-10-17-agent-evals-plan.md` says (fake mode).
-- [ ] Commit `Sales finder B2: the scan's price card names where it looks`, push.
+  Fake run: `w4` 10/10 (`w4:social:*` 4/4). Run the sales eval the way `docs/plans/agents/2026-10-17-agent-evals-plan.md` says (fake mode).
+- [x] Commit `Sales finder B2: the scan's price card names where it looks`, push.
+
+Also changed: `e2e/cmo.spec.ts` asserted the old card text ("Scan Reddit and Hacker News"); it now checks "Scan Reddit", which holds for every card the chat shows by default.
 
 ### - [ ] B3. Review (plan §Code review after each session)
 

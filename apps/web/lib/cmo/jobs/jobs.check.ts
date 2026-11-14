@@ -342,6 +342,14 @@ async function main() {
   assert.ok(queried.length > 0, "the injected search was asked");
   assert.deepEqual(memInj.opps.map((o) => o.url).sort(), [injected(1).url, injected(2).url], "only injected threads become cards");
 
+  // Sales finder B2: the price card names where the scan looks; nothing named means every platform.
+  const { salesScanCard } = await import("./price-card");
+  assert.equal(salesScanCard("x", ["reddit", "threads"]).changes[0], "Scan Reddit and Threads: x");
+  assert.equal(salesScanCard().changes[0], "Scan Reddit, Hacker News, Facebook groups and Threads for people who describe the problem you solve");
+  assert.equal(salesScanCard("x", []).changes[0], "Scan Reddit, Hacker News, Facebook groups and Threads: x");
+  assert.equal(salesScanCard("x", ["hn"]).changes[0], "Scan Hacker News: x");
+  assert.equal(salesScanCard().credits, salesScanCard("x", ["hn"]).credits, "the price does not change with the places");
+
   // Sales finder B1: one scan over the platforms the run asks for and the founder allows.
   const { SocialReadError } = await import("../social/scrapecreators");
   const { scanPlatforms } = await import("./sales-scan");

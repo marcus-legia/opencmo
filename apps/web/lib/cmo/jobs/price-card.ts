@@ -2,16 +2,24 @@
  * What a priced CMO job says before it runs (cmo-review-2 S3.5, S3.6): the same lines on the chat's approval card and
  * on the Sales screen's Scan now card, with the price from `JOB_PRICES`. Pure, so the browser and the server share it.
  */
+import { PLATFORM_LABEL, SALES_PLATFORMS, type SalesPlatform } from "../social/conversations";
 import { JOB_PRICES } from "./progress";
 
 export type PriceCard = { changes: string[]; credits: number };
 
 const clip = (text: string, n: number) => (text.length > n ? `${text.slice(0, n - 1)}…` : text);
 
-export function salesScanCard(brief?: string): PriceCard {
+/** "Reddit", "Reddit and Threads", "Reddit, Hacker News and Threads". */
+function joinLabels(labels: string[]): string {
+  return labels.length <= 1 ? (labels[0] ?? "") : `${labels.slice(0, -1).join(", ")} and ${labels.at(-1)}`;
+}
+
+/** Missing or empty `platforms` means every place Sales looks. */
+export function salesScanCard(brief?: string, platforms?: SalesPlatform[]): PriceCard {
+  const where = joinLabels((platforms?.length ? platforms : [...SALES_PLATFORMS]).map((p) => PLATFORM_LABEL[p]));
   return {
     changes: [
-      brief ? `Scan Reddit and Hacker News: ${clip(brief, 200)}` : "Scan Reddit and Hacker News for people who describe the problem you solve",
+      brief ? `Scan ${where}: ${clip(brief, 200)}` : `Scan ${where} for people who describe the problem you solve`,
       "Up to 8 searches written from your customers' pains, skipping the subreddits and term pairs in your Sales settings",
       "Draft replies for the 5 best threads into Approvals. You post them yourself.",
     ],

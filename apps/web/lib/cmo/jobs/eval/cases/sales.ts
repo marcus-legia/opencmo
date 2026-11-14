@@ -11,10 +11,11 @@
 
 import type { CaseResult } from "@/lib/eval/compare";
 
+import type { ConversationThread } from "../../../social/conversations";
 import type { RedditThread } from "../../../social/reddit";
 import { cascade } from "../../judge";
 import { memoryStore } from "../../memory-store";
-import { quoteIn } from "../../sales-scan";
+import { quoteIn, REPLY_MAX_WORDS } from "../../sales-scan";
 import type { Documents, Opportunity } from "../../types";
 import invoicing from "../fixtures/reddit/invoicing.json";
 import { registerCases, type EvalCase, type EvalEnv } from "../types";
@@ -102,12 +103,54 @@ async function runFixture(fixture: RedditFixture, env: EvalEnv): Promise<CaseRes
   return results;
 }
 
+/**
+ * Sales finder B2: one Facebook group post and one Threads post with a clear pain, through the `searchConversations`
+ * seam. Neither platform has rules we can read, so both cards only help: no product mention, no link, under the limit.
+ */
+async function runSocial(fixture: RedditFixture, env: EvalEnv): Promise<CaseResult[]> {
+  const postedAt = new Date(Date.now() - 5 * 3_600_000).toISOString();
+  const text = "Every month the same story. My clients pay invoices weeks late and I hate chasing them. How do you all handle it?";
+  const posts: ConversationThread[] = [
+    { platform: "facebook", url: "https://www.facebook.com/groups/freelancersunited/posts/1234567890/", community: "Freelancers United", title: "Clients paying late again", author: "Dana", text, comments: 6, postedAt },
+    { platform: "threads", url: "https://www.threads.com/@jo.designs/post/C9xYz123abc", community: "Threads", title: "Chasing invoices is the worst part of freelancing", author: "jo.designs", text, comments: 4, postedAt },
+  ];
+  const mem = memoryStore(fixture.docs, []);
+  const run = mem.enqueue("sales_scan", {});
+  await env.drain(mem.store, {
+    runId: run.id,
+    budgetMs: 240_000,
+    searchReddit: async () => [],
+    searchHn: async () => [],
+    searchConversations: async (platform) => posts.filter((p) => p.platform === platform),
+  });
+  const state = mem.runs.find((r) => r.id === run.id);
+  const id = (output: string) => `w4:social:${output}`;
+  if (state?.status !== "done") return [{ id: id("run"), epoch: env.epoch, pass: false, decided_by: "error", notes: [state?.error ?? "the scan did not finish"] }];
+  const cards = mem.opps.filter((o) => o.platform === "facebook" || o.platform === "threads");
+  const results: CaseResult[] = [
+    { id: id("run"), epoch: env.epoch, pass: true, decided_by: "code" },
+    { id: id("cards"), epoch: env.epoch, pass: cards.length === 2, decided_by: "code", notes: [`${cards.length} cards: ${cards.map((o) => o.platform).join(", ") || "none"}`] },
+  ];
+  for (const card of cards) {
+    const words = card.reply.trim().split(/\s+/).length;
+    const issues = [
+      ...(card.rule === "no_product_mention" ? [] : [`rule is ${card.rule}, not no_product_mention`]),
+      ...(LINK.test(card.reply) ? ["has a link"] : []),
+      ...(words < REPLY_MAX_WORDS ? [] : [`${words} words`]),
+    ];
+    if (env.provider !== "fake") env.log(`${card.platform} (${card.score}): ${card.reply.replace(/\s+/g, " ")}`);
+    results.push({ id: id(`reply:${card.platform}`), epoch: env.epoch, pass: !issues.length, decided_by: "code", notes: issues });
+  }
+  return results;
+}
+
 export const salesCase: EvalCase = {
   job: "w4",
   once: true,
   async run(_fixture, env) {
     const results: CaseResult[] = [];
     for (const fixture of REDDIT_FIXTURES) results.push(...(await runFixture(fixture, env)));
+    results.push(...(await runSocial(REDDIT_FIXTURES[0]!, env)));
     return results;
   },
 };

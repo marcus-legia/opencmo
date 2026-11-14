@@ -124,7 +124,8 @@ test("AI CMO: lập lịch, soạn bài X, duyệt, đánh dấu đã đăng, qu
   // Charge before running (cmo-review-2 S3.5): the scan stops at its price card, and nothing is queued before Approve.
   const confirmCard = page.getByRole("group", { name: "Confirm" });
   await expect(confirmCard).toContainText("5 credits", { timeout: 60_000 });
-  await expect(confirmCard).toContainText("Scan Reddit and Hacker News");
+  // Sales finder B2: the card names every place it looks; the chat may narrow them, Reddit is in the default.
+  await expect(confirmCard).toContainText("Scan Reddit");
   const { count: scansAtCard } = await admin.from("cmo_runs").select("id", { count: "exact", head: true }).eq("user_id", userId).eq("kind", "sales_scan");
   expect(scansAtCard ?? 0).toBe(scansBefore ?? 0);
   await page.getByTestId("cmo-confirm-approve").click();
