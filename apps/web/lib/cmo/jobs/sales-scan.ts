@@ -22,7 +22,9 @@ import {
   type ConversationThread,
   type SalesPlatform,
 } from "../social/conversations";
+import { FACEBOOK_POST, searchFacebookGroups } from "../social/facebook";
 import { ScBudget } from "../social/scrapecreators";
+import { searchThreadsConversations, THREADS_POST } from "../social/threads-search";
 import { cleanUntrusted, escapeAttribute, escapeForTag } from "../untrusted";
 import { voiceBlock } from "../writer/context";
 import { hasLink } from "./check-post";
@@ -60,6 +62,24 @@ const NOWHERE = "Sales has nowhere to look. Turn on a platform in Sales settings
 /** What one community's rules say (5.1): the state, the line the card shows, and what a member needs to post. */
 export type RuleRead = { verdict: SubredditVerdict; summary: string; minKarma?: number | null; minAccountAgeDays?: number | null; megathread?: boolean };
 
+/**
+ * The URL of one post, in the form `opportunities_url_check` accepts for its platform, or null. Hosts are already
+ * one spelling (`normalizeConversationUrl`); this keeps out a group's home page, a profile, or a post filed under the
+ * wrong platform, any of which would make the whole save fail and lose the run's other cards (B3 review).
+ */
+const POST_URL: Record<SalesPlatform, RegExp> = {
+  reddit: /^https:\/\/www\.reddit\.com\//,
+  hn: /^https:\/\/news\.ycombinator\.com\/item\?id=[0-9]{1,12}$/,
+  facebook: FACEBOOK_POST,
+  threads: THREADS_POST,
+};
+export function postUrl(platform: SalesPlatform, raw: string): string | null {
+  let url = normalizeConversationUrl(raw);
+  // Google often links a Threads post with a trailing slash; the stored form has none.
+  if (url && platform === "threads") url = url.replace(/\/+$/, "");
+  return url && url.length <= 500 && POST_URL[platform].test(url) ? url : null;
+}
+
 /** A conversation the scan scores, from any platform (Reddit threads get `platform: "reddit"`). */
 export type ScanThread = ConversationThread;
 
@@ -76,12 +96,10 @@ export function scanPlatforms(input: Record<string, unknown>, settings: SalesSet
   return wanted.filter((p) => settings.platforms.includes(p));
 }
 
-/**
- * The finders' default until A3 lands: nothing found. A3 replaces it with `searchFacebookGroups` /
- * `searchThreadsConversations` on the shared budget.
- */
-function defaultConversationSearch(_budget: ScBudget, _readPosts: number): ConversationSearch {
-  return async () => [];
+/** The real finders (A3), both on one budget: what Facebook spends, Threads cannot. */
+function defaultConversationSearch(budget: ScBudget, readPosts: number): ConversationSearch {
+  return (platform, query) =>
+    platform === "facebook" ? searchFacebookGroups(query, budget, { readPosts }) : searchThreadsConversations(query, budget, { readPosts });
 }
 
 export const fromHn = (t: HnThread): ScanThread => ({
@@ -175,8 +193,9 @@ export function fakeNeeds(rules: string): { minKarma: number | null; minAccountA
 export const subredditOf = (community: string) => community.trim().replace(/^\/?r\//i, "").toLowerCase();
 
 /** The founder's limits, applied before any thread is scored: excluded subreddits, and pairs of terms that must both appear. */
-export function allowedBySettings(thread: RedditThread, settings: SalesSettings): boolean {
-  if (settings.excluded.includes(subredditOf(thread.community))) return false;
+export function allowedBySettings(thread: RedditThread & { platform?: SalesPlatform }, settings: SalesSettings): boolean {
+  // Excluded subreddits are Reddit's: a Facebook group or HN thread that shares a name is not one of them.
+  if ((thread.platform ?? "reddit") === "reddit" && settings.excluded.includes(subredditOf(thread.community))) return false;
   if (!settings.pairs.length) return true;
   const text = `${thread.title} ${thread.text}`.toLowerCase();
   return settings.pairs.some(([a, b]) => text.includes(a.toLowerCase()) && text.includes(b.toLowerCase()));
@@ -372,7 +391,7 @@ export async function salesScan(ctx: JobContext): Promise<JobOutput> {
   const cutoff = Date.now() - MAX_AGE_DAYS * 86_400_000;
   /** The thread under its stored URL when it is new, allowed and recent; null otherwise. */
   const fresh = <T extends ScanThread>(t: T): T | null => {
-    const url = normalizeConversationUrl(t.url);
+    const url = postUrl(t.platform, t.url);
     if (!url || seen.has(url) || seenNorm.has(url) || taken.has(url)) return null;
     // The founder's limits cost nothing to apply: excluded threads are never scored (P5 F5).
     if (!allowedBySettings(t, settings)) return null;
@@ -408,10 +427,13 @@ export async function salesScan(ctx: JobContext): Promise<JobOutput> {
         results = await search(query);
       } catch (error) {
         if (!(error instanceof SocialReadError) || error.kind === "cap") throw error;
-        // A missing or wrong key fails every query: stop now. Any other error skips only that query.
-        if (error.message.includes("not set up")) throw new LlmError(error.message);
         errors += 1;
         message = error.message;
+        // A missing or wrong key fails every query: Reddit is done, the keyless platforms still look (Review focus 3).
+        if (error.kind === "setup" || error.message.includes("not set up")) {
+          errors = list.length;
+          break;
+        }
         continue;
       }
       for (const t of results) {

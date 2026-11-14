@@ -54,7 +54,7 @@ Decisions:
   - a Threads thread and a `threads.net` copy of a URL already in `seen`: nothing new is scored (Review focus 5);
   - a saved Facebook opportunity has `platform: "facebook"` and `rule: "no_product_mention"`.
 - [x] Run `cd apps/web && npx tsx lib/cmo/jobs/jobs.check.ts`: the new checks fail.
-- [x] Implement in `sales-scan.ts` and the hook in `runner.ts` (default `searchConversations` still returns `[]`: A3 not pushed yet, wiring left for when it is). Until A3 is pushed the default for
+- [x] Implement in `sales-scan.ts` and the hook in `runner.ts` (the default calls A3's `searchFacebookGroups` / `searchThreadsConversations` on one shared budget, wired in the B3 commit). Until A3 is pushed the default for
   `searchConversations` is a function that returns `[]`; after A3, the default calls `searchFacebookGroups` /
   `searchThreadsConversations` with the shared budget.
 - [x] `reply-outcomes.ts`: outcomes are checked for `reddit` and `hn` only; a due Facebook or Threads outcome is left
@@ -80,11 +80,35 @@ Credits unchanged (`JOB_PRICES.sales_scan`).
 
 Also changed: `e2e/cmo.spec.ts` asserted the old card text ("Scan Reddit and Hacker News"); it now checks "Scan Reddit", which holds for every card the chat shows by default.
 
-### - [ ] B3. Review (plan §Code review after each session)
+### - [x] B3. Review (plan §Code review after each session)
 
 ## Review
 
-(findings and what was done)
+`/code-review high` on `124e57c1..e9774d9e` (B1, B2), then `security-review-checklist`. Fixed in `Session B: review fixes`:
+
+1. **Fixed.** The scan kept any URL on an allowed host, but `opportunities_url_check` takes only a post's own URL per
+   platform: a group home page, a Threads link with a trailing slash, or a post filed under the wrong platform would
+   make `cmo_save_opportunities` raise and lose every card of the run. `postUrl(platform, url)` (A3's `FACEBOOK_POST` /
+   `THREADS_POST`) now drops them before scoring and strips a Threads trailing slash.
+2. **Request to A.** Facebook and Threads reply outcomes are filtered out after `cmo_reply_outcomes_due` applied its
+   `limit`, and are never marked checked: ten of them would take every slot and starve Reddit/HN checks. The filter
+   belongs in the SQL (A.md, Requests).
+3. **Fixed.** A missing ScrapeCreators key failed the whole scan at Reddit; it now fails Reddit only (Review focus 3),
+   so Hacker News still answers. This overrides the B1 note "keep the 'not set up' key error as an immediate throw".
+4. **Skipped.** A spend-cap error (`kind: "cap"`) inside a platform step still fails the run: past the cap the model
+   calls that follow are refused too, so the threads found could not be scored.
+5. **Fixed.** Excluded subreddits filtered Facebook groups and HN threads of the same name; they apply to Reddit only.
+6. **Fixed.** The default `searchConversations` now calls A3's finders (A3 landed during the review).
+7. **Skipped.** The Reddit, HN and social loops are similar but differ on purpose (Reddit skips a failed query, HN
+   stops, social keeps what it has); one shared loop is a refactor for later.
+8. **Skipped.** `seen.has(url)` next to the normalised set stays: it is free, and a store that answers `has` without
+   listing (the check's stub) still works.
+9. **Skipped.** The e2e card check is "Scan Reddit": session C decides what the chat passes as `platforms`.
+
+Security checklist: no secrets, migrations, tables, media or credit moves in B's diff. The platform switch is checked
+before any read. ScrapeCreators calls stay within `SC_SCAN_LIMIT` (40): Reddit ≤ 8 searches + ≤ 5 rules reads +
+Facebook and Threads together ≤ 16. Note for the owner: with `readPosts: 4`, Facebook can spend 15 of the 16 shared
+lookups, so Threads often gets one search; split the budget per platform if live runs show Threads empty.
 
 ## Requests
 

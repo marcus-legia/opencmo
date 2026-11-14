@@ -233,7 +233,8 @@ async function main() {
   assert.deepEqual(w4.steps.map((s) => s.tool), ["read_doc", "make_queries", "reddit_search", "hn_search", "facebook_search", "threads_search", "score_thread", "check_rules", "draft_reply", "create_card"]);
   assert.ok(mem3.opps.length > 0 && mem3.opps.length <= 5, `1–5 thẻ (${mem3.opps.length})`);
   assert.ok(mem3.opps.every((o) => o.score >= PASS_SCORE && o.reply.length > 0 && o.score_parts.length === 5), "thẻ đủ điểm, có trả lời");
-  assert.ok(mem3.opps.every((o) => (o.platform === "hn" ? new URL(o.url).hostname === "news.ycombinator.com" : new URL(o.url).hostname === "www.reddit.com")), "only reddit.com or HN discussion links");
+  const HOST = { reddit: "www.reddit.com", hn: "news.ycombinator.com", facebook: "www.facebook.com", threads: "www.threads.com" } as const;
+  assert.ok(mem3.opps.every((o) => new URL(o.url).hostname === HOST[o.platform ?? "reddit"]), "every link is on its own platform's host");
   // P6 R4: the fake HN story is scored with the rest; on HN a reply only helps (no product mention).
   const hn = mem3.opps.filter((o) => o.platform === "hn");
   assert.ok(hn.length === 1 && hn[0]!.community === "Hacker News" && hn[0]!.rule === "no_product_mention", "one HN card, help only");
@@ -316,7 +317,7 @@ async function main() {
   memEx.salesSettings.excluded.push("freelance", "smallbusiness");
   memEx.enqueue("sales_scan");
   await drainCmoQueue(memEx.store, { searchHn: async () => [] });
-  assert.equal(memEx.opps.length, 0, "every thread was in an excluded subreddit");
+  assert.equal(memEx.opps.filter((o) => (o.platform ?? "reddit") === "reddit").length, 0, "every Reddit thread was in an excluded subreddit");
 
   // Không thread mới nào: lượt vẫn xong và được hoàn credit.
   const mem4 = memoryStore(docs);
@@ -337,7 +338,7 @@ async function main() {
   const queried: string[] = [];
   const memInj = memoryStore(docs);
   const inj = memInj.enqueue("sales_scan");
-  await drainCmoQueue(memInj.store, { searchReddit: async (query) => (queried.push(query), [injected(1), injected(2)]), searchHn: async () => [] });
+  await drainCmoQueue(memInj.store, { searchReddit: async (query) => (queried.push(query), [injected(1), injected(2)]), searchHn: async () => [], searchConversations: async () => [] });
   assert.equal(inj.status, "done", `W4 with an injected search (${inj.error})`);
   assert.ok(queried.length > 0, "the injected search was asked");
   assert.deepEqual(memInj.opps.map((o) => o.url).sort(), [injected(1).url, injected(2).url], "only injected threads become cards");
@@ -416,6 +417,24 @@ async function main() {
   assert.equal(dup.run.status, "done", `dup (${dup.run.error})`);
   assert.deepEqual(dup.run.output, { cards: 0, refund: true, platforms: ["threads"], failed: [] });
   assert.ok(!dup.run.steps.some((s) => s.tool === "score_thread"), "nothing was scored");
+  // B3 review: a URL the database would refuse (a group's home page, a Threads link with a trailing slash, a post on
+  // another platform's host) is dropped before scoring, so one bad row never loses the run's other cards.
+  const odd = await scanWith(["facebook", "threads"], {}, {
+    social: async (p) => p === "facebook"
+      ? [social("facebook", 1, "https://www.facebook.com/groups/freelancers/"), social("facebook", 2, "https://www.threads.com/@a/post/C2"), social("facebook", 3)]
+      : [social("threads", 4, "https://threads.net/@someone/post/C4/")],
+  });
+  assert.equal(odd.run.status, "done", `odd urls (${odd.run.error})`);
+  assert.deepEqual(odd.mem.opps.map((o) => o.url).sort(), ["https://www.facebook.com/groups/freelancers/posts/3/", "https://www.threads.com/@someone/post/C4"]);
+  // Review focus 3: no ScrapeCreators key fails Reddit only; Hacker News still answers.
+  const noKey = await scanWith(["reddit", "hn"], {}, {
+    reddit: async () => { throw new SocialReadError("Social research is not set up on this server yet.", "setup"); },
+    hn: async () => [{ url: "https://news.ycombinator.com/item?id=42", objectId: "42", community: "Hacker News", title: "Clients pay me late", author: "a", text: "Every month the same story. My clients pay invoices weeks late.", points: 10, comments: 3, postedAt: new Date().toISOString() }] as never[],
+  });
+  assert.equal(noKey.run.status, "done", `no key, HN on (${noKey.run.error})`);
+  assert.deepEqual((noKey.run.output as { failed: Platform[] }).failed, ["reddit"]);
+  // Excluded subreddits are Reddit's: a Facebook group with the same name is still read.
+  assert.equal(allowedBySettings({ ...social("facebook", 1), community: "freelance" }, { excluded: ["freelance"], pairs: [], platforms: ["facebook"] }), true);
 
   // CMO chat không bao giờ có tool đăng/trả lời: mọi thứ ra ngoài đi qua Approvals.
   const { CMO_TOOL_SPECS } = await import("../../agent/cmo-tools");
