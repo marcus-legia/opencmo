@@ -57,7 +57,9 @@ export function normalizeConversationUrl(raw: string): string | null {
   const host = HOSTS[url.hostname.toLowerCase()];
   if (url.protocol !== "https:" || !host || url.username || url.password || url.port) return null;
   const query = host === "news.ycombinator.com" && /^\?id=\d+$/.test(url.search) ? url.search : "";
-  return `https://${host}${url.pathname}${query}`;
+  // Google links a Threads post as /@user/post/<code>/<slug>/: the code is the post, the slug is only words.
+  const path = host === "www.threads.com" ? url.pathname.replace(/^(\/@[^/]+\/post\/[^/]+)\/.*$/, "$1") : url.pathname;
+  return `https://${host}${path}${query}`;
 }
 
 /** The known platforms in `raw`, once each, in list order; anything that is not a list gives none. */

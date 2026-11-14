@@ -1,0 +1,173 @@
+{
+  "source": "real",
+  "path": "/v1/facebook/post",
+  "params": {
+    "url": "https://www.facebook.com/groups/1753756208440623/posts/2552582648557971/",
+    "cache_max_age": "7d"
+  },
+  "capturedAt": "2026-11-14",
+  "body": {
+    "success": true,
+    "credits_remaining": 26,
+    "credits_charged": 1,
+    "post_id": "2552582648557971",
+    "shared_post_id": null,
+    "shared_post_url": null,
+    "is_paid_partnership": null,
+    "like_count": 19,
+    "comment_count": 36,
+    "reaction_counts": {
+      "thankful": 0,
+      "like": 17,
+      "love": 1,
+      "care": 1,
+      "haha": 0,
+      "wow": 0,
+      "sad": 0,
+      "anger": 0,
+      "pride": 0,
+      "confused": 0
+    },
+    "creation_time": "2026-11-06T00:33:28.000Z",
+    "share_count": 1,
+    "view_count": null,
+    "description": "Advice Needed\nI am having a hard time finding clients. I do small business bookkeeping.. any advice would help🙏🏾",
+    "feedback_id": "ZmVlZGJhY2s6cGZiaWQwSlA3Z25RcnJWTDl1aVJiZ2JNaG5ycVZaVW9QM0twdWN5MzdmTEV4aE05VVBlR3JUYkNwUWd4clpaRXl1MURORWw=",
+    "comments": [
+      {
+        "id": "Y29tbWVudDoyNTUyNTgyNjQ4NTU3OTcxXzI1NTI1OTAyOTg1NTcyMDY=",
+        "author": {
+          "__typename": "User",
+          "id": "pfbid05zqieEL2mDTbQxkHsY9KnABeKRMmYSQ81RMM5UDa2xWr9CouqTvEzsoLHbk3V3k7l",
+          "name": "user_redacted",
+          "__isActor": "User",
+          "profile_picture_depth_0": {
+            "uri": "https://scontent-ord5-1.xx.fbcdn.net/v/t1.6435-1/178487052_10224603135128753_514470786852720090_n.jpg?stp=cp0_dst-jpg_tt6&cstp=mx1440x1439&ctp=s64x64&_nc_cat=104&_nc_map=urlgen_bucketless&ccb=1-7&_nc_sid=e99d92&_nc_ohc=FwfhoGr2gpIQ7kNvwGma1G3&_nc_oc=AdrDTJo1uzuduJ_EJ_SqCFvhETBFI8XUZoCQ3CXkt0Nei4aJMtTzgGDmtoJ0OLZ75GA&_nc_zt=24&_nc_ht=scontent-ord5-1.xx&_nc_gid=090AGPIMJcwJiJobP4oS6Q&_nc_ss=78180&oh=00_AQS4lDOpRK9WTfsJXpJaBcQbucLOHWsx0Etw5iJb3Tlx3Q&oe=6B1FB6E9"
+          },
+          "profile_picture_depth_0_increased": {
+            "uri": "https://scontent-ord5-1.xx.fbcdn.net/v/t1.6435-1/178487052_10224603135128753_514470786852720090_n.jpg?stp=cp0_dst-jpg_tt6&cstp=mx1440x1439&ctp=s80x80&_nc_cat=104&_nc_map=urlgen_bucketless&ccb=1-7&_nc_sid=e99d92&_nc_ohc=FwfhoGr2gpIQ7kNvwGma1G3&_nc_oc=AdrDTJo1uzuduJ_EJ_SqCFvhETBFI8XUZoCQ3CXkt0Nei4aJMtTzgGDmtoJ0OLZ75GA&_nc_zt=24&_nc_ht=scontent-ord5-1.xx&_nc_gid=090AGPIMJcwJiJobP4oS6Q&_nc_ss=78180&oh=00_AQS4lDOpRK9WTfsJXpJaBcQbucLOHWsx0Etw5iJb3Tlx3Q&oe=6B1FB6E9"
+          },
+          "profile_picture_depth_1": {
+            "uri": "https://scontent-ord5-1.xx.fbcdn.net/v/t1.6435-1/178487052_10224603135128753_514470786852720090_n.jpg?stp=cp0_dst-jpg_tt6&cstp=mx1440x1439&ctp=s48x48&_nc_cat=104&_nc_map=urlgen_bucketless&ccb=1-7&_nc_sid=e99d92&_nc_ohc=FwfhoGr2gpIQ7kNvwGma1G3&_nc_oc=AdrDTJo1uzuduJ_EJ_SqCFvhETBFI8XUZoCQ3CXkt0Nei4aJMtTzgGDmtoJ0OLZ75GA&_nc_zt=24&_nc_ht=scontent-ord5-1.xx&_nc_gid=090AGPIMJcwJiJobP4oS6Q&_nc_ss=78180&oh=00_AQS4lDOpRK9WTfsJXpJaBcQbucLOHWsx0Etw5iJb3Tlx3Q&oe=6B1FB6E9"
+          },
+          "gender": "FEMALE",
+          "__isEntity": "User",
+          "url": null,
+          "work_info": null,
+          "profile_picture": "https://example.invalid/avatar.jpg"
+        },
+        "text": "In person networking is the best.  I found a group using meet up.\n\nWhere are you located?",
+        "reaction_count": 3,
+        "reactions": {
+          "thankful": 0,
+          "like": 3,
+          "love": 0,
+          "care": 0,
+          "haha": 0,
+          "wow": 0,
+          "sad": 0,
+          "anger": 0,
+          "pride": 0,
+          "confused": 0
+        }
+      },
+      {
+        "id": "Y29tbWVudDoyNTUyNTgyNjQ4NTU3OTcxXzI1NTI2NDQ1OTUyMTg0NDM=",
+        "author": {
+          "__typename": "User",
+          "id": "61590781558093",
+          "name": "user_redacted",
+          "__isActor": "User",
+          "profile_picture_depth_0": {
+            "uri": "https://scontent-ord5-1.xx.fbcdn.net/v/t39.30808-1/743386972_122119702659359385_6110827372775507004_n.jpg?stp=cp0_dst-jpg_tt6&cstp=mx1620x1620&ctp=s64x64&_nc_cat=101&_nc_map=urlgen_bucketless&ccb=1-7&_nc_sid=2d3e12&_nc_ohc=XDcq5eRf7kAQ7kNvwEezkgd&_nc_oc=AdqCrbZ1knBI0uh34hUjGTHGT4pTxL4eNjcp5OPGPwvRewRtgsKadt1Zi2Mjs8w-j_c&_nc_zt=24&_nc_ht=scontent-ord5-1.xx&_nc_gid=090AGPIMJcwJiJobP4oS6Q&_nc_ss=78180&oh=00_AQRuJ5XnoDsJo4wHpUevajdxktySmMxYbyaGjVOklS2Nrg&oe=6AFE432B"
+          },
+          "profile_picture_depth_0_increased": {
+            "uri": "https://scontent-ord5-1.xx.fbcdn.net/v/t39.30808-1/743386972_122119702659359385_6110827372775507004_n.jpg?stp=cp0_dst-jpg_tt6&cstp=mx1620x1620&ctp=s80x80&_nc_cat=101&_nc_map=urlgen_bucketless&ccb=1-7&_nc_sid=2d3e12&_nc_ohc=XDcq5eRf7kAQ7kNvwEezkgd&_nc_oc=AdqCrbZ1knBI0uh34hUjGTHGT4pTxL4eNjcp5OPGPwvRewRtgsKadt1Zi2Mjs8w-j_c&_nc_zt=24&_nc_ht=scontent-ord5-1.xx&_nc_gid=090AGPIMJcwJiJobP4oS6Q&_nc_ss=78180&oh=00_AQRuJ5XnoDsJo4wHpUevajdxktySmMxYbyaGjVOklS2Nrg&oe=6AFE432B"
+          },
+          "profile_picture_depth_1": {
+            "uri": "https://scontent-ord5-1.xx.fbcdn.net/v/t39.30808-1/743386972_122119702659359385_6110827372775507004_n.jpg?stp=cp0_dst-jpg_tt6&cstp=mx1620x1620&ctp=s48x48&_nc_cat=101&_nc_map=urlgen_bucketless&ccb=1-7&_nc_sid=2d3e12&_nc_ohc=XDcq5eRf7kAQ7kNvwEezkgd&_nc_oc=AdqCrbZ1knBI0uh34hUjGTHGT4pTxL4eNjcp5OPGPwvRewRtgsKadt1Zi2Mjs8w-j_c&_nc_zt=24&_nc_ht=scontent-ord5-1.xx&_nc_gid=090AGPIMJcwJiJobP4oS6Q&_nc_ss=78180&oh=00_AQRuJ5XnoDsJo4wHpUevajdxktySmMxYbyaGjVOklS2Nrg&oe=6AFE432B"
+          },
+          "gender": "UNKNOWN",
+          "__isEntity": "User",
+          "url": null,
+          "work_info": null,
+          "profile_picture": "https://example.invalid/avatar.jpg"
+        },
+        "text": "Try going business to business.   Ask if you can have 5 minutes.   Ask how their bookkeeping is currently handled.   Ask how is that working out for them.  Ask if they're getting monthly reports.  Ask if they're bookkeeper is teaching them what their business is telling them, how to understand their books. \n\nBe the bookkeeper who under promises and over delivers. \n\nBeing accessible and down to earth goes a long way.   So taking the time to show up at their front door is impressive.   Be prepared to show,  not just tell.  Be prepared to deliver some value first.   Offer a bookkeeping health che…",
+        "reaction_count": 7,
+        "reactions": {
+          "thankful": 0,
+          "like": 7,
+          "love": 0,
+          "care": 0,
+          "haha": 0,
+          "wow": 0,
+          "sad": 0,
+          "anger": 0,
+          "pride": 0,
+          "confused": 0
+        }
+      },
+      {
+        "id": "Y29tbWVudDoyNTUyNTgyNjQ4NTU3OTcxXzI1NTI1OTE4NjE4OTAzODM=",
+        "author": {
+          "__typename": "GroupAnonAuthorProfile",
+          "id": "2224585211454857",
+          "name": "user_redacted",
+          "__isActor": "GroupAnonAuthorProfile",
+          "profile_picture_depth_0": {
+            "uri": "https://scontent-ord5-2.xx.fbcdn.net/v/t39.35477-6/553527706_31377848075192087_9002088841089125546_n.jpg?stp=cp0_dst-jpg_tt6&cstp=mx688x688&ctp=s64x64&_nc_cat=1&ccb=1-7&_nc_sid=d7e6db&_nc_ohc=YVek4YF-z80Q7kNvwFheTt_&_nc_oc=AdottozjBkFWs_BODRqwhYRgYG1R01zcNqq5xuNtweoO0f7uMBQJUlZol1h7iEq0WeU&_nc_zt=14&_nc_ht=scontent-ord5-2.xx&_nc_gid=090AGPIMJcwJiJobP4oS6Q&_nc_ss=78180&oh=00_AQToDODz6zl3fU3otFWW2Y3Ok_ADSAU9NyKdogqYEM_cag&oe=6AFE3D5A"
+          },
+          "profile_picture_depth_0_increased": {
+            "uri": "https://scontent-ord5-2.xx.fbcdn.net/v/t39.35477-6/553527706_31377848075192087_9002088841089125546_n.jpg?stp=cp0_dst-jpg_tt6&cstp=mx688x688&ctp=s110x80&_nc_cat=1&ccb=1-7&_nc_sid=d7e6db&_nc_ohc=YVek4YF-z80Q7kNvwFheTt_&_nc_oc=AdottozjBkFWs_BODRqwhYRgYG1R01zcNqq5xuNtweoO0f7uMBQJUlZol1h7iEq0WeU&_nc_zt=14&_nc_ht=scontent-ord5-2.xx&_nc_gid=090AGPIMJcwJiJobP4oS6Q&_nc_ss=78180&oh=00_AQToDODz6zl3fU3otFWW2Y3Ok_ADSAU9NyKdogqYEM_cag&oe=6AFE3D5A"
+          },
+          "profile_picture_depth_1": {
+            "uri": "https://scontent-ord5-2.xx.fbcdn.net/v/t39.35477-6/553527706_31377848075192087_9002088841089125546_n.jpg?stp=cp0_dst-jpg_tt6&cstp=mx688x688&ctp=s50x50&_nc_cat=1&ccb=1-7&_nc_sid=d7e6db&_nc_ohc=YVek4YF-z80Q7kNvwFheTt_&_nc_oc=AdottozjBkFWs_BODRqwhYRgYG1R01zcNqq5xuNtweoO0f7uMBQJUlZol1h7iEq0WeU&_nc_zt=14&_nc_ht=scontent-ord5-2.xx&_nc_gid=090AGPIMJcwJiJobP4oS6Q&_nc_ss=78180&oh=00_AQToDODz6zl3fU3otFWW2Y3Ok_ADSAU9NyKdogqYEM_cag&oe=6AFE3D5A"
+          },
+          "is_nickname": true,
+          "__isEntity": "GroupAnonAuthorProfile",
+          "url": null,
+          "profile_picture": "https://example.invalid/avatar.jpg"
+        },
+        "text": "Connect with local CPAs that don’t offer bookkeeping services and also other local bookkeepers. I’ve gotten 2 clients through another bookkeeper who is at capacity.  Made a great relationship with a CPA who refers her clients to me when they’re needing clean up or monthly maintenance.",
+        "reaction_count": 5,
+        "reactions": {
+          "thankful": 0,
+          "like": 5,
+          "love": 0,
+          "care": 0,
+          "haha": 0,
+          "wow": 0,
+          "sad": 0,
+          "anger": 0,
+          "pride": 0,
+          "confused": 0
+        }
+      }
+    ],
+    "url": "https://www.facebook.com/groups/1753756208440623/posts/2552582648557971/",
+    "link_attachment": null,
+    "videos": [],
+    "image_url": null,
+    "images": [],
+    "thumbnail": null,
+    "author": {
+      "id": "1358328948",
+      "name": "user_redacted",
+      "handle": null,
+      "is_verified": null,
+      "url": null,
+      "image": "https://scontent-ord5-1.xx.fbcdn.net/v/t39.30808-1/811203631_10230475847464143_4483305380484569351_n.jpg?stp=dst-jpg_tt6&cstp=mx510x506&ctp=p100x100&_nc_cat=103&_nc_map=urlgen_bucketless&ccb=1-7&_nc_sid=1d2534&_nc_ohc=98NXdnG8Wo4Q7kNvwE4yo0D&_nc_oc=AdqiUoAgZHo56sHnJKb869D9pdDFJRfOu2cCXIcQ738Ar9-8BGkOtt6hksHNtHRDxB0&_nc_zt=24&_nc_ht=scontent-ord5-1.xx&_nc_gid=090AGPIMJcwJiJobP4oS6Q&_nc_ss=78180&oh=00_AQTJrNe5o5m2cedv_-_WMDyuuCdWCpCYuxAyFeHp30QZKw&oe=6AFE2877"
+    },
+    "video": {
+      "id": null,
+      "sd_url": null,
+      "hd_url": null,
+      "height": null,
+      "width": null,
+      "length_in_second": null,
+      "thumbnail": null,
+      "captions_url": null
+    }
+  }
+}

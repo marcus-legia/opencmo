@@ -213,10 +213,10 @@ export async function threadsSearch(query: string, budget?: ScBudget): Promise<S
 export type WebResult = { url: string; title: string; description: string };
 
 /** Google results (`/v1/google/search`). No results is an empty list, not an error (the provider answers 404). */
-export async function googleSearch(query: string, budget?: ScBudget): Promise<WebResult[]> {
+export async function googleSearch(query: string, budget?: ScBudget, opts: { datePosted?: "last-week" | "last-month" } = {}): Promise<WebResult[]> {
   let json: unknown;
   try {
-    json = await scGet("/v1/google/search", { query }, budget);
+    json = await scGet("/v1/google/search", { query, ...(opts.datePosted ? { date_posted: opts.datePosted } : {}) }, budget);
   } catch (error) {
     if (error instanceof SocialReadError && /not found/.test(error.message)) return [];
     throw error;

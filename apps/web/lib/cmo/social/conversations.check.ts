@@ -16,6 +16,9 @@ assert.equal(normalizeConversationUrl("https://threads.com/@a/post/XYZ"), "https
 assert.equal(normalizeConversationUrl("https://WWW.Facebook.com/groups/123/posts/456/?__cft__=x"), "https://www.facebook.com/groups/123/posts/456/");
 assert.equal(normalizeConversationUrl("https://m.facebook.com/groups/123/permalink/456/"), "https://www.facebook.com/groups/123/permalink/456/");
 assert.equal(normalizeConversationUrl("https://www.reddit.com/r/SaaS/comments/1abc/title/"), "https://www.reddit.com/r/SaaS/comments/1abc/title/");
+// Google gives Threads posts with a slug after the code (2026-11-14 capture): the post is the code, the slug goes.
+assert.equal(normalizeConversationUrl("https://www.threads.com/@a_b.c/post/DffS26VHz-0/biggest-flex-not-a-cpa/"), "https://www.threads.com/@a_b.c/post/DffS26VHz-0");
+assert.equal(normalizeConversationUrl("https://www.threads.com/tag/RingCentral"), "https://www.threads.com/tag/RingCentral", "not a post: kept, the finder drops it");
 // Hacker News keeps its query: the item id lives there.
 assert.equal(normalizeConversationUrl("https://news.ycombinator.com/item?id=123#x"), "https://news.ycombinator.com/item?id=123");
 

@@ -1,0 +1,32 @@
+{
+  "source": "real",
+  "path": "/v1/google/search",
+  "params": {
+    "query": "site:facebook.com/groups need help with invoicing clients",
+    "date_posted": "last-month"
+  },
+  "capturedAt": "2026-11-14",
+  "body": {
+    "success": true,
+    "credits_remaining": 27,
+    "credits_charged": 1,
+    "results": [
+      {
+        "title": "Finding clients for small business bookkeeping services - Facebook",
+        "url": "https://www.facebook.com/groups/1753756208440623/posts/2552582648557971/",
+        "description": "Nov 5, 2026 ... We partner with bookkeepers to expand their offerings into tax and that helps gain clients with the added services. Happy to connect! 3h. Cori Reines."
+      },
+      {
+        "title": "How to automate invoicing and email tasks for local businesses?",
+        "url": "https://www.facebook.com/groups/254714301599029/posts/2469463316790772/",
+        "description": "8 days ago ... Automation Tools for Small Businesses: Accounting and invoicing: Platforms like QuickBooks and FreshBooks automate financial tracking, invoicing, and even ..."
+      },
+      {
+        "title": "How to Generate invoice template and send it to your clients/customer",
+        "url": "https://www.facebook.com/groups/vaworkersph/posts/1482271783836860/",
+        "description": "Nov 3, 2026 ... The author, a digital entrepreneur, explains that a clean, clear invoice is crucial for building trust and getting paid faster. The steps include listing the ..."
+      }
+    ],
+    "next_page": 2
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "source": "real",
+  "path": "/v1/google/search",
+  "params": {
+    "query": "site:threads.com need help with invoicing clients",
+    "date_posted": "last-month"
+  },
+  "capturedAt": "2026-11-14",
+  "body": {
+    "success": true,
+    "credits_remaining": 25,
+    "credits_charged": 1,
+    "results": [
+      {
+        "title": "Biggest flex? Not a CPA nor an accounting graduate, no license, no ...",
+        "url": "https://www.threads.com/@user_redacted/post/DffS26VHz-0/biggest-flex-not-a-cpa-nor-an-accounting-graduate-no-license-no-board-exams-but/",
+        "description": "6 days ago ... ... clients if you don't have experience with foreign companies. Applyan mo lahat ng job postings for entry level positions for financial accounts sa bpo ..."
+      },
+      {
+        "title": "RingCentral · 5.8K threads",
+        "url": "https://www.threads.com/tag/RingCentral",
+        "description": "1 day ago ... Would your clients answer calls themselves, or do they want it handled for them? ... My advice for October 18th is this: cancel all your plans and stay home."
+      },
+      {
+        "title": "KuaSaOS · 2.7K threads",
+        "url": "https://www.threads.com/tag/KuaSaOS",
+        "description": "2 days ago ... 6 fixes shipped this week for payroll, billing, chatbot and WhatsApp, so your team can get on with business. And next week? HIRA KPI v1.2: performance ..."
+      }
+    ],
+    "next_page": null
+  }
+}
