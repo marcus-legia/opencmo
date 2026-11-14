@@ -126,7 +126,6 @@ export async function nicheVideoResearch(ctx: JobContext): Promise<JobOutput> {
         return [...tiktok, ...youtube].filter((v) => v.label !== "normal" && /^https:\/\//.test(v.url));
       },
       (videos) => `“${topic}”: ${videos.length} standout ${videos.length === 1 ? "video" : "videos"}`,
-      { memo: `search_videos:${topic}` },
     );
     standouts.push(...found);
   }

@@ -1,5 +1,5 @@
 -- Review R4 (20270102020000): the new route buckets are allowlisted, the chat's research counts in SQL with a daily
--- ceiling shared with MCP, and cmo_enqueue merges only identical requests when there is no item or order.
+-- ceiling (MCP shared it until 20270124010000), and cmo_enqueue merges only identical requests when there is no item or order.
 create extension if not exists pgtap with schema extensions;
 
 begin;
@@ -24,10 +24,10 @@ select throws_ok($$ select public.rate_limit_hit('agent-turn', 9999, 3600) $$, '
 select is(public.cmo_read_limit('chat_social'), 120, 'chat social reads: 120 an hour');
 select is(public.cmo_read_limit('chat_site'), 30, 'chat website reads: 30 an hour');
 select ok(public.cmo_read_hit('chat_social'), 'a chat read is counted');
-select ok(public.cmo_read_hit('mcp_social'), 'an MCP read is counted');
+select ok(public.cmo_read_hit('chat_social'), 'a second chat read is counted');
 reset role;
 select is((select count from public.rate_limits where user_id = 'e2390000-0000-4000-8000-00000000000a' and bucket = 'social_day'), 2,
-  'chat and MCP share one daily count');
+  'social reads add to one daily count');
 set local role authenticated;
 set local request.jwt.claims = '{"sub":"e2390000-0000-4000-8000-00000000000a"}';
 select throws_ok($$ select public.cmo_read_hit('social_day') $$, '22023', 'Invalid rate limit.', 'the daily bucket is not called directly');

@@ -2,8 +2,9 @@
  * Guides, editor skills and the editor prompts (A7).
  *
  * - Resources `opencmo://guides/{name}`: the Assistant's guides (`lib/agent/guides.ts`), word for
- *   word, plus `opencmo://kit/explainer` (the scene-code API). Also the `read_guide` tool, so a
- *   client that never lists resources still gets them.
+ *   word, the no-ai-slop guide every word a person reads goes through (CLAUDE.md), and
+ *   `opencmo://kit/explainer` (the scene-code API). Also the `read_guide` tool, so a client that
+ *   never lists resources still gets them.
  * - The user's editing recipes (`editor_skills`): `read_skill` / `save_skill` and resources
  *   `opencmo://skills/mine/{name}`. Their bodies are the user's text: data, not instructions.
  * - Prompts `/explain`, `/video`, `/roughcut`, `/broll`, `/intro`: the in-app slash command's
@@ -15,6 +16,7 @@ import { z } from "zod";
 import { GUIDE_NAMES, readGuide, type GuideName } from "@/lib/agent/guides";
 import { readSkillInput, runSkillTool, saveSkillInput } from "@/lib/agent/skills";
 import { SLASH_COMMANDS } from "@/lib/agent/slash";
+import { skillText } from "@/lib/cmo/skills";
 
 import { registerGroup, type McpPrompt, type McpResource } from "../registry";
 import { fromOutcome } from "./studio";
@@ -32,13 +34,19 @@ export function explainerKit(): string {
 
 const firstLine = (text: string) => text.split("\n")[0]!.replace(/^#\s*/, "");
 
-const guideResources: McpResource[] = GUIDE_NAMES.map((name) => ({
+/** Not an editing guide: the writing rules for scripts, voice-overs, captions and on-screen text. */
+const NO_AI_SLOP = "no-ai-slop";
+const READABLE = [...GUIDE_NAMES, NO_AI_SLOP] as const;
+type Readable = (typeof READABLE)[number];
+const guideText = (name: Readable): string => (name === NO_AI_SLOP ? skillText(NO_AI_SLOP) : readGuide(name));
+
+const guideResources: McpResource[] = READABLE.map((name) => ({
   uri: `${GUIDE_URI}${name}`,
   name: `guide-${name}`,
-  title: firstLine(readGuide(name)),
-  description: `The OpenCMO editing guide "${name}".`,
+  title: name === NO_AI_SLOP ? "Writing without AI slop" : firstLine(readGuide(name)),
+  description: name === NO_AI_SLOP ? "How to write words a person reads or hears: scripts, voice-overs, storyboards, captions, titles." : `The OpenCMO editing guide "${name}".`,
   mimeType: "text/markdown",
-  read: async () => readGuide(name),
+  read: async () => guideText(name),
 }));
 
 /** Prompts with the steps that differ from the editor chat: find the clip first, price before spending. */
@@ -90,19 +98,19 @@ const prompts: McpPrompt[] = Object.entries(PROMPTS).map(([name, { guide, steps 
   };
 });
 
-const guideInput = z.object({ name: z.enum(GUIDE_NAMES) });
+const guideInput = z.object({ name: z.enum(READABLE) });
 
 registerGroup({
   tools: [
     {
       name: "read_guide",
       title: "Read a guide",
-      description: `Read an OpenCMO editing guide (also the resources ${GUIDE_URI}{name}). Available: ${GUIDE_NAMES.join(", ")}. Read "workflow" before a multi-step edit, "document" before writing properties or keyframes, "explainer" before an explainer. The guides were written for the in-app editor: where they say capture, call capture_frame (the same clip seconds in times, or count for a contact sheet); if looking is not set up, give the user open_in_editor's link.`,
+      description: `Read an OpenCMO editing guide (also the resources ${GUIDE_URI}{name}). Available: ${READABLE.join(", ")}. Read "${NO_AI_SLOP}" before writing words a person reads or hears, "workflow" before a multi-step edit, "document" before writing properties or keyframes, "explainer" before an explainer. The guides were written for the in-app editor: where they say capture, call capture_frame (the same clip seconds in times, or count for a contact sheet); if looking is not set up, give the user open_in_editor's link.`,
       inputSchema: guideInput,
       annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
       async run(input) {
         const { name } = input as z.infer<typeof guideInput>;
-        return { content: [{ type: "text", text: readGuide(name) }] };
+        return { content: [{ type: "text", text: guideText(name) }] };
       },
     },
     {

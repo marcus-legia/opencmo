@@ -53,7 +53,7 @@ export function nextGoalFallback(goal: Goal | null, results: WeekResults): { goa
 
 export async function reviewWeek(ctx: JobContext): Promise<JobOutput> {
   const { store, run } = ctx;
-  // The run's clock: an inbox answer given on Monday still reviews the week the run was asked about.
+  // The run's clock, read once: a run that crosses midnight on Sunday still reviews the week it started in.
   const week = mondayOf(ctx.now);
   const nextWeek = isoDay(7, new Date(`${week}T00:00:00Z`));
   const since = `${week}T00:00:00.000Z`;

@@ -67,8 +67,6 @@ export type Credits = z.infer<typeof CreditsSchema>;
 
 /** What the founder's CMO is doing overall: the Pause CMO button and the header line read it. */
 export const CmoStateSchema = z.object({
-  /** Who does the thinking: our models, or the founder's own Claude through MCP. */
-  mode: z.enum(["opencmo", "claude"]),
   pausedAt: iso.nullable(),
 });
 export type CmoState = z.infer<typeof CmoStateSchema>;

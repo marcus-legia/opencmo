@@ -231,24 +231,6 @@ export type SubredditRule = {
 /** The founder's Sales settings (`sales_settings`). */
 export type SalesSettings = { excluded: string[]; pairs: [string, string][] };
 
-/** Who thinks for a run: OpenCMO's own models, or the founder's Claude through the inbox. */
-export type Brain = "opencmo" | "claude";
-
-/** A model call a run could not make itself, as the founder's Claude reads it in the inbox. */
-export type InboxRequest = {
-  /** What Claude is asked to do, one line. */
-  title: string;
-  /** The agent that would have answered (`lib/cmo/agents/registry.ts`). */
-  agent: string;
-  system: string;
-  prompt: string;
-  /** JSON Schema of the answer: the job validates it with the same zod schema. */
-  schema: Record<string, unknown>;
-};
-
-/** What an inbox replay starts from: the answers given so far, and the step results kept between rounds. */
-export type InboxState = { answers: Record<string, unknown>; memo: Record<string, unknown> };
-
 /** Every read and write of a CMO job goes through here: Supabase (service role) for real, memory in tests. */
 export interface CmoStore {
   /** The service client the spend ledger records with (provider_usage_record); test stores leave it out. */
@@ -330,12 +312,6 @@ export interface CmoStore {
   replyOutcomesDue(userId: string, limit: number): Promise<ReplyOutcomeDue[]>;
   /** P6 A3: stores one check (once); false when it was already checked. */
   saveReplyOutcome(userId: string, outcomeId: string, check: { status: "found" | "not_found" | "gone"; votes: number | null; replies: number | null }): Promise<boolean>;
-  /** The inbox item a replay run answers; null when it is gone or not the user's. */
-  inbox(userId: string, inboxId: string): Promise<InboxState | null>;
-  /** Writes the waiting model call to the run's inbox item and ends the run; null when the lease was lost. */
-  openInbox(run: QueuedRun, step: string, request: InboxRequest, memo: Record<string, unknown>): Promise<string | null>;
-  /** A replay ended: closes the item, or reopens it with the reason the answer failed. */
-  finishInbox(run: QueuedRun, ok: boolean, feedback: string | null): Promise<void>;
 }
 
 /** The UTC date as YYYY-MM-DD, plus `offset` days. The same clock as Postgres's `current_date` (UTC). */

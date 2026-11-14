@@ -134,7 +134,7 @@ async function main() {
   const day: Record<string, Row[]> = { work_orders: [], cmo_runs: [] };
   const { admin: one } = fakeAdmin(day, new Set());
   const xs = ["a", "b", "c", "d"].map((id) => ({ id, platform: "X" }));
-  assert.deepEqual(await enqueueDueDrafts(one, "u", xs, { claude: false }), [3, 0], "three X items on a day are three runs, the fourth waits");
+  assert.equal(await enqueueDueDrafts(one, "u", xs), 3, "three X items on a day are three runs, the fourth waits");
   assert.deepEqual(day.cmo_runs!.map((run) => (run.input as Row).item_id), ["a", "b", "c"], "the oldest first");
 
   // A day in flight when the loop was renamed is not drafted twice: yesterday's name still counts for today.

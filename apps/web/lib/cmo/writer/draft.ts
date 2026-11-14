@@ -3,8 +3,8 @@
  * provider) → one fix round with what both found → code checks again. A post keeps the versions that pass
  * the code; any other kind must pass or the run fails with the reasons, so nothing broken reaches a card.
  *
- * The model call is the job's `think` (OpenCMO's brain, the founder's Claude through the inbox, or the
- * fake in CI), so a writer kind runs the same way in every job that orders it.
+ * The model call is the job's `think` (OpenCMO's model, or the fake in CI), so a writer kind runs the same way in
+ * every job that orders it.
  */
 
 import type { z } from "zod";
@@ -44,14 +44,14 @@ export type WriterDeps = {
   /** The system prompt of a post profile; other kinds have theirs in `prompts.ts`. */
   postSystem?: string;
   /**
-   * False when a fix round must not run: the founder's Claude answers from the inbox, and the fake writes
-   * fixed text. A failed check then fails the run with its reasons.
+   * False when a fix round must not run: the fake writes fixed text. A failed check then fails the run with its
+   * reasons.
    */
   canFix: boolean;
   /** The checker's problems, one list per version (posts) or one list (other kinds); advice, never a gate. */
   review?: (kind: WriterKind, output: unknown, data: string) => Promise<string[][]>;
   onUsage?: ThinkOptions<z.ZodType>["onUsage"];
-  /** Added to every call's label, so one run writing for several edits keeps each call apart (inbox answers). */
+  /** Added to every call's label, so one run writing for several edits keeps each call apart in the logs. */
   labelSuffix?: string;
 };
 

@@ -107,7 +107,7 @@ export async function repurposePost(ctx: JobContext): Promise<JobOutput> {
   await ctx.step(
     "create_card",
     "Saving the rewrite on the post",
-    () => store.saveVariant(run.user_id, run.id, itemId, profile.id, text, { model: genModel(answered, ctx.brain, fakeAllowed()), prompt_version: REPURPOSE_VERSION }),
+    () => store.saveVariant(run.user_id, run.id, itemId, profile.id, text, { model: genModel(answered, fakeAllowed()), prompt_version: REPURPOSE_VERSION }),
     () => `${profile.label} has its own version`,
   );
   return { item_id: itemId, platform: profile.id };

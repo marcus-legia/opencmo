@@ -35,14 +35,14 @@ update public.cmo_runs set status = 'done' where id = (select id from t where na
 select is((select count(*)::int from public.cmo_runs where user_id = 'e2720000-0000-4000-8000-00000000000a' and kind = 'post_draft'), 1,
   'a second completion does not queue a second draft');
 
--- A plan in the founder's Claude inbox is drafted there, not here.
+-- A plan that ended in the old Claude inbox (done with `waiting_for`, before 20270124010000) wrote no week: no draft.
 delete from public.cmo_runs where user_id = 'e2720000-0000-4000-8000-00000000000b';
 update public.profiles set plan = 'creator' where id = 'e2720000-0000-4000-8000-00000000000b';
-insert into t select 'claude', id from public.cmo_enqueue('e2720000-0000-4000-8000-00000000000b', 'plan_week', '{"source":"onboarding","brain":"claude"}');
-update public.cmo_runs set status = 'running' where id = (select id from t where name = 'claude');
-update public.cmo_runs set status = 'done' where id = (select id from t where name = 'claude');
+insert into t select 'inbox', id from public.cmo_enqueue('e2720000-0000-4000-8000-00000000000b', 'plan_week', '{"source":"onboarding"}');
+update public.cmo_runs set status = 'running' where id = (select id from t where name = 'inbox');
+update public.cmo_runs set status = 'done', output = '{"inbox_id":"x","waiting_for":"plan_week"}' where id = (select id from t where name = 'inbox');
 select is((select count(*)::int from public.cmo_runs where user_id = 'e2720000-0000-4000-8000-00000000000b' and kind = 'post_draft'), 0,
-  'a plan in the Claude inbox does not');
+  'a plan left in the old Claude inbox does not');
 
 -- A paused CMO refuses the draft; the plan still ends done.
 delete from public.cmo_runs where user_id = 'e2720000-0000-4000-8000-00000000000a';

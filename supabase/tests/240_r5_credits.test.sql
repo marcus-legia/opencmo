@@ -1,4 +1,4 @@
--- Review R5 (20270102030000): a free founder's run never waits in the Claude inbox, a run past its lease is still the
+-- Review R5 (20270102030000): a run never keeps `brain` (the Claude inbox is gone since 20270124010000), a run past its lease is still the
 -- same run, direct calls cannot queue the schedule's free jobs, parked runs are released after a week, and stale
 -- caption-translation charges are refunded.
 create extension if not exists pgtap with schema extensions;
@@ -14,9 +14,9 @@ select ok(not has_function_privilege('authenticated', 'public.refund_stale_capti
 insert into auth.users (id, email) values ('e2400000-0000-4000-8000-00000000000a', 'r5credits@test.local');
 insert into public.credit_ledger(user_id, delta, reason) values ('e2400000-0000-4000-8000-00000000000a', 50, 'test grant');
 
--- A free founder asked to think with Claude: the run is OpenCMO's own and priced as such.
+-- A founder asked to think with Claude: the run is OpenCMO's own and priced as such.
 create temp table f1 as select * from public.cmo_enqueue('e2400000-0000-4000-8000-00000000000a', 'post_draft', '{"brain":"claude","idea":"A"}');
-select is((select input->>'brain' from f1), null, 'no inbox for a free founder');
+select is((select input->>'brain' from f1), null, 'the brain key is dropped');
 select is((select credits from f1), public.cmo_job_price('post_draft'), 'priced like any OpenCMO run');
 
 -- A running run past its lease is still in flight: asking again returns it.

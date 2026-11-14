@@ -1,8 +1,8 @@
 /**
- * The shared contract of the MCP server (docs/mcp-agent-team-sessions.md, "Shared contracts").
+ * The shared contract of the MCP server's groups.
  *
- * Both sessions add tools, prompts and resources only through `registerGroup`; the server
- * (`server.ts`) turns the registry into MCP. Changing a type here needs a "Requests" note.
+ * Groups add tools, prompts and resources only through `registerGroup`; the server (`server.ts`)
+ * turns the registry into MCP.
  *
  * Additive to the contract (A1): `McpTool.price`, `McpResourceTemplate` and `McpGroup.toolsFor`
  * (tools whose list depends on the request, like the model catalog). A tool with

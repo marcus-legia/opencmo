@@ -15,7 +15,7 @@ State of the code on 2026-11-08 (`4f70a59`): ✅ done · 🟡 partial · ❌ not
 
 ```mermaid
 flowchart TB
-  F["Founder: commands, approves, edits<br/>CMO chat · /commands in the editor · MCP"] --> B
+  F["Founder: commands, approves, edits<br/>CMO chat · /commands in the editor"] --> B
   B["CMO Brain<br/>context · planning · dispatch · shared gates"]
   B --> R[1 Research] & W[2 Writer] & S[3 Sales] & ST[4 Studio]
   B --> A[7 Approval: the founder]
@@ -75,7 +75,7 @@ notes → next week's plan.
 Every capability below is built unless marked. Build or buy per capability is in §7.
 
 1. **Founder**: entry points are the app with its approval inbox, the editor and its Assistant, the CMO chat, and MCP
-   from the founder's own Claude.
+   for the editor from the founder's own Claude (the CMO's MCP tools were removed on 2026-11-14).
 2. **Brain**: planning; dispatch through the `work_orders` tree (`depends_on`, budget per order); memory; the
    capability registry (`packages/contracts/capabilities.json`, one list for brain, UI, Assistant, MCP; checked by
    `lib/cmo/capabilities.check.ts`); event rules in SQL triggers.
@@ -116,7 +116,7 @@ Edges:
 4. Vercel → Modal `submit` on click; `sweep` claims within a minute if it fails.
 5. Worker ↔ Postgres + Storage: lease claims, results, files (service role).
 6. Modal → Vercel: the only clock (`cmo_schedule`, `cmo_digest`, `cmo_runs` dispatch, `cleanup`).
-7. Founder's Claude → MCP with an API key.
+7. Founder's Claude → the editor's MCP with an API key.
 8. MCP → Postgres under RLS with a user JWT; MCP → worker `wake`.
 9. Browser → platform: intent link, the founder taps post (fallback with no connected account).
 10. Creem → Vercel webhook, with a receipts table.

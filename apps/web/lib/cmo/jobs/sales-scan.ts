@@ -91,26 +91,6 @@ export const RulesSchema = z.object({
   ),
 });
 
-/**
- * The rules step's answer as the inbox takes it (`steps.ts`). An inbox item made before 5.1 shows Claude the old
- * schema, so its answer has `mention_ok`/`help_only` and no requirements: the old values map (`toVerdict`) and the
- * new fields default, as `cmo_save_opportunities` and the store already allow. The model's own schema stays strict.
- */
-export const RulesAnswerSchema = z.object({
-  rules: z.array(
-    z.object({
-      index: z.number().int(),
-      verdict: z
-        .enum(["safe", "requires_disclosure", "no_product_mention", "skip", "mention_ok", "help_only"])
-        .transform((value) => toVerdict(value) as "safe" | "requires_disclosure" | "no_product_mention" | "skip"),
-      summary: z.string(),
-      minKarma: z.number().int().nullable().default(null),
-      minAccountAgeDays: z.number().int().nullable().default(null),
-      megathread: z.boolean().default(false),
-    }),
-  ),
-});
-
 const RULES_SYSTEM = `You read the rules of Reddit communities for a founder who wants to help people there, and say what the rules allow.
 - safe: the rules allow members to mention their own product or work when it helps.
 - requires_disclosure: the rules allow it only when the member says it is their own (disclose affiliation, "say you made it").
@@ -378,7 +358,7 @@ export async function salesScan(ctx: JobContext): Promise<JobOutput> {
     // Every query failed: an error (the failed run returns the credits), not "nothing found".
     if (list.length && failed === list.length) throw new LlmError(lastError);
     return [...found.values()].slice(0, MAX_THREADS);
-  }, (t) => (t.length ? `${t.length} new threads found` : "No new threads found"), { memo: "reddit_search" });
+  }, (t) => (t.length ? `${t.length} new threads found` : "No new threads found"));
 
   // P6 R4: Hacker News, free and keyless. A failure here never fails the scan: Reddit's threads still count.
   const hnThreads = await ctx.step("hn_search", "Searching Hacker News", async () => {
@@ -403,7 +383,7 @@ export async function salesScan(ctx: JobContext): Promise<JobOutput> {
       if (found.size >= HN_MAX) break;
     }
     return [...found.values()].slice(0, HN_MAX);
-  }, (t) => (t.length ? `${t.length} new Hacker News threads found` : "No new Hacker News threads"), { memo: "hn_search" });
+  }, (t) => (t.length ? `${t.length} new Hacker News threads found` : "No new Hacker News threads"));
 
   const scanned: ScanThread[] = [...threads.slice(0, MAX_THREADS - hnThreads.length), ...hnThreads];
 
@@ -456,12 +436,8 @@ export async function salesScan(ctx: JobContext): Promise<JobOutput> {
         return { name, failed: true as const };
       }
     };
-    // Kept for inbox replays: the rules Claude classified by index must be the list its verdicts are applied to.
-    const results = await ctx.once("rules_read", async () => {
-      const all: Awaited<ReturnType<typeof read>>[] = [];
-      for (let at = 0; at < names.length; at += 4) all.push(...(await Promise.all(names.slice(at, at + 4).map(read))));
-      return all;
-    });
+    const results: Awaited<ReturnType<typeof read>>[] = [];
+    for (let at = 0; at < names.length; at += 4) results.push(...(await Promise.all(names.slice(at, at + 4).map(read))));
     for (const r of results) {
       if ("cached" in r && r.cached) {
         out.set(r.name, {
@@ -503,9 +479,8 @@ export async function salesScan(ctx: JobContext): Promise<JobOutput> {
         const count = (n: number | null | undefined, max: number) => (typeof n === "number" && Number.isInteger(n) && n > 0 && n <= max ? n : null);
         const minKarma = count(r?.minKarma, 1_000_000);
         const minAccountAgeDays = count(r?.minAccountAgeDays, 3650);
-        // The cache is shared by every founder: only a verdict from OpenCMO's own model goes into it. One from the
-        // founder's Claude (the inbox) holds for this scan only, so no founder can set another's rule or its text.
-        if (ctx.brain === "opencmo") await store.saveSubredditRule({ subreddit: u.name, verdict, summary, min_karma: minKarma, min_account_age_days: minAccountAgeDays, megathread });
+        // The cache is shared by every founder: only OpenCMO's own model writes it.
+        await store.saveSubredditRule({ subreddit: u.name, verdict, summary, min_karma: minKarma, min_account_age_days: minAccountAgeDays, megathread });
         out.set(u.name, { verdict, summary, minKarma, minAccountAgeDays, megathread });
       }
     }
@@ -572,7 +547,7 @@ export async function salesScan(ctx: JobContext): Promise<JobOutput> {
       .map((r) => [r.index, r.reply.trim()] as const)
       .filter(([index, text]) => toDraft[index] && !replyProblems(text, mayMention(toDraft[index]!.rule), products).length),
   );
-  const gen = { model: genModel(answered, ctx.brain, fakeAllowed()), prompt_version: REPLY_VERSION };
+  const gen = { model: genModel(answered, fakeAllowed()), prompt_version: REPLY_VERSION };
   const skipped: Opportunity[] = planned
     .filter((p) => p.rule === "skip")
     .map((r) => ({

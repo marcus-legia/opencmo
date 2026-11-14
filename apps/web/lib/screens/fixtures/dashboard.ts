@@ -5,7 +5,7 @@ import { at } from "./shared";
 
 /** `Main.dc.html` at 10:42:00, Thursday 29 Oct. */
 export const dashboardFixture: DashboardScreen = {
-  cmo: { mode: "opencmo", pausedAt: null },
+  cmo: { pausedAt: null },
   // What `buildToday` makes of this morning: Threads failed at 08:00, LinkedIn has been quiet for three days.
   today: {
     rows: [
@@ -70,7 +70,7 @@ export const dashboardFixture: DashboardScreen = {
 
 /** What production shows for a part that has no backend yet: nothing, never sample numbers. */
 export const dashboardEmpty: DashboardScreen = {
-  cmo: { mode: "opencmo", pausedAt: null },
+  cmo: { pausedAt: null },
   today: { rows: [], done: 0, total: 0, more: 0 },
   week: { goal: null, deliverables: { done: 0, total: 0 }, workingNow: 0, wordsDraftedToday: 0, credits: { used: 0, budget: 0 } },
   team: {

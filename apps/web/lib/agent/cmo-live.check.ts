@@ -12,7 +12,6 @@ import { CMO_TOOL_SPECS } from "./cmo-tools";
 import { runWaitForRun } from "./cmo-wait";
 import { CMO_WINDOW_TURNS, cmoWindowStart } from "./loop";
 import { runLine, startedRunIds } from "./run-line";
-import { CMO_TOOLS } from "@/lib/cmo/mcp/cmo";
 
 // The window: whole turns, never more than 30, and its start moves 10 turns at a time so the cached prefix holds.
 assert.equal(cmoWindowStart(1), 1);
@@ -59,7 +58,7 @@ assert.deepEqual(
   "only runs a successful create_task started",
 );
 
-// wait_for_run: polls until the run finishes, stops at the deadline, never visible to MCP.
+// wait_for_run: polls until the run finishes, stops at the deadline.
 function fakeRuns(statuses: string[]): SupabaseClient {
   let read = 0;
   const query = {
@@ -110,10 +109,6 @@ async function main() {
     "a run id is a uuid",
   );
   assert.ok(CMO_TOOL_SPECS.some((spec) => spec.name === "wait_for_run"));
-  assert.ok(
-    !CMO_TOOLS.some((tool) => tool.name === "wait_for_run"),
-    "MCP polls get_run_result instead",
-  );
 
   console.log("cmo-live.check ok");
 }

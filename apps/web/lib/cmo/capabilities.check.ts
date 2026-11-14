@@ -199,8 +199,8 @@ export const CALLER_PATHS: Record<string, CallerPath> = {
   // The founder's buttons: "Plan my week", "Run now".
   "apps/web/app/api/v1/cmo/runs/route.ts": { callers: ["ui"], reaches: (t) => literals(/kind: z\.enum\(\[([^\]]*)\]/.exec(t)?.[1] ?? "", /"([a-z_]+)"/g) },
   "apps/web/lib/cmo/onboard.ts": { callers: ["ui"], reaches: (t) => literals(t, /p_kind: "([a-z_]+)"/g) },
-  // The CMO chat (Assistant, scope `cmo`) and MCP's CMO tools share this file (`lib/cmo/mcp/cmo.ts` runs it).
-  "apps/web/lib/agent/cmo-tools.ts": { callers: ["assistant", "mcp"], reaches: (t) => literals(/const JOB_OF = \{([^}]*)\}/.exec(t)?.[1] ?? "", /: "([a-z_]+)"/g) },
+  // The CMO chat (Assistant, scope `cmo`). The MCP server is the editor's and never runs it (checked below).
+  "apps/web/lib/agent/cmo-tools.ts": { callers: ["assistant"], reaches: (t) => literals(/const JOB_OF = \{([^}]*)\}/.exec(t)?.[1] ?? "", /: "([a-z_]+)"/g) },
   // The brain's loops: the daily schedule runs the kinds `loops.ts` names; the progress check replans the week.
   "apps/web/lib/cmo/schedule.ts": { callers: ["brain"], reaches: () => literals(source("apps", "web", "lib", "cmo", "loops.ts"), /kind: "([a-z_]+)"/g) },
   "apps/web/lib/cmo/jobs/progress-run.ts": { callers: ["brain"], reaches: (t) => literals(t, /p_kind: "([a-z_]+)"/g) },
@@ -244,7 +244,10 @@ check("every caller path is listed, and reaches only what lists its caller", () 
       for (const caller of path.callers) assert.ok(listed.callers.includes(caller), `${file} (${caller}) reaches ${name}, which does not list ${caller}`);
     }
   }
-  assert.ok(source("apps", "web", "lib", "cmo", "mcp", "cmo.ts").includes("runCmoTool"), "MCP's CMO tools no longer run cmo-tools.ts");
+  // The AI CMO left the MCP server on 2026-11-14: nothing there may reach the CMO chat's tools again.
+  for (const file of walk("packages/mcp-server/src")) {
+    assert.ok(!/@\/lib\/(agent\/cmo-|cmo\/mcp)/.test(source(file)), `${file} imports the CMO chat's tools into the MCP server`);
+  }
 });
 
 if (failures.length) {

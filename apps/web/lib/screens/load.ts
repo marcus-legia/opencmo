@@ -1,7 +1,6 @@
 import "server-only";
 
 import type { SupabaseClient } from "@/lib/api/handler";
-import { brainMode } from "@/lib/cmo/brain";
 import { loadDigestInput, localClock } from "@/lib/cmo/digest";
 import { buildToday } from "@/lib/cmo/today";
 import { loadTodayInput } from "@/lib/cmo/today-input";
@@ -73,9 +72,8 @@ async function profile(supabase: SupabaseClient, userId: string): Promise<Profil
   return r.data as Profile;
 }
 
-async function cmoState(supabase: SupabaseClient, userId: string, p: Promise<Profile>): Promise<CmoState> {
-  const [mode, prof] = await Promise.all([brainMode(supabase, userId), p]);
-  return { mode: mode.brain, pausedAt: iso(prof.cmo_paused_at) };
+async function cmoState(p: Promise<Profile>): Promise<CmoState> {
+  return { pausedAt: iso((await p).cmo_paused_at) };
 }
 
 /** The queue: waiting cards, oldest first, Studio pictures signed, schedule cards in the founder's time. Kinds the app cannot show yet are left out. */
@@ -184,7 +182,7 @@ async function dashboard({ supabase, userId }: LoadContext): Promise<Partial<Das
   const tree = weekTree(supabase);
   const queue = waitingCards(supabase, userId);
   return parts<DashboardScreen>("dashboard", {
-    cmo: () => cmoState(supabase, userId, prof),
+    cmo: () => cmoState(prof),
     queue: () => queue,
     // CMO review 3, 1.1: at most five rows, worked out from the rows above; nothing is stored for it.
     // Only cards the queue can show become rows, so a row always opens in place (`waitingCards` leaves out kinds the
@@ -345,7 +343,7 @@ async function brain({ supabase, userId }: LoadContext): Promise<Partial<BrainSc
       const [week, last] = await Promise.all([weekCounts(supabase, monday, now), weekCounts(supabase, before, now)]);
       return buildMeasures(week, last);
     },
-    cmo: () => cmoState(supabase, userId, prof),
+    cmo: () => cmoState(prof),
     week: async () => {
       const [{ root, orders }, goal, p] = await Promise.all([tree, weekGoal(supabase), prof]);
       const open = orders.filter((o) => o.status !== "cancelled");
@@ -619,7 +617,7 @@ async function settings({ supabase, userId }: LoadContext): Promise<Partial<Sett
   const prof = profile(supabase, userId);
   return parts<SettingsScreen>("settings", {
     accounts: async () => accountList(await socialAccounts(supabase), true),
-    cmo: () => cmoState(supabase, userId, prof),
+    cmo: () => cmoState(prof),
     weeklyCreditBudget: async () => (await prof).weekly_credit_budget,
     timezone: async () => (await prof).timezone,
     digestHour: async () => (await prof).digest_hour,

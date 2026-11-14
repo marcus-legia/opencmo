@@ -6,8 +6,7 @@ import "server-only";
  * until the founder confirms it, and then it calls the same RPC as the button.
  *
  * The card's content hash is read here, when the card is shown, and kept in the prepared input on the server: the
- * model never passes a hash, so it cannot decide a card the founder did not see. These tools are never offered over
- * MCP (`lib/cmo/mcp/cmo.ts` hides them).
+ * model never passes a hash, so it cannot decide a card the founder did not see.
  */
 
 import { z } from "zod";

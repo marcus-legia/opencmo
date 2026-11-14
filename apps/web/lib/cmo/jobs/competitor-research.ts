@@ -131,7 +131,6 @@ export async function competitorResearch(ctx: JobContext): Promise<JobOutput> {
         }
       },
       (result) => (result ? `@${handle}: ${result.items.filter((p) => p.label !== "normal").length} outliers` : `@${handle}: not readable`),
-      { memo: `find_outliers:${handle}` },
     );
     if (result) {
       accounts.push({ handle: `@${handle}`, posts: result.items.length, baseline: result.baseline, confidence: result.confidence });
@@ -154,7 +153,6 @@ export async function competitorResearch(ctx: JobContext): Promise<JobOutput> {
         }
       },
       (found) => (found ? `${name}: ${found.items.filter((p) => p.label !== "normal").length} standout stories` : `${name}: Hacker News not readable`),
-      { memo: `find_hn:${name.toLowerCase()}` },
     );
     if (found?.items.length) {
       accounts.push({ handle: `Hacker News: ${name}`, posts: found.items.length, baseline: found.baseline, confidence: found.confidence });

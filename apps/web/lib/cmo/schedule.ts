@@ -2,7 +2,6 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { brainModes } from "@/lib/cmo/brain";
 import { readAll } from "@/lib/cmo/jobs/progress-run";
 import { isoDay, type CmoJobKind } from "@/lib/cmo/jobs/types";
 import { dueLoops, type LoopState } from "@/lib/cmo/loops";
@@ -53,9 +52,6 @@ const OLD_DRAFT_LOOP = "daily-x-draft";
 
 type DueRow = { id: string; user_id: string; department: string; idea: string; platform: string | null };
 
-/** Loops that call a model: for a founder in mode B they go to the inbox instead. */
-const THINKING: ReadonlySet<CmoJobKind> = new Set(["plan_week", "post_draft", "sales_scan", "competitor_research", "summarize_memory", "review_week"]);
-
 /**
  * The open work order of each due calendar item. The run carries it (`input.order_id`), so a failed run fails its
  * own order instead of a guess (`work_order_for_run`). Read errors only lose the link, never the run.
@@ -92,14 +88,14 @@ async function queuedToday(admin: SupabaseClient, today: string): Promise<Set<st
 /**
  * Queues the drafts of the posts due today, one per item, each linked to its calendar item and work order. The
  * daily schedule calls it for every founder; the weekly plan calls it for the week it just wrote (`runId`), so
- * Monday's post is the plan's, drafted the day it is planned for. Returns `[queued, of them to the inbox]`.
+ * Monday's post is the plan's, drafted the day it is planned for. Returns how many were queued.
  */
 export async function enqueueDueDrafts(
   admin: SupabaseClient,
   user: string,
   due: readonly { id: string; platform: string | null }[],
-  opts: { claude: boolean; done?: Set<string> },
-): Promise<[number, number]> {
+  opts: { done?: Set<string> } = {},
+): Promise<number> {
   const posts = due.slice(0, POST_RUNS_A_DAY);
   const links = await dueLinks(admin, posts.map((d) => d.id));
   let queued = 0;
@@ -110,14 +106,13 @@ export async function enqueueDueDrafts(
       loop: DRAFT_LOOP,
       item_id: post.id,
       ...(links.get(post.id) ? { order_id: links.get(post.id) } : {}),
-      ...(opts.claude ? { brain: "claude" } : {}),
     };
     const { error } = await admin.rpc("enqueue_cmo_run_for", { p_user: user, p_kind: "post_draft", p_input: input });
     // Out of credits or at the daily cap: skip this draft, keep going for the others.
     if (error) console.warn("[cron] cmo: skipped", DRAFT_LOOP, error.message);
     else queued += 1;
   }
-  return [queued, opts.claude ? queued : 0];
+  return queued;
 }
 
 /**
@@ -150,7 +145,7 @@ async function timezones(admin: SupabaseClient, users: string[]): Promise<Map<st
 }
 
 /** `users`: the founders whose morning has come; `waiting`: those whose loops a later hour queues. */
-export async function enqueueDueLoops(admin: SupabaseClient, now = new Date()): Promise<{ users: number; waiting: number; queued: number; inbox: number }> {
+export async function enqueueDueLoops(admin: SupabaseClient, now = new Date()): Promise<{ users: number; waiting: number; queued: number }> {
   const today = isoDay(0, now);
   const weekday = now.getUTCDay();
 
@@ -162,7 +157,7 @@ export async function enqueueDueLoops(admin: SupabaseClient, now = new Date()): 
   const zones = await timezones(admin, everyone);
   const users = everyone.filter((user) => loopHour(zones.get(user), now) <= now.getUTCHours());
   const waiting = everyone.length - users.length;
-  if (!users.length) return { users: 0, waiting, queued: 0, inbox: 0 };
+  if (!users.length) return { users: 0, waiting, queued: 0 };
   const handles = new Map<string, number>();
   for (const row of rows.filter((r) => r.kind === "competitors")) {
     const list = Array.isArray(row.body.competitors) ? (row.body.competitors as { x_handle?: unknown }[]) : [];
@@ -192,13 +187,11 @@ export async function enqueueDueLoops(admin: SupabaseClient, now = new Date()): 
       .lte("decided_at", new Date(now.getTime() - 3 * 86_400_000).toISOString()).order("id").range(from, to),
   ));
   const socialReader = socialReaderReady();
-  const modes = await brainModes(admin, users);
   // CMO review 3, 3.1: loops run for accounts with a plan or credits left, the same rule as `cmo_require_paid`.
   const paid = await paidUsers(admin, users);
   const done = await queuedToday(admin, today);
 
   let queued = 0;
-  let inbox = 0;
   const enqueueFor = async (user: string) => {
     const due = dueBy.get(user) ?? [];
     const duePosts = due.filter((d) => d.department === "post");
@@ -214,34 +207,27 @@ export async function enqueueDueLoops(admin: SupabaseClient, now = new Date()): 
       socialReader,
       paid: paid.has(user),
     };
-    // Mode B: the run reads what it needs, then waits in the founder's inbox for their Claude.
-    const claude = modes.get(user)?.brain === "claude";
     for (const run of dueLoops(state)) {
       // Each due item gets its own run (`cmo_enqueue` waits per item), the oldest first as `pickDueItem` drafts: one
       // core post per slot, which goes to every platform of the slot.
       if (run.kind === "post_draft") {
-        const [drafts, toInbox] = await enqueueDueDrafts(admin, user, duePosts, { claude, done });
+        // Awaited first: `queued += await …` reads `queued` before the wait, and the other workers' counts are lost.
+        const drafts = await enqueueDueDrafts(admin, user, duePosts, { done });
         queued += drafts;
-        inbox += toInbox;
         continue;
       }
       if (done.has(loopKey(user, run.loop))) continue;
-      const toInbox = claude && THINKING.has(run.kind);
       const item = run.kind === "sales_scan" ? state.dueSales?.id : undefined;
       const order = item ? (await dueLinks(admin, [item])).get(item) : undefined;
       const input = {
         ...run.input,
         loop: run.loop,
         ...(item ? { item_id: item, ...(order ? { order_id: order } : {}) } : {}),
-        ...(toInbox ? { brain: "claude" } : {}),
       };
       const { error: enqueueError } = await admin.rpc("enqueue_cmo_run_for", { p_user: user, p_kind: run.kind, p_input: input });
       // Out of credits or at the daily cap: skip this run, keep going for the others.
       if (enqueueError) console.warn("[cron] cmo: skipped", run.loop, enqueueError.message);
-      else {
-        queued += 1;
-        if (toInbox) inbox += 1;
-      }
+      else queued += 1;
     }
   };
   // A fixed number of workers walk the list; one founder's failure is logged and the others still get their loops.
@@ -254,5 +240,5 @@ export async function enqueueDueLoops(admin: SupabaseClient, now = new Date()): 
       }
     }),
   );
-  return { users: users.length, waiting, queued, inbox };
+  return { users: users.length, waiting, queued };
 }

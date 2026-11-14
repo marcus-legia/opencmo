@@ -5,22 +5,9 @@
 
 import type { VideoSource } from "../writer/types";
 import { latestPerTopic } from "./context";
-import { isoDay, type CmoStore, type DraftRating, type CompetitorInsight, type ConnectedAccountRow, type ReplyOutcomeDue, type MetricRow, type ZernioPostRow, type NicheVideoInsight, type SalesSettings, type SubredditRule, type Documents, type Goal, type InboxRequest, type ItemRow, type Lesson, type MemoryEvent, type Opportunity, type QueuedRun, type Step, type VoiceNoteRow, type WeekResults } from "./types";
+import { isoDay, type CmoStore, type DraftRating, type CompetitorInsight, type ConnectedAccountRow, type ReplyOutcomeDue, type MetricRow, type ZernioPostRow, type NicheVideoInsight, type SalesSettings, type SubredditRule, type Documents, type Goal, type ItemRow, type Lesson, type MemoryEvent, type Opportunity, type QueuedRun, type Step, type VoiceNoteRow, type WeekResults } from "./types";
 import type { AccountMetricRow } from "./metrics-source";
 import { defaultPostingPlan, type PostingPlan } from "../posting-plan";
-
-export type InboxItem = {
-  id: string;
-  kind: QueuedRun["kind"];
-  input: Record<string, unknown>;
-  step: string;
-  request: InboxRequest;
-  answers: Record<string, unknown>;
-  memo: Record<string, unknown>;
-  status: "open" | "claimed" | "submitted" | "done" | "expired";
-  feedback: string | null;
-  rounds: number;
-};
 
 export type RunState = QueuedRun & { status: string; steps: Step[]; error: string | null; output: unknown; notBefore?: number };
 
@@ -52,7 +39,6 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
     posts: [],
     days: [],
   };
-  const inbox: InboxItem[] = [];
   /** cmo-review-3 2.2: rating rounds by id, and the rules each one proposed. */
   const ratings = new Map<string, DraftRating[]>();
   const ratingRules = new Map<string, string[]>();
@@ -143,7 +129,7 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
     async queueDueDrafts(run) {
       // As `enqueueDueDrafts`: one run per due item, at most three a day.
       const due = items.filter((i) => i.run_id === run.id && i.department === "post" && i.status === "planned" && i.day <= isoDay()).slice(0, 3);
-      for (const item of due) enqueue("post_draft", { source: "schedule", loop: "daily-post-draft", item_id: item.id, ...(run.input.brain === "claude" ? { brain: "claude" } : {}) });
+      for (const item of due) enqueue("post_draft", { source: "schedule", loop: "daily-post-draft", item_id: item.id });
       return due.length;
     },
     async variantSource(_u, itemId) {
@@ -226,47 +212,11 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
       row.check = check;
       return true;
     },
-    inbox: async (_u, inboxId) => {
-      const item = inbox.find((i) => i.id === inboxId);
-      return item ? { answers: { ...item.answers }, memo: { ...item.memo } } : null;
-    },
-    async openInbox(run, step, request, memo) {
-      const r = runs.find((x) => x.id === run.id)!;
-      if (r.attempt !== run.attempt || r.status !== "running") return null;
-      const inboxId = typeof run.input.inbox === "string" ? run.input.inbox : null;
-      let item = inboxId ? inbox.find((i) => i.id === inboxId) : undefined;
-      if (!item) {
-        const { brain: _brain, ...input } = run.input;
-        item = { id: id(), kind: run.kind, input, step, request, answers: {}, memo: {}, status: "open", feedback: null, rounds: 0 };
-        inbox.push(item);
-      }
-      Object.assign(item, { step, request, memo: { ...item.memo, ...memo }, status: "open", feedback: null });
-      Object.assign(r, { status: "done", output: { inbox_id: item.id, waiting_for: step }, error: null });
-      return item.id;
-    },
-    async finishInbox(run, ok, feedback) {
-      const item = inbox.find((i) => i.id === run.input.inbox);
-      if (!item || item.status !== "submitted") return;
-      if (ok) Object.assign(item, { status: "done", feedback: null });
-      else {
-        delete item.answers[item.step];
-        Object.assign(item, { status: "open", feedback });
-      }
-    },
-  };
-  /** What `inbox_submit` does: stores the answer and queues the replay. */
-  const submit = (inboxId: string, step: string, answer: unknown) => {
-    const item = inbox.find((i) => i.id === inboxId);
-    if (!item || item.status !== "open" || item.step !== step) throw new Error(`inbox ${inboxId} is not waiting for ${step}`);
-    item.answers[step] = answer;
-    item.status = "submitted";
-    item.rounds += 1;
-    return enqueue(item.kind, { ...item.input, brain: "claude", inbox: item.id });
   };
   const enqueue = (kind: QueuedRun["kind"], input: Record<string, unknown> = {}) => {
     const run: RunState = { id: id(), user_id: "u1", kind, input, attempt: 0, status: "queued", steps: [], error: null, output: null };
     runs.push(run);
     return run;
   };
-  return { store, posting, runs, items, opps, rules, salesSettings, mentions, insights, niche, metrics, zernio, replies, lessons, goals, results, enqueue, inbox, submit, voice, videos, captions, variants, photoCaptions, ratings, ratingRules };
+  return { store, posting, runs, items, opps, rules, salesSettings, mentions, insights, niche, metrics, zernio, replies, lessons, goals, results, enqueue, voice, videos, captions, variants, photoCaptions, ratings, ratingRules };
 }

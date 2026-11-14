@@ -256,26 +256,6 @@ function SettingsBody({ data, live }: { data: Data; live: Record<keyof Data, boo
               </select>
             </label>
             <AutopilotField initial={data.autopilot} accounts={data.accounts} live={live.autopilot} />
-            <fieldset className="v2-field scr-radios">
-              <legend>Who does the thinking</legend>
-              <label className={cx("scr-radio", data.cmo.mode === "opencmo" && "is-on")}>
-                <input type="radio" name="mode" checked={data.cmo.mode === "opencmo"} disabled readOnly />
-                <span>
-                  <b>OpenCMO</b>
-                  <span className="scr-tiny scr-muted">Runs on its own schedule, uses your credits.</span>
-                </span>
-              </label>
-              <label className={cx("scr-radio", data.cmo.mode === "claude" && "is-on")}>
-                <input type="radio" name="mode" checked={data.cmo.mode === "claude"} disabled readOnly />
-                <span>
-                  <b>Your own Claude, through MCP</b>
-                  <span className="scr-tiny scr-muted">Your assistant plans; OpenCMO drafts, makes and posts what you approve.</span>
-                </span>
-              </label>
-              <span className="scr-tiny scr-muted">
-                Chosen for you today: OpenCMO while you have credits, your Claude when they run out. Connect Claude below.
-              </span>
-            </fieldset>
             {error && <ErrorNote>{error}</ErrorNote>}
             <span className="v2-actions">
               <Button type="submit" variant="on-dark" disabled={!dirty || !budgetOk || saving}>

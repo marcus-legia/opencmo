@@ -16,7 +16,7 @@ import { checkPost } from "../jobs/check-post";
 import { REVIEW_SYSTEM } from "../jobs/draft-post";
 import { postProfile } from "../platforms";
 import { memoryStore } from "../jobs/memory-store";
-import { drainCmoQueue } from "../jobs/runner";
+import { drainCmoQueue, type JobContext } from "../jobs/runner";
 import { CMO_JOB_KINDS, isoDay, type ItemRow } from "../jobs/types";
 import { stockPatterns } from "../jobs/eval/style";
 import { CAPTION_PROFILES, countHashtags, POST_PROFILES, profileOf } from "../platforms";
@@ -248,26 +248,33 @@ async function postChecks() {
   assert.deepEqual(moreAdvice(long, threads), [], "Threads shows the whole post");
 
 
-  // A Threads item through the founder's Claude: its own agent, the <platform> block first, X's prefix.
+  // A Threads item: its own agent, the <platform> block first, X's prefix. The model is stubbed to read each request.
   process.env.OPENCMO_AGENT_FAKE = "1";
   const docs = { product: { name: "Paylane", pricing: "$12/month" }, strategy: { avoid: ["revolutionary"] }, content_strategy: { pillars: [{ name: "Getting paid", ideas: ["The 3-7-14 reminder rule"] }] } };
   const item = (platform: string, id: string): ItemRow => ({ id, run_id: null, department: "post", platform, day: isoDay(), idea: "Why reminders on day 3, 7 and 14 get invoices paid", reason: "pillar", status: "planned", priority: "medium", body: {}, final_text: null, external_url: null, decided_at: null, published_at: null, created_at: new Date().toISOString() });
-  const mem = memoryStore(docs, []);
-  mem.items.push(item("threads", "t1"), item("x", "x1"));
-  mem.enqueue("post_draft", { brain: "claude", item_id: "t1" });
-  mem.enqueue("post_draft", { brain: "claude", item_id: "x1" });
-  await drainCmoQueue(mem.store);
-  const [onThreads, onX] = mem.inbox;
-  assert.ok(onThreads && onX, "both runs wait for Claude");
-  assert.deepEqual([onThreads.request.agent, onX.request.agent], ["threads_writer", "x_writer"]);
-  assert.equal(onThreads.request.system, onX.request.system, "one cached prefix for every post profile");
-  assert.deepEqual([profileFromPrompt(onThreads.request.prompt), profileFromPrompt(onX.request.prompt)], ["threads", "x"]);
-  assert.match(onThreads.request.title, /today's Threads post/);
   // A 400-character version fits Threads, and X too since X takes long posts (D6).
   const answer = { versions: [{ text: long, angle: "long" }, { text: "Reminders on day 3, 7 and 14.", angle: "short" }], rationale: "r" };
-  mem.submit(onThreads.id, "draft_post", answer);
-  mem.submit(onX.id, "draft_post", answer);
-  await drainCmoQueue(mem.store);
+  /** Every request the jobs send, answered with `answer` checked against the job's own schema. */
+  const asking = () => {
+    const calls: Parameters<JobContext["think"]>[0][] = [];
+    const think: JobContext["think"] = async (call) => {
+      calls.push(call);
+      return call.schema.parse(answer);
+    };
+    return { calls, think };
+  };
+  const mem = memoryStore(docs, []);
+  mem.items.push(item("threads", "t1"), item("x", "x1"));
+  mem.enqueue("post_draft", { item_id: "t1" });
+  mem.enqueue("post_draft", { item_id: "x1" });
+  const two = asking();
+  await drainCmoQueue(mem.store, { think: two.think });
+  const [onThreads, onX] = two.calls;
+  assert.ok(onThreads && onX, "both runs asked the model");
+  assert.deepEqual([onThreads.agent, onX.agent], ["threads_writer", "x_writer"]);
+  assert.equal(onThreads.system, onX.system, "one cached prefix for every post profile");
+  assert.deepEqual([profileFromPrompt(onThreads.prompt), profileFromPrompt(onX.prompt)], ["threads", "x"]);
+  assert.match(onThreads.title, /today's Threads post/);
   const threadsCard = mem.items.find((i) => i.id === "t1")!;
   const xCard = mem.items.find((i) => i.id === "x1")!;
   assert.equal(threadsCard.status, "in_review");
@@ -277,11 +284,10 @@ async function postChecks() {
   // A slot for two platforms is one core post (D3): the core profile, and the draft keeps the planner's targets.
   const core = memoryStore(docs, []);
   core.items.push({ ...item("X", "c1"), body: { targets: ["x", "linkedin"], slot: 0 } });
-  core.enqueue("post_draft", { brain: "claude", item_id: "c1" });
-  await drainCmoQueue(core.store);
-  assert.equal(profileFromPrompt(core.inbox[0]!.request.prompt), "core", "two targets: the core profile");
-  core.submit(core.inbox[0]!.id, "draft_post", answer);
-  await drainCmoQueue(core.store);
+  core.enqueue("post_draft", { item_id: "c1" });
+  const coreAsk = asking();
+  await drainCmoQueue(core.store, { think: coreAsk.think });
+  assert.equal(profileFromPrompt(coreAsk.calls[0]!.prompt), "core", "two targets: the core profile");
   const coreCard = core.items.find((i) => i.id === "c1")!;
   assert.deepEqual([coreCard.status, coreCard.body.targets, coreCard.body.slot], ["in_review", ["x", "linkedin"], 0], "the draft keeps its targets");
 
@@ -293,16 +299,17 @@ async function postChecks() {
     { body: 'Approved as written on X: "Day 3, 7, 14."', platform: "x", created_at: "2026-09-10T09:00:00Z", weight: 0.2 },
   );
   voiced.items.push(item("LinkedIn", "lv"));
-  voiced.enqueue("post_draft", { brain: "claude", item_id: "lv" });
-  await drainCmoQueue(voiced.store);
-  const asked = voiced.inbox[0]!.request;
+  voiced.enqueue("post_draft", { item_id: "lv" });
+  const voicedAsk = asking();
+  await drainCmoQueue(voiced.store, { think: voicedAsk.think });
+  const asked = voicedAsk.calls[0]!;
   assert.equal(profileFromPrompt(asked.prompt), "linkedin", "a calendar label resolves to its profile");
   assert.equal(asked.agent, "linkedin_writer");
   const at = (tag: string) => asked.prompt.indexOf(tag);
   assert.ok(at("<platform>") === 0 && at("<platform>") < at("<founder_rules") && at("<founder_rules") < at("<founder_voice") && at("<founder_voice") < at("<documents>") && at("<documents>") < at("<memories>"), "rules, then voice, then documents and memories");
   assert.ok(asked.prompt.indexOf("cut it shorter") < asked.prompt.indexOf("Day 3, 7, 14."), "the newer, heavier note first");
   assert.match(asked.prompt, /\(LinkedIn, weight 0\.98, 2026-10-28\)/);
-  assert.equal(asked.system, onX.request.system, "the founder's notes never change the cached prefix");
+  assert.equal(asked.system, onX.system, "the founder's notes never change the cached prefix");
   assert.match(asked.system, /When their voice and the no-ai-slop guidance disagree, write it their way/);
 
   // The fake writer drafts LinkedIn too, end to end.

@@ -4,7 +4,7 @@ import type { SupabaseClient as BaseClient } from "@supabase/supabase-js";
 
 import { DOCUMENT_KINDS, type DocumentKind } from "../documents";
 import { latestPerTopic } from "./context";
-import type { CmoStore, DraftRating, CompetitorInsight, ConnectedAccountRow, ReplyOutcomeDue, ZernioPostRow, Documents, NicheVideoInsight, SubredditRule, Goal, InboxState, ItemRow, Lesson, MemoryEvent, QueuedRun } from "./types";
+import type { CmoStore, DraftRating, CompetitorInsight, ConnectedAccountRow, ReplyOutcomeDue, ZernioPostRow, Documents, NicheVideoInsight, SubredditRule, Goal, ItemRow, Lesson, MemoryEvent, QueuedRun } from "./types";
 import { isoDay, toVerdict } from "./types";
 import { enqueueDueDrafts } from "../schedule";
 import { planOrDefault } from "../posting-plan";
@@ -180,7 +180,7 @@ export function supabaseStore(admin: BaseClient): CmoStore {
       const { data, error } = await admin.from("content_items").select("id, platform").eq("user_id", run.user_id).eq("run_id", run.id)
         .eq("department", "post").eq("status", "planned").lte("day", isoDay()).order("day").order("id");
       if (error) throw new Error(`queueDueDrafts: ${error.message}`);
-      const [queued] = await enqueueDueDrafts(admin, run.user_id, (data ?? []) as { id: string; platform: string | null }[], { claude: run.input.brain === "claude" });
+      const queued = await enqueueDueDrafts(admin, run.user_id, (data ?? []) as { id: string; platform: string | null }[]);
       return queued;
     },
     async variantSource(userId, itemId) {
@@ -285,18 +285,5 @@ export function supabaseStore(admin: BaseClient): CmoStore {
     replyOutcomesDue: (userId, limit) => rpc<ReplyOutcomeDue[]>("cmo_reply_outcomes_due", { p_user: userId, p_limit: limit }).then((rows) => rows ?? []),
     saveReplyOutcome: (userId, outcomeId, c) =>
       rpc<boolean>("cmo_save_reply_outcome", { p_user: userId, p_outcome: outcomeId, p_status: c.status, p_votes: c.votes, p_replies: c.replies }),
-    async inbox(userId, inboxId) {
-      const { data, error } = await admin.from("cmo_inbox").select("answers, memo").eq("id", inboxId).eq("user_id", userId).maybeSingle();
-      if (error) throw new Error(`inbox: ${error.message}`);
-      return (data as InboxState | null) ?? null;
-    },
-    async openInbox(run, step, request, memo) {
-      return one<{ id: string }>(
-        await rpc("cmo_inbox_open", { p_run: run.id, p_attempt: run.attempt, p_step: step, p_request: request, p_memo: memo }),
-      )?.id ?? null;
-    },
-    async finishInbox(run, ok, feedback) {
-      await rpc("cmo_inbox_finish", { p_run: run.id, p_ok: ok, p_feedback: feedback });
-    },
   };
 }

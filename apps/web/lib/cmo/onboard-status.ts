@@ -52,7 +52,7 @@ export const SETUP_MAX_WAIT_MS = 120_000;
 export function setupFinished(status: OnboardingStatus, settledMs: number): boolean {
   if (!status.run || status.run.status === "running") return false;
   if (status.run.status === "failed") return false;
-  // The documents are saved; whatever is still on its way (a plan waiting in the founder's own Claude, a slow sweep)
+  // The documents are saved; whatever is still on its way (a slow sweep, a plan still running)
   // shows on the Dashboard. Setup never keeps the founder longer than this.
   if (settledMs > SETUP_MAX_WAIT_MS) return true;
   if (status.draft === "done" || status.draft === "failed") return true;
