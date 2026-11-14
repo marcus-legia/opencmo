@@ -1,6 +1,7 @@
 # Sales finder: leads on every platform, from a question (spec, not started)
 
-> **Status: spec (owner, 2026-10-31; chat-first section added 2026-11-01).** Nothing in §6 is built. The owner chose
+> **Status: v1 built (conversations; Reddit, HN, Facebook groups, Threads): [`2026-11-14-sales-finder-plan.md`](2026-11-14-sales-finder-plan.md).**
+> Spec (owner, 2026-10-31; chat-first section added 2026-11-01). Nothing in §6 is built. The owner chose
 > on 2026-11-01 to build the **foundation** first: the chat → panel protocol (`view.open`) and the context chip, in
 > `review/1-quality` (see [`../../research/agents/2026-11-01-cmo-chat-control-audit.md`](../../research/agents/2026-11-01-cmo-chat-control-audit.md)).
 > The multi-platform `leads` table and the finders wait on R0. The three ScrapeCreators integration bugs found in the
