@@ -7,6 +7,7 @@ import type { PostingPlan } from "../posting-plan";
 import type { DocumentKind } from "../documents";
 import type { VideoSource } from "../writer/types";
 import type { AccountMetricRow } from "./metrics-source";
+import type { SalesPlatform } from "../social/conversations";
 
 export type CmoJobKind =
   | "plan_week"
@@ -122,7 +123,7 @@ export type ZernioPostRow = {
 export type ReplyOutcomeDue = {
   outcome_id: string;
   opportunity_id: string;
-  platform: "reddit" | "hn";
+  platform: SalesPlatform;
   url: string;
   community: string;
   reply: string;
@@ -195,8 +196,8 @@ export type Opportunity = {
   /** 5.1: what a member needs before posting there, when the rules say it. */
   min_karma?: number;
   min_account_age_days?: number;
-  /** P6 R4: where the thread is. Omitted means Reddit (the column's default). */
-  platform?: "reddit" | "hn";
+  /** P6 R4, Sales finder A1: where the thread is. Omitted means Reddit (the column's default). */
+  platform?: SalesPlatform;
 };
 
 /**
@@ -229,7 +230,8 @@ export type SubredditRule = {
   megathread?: boolean;
 };
 /** The founder's Sales settings (`sales_settings`). */
-export type SalesSettings = { excluded: string[]; pairs: [string, string][] };
+/** The founder's Sales settings; `platforms` are the places Sales may look (at least one, `sales_settings.platforms`). */
+export type SalesSettings = { excluded: string[]; pairs: [string, string][]; platforms: SalesPlatform[] };
 
 /** Every read and write of a CMO job goes through here: Supabase (service role) for real, memory in tests. */
 export interface CmoStore {

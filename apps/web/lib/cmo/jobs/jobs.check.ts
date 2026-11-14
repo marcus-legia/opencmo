@@ -309,9 +309,9 @@ async function main() {
   assert.ok(memM.opps.some((o) => /1 of your last 10 replies/.test(o.rule_why ?? "")), "the card says why");
   // Excluded subreddits are never scored; pairs must both appear.
   const limited = { url: "https://www.reddit.com/r/freelance/comments/x/", community: "r/freelance", title: "Late invoice", author: "", text: "Chasing a client", comments: 1, postedAt: null };
-  assert.equal(allowedBySettings(limited, { excluded: ["freelance"], pairs: [] }), false);
-  assert.equal(allowedBySettings(limited, { excluded: [], pairs: [["invoice", "client"]] }), true);
-  assert.equal(allowedBySettings(limited, { excluded: [], pairs: [["invoice", "stripe"]] }), false);
+  assert.equal(allowedBySettings(limited, { excluded: ["freelance"], pairs: [], platforms: ["reddit"] }), false);
+  assert.equal(allowedBySettings(limited, { excluded: [], pairs: [["invoice", "client"]], platforms: ["reddit"] }), true);
+  assert.equal(allowedBySettings(limited, { excluded: [], pairs: [["invoice", "stripe"]], platforms: ["reddit"] }), false);
   const memEx = memoryStore({ ...docs, strategy: { ...docs.strategy, pains: ["late invoice payments"] } });
   memEx.salesSettings.excluded.push("freelance", "smallbusiness");
   memEx.enqueue("sales_scan");
