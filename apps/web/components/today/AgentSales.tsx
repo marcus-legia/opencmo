@@ -1,13 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { Logs } from "@/app/api/v1/logs/route";
 import { api, jsonBody } from "@/components/clipping/api";
+import { useLive } from "@/components/clipping/useLive";
 import { SalesSettings } from "@/components/screens/sales/SalesSettings";
 import { useScreen } from "@/components/screens/useScreen";
 import { salesScanCard } from "@/lib/cmo/jobs/price-card";
 import type { SalesScreen } from "@/lib/screens/sales";
+import { createClient } from "@/lib/supabase/client";
 
 import { useWorkspace } from "./workspace";
 
@@ -32,10 +34,106 @@ const runTime = (iso: string) => {
   return d.toDateString() === new Date().toDateString() ? `Today ${time}` : `${new Intl.DateTimeFormat("en-GB", { weekday: "short" }).format(d)} ${time}`;
 };
 
+type ScanStep = { label: string; status: "running" | "done" | "failed" };
+type Scan = { id: string; status: "queued" | "running" | "done" | "failed"; steps: ScanStep[]; error: string | null; cards: number | null; since: string };
+
+const SCAN_COLUMNS = "id, status, steps, error, output, created_at, started_at";
+const scanActive = (scan: Scan | null): scan is Scan => scan !== null && (scan.status === "queued" || scan.status === "running");
+
+/**
+ * A `cmo_runs` row as the progress card shows it. The step labels are fixed text from `sales-scan.ts` (with counts the
+ * job filled in), written by the runner before and after each step, so the card follows the scan as it goes.
+ */
+function toScan(row: Record<string, unknown>): Scan {
+  const status = row.status === "queued" || row.status === "running" || row.status === "done" || row.status === "failed" ? row.status : "queued";
+  const steps = (Array.isArray(row.steps) ? row.steps : []).flatMap((s): ScanStep[] => {
+    const step = s as { label?: unknown; status?: unknown };
+    if (typeof step.label !== "string") return [];
+    return [{ label: step.label.slice(0, 160), status: step.status === "done" || step.status === "failed" ? step.status : "running" }];
+  });
+  const output = row.output as { cards?: unknown } | null;
+  return {
+    id: String(row.id),
+    status,
+    steps,
+    error: typeof row.error === "string" ? row.error : null,
+    cards: typeof output?.cards === "number" ? output.cards : null,
+    since: String(row.started_at ?? row.created_at ?? new Date().toISOString()),
+  };
+}
+
+const clock = (ms: number) => {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+};
+
+/** What the scan is doing right now, step by step; a finished scan says what it found until the founder closes it. */
+function ScanProgress({ scan, onClose }: { scan: Scan; onClose: () => void }) {
+  const active = scanActive(scan);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!active) return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [active]);
+
+  const title =
+    scan.status === "queued"
+      ? "Scan starting…"
+      : scan.status === "running"
+        ? `Scanning · ${clock(now - Date.parse(scan.since))}`
+        : scan.status === "failed"
+          ? "The scan did not finish"
+          : scan.cards
+            ? `Scan finished · ${scan.cards} ${scan.cards === 1 ? "thread" : "threads"} to review`
+            : "Scan finished · nothing worth joining this time";
+
+  return (
+    <section className="card" role="status" aria-live="polite" style={{ marginTop: "14px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+        {active ? <span className="live"></span> : null}
+        <b style={{ flex: "1 1 auto" }}>{title}</b>
+        {active ? null : (
+          <button type="button" className="ghost" onClick={onClose}>
+            Close
+          </button>
+        )}
+      </div>
+      {scan.status === "queued" && !scan.steps.length ? <div className="meta" style={{ marginTop: "6px" }}>Waiting for a free worker. This usually takes a few seconds.</div> : null}
+      {scan.steps.length ? (
+        <ol style={{ listStyle: "none", margin: "10px 0 0", padding: "0", display: "flex", flexDirection: "column", gap: "6px" }}>
+          {scan.steps.map((step, i) => (
+            <li key={i} style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13.5px", color: step.status === "running" ? "var(--text)" : "var(--muted)" }}>
+              <span aria-hidden="true" style={{ width: "14px", display: "inline-flex", justifyContent: "center" }}>
+                {step.status === "running" ? (
+                  <span className="live"></span>
+                ) : step.status === "done" ? (
+                  <svg className="i s" viewBox="0 0 24 24" style={{ color: "var(--ok)" }}>
+                    <path d="M20 6 9 17l-5-5" />
+                  </svg>
+                ) : (
+                  <svg className="i s" viewBox="0 0 24 24" style={{ color: "var(--warn)" }}>
+                    <path d="M18 6 6 18M6 6l12 12" />
+                  </svg>
+                )}
+              </span>
+              <span>
+                {step.label}
+                <span className="sr-only">{step.status === "running" ? " (in progress)" : step.status === "failed" ? " (failed)" : " (done)"}</span>
+              </span>
+            </li>
+          ))}
+        </ol>
+      ) : null}
+      {scan.status === "failed" && scan.error ? <div className="meta" style={{ marginTop: "8px", color: "var(--warn)" }}>{scan.error}</div> : null}
+    </section>
+  );
+}
+
 /** Scan now: the same price card as a scan asked in the CMO chat; nothing is held until the founder approves it. */
-function ScanNow() {
+function ScanNow({ scanning, onStarted }: { scanning: boolean; onStarted: (run: { id: string; status: string; created_at: string }) => void }) {
   const card = salesScanCard();
-  const [step, setStep] = useState<"idle" | "confirm" | "busy" | "started">("idle");
+  const [step, setStep] = useState<"idle" | "confirm" | "busy">("idle");
   const [error, setError] = useState<string | null>(null);
 
   function open() {
@@ -46,16 +144,21 @@ function ScanNow() {
     setStep("busy");
     setError(null);
     try {
-      await api("/cmo/runs", jsonBody({ kind: "sales_scan" }));
-      setStep("started");
+      // A scan already in flight comes back as itself (`cmo_enqueue`), so a second press follows the same run.
+      onStarted(await api<{ id: string; status: string; created_at: string }>("/cmo/runs", jsonBody({ kind: "sales_scan" })));
+      setStep("idle");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not start the scan. Please try again.");
       setStep("confirm");
     }
   }
 
-  if (step === "started") {
-    return <span className="chip">Scanning: threads land here within a few minutes</span>;
+  if (scanning) {
+    return (
+      <span className="chip">
+        <span className="live"></span>Scanning…
+      </span>
+    );
   }
   if (step === "idle") {
     return (
@@ -222,7 +325,7 @@ function ThreadRow({ t, open, onToggle, onDecide }: { t: Thread; open: boolean; 
  * opens the thread.
  */
 export function AgentSales() {
-  const [state] = useScreen("sales");
+  const [state, reload] = useScreen("sales");
   const ws = useWorkspace();
   const [tab, setTab] = useState<Tab>("threads");
   const [threads, setThreads] = useState<Thread[] | null>(null);
@@ -240,11 +343,56 @@ export function AgentSales() {
     setOpen((was) => was ?? data.threads.find((t) => t.status === "open")?.id ?? null);
   }, [data]);
 
-  useEffect(() => {
+  const loadRuns = useCallback(() => {
     void api<Logs>("/logs")
       .then((logs) => setRuns(logs.events.filter((e) => e.who === "sales").slice(0, 5)))
       .catch(() => {});
   }, []);
+  useEffect(loadRuns, [loadRuns]);
+
+  // The scan being followed. Realtime (with useLive's 5-second fallback poll) re-reads it under RLS; the payload is never
+  // trusted. When it finishes, the threads and the runs are read again, so new threads show without a page reload.
+  const [scan, setScan] = useState<Scan | null>(null);
+  const scanRef = useRef(scan);
+  scanRef.current = scan;
+  const refreshScan = useCallback(async (id?: string) => {
+    const was = scanRef.current;
+    const target = id ?? (scanActive(was) ? was.id : null);
+    if (!target) return;
+    const { data } = await createClient().from("cmo_runs").select(SCAN_COLUMNS).eq("id", target).maybeSingle();
+    if (!data) return;
+    const next = toScan(data as Record<string, unknown>);
+    setScan((current) => (current === null || current.id === next.id ? next : current));
+    if (!scanActive(next)) {
+      reload();
+      loadRuns();
+    }
+  }, [reload, loadRuns]);
+  useLive("cmo_runs", scanActive(scan) ? `id=eq.${scan.id}` : null, () => void refreshScan(), scanActive(scan), true, "sales");
+
+  // A scan started elsewhere (the chat, the daily loop) or before a reload is followed too.
+  useEffect(() => {
+    void createClient()
+      .from("cmo_runs")
+      .select(SCAN_COLUMNS)
+      .eq("kind", "sales_scan")
+      .in("status", ["queued", "running"])
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) setScan((current) => current ?? toScan(data as Record<string, unknown>));
+      });
+  }, []);
+
+  const startedScan = useCallback(
+    (run: { id: string; status: string; created_at: string }) => {
+      setScan((current) => (current?.id === run.id ? current : toScan({ ...run, steps: [] })));
+      // The run may already be under way (a second press): read its steps now rather than at the next event.
+      void refreshScan(run.id);
+    },
+    [refreshScan],
+  );
 
   async function decide(t: Thread, action: "replied" | "dismissed", reason?: string, text?: string) {
     setError(null);
@@ -299,8 +447,9 @@ export function AgentSales() {
               <span className="chip">Brand voice</span>
             </div>
           </div>
-          <ScanNow />
+          <ScanNow scanning={scanActive(scan)} onStarted={startedScan} />
         </div>
+        {scan ? <ScanProgress scan={scan} onClose={() => setScan(null)} /> : null}
 
         <div className="tabs" role="tablist" aria-label="Sales">
           {(
