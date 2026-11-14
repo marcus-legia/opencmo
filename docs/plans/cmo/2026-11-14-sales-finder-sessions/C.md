@@ -14,7 +14,7 @@ Commit and push after every task. Read the plan's Global constraints first.
 
 ## Tasks
 
-### - [ ] C1. The chat asks for places, and refuses a scan with nowhere to look
+### - [x] C1. The chat asks for places, and refuses a scan with nowhere to look
 
 **Consumes:** `SALES_PLATFORMS`, `SalesPlatform`, `PLATFORM_LABEL` (A1); `salesScanCard(brief, platforms)` (B2 — until
 B2 is pushed, pass only `brief`).
@@ -37,14 +37,15 @@ Decisions:
   `Look on: <labels>`, and passes `p_platforms`; the route `app/api/v1/sales/settings/route.ts` gains optional
   `platforms` and returns `platforms`.
 
-- [ ] Failing checks (extend `lib/agent/cmo-decisions.check.ts` and the `create_task` checks next to `pricedTaskCard`):
+- [x] Failing checks (extend `lib/agent/cmo-decisions.check.ts` and the `create_task` checks next to `pricedTaskCard`):
   - `pricedTaskCard({ agent: "sales", brief: "find x", platforms: ["threads"] })?.card.changes[0]` starts `Scan Threads`
     (needs B2; if B2 is not pushed yet, add this one assertion in C2 instead);
   - `pricedTaskCard({ agent: "x_writer", brief: "x", platforms: ["reddit"] })` is `null`;
   - `platforms: ["x"]` is refused by the zod;
   - `set_sales_settings` with `platforms: []` is invalid; with `["reddit"]` its card says `Look on: Reddit`.
-- [ ] Implement; run the checks and `npm run typecheck`.
-- [ ] Commit `Sales finder C1: the CMO chat asks Sales to look on Facebook groups and Threads`, push.
+- [x] Implement; run the checks and `npm run typecheck`. Also in `lib/agent/scope.ts` (`plan`): the price card names only
+  the places the founder's switches allow, and a scan with nowhere to look is refused before the card is shown.
+- [x] Commit `Sales finder C1: the CMO chat asks Sales to look on Facebook groups and Threads`, push.
 
 ### - [ ] C2. The Sales screen shows where each thread is, and the switches
 

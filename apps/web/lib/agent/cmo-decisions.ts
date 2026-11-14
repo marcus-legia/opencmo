@@ -15,6 +15,7 @@ import { ApiError } from "@/lib/api/errors";
 import { firstRow, rpcOrThrow, type SupabaseClient } from "@/lib/api/handler";
 import { APPROVAL_COLUMNS, approvalToCard, type ApprovalRow } from "@/lib/screens/cards";
 import { PLATFORM_LABEL } from "@/lib/screens/common";
+import { PLATFORM_LABEL as SALES_LABEL, SALES_PLATFORMS, type SalesPlatform } from "@/lib/cmo/social/conversations";
 import { BUDGET_MAX, BUDGET_MIN } from "@/lib/screens/settings";
 
 import type { PanelOpen } from "./panel";
@@ -68,7 +69,7 @@ export const DECISION_TOOL_SPECS: ToolSpec[] = [
   {
     name: "set_sales_settings",
     description:
-      "Change what Sales scans, when the founder asks: add or remove subreddits it never reads (\"stop showing r/memes\"), and pairs of terms a thread must both contain. Only the changes; the rest stays. Confirmed on a card.",
+      "Change what Sales scans, when the founder asks: add or remove subreddits it never reads (\"stop showing r/memes\"), pairs of terms a thread must both contain, and the places it looks (platforms: the whole list to keep on, at least one of reddit, hn, facebook, threads). Only the changes; the rest stays. Confirmed on a card.",
     schema: {
       type: "object",
       properties: {
@@ -76,6 +77,7 @@ export const DECISION_TOOL_SPECS: ToolSpec[] = [
         include: { type: "array", items: { type: "string" }, description: "Subreddits to read again." },
         add_pairs: { type: "array", items: { type: "array", items: { type: "string" } } },
         remove_pairs: { type: "array", items: { type: "array", items: { type: "string" } } },
+        platforms: { type: "array", items: { type: "string", enum: [...SALES_PLATFORMS] }, description: "Every place Sales should look from now on." },
       },
       additionalProperties: false,
     },
@@ -138,6 +140,7 @@ const salesInput = z.object({
   include: z.array(subreddit).max(50).optional(),
   add_pairs: z.array(pair).max(20).optional(),
   remove_pairs: z.array(pair).max(20).optional(),
+  platforms: z.array(z.enum(SALES_PLATFORMS)).min(1).max(4).optional(),
 });
 const pauseInput = z.object({ paused: z.boolean() });
 const settingsInput = z
@@ -152,7 +155,7 @@ const settingsInput = z
 export type Prepared =
   | { tool: "decide_card"; cardId: string; action: string; payload: Record<string, unknown>; contentHash: string; screen: PanelOpen }
   | { tool: "mark_done"; itemId: string; url: string | null }
-  | { tool: "set_sales_settings"; excluded: string[]; pairs: [string, string][] }
+  | { tool: "set_sales_settings"; excluded: string[]; pairs: [string, string][]; platforms?: SalesPlatform[] }
   | { tool: "set_cmo_paused"; paused: boolean }
   | { tool: "update_cmo_settings"; budget: number; timezone: string; digestHour: number | null };
 
@@ -323,8 +326,11 @@ async function preparePosted(supabase: SupabaseClient, raw: unknown): Promise<Pr
 
 async function prepareSales(supabase: SupabaseClient, raw: unknown): Promise<PreparedDecision> {
   const parsed = salesInput.safeParse(raw);
-  if (!parsed.success) return refused("exclude and include are subreddit names; add_pairs and remove_pairs are pairs of terms.");
-  const { data, error } = await supabase.from("sales_settings").select("excluded_subreddits, co_occurrence").maybeSingle<{ excluded_subreddits: string[]; co_occurrence: [string, string][] }>();
+  if (!parsed.success) return refused("exclude and include are subreddit names; add_pairs and remove_pairs are pairs of terms; platforms is at least one of reddit, hn, facebook, threads.");
+  const { data, error } = await supabase
+    .from("sales_settings")
+    .select("excluded_subreddits, co_occurrence, platforms")
+    .maybeSingle<{ excluded_subreddits: string[]; co_occurrence: [string, string][]; platforms?: string[] | null }>();
   if (error) return refused("Could not read your Sales settings right now.", "Could not read settings");
   const excluded = new Set((data?.excluded_subreddits ?? []).map(subredditName));
   let pairs = [...(data?.co_occurrence ?? [])];
@@ -337,9 +343,15 @@ async function prepareSales(supabase: SupabaseClient, raw: unknown): Promise<Pre
     pairs = pairs.filter((q) => !samePair(q, p));
     if (pairs.length < before) changes.push(`Drop the pair "${p[0]}" + "${p[1]}"`);
   }
+  // Sales finder C1: the places Sales looks, saved whole (the founder names where to look, not a change to a list).
+  const platforms = parsed.data.platforms ? SALES_PLATFORMS.filter((p) => parsed.data.platforms!.includes(p)) : undefined;
+  if (platforms) {
+    const current = SALES_PLATFORMS.filter((p) => (data?.platforms ?? SALES_PLATFORMS).includes(p));
+    if (platforms.join() !== current.join()) changes.push(`Look on: ${platforms.map((p) => SALES_LABEL[p]).join(", ")}`);
+  }
   if (!changes.length) return refused("Nothing would change: those settings are already in place.", "Nothing to change");
   if (excluded.size > 50 || pairs.length > 20) return refused("Sales takes at most 50 excluded subreddits and 20 term pairs.");
-  return { ok: true, prepared: { tool: "set_sales_settings", excluded: [...excluded], pairs }, card: { changes } };
+  return { ok: true, prepared: { tool: "set_sales_settings", excluded: [...excluded], pairs, ...(platforms ? { platforms } : {}) }, card: { changes } };
 }
 
 async function prepareSettings(supabase: SupabaseClient, raw: unknown): Promise<PreparedDecision> {
@@ -424,7 +436,7 @@ export async function runDecision(supabase: SupabaseClient, prepared: Prepared):
         await rpcOrThrow(supabase, "cmo_mark_posted", { p_id: prepared.itemId, p_url: prepared.url });
         return done("Marked as posted", { screen: "dashboard" });
       case "set_sales_settings":
-        await rpcOrThrow(supabase, "sales_settings_save", { p_excluded: prepared.excluded, p_pairs: prepared.pairs });
+        await rpcOrThrow(supabase, "sales_settings_save", { p_excluded: prepared.excluded, p_pairs: prepared.pairs, p_platforms: prepared.platforms ?? null });
         return done("Sales settings saved", { screen: "sales" });
       case "set_cmo_paused":
         await rpcOrThrow(supabase, prepared.paused ? "cmo_pause" : "cmo_resume", {});
