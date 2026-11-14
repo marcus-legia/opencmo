@@ -6,6 +6,7 @@ Newest first.
 
 | Date | Plan | Source | PR |
 |---|---|---|---|
+| 2026-11-14 | [Remove the AI CMO's MCP; keep the editor's](2026-11-14-remove-cmo-mcp-plan.md) · [sessions](2026-11-14-remove-cmo-mcp-sessions/): CMO, inbox and account MCP groups, mode B (the founder's Claude as the brain) and the `cmo_inbox` table go; `get_credits` moves to the editor MCP | Owner 2026-11-14 | `claude/remove-ai-cmo-mcp-plan-5jwr85` → `main` |
 | 2026-11-12 | [Autopilot for posts, and one working screen](2026-11-12-autopilot-one-screen-plan.md) · [screenshots](2026-11-12-autopilot-one-screen-shots/) | Owner conversation 2026-11-12, and the owner's own account read over MCP | this PR |
 | 2026-11-11 | [The feed after an approval](2026-11-11-approve-flow-feed-plan.md): Approve leads on a post, the week and the activity on the feed, live after every decision, the chat stays on the feed, a local sweep for `npm run dev` | Owner 2026-11-11 after testing | `claude/approve-flow-dashboard-jv2rjx` → `main` |
 | 2026-11-10 | [Groups 4 and 5](2026-11-10-groups-4-5-plan.md): the script where the founder works (I0 done, I1 backend done, I3 core done; Script tab, take check and Keep only the script left), Sales disclosure, ruleCheck, ban-risk rules and real fixtures, the last red e2e | Owner 2026-11-10 after #186 | `claude/okara-spec-opencmo-b7qlx2` → `main` |
