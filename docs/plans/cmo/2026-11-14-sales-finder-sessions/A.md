@@ -110,4 +110,8 @@ description as `text` (Review focus 2). Posts older than 30 days (when the time 
 
 ## Requests
 
-(from other sessions)
+- **From B (B3 review): filter reply outcomes by platform in SQL.** `cmo_reply_outcomes_due` returns the newest 10 due
+  outcomes of every platform; `checkReplies` (`reply-outcomes.ts`) then drops Facebook and Threads ones, which are
+  never marked checked. Ten such replies take every slot from then on, and Reddit/HN replies are never checked. In a
+  new migration, add `and p.platform in ('reddit', 'hn')` to its `where` (pgTAP: ten due Facebook outcomes and one
+  Reddit outcome → the Reddit one is returned). B keeps its filter as a second guard.
