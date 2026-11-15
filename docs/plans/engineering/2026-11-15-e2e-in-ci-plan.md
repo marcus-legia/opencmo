@@ -41,11 +41,11 @@ lives in one place, the `test:e2e:smoke` script in `apps/web/package.json`, so a
 ### Baseline, 2026-11-15 (local, `main` `fb2e003d`, v2 build, `login isolation ui-v2`)
 
 101 passed, 6 failed, 12.6 minutes. The six were already red on `main`; this plan does not fix them, it keeps them
-out of the smoke set (`isolation` and `ui-v2-activation` whole, the other two by title with `--grep-invert`):
+out of the smoke set (`isolation` whole, the other two by title with `--grep-invert`):
 
 | Spec | What fails | First look |
 |---|---|---|
-| `ui-v2-activation` :30 and :88 | No plan card and no first draft within 150 s of "Read my website" for a new account | **May be a real regression of the free first run** (CMO review 3, 3.1). Fix first: it is the founder's first minute |
+| `ui-v2-activation` :30 and :88 | No first draft within 150 s of "Read my website" for a new account | **Fixed 2026-11-15, back in the smoke set.** Not the product: the fake site's title "paylane: invoicing that chases late payments" became the fake product name, the fake plan and draft repeated it, and the no-ai-slop gate (colon reveal, 2026-11-12) dropped every fake draft. `fakeDrafts` now cuts the name at a colon; `cmo.check` guards it |
 | `isolation` :11 | User B opening user A's project lands on `/app/studio?item=…` and never shows "not found" | The v2 redirect; the test expects the v1 page |
 | `login` :38 | No `retention-banner` for a free account | The banner is not on the v2 shell |
 | `ui-v2-writer` :205 | The LinkedIn filter still lists an X draft | One core post serves every platform (D3); the test predates it |

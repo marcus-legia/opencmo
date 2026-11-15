@@ -59,6 +59,7 @@ insert into allowed values
   ('cmo_decide_opportunity(uuid,text,text,text)'),
   ('cmo_decide_post(uuid,text,text,text)'),
   ('cmo_edit_correction(uuid,text,boolean)'),
+  ('cmo_funnel_report(integer)'),  -- 20270126010000: refuses anyone not in app_owners, like provider_spend_report
   ('cmo_order_script(text,date)'),
   ('cmo_post_myself(uuid,text,text)'),
   ('cmo_script_edit_beat(uuid,integer,text,text,timestamp with time zone)'),

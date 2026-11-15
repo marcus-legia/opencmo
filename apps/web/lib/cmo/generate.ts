@@ -49,7 +49,8 @@ function siteForPrompt(site: SiteSnapshot): string {
 /** Bản giả cho CI/E2E (`OPENCMO_AGENT_FAKE=1`): dựng từ tiêu đề và mô tả trang, không gọi model. */
 function fakeDrafts(site: SiteSnapshot): OnboardingDrafts {
   const home = site.pages[0];
-  const name = home.title.split(/[|–—-]/)[0]?.trim() || new URL(site.url).hostname;
+  // "Name: tagline" is as common in a title as "Name | tagline"; the tagline is not the name.
+  const name = home.title.split(/[|–—:-]/)[0]?.trim() || new URL(site.url).hostname;
   const about = home.description || home.headings[0] || `${name} website`;
   return {
     product: {

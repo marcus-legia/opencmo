@@ -4574,6 +4574,84 @@ CREATE FUNCTION public.cmo_free_onboard_runs() RETURNS integer
 
 
 --
+-- Name: cmo_funnel_report(integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_funnel_report(p_days integer DEFAULT 30) RETURNS jsonb
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_email text := lower(coalesce(auth.jwt()->>'email', ''));
+  v_since timestamptz;
+  v_result jsonb;
+begin
+  if not exists (select 1 from public.app_owners where email = v_email) then
+    raise exception 'Not available.' using errcode = '42501';
+  end if;
+  if p_days is null or p_days < 1 or p_days > 365 then
+    raise exception 'Pick 1 to 365 days.' using errcode = '22023';
+  end if;
+  v_since := date_trunc('day', now() at time zone 'utc') at time zone 'utc' - make_interval(days => p_days - 1);
+
+  with cohort as (
+    select u.id, u.created_at
+    from auth.users u
+    where u.created_at >= v_since
+      and lower(coalesce(u.email, '')) not in (select email from public.app_owners)
+  ),
+  firsts as (
+    select c.id, c.created_at,
+      (select min(e.at) from public.product_events e where e.user_id = c.id and e.kind = 'onboarded') as onboarded_at,
+      (select min(e.at) from public.product_events e where e.user_id = c.id and e.kind = 'approve') as approved_at,
+      (select min(e.at) from public.product_events e where e.user_id = c.id and e.kind = 'schedule') as scheduled_at,
+      (select min(e.at) from public.product_events e where e.user_id = c.id and e.kind = 'posted') as posted_at,
+      -- Active: approved something in the last 7 days, counted only for accounts at least 7 days old.
+      exists (select 1 from public.product_events e where e.user_id = c.id and e.kind = 'approve' and e.at >= now() - interval '7 days')
+        as active_7d,
+      public.cmo_paid(c.id) as paid
+    from cohort c
+  ),
+  median as (
+    select
+      percentile_cont(0.5) within group (order by extract(epoch from onboarded_at - created_at)) filter (where onboarded_at is not null) as onboarded_s,
+      percentile_cont(0.5) within group (order by extract(epoch from approved_at - created_at)) filter (where approved_at is not null) as approved_s,
+      percentile_cont(0.5) within group (order by extract(epoch from posted_at - created_at)) filter (where posted_at is not null) as posted_s
+    from firsts
+  )
+  select jsonb_build_object(
+    'since', v_since,
+    'steps', jsonb_build_array(
+      jsonb_build_object('step', 'signed_up', 'users', (select count(*) from firsts)),
+      jsonb_build_object('step', 'onboarded', 'users', (select count(*) from firsts where onboarded_at is not null)),
+      jsonb_build_object('step', 'approved', 'users', (select count(*) from firsts where approved_at is not null)),
+      jsonb_build_object('step', 'scheduled', 'users', (select count(*) from firsts where scheduled_at is not null)),
+      jsonb_build_object('step', 'posted', 'users', (select count(*) from firsts where posted_at is not null)),
+      jsonb_build_object('step', 'paid', 'users', (select count(*) from firsts where paid))
+    ),
+    'median_seconds', (select jsonb_build_object('onboarded', round(onboarded_s), 'approved', round(approved_s), 'posted', round(posted_s)) from median),
+    'active_7d', jsonb_build_object(
+      'eligible', (select count(*) from firsts where created_at <= now() - interval '7 days'),
+      'active', (select count(*) from firsts where created_at <= now() - interval '7 days' and active_7d),
+      'paid_eligible', (select count(*) from firsts where created_at <= now() - interval '7 days' and paid),
+      'paid_active', (select count(*) from firsts where created_at <= now() - interval '7 days' and paid and active_7d)
+    ),
+    'by_week', coalesce((select jsonb_agg(w order by w.week) from (
+      select date_trunc('week', created_at at time zone 'utc')::date as week,
+        count(*) as signed_up,
+        count(onboarded_at) as onboarded,
+        count(approved_at) as approved,
+        count(posted_at) as posted,
+        count(*) filter (where paid) as paid
+      from firsts group by 1
+    ) w), '[]'::jsonb)
+  ) into v_result;
+  return v_result;
+end;
+$$;
+
+
+--
 -- Name: cmo_job_daily_limit(text); Type: FUNCTION; Schema: public; Owner: -
 --
 

@@ -8,8 +8,11 @@ import assert from "node:assert/strict";
 
 import { clampDocument, DOCUMENT_KINDS, OnboardingSchema, wasCut } from "./documents";
 import { draftDocuments } from "./generate";
+import { postProfile } from "./platforms";
 import { extractPage, normalizeSite, privateAddress, readSite, SiteError } from "./site";
 import { suggestFixes } from "./suggest";
+import { checkPostFor } from "./writer/checks";
+import { fakePost } from "./writer/draft";
 
 async function main(): Promise<void> {
   // normalizeSite: chuẩn hoá ô nhập, chặn mọi thứ không phải tên miền công khai.
@@ -61,6 +64,18 @@ async function main(): Promise<void> {
   OnboardingSchema.parse(drafts);
   for (const kind of DOCUMENT_KINDS) assert.ok(drafts[kind], `thiếu ${kind}`);
   assert.equal(drafts.product.name, "Acme & Co");
+
+  // The e2e's site (`paylane.test`): its title is "paylane: invoicing that chases late payments". The fake week plan
+  // turns the product name into the first post idea, and the fake post repeats the idea; a name that kept the tagline
+  // carried its colon into every draft, the no-ai-slop gate (colon reveal) dropped all three, and the free first run
+  // had no draft (e2e ui-v2-activation, red since 2026-11-12).
+  const paylane = await draftDocuments(await readSite("paylane.test"));
+  assert.equal(paylane.product.name, "paylane", "a title's tagline after a colon is not the product name");
+  const idea = paylane.content_strategy.pillars[0]!.ideas[0]!;
+  for (const version of fakePost(idea, paylane.product.name).versions) {
+    assert.deepEqual(checkPostFor(version.text, postProfile("X", ["x"]), { avoid: [], known: new Set(), names: [paylane.product.name] }), [],
+      `the fake first draft passes the post checks: ${version.text}`);
+  }
 
   // suggestFixes: chỉ gợi ý chỗ thật sự thiếu, đúng thứ tự ảnh hưởng, trỏ đúng thẻ.
   const thin = suggestFixes({
