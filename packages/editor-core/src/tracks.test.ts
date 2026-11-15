@@ -117,13 +117,14 @@ describe('move_to_row', () => {
 		);
 	});
 
-	it('clip dời tới thắng chỗ chồng giờ (anh em nhường)', async () => {
+	it('thả chồng giờ lên clip khác: không cắt gì, clip dời tới sang hàng mới ngay trên (B2 2026-11-15)', async () => {
 		const ctx = context();
 		const old = structuredClone(SOURCE);
 		top(old).splice(1, 0, { ...broll('library/a.mp4', 1), id: 'a' }, { ...broll('library/b.mp4', 2), id: 'b' });
 		const { document } = await applyOps(old, [{ op: 'move_to_row', element_ids: ['b'], target_id: 'a' }], ctx);
-		const kids = sequences(document)[0]!.children as Entity[];
-		expect(kids.find((child) => child.id === 'a')).toMatchObject({ start: 1, end: 2 });
+		expect(top(document).find((node) => node.id === 'a')).toMatchObject({ start: 1 });
+		expect(top(document).find((node) => node.id === 'a')).not.toHaveProperty('end');
+		expect((sequences(document)[0]!.children as Entity[]).map((child) => child.id)).toEqual(['b']);
 	});
 
 	it('hàng phụ đề vẫn nằm trên cùng', async () => {

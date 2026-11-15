@@ -67,10 +67,10 @@ Checks of what it touched → `/code-review` on the step's diff → fix → tick
 
 ### B2 — R5: move rules
 
-- [ ] Write the cases first (drop over a clip, between two, past the end, on another row, multi-select across rows) as
+- [x] Write the cases first (drop over a clip, between two, past the end, on another row, multi-select across rows) as
       tests for `ops/rows.ts` / `make_room`.
-- [ ] Change behaviour only where the report shows CapCut's rule is clearer than ours; keep one gesture = one undo.
-- [ ] Review → commit → push.
+- [x] Change behaviour only where the report shows CapCut's rule is clearer than ours; keep one gesture = one undo.
+- [x] Review → commit → push.
 
 ### B3 — R6a: beats and range play
 
