@@ -35,11 +35,13 @@ export async function readThreadsPost(url: string, budget?: ScBudget): Promise<T
     .filter((c) => c.text)
     .slice(0, REPLIES);
   return {
-    text: clean(str(obj(post.caption).text), TEXT_MAX),
-    author: clean(str(obj(post.user).username), 100),
-    postedAt: isoTime(post.taken_at),
+    // ScrapeCreators nests the post (`post.caption.text`); LurkAPI answers flat (`text`, `author`, `reply_count`,
+    // live 2026-11-15) and carries no replies.
+    text: clean(str(obj(post.caption).text) || str(json.text), TEXT_MAX),
+    author: clean(str(obj(post.user).username) || str(obj(json.author).username), 100),
+    postedAt: isoTime(post.taken_at) ?? isoTime(json.created_at),
     // `scGet` asks for the trimmed answer, which has no reply count (2026-11-14 capture): the replies it carries count.
-    comments: num(obj(post.text_post_app_info).direct_reply_count) || comments.length,
+    comments: num(obj(post.text_post_app_info).direct_reply_count) || num(json.reply_count) || comments.length,
     replies,
   };
 }
