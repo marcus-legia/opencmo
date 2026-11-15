@@ -1,6 +1,8 @@
 # Plan: learn from CapCut Web's bundles, then update the editor (2026-11-15)
 
-Research plan. Nothing here is built until the research report for its track lands and the owner ranks it.
+**Scope (owner, 2026-11-15): learn all six tracks (R1–R6) and build them into the editor.** Each track still starts
+with a short research report, then is built. Two sessions work in parallel on one branch and one PR; see
+"Order and sessions" and the checklists in [`2026-11-15-capcut-bundle-study-sessions/`](2026-11-15-capcut-bundle-study-sessions/).
 
 ## Sources
 
@@ -67,7 +69,8 @@ people, voice effects, vocal separation of someone else's track, Dropbox / Googl
 
 ## Research tracks, ranked
 
-Each track ends in a report in `docs/research/editor/` (Vietnamese, per `docs/research/README.md`), then its own plan.
+Each track starts with a report in `docs/research/editor/` (Vietnamese, per `docs/research/README.md`) that ends in
+the exact design to build, then the session builds it. The ranking sets the order inside each session.
 
 | # | Track | Why (CMO loop) | Bundle files to read | Our files to compare |
 |---|---|---|---|---|
@@ -103,10 +106,32 @@ capture at home (`inspect_web_page` on `capcut.com/editor`, with workers allowed
 
 ## Order and sessions
 
-R1 → R2 → R3, then R4–R6 only if the owner wants editor time after the CMO loop work. R1 and R2 read different files
-and can run as two sessions on **one branch and one PR**: R1 owns `docs/research/editor/2026-11-xx-capcut-recording.md`,
-R2 owns `docs/research/editor/2026-11-xx-capcut-range-export-cover.md`; whoever finishes second adds both rows to
-`docs/research/editor/README.md`. R3 is small enough to fold into R2's session.
+All six tracks are built. Two sessions, split by area so they never edit the same file:
+
+| Session | Runs on | Tracks, in order | Owns |
+|---|---|---|---|
+| **A — media** | the owner's laptop (local dev stack, worker, `/usr/bin/time`, frame checks) | R1 recording → R2 range export + cover → R4 clip tools | recording UI, upload/transcode path, `clip-export`, `clip-render`, `clip-doc` schema, new editor-core ops, inspector, MCP tools |
+| **B — timeline** | a second Claude account (cloud) | R3 quick wins → R5 move rules → R6 beats, range play, drawing | `apps/web/components/editor/timeline/**`, `playback.ts`, `shortcuts.ts`, `editor-core` `ops/rows.ts`, `beats.ts` |
+
+Exact files, shared-file blocks and numbered checklists: [A](2026-11-15-capcut-bundle-study-sessions/A-media.md),
+[B](2026-11-15-capcut-bundle-study-sessions/B-timeline.md). Neither waits on the other; no building block is shared.
+
+**Branch and PR:** both sessions work on `claude/capcut-research-editor-plan-4fe196` and PR #220. Neither opens its
+own branch or PR. Pull (rebase) before every push.
+
+**Every step ends the same way:**
+
+1. Run the checks of what it touched (`npm run typecheck`, the package's tests, `check:contracts` for web, pytest +
+   ruff for the engine; RAM measurement for any ffmpeg change; a frame extracted from the full-size export for
+   anything that renders).
+2. **Code review:** run `/code-review` on the step's diff (and the `security-review-checklist` skill when the step
+   touches uploads, the worker's media pipeline, credits, migrations or MCP tools). Fix what it finds, or write in the
+   session file why a finding was left.
+3. **Commit and push** to the shared branch at once, with a message in English. Tick the box in the session file in
+   the same commit.
+
+**Access for session B:** the second account needs read access to `marcus-legia/opencmo` and
+`marcus-legia/opencmo-internal` (the bundles are committed there; the REA captures are not, and are not needed).
 
 ## Not doing
 

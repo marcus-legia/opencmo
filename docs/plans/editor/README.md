@@ -7,7 +7,7 @@ Newest first.
 
 | Date | Plan | Source report | PR |
 |---|---|---|---|
-| 2026-11-15 | [Learn from CapCut Web's bundles: recording, range export + cover, timeline quick wins](2026-11-15-capcut-bundle-study-plan.md) (R1–R6, research first) | `opencmo-internal` `docs/specs/2026-11-09-hoc-capcut-timeline.md` + `research/bundles/capcut/` | — |
+| 2026-11-15 | [Learn from CapCut Web's bundles and build it: recording, range export + cover, clip tools, timeline](2026-11-15-capcut-bundle-study-plan.md) (R1–R6) · [sessions](2026-11-15-capcut-bundle-study-sessions/) | `opencmo-internal` `docs/specs/2026-11-09-hoc-capcut-timeline.md` + `research/bundles/capcut/` | [#220](https://github.com/marcus-legia/opencmo/pull/220) |
 | 2026-10-24 | [Learn how Opus makes video, into the editor: craft kit, review loop, talking-head camera, multi-scene videos](2026-10-24-opus-animation-plan.md) (O1–O8) | `docs/research/editor/2026-10-24-opus-animation-toan-bo.md` | — |
 | 2026-10-24 | [Talking-head seats: card, circle and aperture placed from the measured face](2026-10-24-talking-head-seats-plan.md) (O8, planned; needs a face pass on upload again) | `docs/plans/editor/2026-10-24-opus-animation-plan.md` | — |
 | 2026-10-24 | [Remove 3D (three.js) and Lottie](2026-10-24-remove-3d-and-lottie-plan.md) (built) | Owner decision 2026-10-24 | — |
