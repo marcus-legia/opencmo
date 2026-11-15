@@ -35,7 +35,14 @@ begin
     jsonb_build_object('text', 'One true thing, number ' || p_n || '.', 'proposed', jsonb_build_object(
       'platform', 'x', 'mode', 'publish', 'account_id', 'e3151000-0000-4000-8000-000000000001', 'handle', 'founder',
       'at', to_char(date_trunc('minute', now() + interval '2 days') at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'))));
-  perform public.approval_raise('e3150000-0000-4000-8000-00000000000a', 'content_item', v_id);
+  -- The insert's trigger picks X's next free time (09:00 UTC), under the autopilot window when the suite runs between
+  -- about 07:45 and 08:30 UTC (red on CI 2026-11-15 08:08); an update in review keeps the time the test set, as in 301.
+  update public.content_items set body = jsonb_set(body, '{proposed,at}',
+      to_jsonb(to_char(date_trunc('minute', now() + interval '2 days') at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')))
+  where id = v_id;
+  -- The update's sync raised the card again with that time; it replaced the insert's card, which is cancelled and was
+  -- the only one counted against the day's card budget. Dropping the cancelled one leaves one card to check.
+  delete from public.approvals where ref_id = v_id and status = 'cancelled';
   select * into v_card from public.approvals where ref_id = v_id and ref_kind = 'content_item' order by created_at desc limit 1;
   return v_card;
 end $$;
