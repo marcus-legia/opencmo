@@ -80,9 +80,9 @@ Checks of what it touched → `/code-review` on the step's diff → fix → tick
 
 ### B4 — R6b: timeline drawing (size set by B0's measurement)
 
-- [ ] Draw only clips inside the visible window (plus a margin).
+- [x] Draw only clips inside the visible window (plus a margin).
 - [ ] Filmstrip thumbnails on video clips, drawn in idle time from the preview file, cached per zoom bucket.
-- [ ] Waveforms batched the same way (`peaks.ts`).
+- [x] Waveforms batched the same way (`peaks.ts`): drawn for the visible part only.
 - [ ] Measure again on the 30-minute upload; put before/after numbers in the report.
 - [ ] Review → commit → push.
 

@@ -141,18 +141,38 @@ export function Timeline(props: TimelineProps) {
   const workarea = (scene.workarea as [number, number] | null | undefined) ?? null;
   const end = Math.max(sceneTime?.end ?? 0, workarea ? Math.round(workarea[1] * FPS) : 0);
   const contentWidth = PAD * 2 + (end + 5 * FPS) * ppf;
-  // Width of the clip lane on screen (the panel minus the layer column): sets the farthest zoom.
-  const [laneWidth, setLaneWidth] = useState(0);
+  // The part of the lane on screen, in content px: the lane's width sets the farthest zoom, and
+  // only what falls in it (plus a margin) is drawn (B4: a 30-minute edit drew ~11k nodes zoomed in).
+  const [view, setView] = useState({ left: 0, width: 0 });
   useEffect(() => {
     const element = scroller.current;
     if (!element) return;
-    const measure = () => setLaneWidth(Math.max(0, element.clientWidth - LABEL_WIDTH));
+    let raf = 0;
+    const measure = () => {
+      raf = 0;
+      const next = { left: element.scrollLeft, width: Math.max(0, element.clientWidth - LABEL_WIDTH) };
+      setView((old) => (old.left === next.left && old.width === next.width ? old : next));
+    };
+    const schedule = () => {
+      if (!raf) raf = requestAnimationFrame(measure);
+    };
     measure();
-    const observer = new ResizeObserver(measure);
+    const observer = new ResizeObserver(schedule);
     observer.observe(element);
-    return () => observer.disconnect();
+    element.addEventListener("scroll", schedule, { passive: true });
+    return () => {
+      cancelAnimationFrame(raf);
+      observer.disconnect();
+      element.removeEventListener("scroll", schedule);
+    };
   }, []);
+  const laneWidth = view.width;
   const floor = zoomFloor(end, laneWidth || 800);
+  // Frames worth drawing: the visible window plus one screen each side, so a scroll or a zoom step
+  // shows drawn content before the next measure. Unmeasured (first render): everything.
+  const shown: [number, number] = view.width
+    ? [Math.max(0, (view.left - Math.max(view.width, 400) - PAD) / ppf), (view.left + view.width + Math.max(view.width, 400) - PAD) / ppf]
+    : [0, Infinity];
   const playheadRef = useRef(frame);
   playheadRef.current = frame;
   const x = useCallback((f: number) => PAD + f * ppf, [ppf]);
@@ -620,13 +640,14 @@ export function Timeline(props: TimelineProps) {
     const step = rulerStep(ppf);
     const out: { frame: number; major: boolean }[] = [];
     const minor = step / 5;
-    const limit = (contentWidth - PAD) / ppf;
-    for (let f = 0; f <= limit; f += minor >= 1 ? minor : step) {
+    const every = minor >= 1 ? minor : step;
+    const limit = Math.min((contentWidth - PAD) / ppf, shown[1]);
+    for (let f = Math.max(0, Math.floor(shown[0] / step) * step); f <= limit; f += every) {
       const rounded = Math.round(f);
       out.push({ frame: rounded, major: rounded % step === 0 });
     }
     return out;
-  }, [ppf, contentWidth]);
+  }, [ppf, contentWidth, shown[0], shown[1]]);
 
   const range: [number, number] = workarea
     ? [Math.round(workarea[0] * FPS), Math.round(workarea[1] * FPS)]
@@ -836,6 +857,7 @@ export function Timeline(props: TimelineProps) {
                       onRetry={props.onRetry}
                       onBarDown={onBarDown}
                       beatDensity={beatDensity}
+                      shown={shown}
                       onKeyframeDown={(keyframe, event) => {
                         const t = row.time;
                         if (!t || !keyframe.id) return;
@@ -1028,8 +1050,10 @@ function Lane({
   onBarDown,
   onKeyframeDown,
   beatDensity,
+  shown,
 }: {
   beatDensity: BeatDensity;
+  shown: [number, number];
   row: Row;
   times: Map<ClipNode, TimeNode>;
   media: BrowserMedia;
@@ -1049,7 +1073,10 @@ function Lane({
     const keyframes = ((row.entity.keyframes as Entity[] | undefined) ?? []).filter((keyframe) => keyframe.id);
     return (
       <>
-        {keyframes.map((keyframe) => (
+        {keyframes.filter((keyframe) => {
+          const at = t.origin + (Number(keyframe.time) * FPS) / t.rate;
+          return at >= shown[0] && at <= shown[1];
+        }).map((keyframe) => (
           <span
             key={keyframe.id}
             className={selection.includes(String(keyframe.id)) ? "ed2-keyframe is-selected" : "ed2-keyframe"}
@@ -1064,7 +1091,11 @@ function Lane({
   }
   if (row.kind !== "clip" || !row.time) return null;
   // Sequence giữ mọi clip trên một hàng.
-  const bars: TimeNode[] = row.entity.kind === "sequence" ? row.time.children : [row.time];
+  // Only bars that reach into the drawn window, but always the selected ones (a drag's preview
+  // can carry one out of the window, and its handles must stay under the pointer).
+  const bars: TimeNode[] = (row.entity.kind === "sequence" ? row.time.children : [row.time]).filter(
+    (t) => (t.end >= shown[0] && t.start <= shown[1]) || selection.includes(String((t.node as Entity).id ?? "")),
+  );
   return (
     <>
       {bars.map((t) => (
@@ -1081,6 +1112,7 @@ function Lane({
           onRetry={onRetry}
           onDown={onBarDown}
           beatDensity={beatDensity}
+          shown={shown}
         />
       ))}
     </>
@@ -1099,8 +1131,10 @@ function Bar({
   onRetry,
   onDown,
   beatDensity,
+  shown,
 }: {
   beatDensity: BeatDensity;
+  shown: [number, number];
   t: TimeNode;
   media: BrowserMedia;
   ppf: number;
@@ -1130,10 +1164,10 @@ function Bar({
       title={slip ? `${label} · Alt-drag to slip the footage inside this clip` : `${label} · Drag up or down to move it to another row`}
       onPointerDown={(event) => onDown(entity, t, event)}
     >
-      {src !== undefined ? <Wave src={src} t={t} media={media} width={width} height={height - 6} beatDensity={beatDensity} /> : null}
+      {src !== undefined ? <Wave src={src} t={t} media={media} ppf={ppf} shown={shown} height={height - 6} beatDensity={beatDensity} /> : null}
       {kind === "captions" && typeof entity.src === "string" ? (
         <>
-          <Words transcript={media.transcript(entity.src)} t={t} ppf={ppf} />
+          <Words transcript={media.transcript(entity.src)} t={t} ppf={ppf} shown={shown} />
           <CaptionsProblem status={media.transcriptStatus(entity.src)} transcript={media.transcript(entity.src)} t={t} id={String(entity.id ?? "")} />
         </>
       ) : null}
@@ -1239,7 +1273,23 @@ function FadeShades({ entity, ppf, width }: { entity: Entity; ppf: number; width
   );
 }
 
-function Wave({ src, t, media, width, height, beatDensity }: { src: AssetInput; t: TimeNode; media: BrowserMedia; width: number; height: number; beatDensity: BeatDensity }) {
+function Wave({
+  src,
+  t,
+  media,
+  ppf,
+  shown,
+  height,
+  beatDensity,
+}: {
+  src: AssetInput;
+  t: TimeNode;
+  media: BrowserMedia;
+  ppf: number;
+  shown: [number, number];
+  height: number;
+  beatDensity: BeatDensity;
+}) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const [peaks, setPeaks] = useState<Peaks | null>(null);
   const key = typeof src === "string" ? src : JSON.stringify(src);
@@ -1251,27 +1301,31 @@ function Wave({ src, t, media, width, height, beatDensity }: { src: AssetInput; 
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, media]);
-  // Canvas không rộng quá vùng thấy được nhiều lần: vẽ theo pixel thật, có trần.
-  const pixels = Math.min(8192, Math.max(1, Math.round(width)));
+  // Only the part of the clip in the drawn window, at real pixels: a whole 30-minute clip zoomed in
+  // was one canvas capped at 8,192 px and stretched over 200,000.
+  const from = Math.max(t.start, Math.floor(shown[0]));
+  const to = Math.min(t.end, Math.ceil(shown[1]));
+  const left = (from - t.start) * ppf;
+  const pixels = Math.min(16384, Math.max(1, Math.round((to - from) * ppf)));
   const theme = useThemePref();
   useEffect(() => {
     const element = canvas.current;
-    if (!element || !peaks) return;
+    if (!element || !peaks || to <= from) return;
     element.width = pixels;
     element.height = Math.max(1, Math.round(height));
-    const from = ((t.start - t.origin) * t.rate) / FPS;
-    const to = ((t.end - t.origin) * t.rate) / FPS;
+    const sourceFrom = ((from - t.origin) * t.rate) / FPS;
+    const sourceTo = ((to - t.origin) * t.rate) / FPS;
     // Màu sóng theo theme (token --ds-wave); thiếu token thì giữ màu cũ.
     const wave = getComputedStyle(element).getPropertyValue("--ds-wave").trim() || "rgba(255,255,255,0.35)";
-    drawPeaks(element, peaks, from, to, wave);
+    drawPeaks(element, peaks, sourceFrom, sourceTo, wave);
     // Nhạc (lớp audio): vạch beat — cũng là điểm dính khi kéo clip (`targets`).
     if (t.node.kind === "audio") {
       const grid = beatsOf(key, peaks);
-      if (grid) drawBeats(element, thinBeats(grid.beats, beatDensity), from, to, "rgba(255,214,0,0.8)");
+      if (grid) drawBeats(element, thinBeats(grid.beats, beatDensity), sourceFrom, sourceTo, "rgba(255,214,0,0.8)");
     }
-  }, [peaks, pixels, height, t.start, t.end, t.origin, t.rate, key, t.node.kind, theme, beatDensity]);
-  if (!peaks) return null;
-  return <canvas ref={canvas} className="ed2-wave" data-testid="waveform" />;
+  }, [peaks, pixels, height, from, to, t.origin, t.rate, key, t.node.kind, theme, beatDensity]);
+  if (!peaks || to <= from) return null;
+  return <canvas ref={canvas} className="ed2-wave" data-testid="waveform" style={{ left, width: (to - from) * ppf, right: "auto" }} />;
 }
 
 /** Thời gian (frame scene) của các từ rơi vào thanh `t`. */
@@ -1300,15 +1354,17 @@ function CaptionsProblem({ status, transcript, t, id }: { status: "loading" | "f
   );
 }
 
-function Words({ transcript, t, ppf }: { transcript: Transcript | null; t: TimeNode; ppf: number }) {
+function Words({ transcript, t, ppf, shown }: { transcript: Transcript | null; t: TimeNode; ppf: number; shown: [number, number] }) {
   if (!transcript) return null;
   const words = transcript.flatMap((segment) => segment.words);
+  const from = Math.max(t.start, shown[0]);
+  const to = Math.min(t.end, shown[1]);
   return (
     <>
       {words.map((word, index) => {
         const start = t.origin + (word.start * FPS) / t.rate;
         const end = t.origin + (word.end * FPS) / t.rate;
-        if (end <= t.start || start >= t.end) return null;
+        if (end <= from || start >= to) return null;
         const left = (Math.max(start, t.start) - t.start) * ppf;
         const width = (Math.min(end, t.end) - Math.max(start, t.start)) * ppf;
         if (width < 3) return null;

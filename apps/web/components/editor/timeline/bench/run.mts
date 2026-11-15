@@ -122,5 +122,16 @@ const result = await page.evaluate(async () => {
   return report;
 });
 
+// BENCH_SHOT_CLOSE=<file.png>: zoomed in and scrolled to the middle, to check nothing is left undrawn.
+if (process.env.BENCH_SHOT_CLOSE) {
+  for (let index = 0; index < 12; index++) await page.click('[aria-label="Zoom in timeline"]');
+  await page.evaluate(() => {
+    const scroller = document.querySelector(".ed2-tl-scroll") as HTMLElement;
+    scroller.scrollLeft = scroller.scrollWidth / 2;
+  });
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: process.env.BENCH_SHOT_CLOSE });
+}
+
 console.log(JSON.stringify({ minutes, cuts, ...result }, null, 2));
 await browser.close();
