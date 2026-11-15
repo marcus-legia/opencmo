@@ -30,9 +30,12 @@ export function LibraryPanel({
   library,
   onInsert,
   transcriptOf,
+  onRecord,
 }: {
   library: LibraryApi;
   onInsert: (record: LibraryRecord) => void;
+  /** Opens the browser recorder; the take is imported here and placed at the playhead. */
+  onRecord?: () => void;
   /** The file's automatic transcript (`useAutoTranscripts`); null = none to show. */
   transcriptOf?: (record: LibraryRecord) => TranscriptStatus | null;
 }) {
@@ -85,6 +88,11 @@ export function LibraryPanel({
         <button type="button" className="ed2-icon" aria-label="New folder" title="New folder" data-testid="new-folder" onClick={() => setRenaming(library.createFolder(folder))}>
           ⊞
         </button>
+        {onRecord ? (
+          <button type="button" className="ed2-btn" data-testid="record-media" onClick={onRecord}>
+            Record
+          </button>
+        ) : null}
         <button type="button" className="ed2-btn" data-testid="import-media" onClick={() => picker.current?.click()}>
           Import
         </button>

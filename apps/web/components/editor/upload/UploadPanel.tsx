@@ -23,6 +23,9 @@ import { ASPECTS } from "@/lib/settings-schema";
 import { formatBytes, MAX_EDIT_SECONDS, MAX_UPLOAD_BYTES, rejectReason, TOO_LONG } from "@/lib/upload";
 import { uploadResumable, type UploadHandle } from "@/lib/upload-tus";
 
+import { learnLength } from "../library/store";
+import { Recorder } from "../record/Recorder";
+
 type Granted = { bucket: string; objectName: string; source: string | null };
 // On/off only: the caption style is picked in the editor, from the editor's own presets.
 type Captions = "on" | "off";
@@ -54,7 +57,11 @@ function probeDuration(file: File): Promise<number | null> {
       resolve(value);
     };
     video.preload = "metadata";
-    video.onloadedmetadata = () => done(Number.isFinite(video.duration) ? video.duration : null);
+    // A browser recording reports Infinity until it is made to find its end (`learnLength`).
+    video.onloadedmetadata = () =>
+      void (video.duration === Infinity ? learnLength(video) : Promise.resolve()).then(() =>
+        done(Number.isFinite(video.duration) ? video.duration : null),
+      );
     video.onerror = () => done(null);
     video.src = url;
   });
@@ -70,6 +77,7 @@ export function UploadPanel({ frame, onOpen, hidden = false }: { frame: AspectRa
   const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [jobs, setJobs] = useState<UploadEdit[] | null>(null);
+  const [recording, setRecording] = useState(false);
   const upload = useRef<UploadHandle | null>(null);
   const uploaded = useRef<{ file: File; source: string } | null>(null);
   const picker = useRef<HTMLInputElement>(null);
@@ -140,7 +148,8 @@ export function UploadPanel({ frame, onOpen, hidden = false }: { frame: AspectRa
   // Hidden, only an upload in flight keeps it listening, and it never polls.
   useLive("jobs", userId && `user_id=eq.${userId}`, () => void load(), Boolean(userId) && (!hidden || running || busy), running && !hidden, "editor-uploads");
 
-  function pickFile(next: File | null) {
+  /** `known`: the length when we already have it (a browser recording, whose header often has none). */
+  function pickFile(next: File | null, known?: number) {
     if (busy) return;
     setError(null);
     uploaded.current = null;
@@ -150,7 +159,7 @@ export function UploadPanel({ frame, onOpen, hidden = false }: { frame: AspectRa
     setFile(problem ? null : next);
     probing.current = problem ? null : next;
     if (!next || problem) return;
-    void probeDuration(next).then((seconds) => {
+    void (known !== undefined ? Promise.resolve(known) : probeDuration(next)).then((seconds) => {
       if (probing.current !== next) return;
       if (seconds !== null && seconds > MAX_EDIT_SECONDS) {
         setError(TOO_LONG);
@@ -240,6 +249,9 @@ export function UploadPanel({ frame, onOpen, hidden = false }: { frame: AspectRa
           <button type="button" className="ed2-btn" disabled={busy} onClick={() => picker.current?.click()}>
             {file ? "Choose another video" : "Choose video"}
           </button>
+          <button type="button" className="ed2-btn" disabled={busy} data-testid="upload-record" onClick={() => setRecording(true)}>
+            Record a video
+          </button>
           {progress !== null ? (
             <div className="ed2-clips-progress">
               <progress max={100} value={progress} aria-label="Upload progress" />
@@ -282,6 +294,14 @@ export function UploadPanel({ frame, onOpen, hidden = false }: { frame: AspectRa
           {short ? <> · <a href="/app/billing">Top up</a></> : null}
         </p>
       </form>
+      {recording ? (
+        <Recorder
+          destination="The take opens as its own edit once you upload it."
+          requireCamera
+          onClose={() => setRecording(false)}
+          onDone={(take, seconds) => pickFile(take, seconds)}
+        />
+      ) : null}
 
       <section className="ed2-clips-jobs" aria-label="Your uploads">
         {jobs === null ? <p className="ed2-clips-hint">Loading…</p> : null}

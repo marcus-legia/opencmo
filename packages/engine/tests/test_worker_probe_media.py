@@ -213,3 +213,49 @@ def test_a_video_reports_whether_it_has_audio_so_its_transcript_can_be_queued(tm
         probe_media.process(store, Task(id="t", user_id="user-1", kind="probe_media", asset_id="asset-1", attempt_id="a"))
         assert store.completed[1]["ok"] is True
         assert store.completed[1]["has_audio"] is audio, name
+
+
+def test_a_browser_recording_with_no_length_in_its_header_is_measured(tmp_path):
+    """MediaRecorder WebM has no duration in its header; written to a pipe, ffmpeg's WebM has none either."""
+    import subprocess
+
+    source = tmp_path / "Recording.webm"
+    with source.open("wb") as out:
+        subprocess.run(
+            [
+                "ffmpeg", "-v", "error", "-f", "lavfi", "-i", "testsrc=s=64x48:r=10:d=2",
+                "-f", "lavfi", "-i", "sine=f=440:d=2", "-shortest",
+                "-c:v", "libvpx", "-deadline", "realtime", "-c:a", "libopus", "-f", "webm", "pipe:1",
+            ],
+            check=True, stdout=out,
+        )
+    assert probe_media.probe_file(str(source), local_only=True).duration <= 0, "the fixture must lack a length"
+    store = FakeStore(tmp_path)
+    store.get_media_asset = lambda _id: {
+        "id": "asset-1", "user_id": "user-1", "job_id": "job-1", "storage_path": "media/user-1/job-1/Recording.webm",
+    }
+    store.download_object = lambda _bucket, _path, dest, **_kwargs: dest.write_bytes(source.read_bytes())
+    probe_media.process(store, Task(id="t", user_id="user-1", kind="probe_media", asset_id="asset-1", attempt_id="a"))
+    assert store.completed[1]["ok"] is True
+    assert 1.5 < store.completed[1]["duration"] < 2.5
+    assert store.completed[1]["has_audio"] is True
+
+
+def test_an_audio_only_browser_recording_is_read_as_sound(tmp_path):
+    """Camera off: the recorder names the WebM `.weba` so it takes the sound path, and its length is measured."""
+    import subprocess
+
+    source = tmp_path / "Recording.weba"
+    with source.open("wb") as out:
+        subprocess.run(
+            ["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "sine=f=440:d=2", "-c:a", "libopus", "-f", "webm", "pipe:1"],
+            check=True, stdout=out,
+        )
+    store = FakeStore(tmp_path)
+    store.get_media_asset = lambda _id: {
+        "id": "asset-1", "user_id": "user-1", "job_id": "job-1", "storage_path": "media/user-1/job-1/Recording.weba",
+    }
+    store.download_object = lambda _bucket, _path, dest, **_kwargs: dest.write_bytes(source.read_bytes())
+    probe_media.process(store, Task(id="t", user_id="user-1", kind="probe_media", asset_id="asset-1", attempt_id="a"))
+    assert store.completed[1]["ok"] is True
+    assert 1.5 < store.completed[1]["duration"] < 2.5

@@ -69,6 +69,7 @@ import { Soundboard } from "./soundboard/Soundboard";
 import { SlidePanel, SlideStrip, readSlides, slideAt } from "./slides/SlidesView";
 import { Timeline } from "./timeline/Timeline";
 import { ScriptPanel } from "./script/ScriptPanel";
+import { Recorder } from "./record/Recorder";
 import type { Script } from "@/lib/cmo/script";
 import { studioItemHref } from "@/components/screens/studio/href";
 import { reportClientError } from "@/lib/client-errors";
@@ -364,6 +365,8 @@ function Workspace({
   // The script this edit was opened from (cmo-review-3 I1): the Script tab shows only when there is one.
   const [script, setScript] = useState<Script | null>(null);
   const [scriptRead, setScriptRead] = useState(0);
+  // capcut-A: recorder — the frame the take goes to, captured when the recorder opens; null = closed.
+  const [recordAt, setRecordAt] = useState<number | null>(null);
   useEffect(() => {
     let live = true;
     api<Script>(`/clips/${encodeURIComponent(clipId)}/script`).then(
@@ -1490,6 +1493,7 @@ function Workspace({
             library={library}
             transcriptOf={transcripts.statusOf}
             onInsert={(record) => void insertAssets([record], { start: playback.frame / 30 })}
+            onRecord={() => setRecordAt(playback.frame)}
           />
         ) : leftTab === "transcript" ? (
           <TranscriptPanel
@@ -1511,6 +1515,21 @@ function Workspace({
             run={run}
             playhead={frame / 30}
             onSeek={(seconds) => playback.seek(Math.round(seconds * 30))}
+            onRecord={() => setRecordAt(playback.frame)}
+          />
+        ) : null}
+        {/* capcut-A: recorder — the take is imported into Media ▸ Recordings, then placed where the playhead was. */}
+        {recordAt !== null ? (
+          <Recorder
+            beats={script?.beats}
+            title={script?.title}
+            destination="The take goes into this edit at the playhead, and into Media ▸ Recordings."
+            onClose={() => setRecordAt(null)}
+            onDone={async (file) => {
+              const records = await library.importFiles([file], "Recordings");
+              if (!records.length) throw new Error("The take could not be added to your media.");
+              await insertAssets(records, { start: recordAt / 30 });
+            }}
           />
         ) : null}
         <UploadPanel

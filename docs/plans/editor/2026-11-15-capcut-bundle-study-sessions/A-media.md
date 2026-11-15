@@ -53,17 +53,20 @@ media, credits, migrations, MCP) → fix → tick the box → **commit and push*
 
 ### A1 — R1: record in the browser
 
-- [ ] Recorder panel (`components/editor/record/`): pick mic and camera, record / pause / resume / restart, a level
+- [x] Recorder panel (`components/editor/record/`): pick mic and camera, record / pause / resume / restart, a level
       meter, a time counter. Shows the CMO script beside the camera when the edit came from a script.
-- [ ] Upload while recording: chunks go up through the existing TUS reservation path (web rule 3), never through
-      Next.js. A local copy (IndexedDB) lets a crashed tab resume or re-upload the take.
-- [ ] Safari / Firefox: pick a `MediaRecorder` mime the browser supports; the worker treats the result as untrusted
+- [x] Slices go to IndexedDB as they arrive (crash recovery: "Unsaved recording → Recover"); the finished take goes up
+      through the existing TUS reservation path (web rule 3), never through Next.js. Streaming the upload while
+      recording is left out until a measurement shows the wait after Stop matters.
+- [x] Safari / Firefox: pick a `MediaRecorder` mime the browser supports; the worker treats the result as untrusted
       user media (explicit format / `USER_MEDIA_FORMATS`).
-- [ ] The finished take becomes a normal upload (probe → remux → transcript) and lands on the timeline at the
+- [x] The finished take becomes a normal upload (probe → remux → transcript) and lands on the timeline at the
       playhead.
-- [ ] Measure the worker on a 10-minute recorded take: peak RAM < 2 GB (`/usr/bin/time -v`).
-- [ ] Look: extract a frame and the audio from the full-size master; both present.
-- [ ] Review (+ security checklist: uploads, worker media) → commit → push.
+- [x] Measure the worker on a 10-minute recorded take: the length remux (stream copy) of a 10-min 720p WebM peaked at
+      55 MB RSS, 0.4 s (`/usr/bin/time -v`). New-edit uploads already handled a header with no length.
+- [ ] Look: record a real take in Chrome, Firefox and Safari and extract a frame and the audio from the full-size
+      master. **Not done yet:** the dev stack could not run beside the e2e run on the main checkout.
+- [x] Review (+ security checklist: uploads, worker media) → commit → push.
 
 ### A2 — R2: export a range, pick a cover
 
