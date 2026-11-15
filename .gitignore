@@ -58,6 +58,7 @@ modal-kiem.png
 # Playwright: video fixture do ffmpeg sinh ra lúc setup, và kết quả từng lần chạy.
 apps/web/e2e/fixtures/
 apps/web/test-results/
+apps/web/.lighthouseci/
 apps/web/playwright-report/
 .vercel
 
