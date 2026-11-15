@@ -44,6 +44,19 @@ MAX_SOURCE_BYTES = 2 * 1024**3
 EXPORT_TIMEOUT = 1800
 
 
+def cover_seconds(document: dict[str, Any], duration: float) -> float | None:
+    """The scene's cover (scene seconds) as a time in the exported file, which starts at the work area. None when
+    there is no cover or it falls outside what was exported."""
+    scenes = [child for child in (document.get("stage") or {}).get("children") or [] if isinstance(child, dict) and child.get("kind") == "scene"]
+    scene = next((child for child in scenes if child.get("active")), scenes[0] if scenes else None)
+    if not scene or not isinstance(scene.get("cover"), (int, float)):
+        return None
+    workarea = scene.get("workarea")
+    start = float(workarea[0]) if isinstance(workarea, list) and workarea and isinstance(workarea[0], (int, float)) else 0.0
+    at = round(float(scene["cover"]) - start, 3)
+    return at if 0 <= at < duration else None
+
+
 def _canonical(task: Task) -> tuple[str, str]:
     """Nơi DUY NHẤT ghi bản xuất: `exports/<user>/<clip>/<task>.mp4` — đích do RPC đặt."""
     payload = task.payload or {}
@@ -522,6 +535,8 @@ def _run(ctx: TaskContext) -> None:
     store.replace_object(bucket, object_name, final, content_type="video/mp4")
     output = {
         "output_path": object_name,
+        # The cover frame (`set_cover`), in the exported file's seconds; the schedule card opens the video on it.
+        **({"cover": cover} if (cover := cover_seconds(document, produced.duration)) is not None else {}),
         "bytes": final.stat().st_size,
         "width": produced.width,
         "height": produced.height,

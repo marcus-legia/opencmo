@@ -155,6 +155,9 @@
                 }
               ]
             },
+            "cover": {
+              "$ref": "#/$defs/__schema2"
+            },
             "playhead": {
               "$ref": "#/$defs/__schema2"
             },

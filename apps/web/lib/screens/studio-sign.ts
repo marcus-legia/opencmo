@@ -25,20 +25,27 @@ const paths = (v: unknown, key: string): string[] =>
   Array.isArray(v) ? v.map((x) => (x as Record<string, unknown>)?.[key]).filter((p): p is string => typeof p === "string") : [];
 
 /** The latest done render of each short's own edit, as `short clip id → exports path`. */
-export async function shortRenders(supabase: SupabaseClient, clipIds: string[]): Promise<Map<string, string>> {
+/** The latest finished export of each clip: its object and, when the edit set one, its cover time in that file. */
+export async function latestRenders(supabase: SupabaseClient, clipIds: string[]): Promise<Map<string, { path: string; cover: number | null }>> {
   if (!clipIds.length) return new Map();
   const { data } = await supabase
     .from("tasks")
-    .select("clip_id, output_path, finished_at")
+    .select("clip_id, output_path, output, finished_at")
     .in("clip_id", clipIds)
     .eq("kind", "render_document")
     .eq("status", "done")
     .order("finished_at", { ascending: false });
-  const out = new Map<string, string>();
-  for (const t of (data ?? []) as { clip_id: string; output_path: string | null }[]) {
-    if (t.output_path && !out.has(t.clip_id)) out.set(t.clip_id, t.output_path);
+  const out = new Map<string, { path: string; cover: number | null }>();
+  for (const t of (data ?? []) as { clip_id: string; output_path: string | null; output: { cover?: unknown } | null }[]) {
+    if (!t.output_path || out.has(t.clip_id)) continue;
+    const cover = typeof t.output?.cover === "number" && Number.isFinite(t.output.cover) && t.output.cover >= 0 ? t.output.cover : null;
+    out.set(t.clip_id, { path: t.output_path, cover });
   }
   return out;
+}
+
+export async function shortRenders(supabase: SupabaseClient, clipIds: string[]): Promise<Map<string, string>> {
+  return new Map([...(await latestRenders(supabase, clipIds))].map(([clip, render]) => [clip, render.path]));
 }
 
 export async function signStudioCards(supabase: SupabaseClient, cards: ApprovalCard[], rows: ApprovalRow[]): Promise<ApprovalCard[]> {

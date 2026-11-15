@@ -18,7 +18,7 @@ import type { ClipContext } from "@/lib/api/clips";
 import { ApiError } from "@/lib/api/errors";
 import type { SupabaseClient } from "@/lib/api/handler";
 import { readEditorProject } from "@/lib/editor/apply";
-import { EXPORT_FRAME_NAMES, exportPlan, frameName, snapshotForExport, startDocumentExport, type ExportFrame } from "@/lib/editor/export";
+import { EXPORT_FRAME_NAMES, exportPlan, frameName, snapshotForExport, startDocumentExport, type ExportFrame, type ExportSelection } from "@/lib/editor/export";
 
 import { spec, type ToolOutcome, type ToolSpec } from "./tools";
 
@@ -29,7 +29,10 @@ export const exportInput = z.object({
     .max(EXPORT_FRAME_NAMES.length)
     .optional()
     .describe("Frames to export: 9:16 (Reels, TikTok, Shorts), 4:5 and 1:1 (feeds), 16:9 (YouTube). Omit for the clip's current frame only."),
-});
+  start: z.number().min(0).optional().describe("Export only from this second of the timeline (with end). Omit for the whole clip (or its work area)."),
+  end: z.number().min(0).optional().describe("Export only up to this second of the timeline (with start)."),
+}).refine((value) => (value.start === undefined) === (value.end === undefined), "Give both start and end, or neither.")
+  .refine((value) => value.start === undefined || value.end! > value.start, "end must be after start.");
 
 export const EXPORT_TOOL: ToolSpec = {
   ...spec(
@@ -41,7 +44,7 @@ export const EXPORT_TOOL: ToolSpec = {
 };
 
 /** Đã báo giá: đúng các khung và đúng bản document người dùng duyệt. */
-export type PreparedExport = { frames: ExportFrame[]; current: ExportFrame | null; document_hash: string };
+export type PreparedExport = { frames: ExportFrame[]; current: ExportFrame | null; document_hash: string; selection?: ExportSelection };
 
 const NAMES: Record<ExportFrame, string> = { "9:16": "9:16 (Reels, TikTok, Shorts)", "4:5": "4:5 (feed)", "1:1": "1:1 (square feed)", "16:9": "16:9 (YouTube)" };
 
@@ -57,7 +60,8 @@ export async function prepareExport(supabase: SupabaseClient, clipId: string, in
   const project = await readEditorProject(supabase, clipId);
   const current = frameName(project.document);
   const frames = [...new Set(parsed.data.frames ?? (current ? [current] : ["9:16" as const]))];
-  return { frames, current, document_hash: project.document_hash };
+  const { start, end } = parsed.data;
+  return { frames, current, document_hash: project.document_hash, ...(start !== undefined && end !== undefined ? { selection: { start, end } } : {}) };
 }
 
 export async function exportCard(supabase: SupabaseClient, clipId: string, prepared: PreparedExport) {
@@ -69,6 +73,7 @@ export async function exportCard(supabase: SupabaseClient, clipId: string, prepa
       ...prepared.frames.map((frame) =>
         frame === prepared.current ? `Export ${NAMES[frame]} at ${plan.resolution}p` : `Export a ${NAMES[frame]} copy at ${plan.resolution}p. Your project stays as it is.`,
       ),
+      ...(prepared.selection ? [`Only ${prepared.selection.start.toFixed(1)}–${prepared.selection.end.toFixed(1)} s of the timeline.`] : []),
       `Uses ${count} of your ${plan.perDay} exports a day on the ${plan.name} plan. No credits.`,
     ],
     credits: 0,
@@ -84,7 +89,7 @@ export async function runExport(env: ExportEnv, prepared: PreparedExport): Promi
   let failure: string | null = null;
   for (const frame of prepared.frames) {
     try {
-      const revision = await snapshotForExport(env.supabase, env.context, env.clipId, prepared.document_hash, frame === prepared.current ? undefined : frame);
+      const revision = await snapshotForExport(env.supabase, env.context, env.clipId, prepared.document_hash, frame === prepared.current ? undefined : frame, prepared.selection);
       const task = await startDocumentExport(env.supabase, env.clipId, revision.id, randomUUID(), resolution);
       started.push({ frame, task_id: task.id });
     } catch (err) {

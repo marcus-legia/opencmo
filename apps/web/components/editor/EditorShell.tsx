@@ -611,6 +611,22 @@ function Workspace({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [doc, media, generation],
   );
+  // capcut-A: cover — scene seconds, or undefined when the export keeps no cover.
+  const coverAt = (activeScene(doc) as unknown as { cover?: number } | undefined)?.cover;
+  // capcut-A: range export — the span the selected clips cover on the timeline, scene seconds; null = none selected.
+  const selectionSpan = useMemo(() => {
+    if (!selection.length) return null;
+    const ids = new Set(selection);
+    let start = Infinity;
+    let end = -Infinity;
+    for (const t of times.values()) {
+      const id = (t.node as { id?: unknown }).id;
+      if (typeof id !== "string" || !ids.has(id)) continue;
+      start = Math.min(start, t.start);
+      end = Math.max(end, t.end);
+    }
+    return end > start ? { start: start / 30, end: end / 30 } : null;
+  }, [times, selection]);
   // Phần tử đã chọn biến mất (xoá, Undo) thì bỏ khỏi lựa chọn.
   useEffect(() => {
     if (selection.some((id) => !elements.has(id))) setSelection((current) => current.filter((id) => elements.has(id)));
@@ -781,7 +797,8 @@ function Workspace({
     await api(`/tasks/${encodeURIComponent(id)}/cancel`, jsonBody({})).catch((error: Error) => setNotice(error.message));
   };
   // `frame`: bản theo khung của nền tảng khác (học Palmier §C4) — server đổi khung trên bản sao.
-  const startExport = async (frame?: "4:5" | "1:1" | "16:9") => {
+  // capcut-A: range export — `selection` exports only the span of the selected clips (and with `only`, only them).
+  const startExport = async (frame?: "4:5" | "1:1" | "16:9", selection?: { start: number; end: number; only?: string[] }) => {
     if (exportBusy.current) return;
     exportBusy.current = true;
     if (polling.current) clearTimeout(polling.current);
@@ -801,7 +818,7 @@ function Workspace({
       await session.flush();
       const hash = session.getState().documentHash;
       if (!hash) throw new Error("Could not save your changes. Try again.");
-      const revision = await api<{ id: string }>("/editor/revision", jsonBody({ clip_id: clipId, document_hash: hash, ...(frame ? { frame } : {}) }));
+      const revision = await api<{ id: string }>("/editor/revision", jsonBody({ clip_id: clipId, document_hash: hash, ...(frame ? { frame } : {}), ...(selection ? { selection } : {}) }));
       const started = await api<{ task_id: string; status: string }>(
         `/clips/${encodeURIComponent(clipId)}/exports`,
         jsonBody({ mode: "document", revision_id: revision.id, request_id: crypto.randomUUID() }),
@@ -970,6 +987,27 @@ function Workspace({
           items: [
             item("Export scene…", "export"),
             { label: "Export current frame as image", onSelect: () => void exportFrameImage(), testid: "menu-export-frame" },
+            // capcut-A: cover — the frame the export saves as the post's cover image.
+            {
+              label: coverAt === undefined ? "Use this frame as the cover" : `Use this frame as the cover (now ${clockOf(coverAt)})`,
+              onSelect: () => void run([{ op: "set_cover", time: playback.frame / 30 }]),
+              testid: "menu-cover-set",
+            },
+            ...(coverAt === undefined ? [] : [{ label: "Clear the cover", onSelect: () => void run([{ op: "set_cover", clear: true }]), testid: "menu-cover-clear" }]),
+            { kind: "separator" },
+            // capcut-A: range export
+            {
+              label: selectionSpan ? `Export selection ${spanLabel(selectionSpan)} (everything in it)` : "Export selection (select clips first)",
+              disabled: !selectionSpan,
+              onSelect: () => selectionSpan && void startExport(undefined, selectionSpan),
+              testid: "menu-export-selection",
+            },
+            {
+              label: "Export selected clips only",
+              disabled: !selectionSpan,
+              onSelect: () => selectionSpan && void startExport(undefined, { ...selectionSpan, only: selection }),
+              testid: "menu-export-selected-only",
+            },
             { kind: "separator" },
             { label: "Export a 1:1 copy (feed)", onSelect: () => void startExport("1:1"), testid: "menu-export-square" },
             { label: "Export a 4:5 copy (feed)", onSelect: () => void startExport("4:5"), testid: "menu-export-portrait" },
@@ -2049,4 +2087,14 @@ function selectedVisual(document: ClipDocument, selection: string[]): SelectedVi
     if (holder?.id && mark?.op) found = { id: String(holder.id), op: mark.op, input: mark.input ?? {} };
   });
   return found;
+}
+
+/** "0:03" for scene seconds. */
+function clockOf(seconds: number): string {
+  return `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
+}
+
+/** "0:03–0:12" for an export span in scene seconds. */
+function spanLabel(span: { start: number; end: number }): string {
+  return `${clockOf(span.start)}–${clockOf(span.end)}`;
 }

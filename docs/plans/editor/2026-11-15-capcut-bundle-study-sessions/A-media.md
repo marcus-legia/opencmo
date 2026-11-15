@@ -70,13 +70,17 @@ media, credits, migrations, MCP) → fix → tick the box → **commit and push*
 
 ### A2 — R2: export a range, pick a cover
 
-- [ ] Export menu: "Export all" and "Export selection" (the work area, or the selected clips' span).
-- [ ] `render_document` takes the range; the exported file starts and ends on it (check frame 0 and the last frame).
-- [ ] Cover: pick a frame from the playhead or from suggested frames; stored on the document; the export job writes a
-      cover image next to the MP4.
-- [ ] The Post schedule card for a founder's video shows that cover.
-- [ ] MCP: `export_clip` takes the range; the cover is readable by the CMO.
-- [ ] Review → commit → push.
+- [x] Export menu: "Export selection (everything in it)" and "Export selected clips only" (the selected clips' span;
+      the copy's work area is set, the user's own work area stays).
+- [x] `render_document` takes the range: the variant revision sets the work area the exporter already reads as its
+      range; "only" hides every other node on the copy (`isolateSelection`, editor-core).
+- [x] Cover: `set_cover` (scene seconds, inside the exported part), File ▸ Export ▸ "Use this frame as the cover".
+      The export writes the cover as a time in its manifest (`output.cover`). **Changed from the plan:** no JPEG yet —
+      the `exports` bucket accepts `video/*` only, and its migration could not be run here beside the e2e database.
+      A cover image for platform uploads is a follow-up (migration + worker frame grab).
+- [x] The Post schedule card opens the founder's video on that cover (`#t=` media fragment, `withCover`).
+- [x] MCP: `export_clip` / `request_export` take `start`/`end`; `set_cover` is an op tool the CMO can call.
+- [x] Review → commit → push.
 
 ### A3 — R4: clip tools
 

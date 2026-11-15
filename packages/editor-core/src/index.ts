@@ -18,6 +18,7 @@ export * from './brand';
 export { MASTER_SRC, stamp, byId, walk, activeView, frameRatio, timelineLabel, timelinesOf, isCutSequence, isMasterSound, type Entity } from './doc';
 export { checkDocument, type CheckIssue, type CheckMedia, type CheckReport } from './check';
 export { findSilences, type Silence } from './silences';
+export { isolateSelection, IsolateError, ISOLATE_MAX } from './selection-export';
 export { TITLE_KINDS, TITLE_LOOKS, TITLE_MOTIONS, type TitleInput } from './visuals/title';
 export { LAYOUT_MODES, panelRegionAt, readLayout, speakerBandAt, type LayoutMode, type LayoutRange } from './layout';
 export { anchorPoint, LAYOUT_ANCHOR_NAMES, LAYOUT_LABEL, layoutSlots, layoutsFor, slotBox, VIDEO_LAYOUTS, type LayoutSlot, type VideoLayout } from './layouts';

@@ -9,7 +9,8 @@
 
 import { normalizeManifest } from "@opencmo/clip-assets";
 import { validate, type ClipDocument } from "@opencmo/clip-doc";
-import { applyOps, OpError, readFrame } from "@opencmo/editor-core";
+import { applyOps, isolateSelection, IsolateError, ISOLATE_MAX, OpError, readFrame } from "@opencmo/editor-core";
+import { z } from "zod";
 
 import type { ClipContext } from "@/lib/api/clips";
 import { ApiError } from "@/lib/api/errors";
@@ -37,6 +38,21 @@ export function frameName(document: ClipDocument): ExportFrame | null {
 }
 
 /**
+ * "Export selection" (plan 2026-11-15 A2): the span of the selected clips, in scene seconds, and optionally only those
+ * clips (everything else hidden on the copy). The span is computed by the editor, which knows every clip's length.
+ */
+export const exportSelection = z
+  .object({
+    start: z.number().min(0).max(24 * 3600),
+    end: z.number().min(0).max(24 * 3600),
+    only: z.array(z.string().min(1).max(64)).min(1).max(ISOLATE_MAX).optional(),
+  })
+  .refine((value) => value.end > value.start, "The selection must end after it starts.");
+export type ExportSelection = z.infer<typeof exportSelection>;
+
+const clock = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
+
+/**
  * Chụp project thành revision export. `frame` khác khung hiện tại: đổi khung
  * (`set_frame`, cùng bám mặt và dựng lại bố cục như trong editor) trên BẢN SAO
  * rồi chụp bản sao — project người dùng đang sửa không đổi.
@@ -47,27 +63,39 @@ export async function snapshotForExport(
   clipId: string,
   documentHash: string,
   frame?: ExportFrame,
+  selection?: ExportSelection,
 ): Promise<{ id: string }> {
   const params = { p_clip_id: clipId, p_document_hash: documentHash };
-  if (!frame) return rpcOrThrow(supabase, "snapshot_editor_revision", params);
+  if (!frame && !selection) return rpcOrThrow(supabase, "snapshot_editor_revision", params);
 
   const project = await readEditorProject(supabase, clipId);
   if (project.document_hash !== documentHash) {
     throw new ApiError(409, "This project changed while it was being exported. Try again.");
   }
-  if (frameName(project.document) === frame) return rpcOrThrow(supabase, "snapshot_editor_revision", params);
-  const target = EXPORT_FRAMES[frame];
+  const reframe = frame && frameName(project.document) !== frame ? frame : undefined;
+  if (!reframe && !selection) return rpcOrThrow(supabase, "snapshot_editor_revision", params);
+  const ops: unknown[] = [];
+  if (reframe) ops.push({ op: "set_frame", ...EXPORT_FRAMES[reframe] });
+  // The work area is what the exporter reads as the range; on the copy only, so the user's own work area stays.
+  if (selection) ops.push({ op: "set_workarea", start: selection.start, end: selection.end });
   const manifest = normalizeManifest(project.manifest);
   const media = await serverMedia(supabase, context, clipId, project.document, manifest);
   let variant;
   try {
-    variant = (await applyOps(project.document, [{ op: "set_frame", ...target }], serverOpContext(supabase, context, clipId, media))).document;
+    variant = (await applyOps(project.document, ops, serverOpContext(supabase, context, clipId, media))).document;
+    if (selection?.only) variant = isolateSelection(variant, selection.only);
     validate(variant);
   } catch (err) {
-    if (err instanceof OpError) throw new ApiError(422, err.message);
+    if (err instanceof OpError || err instanceof IsolateError) throw new ApiError(422, err.message);
     throw err;
   }
-  return rpcOrThrow(supabase, "snapshot_editor_variant", { ...params, p_document: variant, p_label: frame });
+  const label = [
+    reframe,
+    selection ? `${selection.only ? "selected clips" : "selection"} ${clock(selection.start)}–${clock(selection.end)}` : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
+  return rpcOrThrow(supabase, "snapshot_editor_variant", { ...params, p_document: variant, p_label: label });
 }
 
 /** Gói của người dùng: độ phân giải bản xuất và số lượt export mỗi ngày. */

@@ -583,3 +583,18 @@ def test_a_keyframe_shared_by_two_shots_is_looked_up_once(monkeypatch):
     rd.process(store, _task())
     assert store.failed is None
     assert looked_up.count("m-fox") == 1, "the shared keyframe is resolved once"
+
+
+def test_the_cover_is_a_time_in_the_exported_file():
+    from opencmo.worker.render_document_task import cover_seconds
+
+    def doc(**scene):
+        return {"stage": {"children": [{"kind": "scene", "active": True, **scene}]}}
+
+    assert cover_seconds(doc(), 10) is None
+    assert cover_seconds(doc(cover=2.5), 10) == 2.5
+    # The export starts at the work area, so the cover moves with it.
+    assert cover_seconds(doc(cover=6, workarea=[4, 9]), 5) == 2
+    # Outside what was exported: no cover.
+    assert cover_seconds(doc(cover=1, workarea=[4, 9]), 5) is None
+    assert cover_seconds(doc(cover=12), 10) is None
