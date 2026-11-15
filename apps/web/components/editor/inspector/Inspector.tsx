@@ -29,6 +29,7 @@ import { TextStyleSection } from "./textstyle";
 import { GenerateCaptionsSection, mediaOf, TranslateCaptionsRow, VoiceoverCaptionsSection } from "./captions-ai";
 import { AnimationsSection, EffectsSection, FillsSection, MasksSection, ShadowsSection, StrokesSection } from "./parts";
 import { VariantsSection } from "./variants";
+import { ClipToolsSection, isFreezable } from "./clip-tools";
 import {
   BLEND_OPTIONS,
   diamond,
@@ -56,6 +57,8 @@ type Props = {
   sample?: (at: number) => ImageData | null;
   /** Clip đang sửa — cho các việc tốn credit gọi API (phụ đề, dịch). */
   clipId?: string;
+  /** Draws and saves the frame at the playhead, then freezes the clip there (plan 2026-11-15 A3). */
+  freeze?: (id: string, seconds: number) => Promise<void>;
 };
 
 const KIND_LABEL: Record<string, string> = {
@@ -115,7 +118,7 @@ export function Inspector(props: Props) {
     };
     const t = ctx.time;
     ctx.local = t ? Math.round((props.frame - t.origin) * t.rate) : props.frame;
-    body = <NodeSections ctx={ctx} parent={first.owner} tab={tab} onTab={setTab} />;
+    body = <NodeSections ctx={ctx} parent={first.owner} tab={tab} onTab={setTab} freeze={props.freeze} />;
   }
 
   return (
@@ -155,7 +158,19 @@ const TAB_LABEL: Record<InspectorTab, string> = { content: "Content", animate: "
  * Mục chia theo tab như inspector của Palmier: chữ có Content/Animate, hình có
  * Video/Adjust, có tiếng thì thêm Audio. Chỉ một tab có nội dung thì không vẽ thanh tab.
  */
-function NodeSections({ ctx, parent, tab, onTab }: { ctx: InspectorContext; parent: Entity | null; tab: InspectorTab; onTab: (tab: InspectorTab) => void }) {
+function NodeSections({
+  ctx,
+  parent,
+  tab,
+  onTab,
+  freeze,
+}: {
+  ctx: InspectorContext;
+  parent: Entity | null;
+  tab: InspectorTab;
+  onTab: (tab: InspectorTab) => void;
+  freeze?: (id: string, seconds: number) => Promise<void>;
+}) {
   const { node } = ctx;
   const [advanced, setAdvanced] = useAdvanced();
   const kind = node.kind as string;
@@ -184,6 +199,7 @@ function NodeSections({ ctx, parent, tab, onTab }: { ctx: InspectorContext; pare
       {kind === "audio" ? <VoiceoverCaptionsSection ctx={ctx} /> : null}
       {has(kind, "src") && kind !== "captions" ? <SourceSection ctx={ctx} /> : null}
       <VariantsSection ctx={ctx} />
+      {isFreezable(node) ? <ClipToolsSection ctx={ctx} freeze={freeze} /> : null}
       {parent?.kind === "sequence" && has(kind, "transition") ? <TransitionSection ctx={ctx} /> : null}
       {advancedSections.length ? (
         <>

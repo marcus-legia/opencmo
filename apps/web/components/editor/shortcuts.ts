@@ -127,12 +127,33 @@ export const SHORTCUTS: { combo: Combo; action: ActionName }[] = [
   { combo: { key: "arrowdown", shift: true }, action: "nudgeDownFast" },
 ];
 
+/**
+ * Keys the timeline handles itself (plan 2026-11-15 B1, B3), so the shell's action table and its
+ * menus stay as they are. None of them overlaps a key in `SHORTCUTS`.
+ */
+export type TimelineAction = "timelineZoomIn" | "timelineZoomOut" | "rangePlay";
+
+export const TIMELINE_SHORTCUTS: { combo: Combo; action: TimelineAction }[] = [
+  { combo: { key: "=", mod: false, alt: false }, action: "timelineZoomIn" },
+  { combo: { key: "+", mod: false, alt: false }, action: "timelineZoomIn" },
+  { combo: { key: "-", mod: false, alt: false }, action: "timelineZoomOut" },
+  { combo: { key: "/", mod: false, alt: false, shift: false }, action: "rangePlay" },
+];
+
 type KeyInput = Pick<KeyboardEvent, "key" | "ctrlKey" | "metaKey" | "shiftKey" | "altKey">;
 
+export function matchTimelineShortcut(event: KeyInput): TimelineAction | null {
+  return match(TIMELINE_SHORTCUTS, event);
+}
+
 export function matchShortcut(event: KeyInput): ActionName | null {
+  return match(SHORTCUTS, event);
+}
+
+function match<Name extends string>(table: { combo: Combo; action: Name }[], event: KeyInput): Name | null {
   const key = event.key.toLowerCase();
   const mod = event.ctrlKey || event.metaKey;
-  for (const { combo, action } of SHORTCUTS) {
+  for (const { combo, action } of table) {
     if (combo.key !== key) continue;
     if (combo.mod !== undefined && combo.mod !== mod) continue;
     if (combo.shift !== undefined && combo.shift !== event.shiftKey) continue;
@@ -158,8 +179,8 @@ const KEY_LABEL: Record<string, string> = {
 };
 
 /** Phím đầu tiên của một lệnh, viết như menu: "⇧⌘G" trên Mac, "Ctrl+Shift+G" ở máy khác. */
-export function shortcutLabel(action: ActionName): string | null {
-  const found = SHORTCUTS.find((entry) => entry.action === action);
+export function shortcutLabel(action: ActionName | TimelineAction): string | null {
+  const found = [...SHORTCUTS, ...TIMELINE_SHORTCUTS].find((entry) => entry.action === action);
   return found ? comboLabel(found.combo) : null;
 }
 
@@ -174,7 +195,7 @@ function comboLabel(combo: Combo): string {
  * DS. Đọc từ chính `SHORTCUTS` nên không lệch được với phím thật; lệnh có hai
  * phím (Redo, Delete, Zoom in) in cả hai.
  */
-export const SHORTCUT_GROUPS: { title: string; actions: [ActionName, string][] }[] = [
+export const SHORTCUT_GROUPS: { title: string; actions: [ActionName | TimelineAction, string][] }[] = [
   {
     title: "General",
     actions: [
@@ -239,6 +260,7 @@ export const SHORTCUT_GROUPS: { title: string; actions: [ActionName, string][] }
       ["timelineEnd", "Go to end"],
       ["split", "Split at playhead"],
       ["addMarker", "Add a marker at the playhead"],
+      ["rangePlay", "Loop the selected clips or the work area"],
     ],
   },
   {
@@ -249,11 +271,13 @@ export const SHORTCUT_GROUPS: { title: string; actions: [ActionName, string][] }
       ["zoomActual", "Zoom to 100%"],
       ["zoomFit", "Zoom to fit"],
       ["zoomSelection", "Zoom to selection"],
+      ["timelineZoomIn", "Zoom the timeline in"],
+      ["timelineZoomOut", "Zoom the timeline out"],
     ],
   },
 ];
 
 /** Mọi phím của một lệnh, theo thứ tự trong bảng. */
-export function shortcutLabels(action: ActionName): string[] {
-  return SHORTCUTS.filter((entry) => entry.action === action).map((entry) => comboLabel(entry.combo));
+export function shortcutLabels(action: ActionName | TimelineAction): string[] {
+  return [...SHORTCUTS, ...TIMELINE_SHORTCUTS].filter((entry) => entry.action === action).map((entry) => comboLabel(entry.combo));
 }

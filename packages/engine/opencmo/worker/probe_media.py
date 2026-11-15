@@ -7,6 +7,7 @@ sinh sau khi `generate_task` kiểm duyệt lại.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import logging
 import math
@@ -29,9 +30,10 @@ MAX_LUT_BYTES = 12 * 1024 * 1024
 IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "webp"}
 # Music and sound effects the user adds: Export runs on the server and needs a stored copy (they
 # used to stay on the device that imported them, and Export failed with "only saved on the device").
-AUDIO_EXTENSIONS = {"mp3", "wav", "m4a", "aac", "ogg", "flac"}
+# `weba`: an audio-only browser recording (WebM with no picture).
+AUDIO_EXTENSIONS = {"mp3", "wav", "m4a", "aac", "ogg", "flac", "weba"}
 MAX_AUDIO_BYTES = 200 * 1024 * 1024
-BAD_MEDIA = "Choose a playable video, an MP3, WAV, M4A, AAC, OGG or FLAC sound, a PNG, JPEG or WebP image, or a 3D .cube LUT."
+BAD_MEDIA = "Choose a playable video, an MP3, WAV, M4A, AAC, OGG, FLAC or WebM sound, a PNG, JPEG or WebP image, or a 3D .cube LUT."
 
 
 def cube_size(text: str) -> int:
@@ -61,6 +63,26 @@ def cube_size(text: str) -> int:
     if not size or count != size**3:
         raise ValueError("LUT row count does not match its size")
     return size
+
+
+def _recorded_length(local: Path, root: Path) -> float:
+    """The length of a browser recording (MediaRecorder WebM or fragmented MP4), whose header has none: a
+    stream-copy remux (no decode, so little memory) writes one, and that copy is probed. The stored file stays
+    as uploaded. 0 when it cannot be learned; the caller then refuses the file."""
+    copy = root / "length.mkv"
+    try:
+        run(
+            ["ffmpeg", "-v", "error", *USER_INPUT, "-i", str(local), "-map", "0", "-c", "copy", "-f", "matroska", "-y", str(copy)],
+            timeout=300,
+        )
+        # The format's length, not `probe_file`: that one needs a picture, and an audio-only take has none.
+        proc = run(["ffprobe", "-v", "error", *USER_INPUT, "-print_format", "json", "-show_format", str(copy)], timeout=60)
+        return max(0.0, float(json.loads(proc.stdout).get("format", {}).get("duration") or 0))
+    except Exception:  # the caller refuses the file as unreadable
+        log.warning("Could not learn the length of %s", local.name, exc_info=True)
+        return 0.0
+    finally:
+        copy.unlink(missing_ok=True)
 
 
 def process(store: Any, task: Task) -> None:
@@ -108,6 +130,8 @@ def process(store: Any, task: Task) -> None:
                 "media", object_name, local, max_bytes=MAX_IMAGE_BYTES if image else MAX_MEDIA_BYTES
             )
             info = probe_file(str(local), local_only=True)
+            if not image and info.duration <= 0 and info.width > 0 and info.height > 0:
+                info = dataclasses.replace(info, duration=_recorded_length(local, root))
             if info.width <= 0 or info.height <= 0 or (not image and info.duration <= 0):
                 raise ValueError("invalid media dimensions")
             run(
@@ -151,6 +175,8 @@ def _probe_audio(store: Any, task: Task, object_name: str) -> None:
             if not any(stream.get("codec_type") == "audio" for stream in data.get("streams", [])):
                 raise ValueError("no audio stream")
             duration = float(data.get("format", {}).get("duration") or 0)
+            if duration <= 0:
+                duration = _recorded_length(local, root)
             if duration <= 0:
                 raise ValueError("no duration")
             run(["ffmpeg", "-v", "error", *USER_INPUT, "-i", str(local), "-t", "1", "-vn", "-f", "null", "-"], timeout=60)

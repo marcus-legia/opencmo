@@ -59,8 +59,8 @@ function topOf(document: ClipDocument, entity: Entity): Entity {
  * Dời clip sang hàng của `target_id` (kéo bar lên/xuống timeline, "Put on one
  * row"). Đích là một hàng (sequence cùng làn) → vào hàng đó; đích là một clip
  * đơn → clip đó thành một hàng mới rồi nhận các clip dời tới; đích là scene →
- * clip ra một hàng riêng, ngay trên hàng cũ. Clip dời tới thắng chỗ chồng giờ
- * (anh em nhường, như ghi đè của NLE — luật `settle`).
+ * clip ra một hàng riêng, ngay trên hàng cũ. Hàng đích đã có clip ở đúng khoảng giờ đó thì
+ * không cắt gì: các clip dời tới sang một hàng mới cùng loại ngay trên hàng đích.
  */
 export const moveToRow = {
   name: 'move_to_row',
@@ -103,23 +103,44 @@ export const moveToRow = {
     for (const entity of moving) {
       if (laneOf(entity) !== lane) throw new OpFailure(LANE_RULE[laneOf(entity)!] ?? 'Those clips cannot share a row.');
     }
-    let row = target;
+    // A drop never cuts what is already on the target row (CapCut's rule, report 2026-11-15 §3):
+    // if any clip would overlap a clip there, the clips get a new row of their own right above.
     const holder = target.kind === 'sequence' ? null : placeOf(next, target).parent;
-    if (holder && holder.kind === 'sequence' && laneOf(holder) === lane) row = holder;
-    else if (target.kind !== 'sequence') {
+    const shared = holder && holder.kind === 'sequence' && laneOf(holder) === lane ? holder : null;
+    const home = target.kind === 'sequence' ? target : shared;
+    const residents = home ? ((home.children as Entity[] | undefined) ?? []) : [target];
+    const incoming = moving.filter((entity) => !residents.includes(entity));
+    if (!incoming.length) return document;
+    const times = timesOf(next, ctx);
+    const overlaps = incoming.some((entity) => {
+      const own = times.get(entity as unknown as ClipNode);
+      return own && residents.some((resident) => {
+        if (moving.includes(resident)) return false;
+        const t = times.get(resident as unknown as ClipNode);
+        return t && t.start < own.end && own.start < t.end;
+      });
+    });
+
+    let row: Entity;
+    if (overlaps) {
+      const anchor = home ?? target;
+      const { list } = placeOf(next, anchor);
+      row = { kind: 'sequence', name: rowName(next, lane), children: [] };
+      list.splice(list.indexOf(anchor) + 1, 0, row);
+    } else if (home) {
+      row = home;
+    } else {
       // Clip đơn thành hàng: bọc tại chỗ, giữ thứ tự lớp.
       const { list } = placeOf(next, target);
       row = { kind: 'sequence', name: rowName(next, lane), children: [target] };
       list.splice(list.indexOf(target), 1, row);
     }
     const children = row.children as Entity[];
-    const moved = moving.filter((entity) => !children.includes(entity));
-    if (!moved.length) return document;
-    for (const entity of moved) {
+    for (const entity of incoming) {
       detach(next, entity);
       children.push(entity);
     }
-    settle(next, ctx, moved);
+    settle(next, ctx, incoming);
     return checked(next, `Those clips cannot be put on one ${LANE_NAME[lane]} row`);
   },
 };

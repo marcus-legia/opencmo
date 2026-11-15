@@ -361,6 +361,12 @@ const OP_DESCRIPTIONS: Record<string, string> = {
     "Reorder or re-parent an element: put it in parent_id, just before before_id (null = on top). Later children draw on top.",
   move_keyframe: "Move one keyframe (by id, from get_document) to a new time in the element's own seconds.",
   set_workarea: "Set the part of the timeline that gets exported, or clear it.",
+  freeze_frame:
+    "Freeze a B-roll video clip at a clip-timeline second for `seconds`: the clip splits there, a still of that frame holds in its place, and everything starting from that second moves later. `src` is the frame image in the library (save_frame first). Not for the clip's own talking-head video.",
+  speed_ramp:
+    "Give a B-roll video clip a speed ramp preset (montage, hero, bullet, jump_cut, flash_in, flash_out): it is cut into parts at different speeds that average 1x, so its length on the timeline stays the same. Not for the clip's own talking-head video.",
+  set_cover:
+    "Set the cover frame (a clip-timeline second inside the exported part) that the export saves as an image and the post shows before it plays, or clear it. Pick a frame where the speaker looks at the camera, or the clearest shot of the product.",
   set_marker:
     "Add (no marker_id) or change a timeline marker: a point or a range (duration) at clip seconds with a name, color, note and status open/review/resolved. Use markers to leave the user review notes on moments you could not fix or want them to check; markers never appear in the export.",
   delete_marker: "Delete a timeline marker by id.",
@@ -382,7 +388,7 @@ const OP_DESCRIPTIONS: Record<string, string> = {
     "Add a sub-part to an element: paints, strokes, shadows, effects, animations (e.g. {type: 'fade', phase: 'in', duration: 0.4}), ranges (text highlight), masks or gradient stops.",
   move_part: "Reorder a sub-part (paint, stroke, effect, ...) within its list.",
   move_to_row:
-    "Move clips onto another timeline row so they share it: target_id is a clip or row id from get_project_state; the scene's id gives each clip its own row again. Only the same kind shares a row: B-roll with B-roll, text with text, sounds with sounds.",
+    "Move clips onto another timeline row so they share it: target_id is a clip or row id from get_project_state; the scene's id gives each clip its own row again. Only the same kind shares a row: B-roll with B-roll, text with text, sounds with sounds. Nothing on the target row is cut: clips that would overlap one there go to a new row of the same kind right above it instead (read get_project_state to see where they landed).",
   copy_settings:
     "Make elements look like another one: copy groups of settings from from_id to to_ids — look (opacity, corners, blend), text (font, size, weight, color, case, stroke; text to text only), effects (filters, shadows), motion (animations, transition), audio (volume, mute). Never copies timing, position, wording or keyframes. Default: every group that fits each target.",
   duplicate_elements: "Duplicate elements in place.",

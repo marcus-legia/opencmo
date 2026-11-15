@@ -938,6 +938,8 @@ const SceneBase = z
     /** Số khung/giây của bản export (E2-b). Sửa vẫn theo lưới 30; vắng = 30. */
     fps: z.union([z.literal(24), z.literal(25), z.literal(30), z.literal(50), z.literal(60)]).optional(),
     workarea: z.tuple([time, time]).nullable().optional(),
+    /** The cover frame of the export, scene seconds (plan 2026-11-15 A2). */
+    cover: time.optional(),
     playhead: time.optional(),
     timeline: z.tuple([num, num, num]).optional(),
     selected: z.boolean().optional(),

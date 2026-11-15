@@ -69,6 +69,7 @@ import { Soundboard } from "./soundboard/Soundboard";
 import { SlidePanel, SlideStrip, readSlides, slideAt } from "./slides/SlidesView";
 import { Timeline } from "./timeline/Timeline";
 import { ScriptPanel } from "./script/ScriptPanel";
+import { Recorder } from "./record/Recorder";
 import type { Script } from "@/lib/cmo/script";
 import { studioItemHref } from "@/components/screens/studio/href";
 import { reportClientError } from "@/lib/client-errors";
@@ -349,6 +350,14 @@ function Workspace({
   const [playing, setPlaying] = useState(false);
   const playback = useMemo(() => new Playback(media, setFrame, setPlaying), [media]);
   useEffect(() => () => playback.dispose(), [playback]);
+  // capcut-B: range play — whether a loop is playing, for the timeline's Loop button and Escape.
+  const [looping, setLooping] = useState(false);
+  useEffect(() => {
+    playback.onLoopChange = setLooping;
+    return () => {
+      playback.onLoopChange = () => undefined;
+    };
+  }, [playback]);
   useEffect(() => {
     playback.renderer = renderer;
     if (renderer) playback.seek(playback.frame);
@@ -364,6 +373,8 @@ function Workspace({
   // The script this edit was opened from (cmo-review-3 I1): the Script tab shows only when there is one.
   const [script, setScript] = useState<Script | null>(null);
   const [scriptRead, setScriptRead] = useState(0);
+  // capcut-A: recorder — the frame the take goes to, captured when the recorder opens; null = closed.
+  const [recordAt, setRecordAt] = useState<number | null>(null);
   useEffect(() => {
     let live = true;
     api<Script>(`/clips/${encodeURIComponent(clipId)}/script`).then(
@@ -513,6 +524,43 @@ function Workspace({
       children.flatMap((child) => (isRow(child) ? added(child.children ?? []) : child.id && !before.has(child.id) ? [child.id] : []));
     setSelection(added((activeScene(after) as unknown as Child).children ?? []));
   };
+  // capcut-A: freeze — draw the clip's own source frame under the playhead at its full size, save it to Media ▸
+  // Frames, then `freeze_frame` holds it. The source frame (not the whole canvas) so the still fits the clip's box.
+  const freezeClip = async (id: string, seconds: number) => {
+    const at = playback.frame;
+    const entry = [...times].find(([node]) => (node as { id?: unknown }).id === id);
+    if (!entry) throw new Error("That clip is not on the timeline.");
+    const [node, t] = entry as [Record<string, unknown>, (typeof entry)[1]];
+    const paint = ((node.paints as { type?: string; src?: unknown }[] | undefined) ?? []).find((item) => item.type === "video");
+    const src = (node.kind === "video" ? node.src : paint?.src) as Parameters<typeof media.urlOf>[0];
+    const url = src ? await media.urlOf(src) : null;
+    if (!url) throw new Error("This clip's video is not loaded yet.");
+    const sourceSeconds = Math.max(0, ((at - t.origin) * (t.rate || 1)) / 30);
+    const video = document.createElement("video");
+    video.muted = true;
+    video.preload = "auto";
+    video.crossOrigin = "anonymous";
+    video.src = url;
+    await new Promise<void>((resolve, reject) => {
+      video.addEventListener("loadeddata", () => resolve(), { once: true });
+      video.addEventListener("error", () => reject(new Error("This clip's video could not be read.")), { once: true });
+    });
+    await new Promise<void>((resolve) => {
+      video.addEventListener("seeked", () => resolve(), { once: true });
+      video.currentTime = Math.min(sourceSeconds, Math.max(0, video.duration - 0.05));
+    });
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext("2d")!.drawImage(video, 0, 0);
+    video.removeAttribute("src");
+    video.load();
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.92));
+    if (!blob) throw new Error("The frame could not be drawn.");
+    const [record] = await library.importFiles([new File([blob], `freeze-${(at / 30).toFixed(1)}s.jpg`, { type: "image/jpeg" })], "Frames");
+    if (!record) throw new Error("The frame could not be saved to your media.");
+    await run([{ op: "freeze_frame", element_id: id, at: at / 30, seconds, src: record.path }]);
+  };
   /** Chèn asset rồi chọn node vừa chèn. */
   const insertAssets = async (records: LibraryRecord[], options: { at?: { x: number; y: number }; start: number }) => {
     let last: string | null = null;
@@ -600,6 +648,22 @@ function Workspace({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [doc, media, generation],
   );
+  // capcut-A: cover — scene seconds, or undefined when the export keeps no cover.
+  const coverAt = (activeScene(doc) as unknown as { cover?: number } | undefined)?.cover;
+  // capcut-A: range export — the span the selected clips cover on the timeline, scene seconds; null = none selected.
+  const selectionSpan = useMemo(() => {
+    if (!selection.length) return null;
+    const ids = new Set(selection);
+    let start = Infinity;
+    let end = -Infinity;
+    for (const t of times.values()) {
+      const id = (t.node as { id?: unknown }).id;
+      if (typeof id !== "string" || !ids.has(id)) continue;
+      start = Math.min(start, t.start);
+      end = Math.max(end, t.end);
+    }
+    return end > start ? { start: start / 30, end: end / 30 } : null;
+  }, [times, selection]);
   // Phần tử đã chọn biến mất (xoá, Undo) thì bỏ khỏi lựa chọn.
   useEffect(() => {
     if (selection.some((id) => !elements.has(id))) setSelection((current) => current.filter((id) => elements.has(id)));
@@ -770,7 +834,8 @@ function Workspace({
     await api(`/tasks/${encodeURIComponent(id)}/cancel`, jsonBody({})).catch((error: Error) => setNotice(error.message));
   };
   // `frame`: bản theo khung của nền tảng khác (học Palmier §C4) — server đổi khung trên bản sao.
-  const startExport = async (frame?: "4:5" | "1:1" | "16:9") => {
+  // capcut-A: range export — `selection` exports only the span of the selected clips (and with `only`, only them).
+  const startExport = async (frame?: "4:5" | "1:1" | "16:9", selection?: { start: number; end: number; only?: string[] }) => {
     if (exportBusy.current) return;
     exportBusy.current = true;
     if (polling.current) clearTimeout(polling.current);
@@ -790,7 +855,7 @@ function Workspace({
       await session.flush();
       const hash = session.getState().documentHash;
       if (!hash) throw new Error("Could not save your changes. Try again.");
-      const revision = await api<{ id: string }>("/editor/revision", jsonBody({ clip_id: clipId, document_hash: hash, ...(frame ? { frame } : {}) }));
+      const revision = await api<{ id: string }>("/editor/revision", jsonBody({ clip_id: clipId, document_hash: hash, ...(frame ? { frame } : {}), ...(selection ? { selection } : {}) }));
       const started = await api<{ task_id: string; status: string }>(
         `/clips/${encodeURIComponent(clipId)}/exports`,
         jsonBody({ mode: "document", revision_id: revision.id, request_id: crypto.randomUUID() }),
@@ -959,6 +1024,27 @@ function Workspace({
           items: [
             item("Export scene…", "export"),
             { label: "Export current frame as image", onSelect: () => void exportFrameImage(), testid: "menu-export-frame" },
+            // capcut-A: cover — the frame the export saves as the post's cover image.
+            {
+              label: coverAt === undefined ? "Use this frame as the cover" : `Use this frame as the cover (now ${clockOf(coverAt)})`,
+              onSelect: () => void run([{ op: "set_cover", time: playback.frame / 30 }]),
+              testid: "menu-cover-set",
+            },
+            ...(coverAt === undefined ? [] : [{ label: "Clear the cover", onSelect: () => void run([{ op: "set_cover", clear: true }]), testid: "menu-cover-clear" }]),
+            { kind: "separator" },
+            // capcut-A: range export
+            {
+              label: selectionSpan ? `Export selection ${spanLabel(selectionSpan)} (everything in it)` : "Export selection (select clips first)",
+              disabled: !selectionSpan,
+              onSelect: () => selectionSpan && void startExport(undefined, selectionSpan),
+              testid: "menu-export-selection",
+            },
+            {
+              label: "Export selected clips only",
+              disabled: !selectionSpan,
+              onSelect: () => selectionSpan && void startExport(undefined, { ...selectionSpan, only: selection }),
+              testid: "menu-export-selected-only",
+            },
             { kind: "separator" },
             { label: "Export a 1:1 copy (feed)", onSelect: () => void startExport("1:1"), testid: "menu-export-square" },
             { label: "Export a 4:5 copy (feed)", onSelect: () => void startExport("4:5"), testid: "menu-export-portrait" },
@@ -1490,6 +1576,7 @@ function Workspace({
             library={library}
             transcriptOf={transcripts.statusOf}
             onInsert={(record) => void insertAssets([record], { start: playback.frame / 30 })}
+            onRecord={() => setRecordAt(playback.frame)}
           />
         ) : leftTab === "transcript" ? (
           <TranscriptPanel
@@ -1511,6 +1598,21 @@ function Workspace({
             run={run}
             playhead={frame / 30}
             onSeek={(seconds) => playback.seek(Math.round(seconds * 30))}
+            onRecord={() => setRecordAt(playback.frame)}
+          />
+        ) : null}
+        {/* capcut-A: recorder — the take is imported into Media ▸ Recordings, then placed where the playhead was. */}
+        {recordAt !== null ? (
+          <Recorder
+            beats={script?.beats}
+            title={script?.title}
+            destination="The take goes into this edit at the playhead, and into Media ▸ Recordings."
+            onClose={() => setRecordAt(null)}
+            onDone={async (file) => {
+              const records = await library.importFiles([file], "Recordings");
+              if (!records.length) throw new Error("The take could not be added to your media.");
+              await insertAssets(records, { start: recordAt / 30 });
+            }}
           />
         ) : null}
         <UploadPanel
@@ -1730,6 +1832,7 @@ function Workspace({
         manifest={library.manifest as unknown as Manifest}
         sample={sampleFrame}
         clipId={clipId}
+        freeze={freezeClip}
       />
       </div>
       )}
@@ -1756,6 +1859,9 @@ function Workspace({
         flash={flash}
         aiState={(entity) => aiStateOf(entity, library.manifest, aiLabel(entity))}
         onRetry={(entity) => void retryGeneration(entity)}
+        // capcut-B: range play — loop the selected clips or the work area; any pause ends the loop.
+        onLoop={(range) => (range ? playback.playLoop(range[0], range[1]) : playback.pause())}
+        looping={looping}
         onDropMedia={(event, dropFrame) =>
           // Timeline: bắt đầu đúng chỗ thả, đặt giữa khung.
           void dropped(event).then((records) => insertAssets(records, { start: dropFrame / 30 }))
@@ -2019,4 +2125,14 @@ function selectedVisual(document: ClipDocument, selection: string[]): SelectedVi
     if (holder?.id && mark?.op) found = { id: String(holder.id), op: mark.op, input: mark.input ?? {} };
   });
   return found;
+}
+
+/** "0:03" for scene seconds. */
+function clockOf(seconds: number): string {
+  return `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
+}
+
+/** "0:03–0:12" for an export span in scene seconds. */
+function spanLabel(span: { start: number; end: number }): string {
+  return `${clockOf(span.start)}–${clockOf(span.end)}`;
 }

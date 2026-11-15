@@ -36,6 +36,24 @@ export { readLocal, removeLocal };
 
 // ------------------------------------------------------------------ đo file
 
+/** Seeks far past the end so the element finds the file's length; gives up after 10 s (the length stays unknown). */
+export function learnLength(el: HTMLMediaElement): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const done = () => {
+      window.clearTimeout(timer);
+      el.removeEventListener("durationchange", changed);
+      el.currentTime = 0;
+      resolve();
+    };
+    const changed = () => {
+      if (Number.isFinite(el.duration)) done();
+    };
+    const timer = window.setTimeout(done, 10_000);
+    el.addEventListener("durationchange", changed);
+    el.currentTime = Number.MAX_SAFE_INTEGER;
+  });
+}
+
 async function probe(file: File, type: AssetType, mime: string): Promise<Partial<AssetRecord>> {
   if (type === "LUT") {
     // Đọc thử ngay lúc nhập (E3-c): LUT hỏng bị từ chối ở đây, không thành màu sai lúc export.
@@ -65,6 +83,9 @@ async function probe(file: File, type: AssetType, mime: string): Promise<Partial
       el.addEventListener("loadedmetadata", () => resolve(), { once: true });
       el.addEventListener("error", () => reject(new Error(`${file.name} could not be read.`)), { once: true });
     });
+    // A browser recording (MediaRecorder) often has no length in its header: the element reports Infinity until
+    // it is asked to seek past the end, which makes it scan the file and learn the real length.
+    if (el.duration === Infinity) await learnLength(el);
     const duration = Number.isFinite(el.duration) ? Math.round(el.duration * 1000) / 1000 : undefined;
     if (el instanceof HTMLVideoElement) return { width: el.videoWidth, height: el.videoHeight, duration };
     return { duration };

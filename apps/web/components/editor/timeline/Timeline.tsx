@@ -17,16 +17,20 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { AssetInput, ClipDocument, ClipNode } from "@opencmo/clip-doc";
 import { FPS, type TimeNode, type Transcript } from "@opencmo/clip-render";
-import { activeScene, applyOps, laneOf, MARKER_COLORS, readMarkers, timelinesOf, timesOf, type Marker, type OpContext } from "@opencmo/editor-core";
+import { activeScene, applyOps, laneOf, thinBeats, type BeatDensity, MARKER_COLORS, readMarkers, timelinesOf, timesOf, type Marker, type OpContext } from "@opencmo/editor-core";
 
 import { useThemePref } from "@/components/theme";
 
 import { clock } from "../clock";
+import { isTyping } from "../Stage";
+import { matchTimelineShortcut } from "../shortcuts";
 import type { BrowserMedia } from "../media";
 import type { AiState } from "../generate/useGenerations";
+import { filmstripStep, grabberFor } from "./filmstrip";
 import { beatsOf, drawBeats, drawPeaks, knownBeats, loadPeaks, type Peaks } from "./peaks";
 import { buildRows, CLIP_HEIGHT, ROLE_LABEL, roleOf, subtreeIds, type Row } from "./rows";
-import { rulerStep, snapDelta, snapFrame, snapTargets } from "./snap";
+import { rulerStep, SNAP_PX, snapDelta, snapFrame, snapTargets } from "./snap";
+import { clampZoom, rememberedZoom, rememberZoom, zoomAnchor, zoomFloor, ZOOM_MAX } from "./zoom";
 import { NewTimeline, TimelineTabs } from "./TimelineTabs";
 
 type Entity = Record<string, unknown> & { id?: string };
@@ -34,9 +38,8 @@ type Entity = Record<string, unknown> & { id?: string };
 const LABEL_WIDTH = 232;
 const RULER_HEIGHT = 36;
 const PAD = 8;
-const SNAP_PX = 10;
 const HANDLE_PX = 8;
-const ZOOM = { min: 0.03, max: 120, initial: 1 / 0.7 };
+const INITIAL_ZOOM = 1 / 0.7;
 
 export type TimelineProps = {
   /** Document đang hiện (bản xem trước khi đang kéo). */
@@ -66,6 +69,10 @@ export type TimelineProps = {
   aiState?: (entity: Entity) => AiState | null;
   /** Bấm Retry trên thanh clip hỏng. */
   onRetry?: (entity: Entity) => void;
+  /** Range play (B3): loop `[start, end)` frames, or stop with null. */
+  onLoop?: (range: [number, number] | null) => void;
+  /** A loop is playing. */
+  looping?: boolean;
 };
 
 type Gesture =
@@ -95,7 +102,7 @@ const BAR_CLASS: Record<string, string> = {
 
 export function Timeline(props: TimelineProps) {
   const { doc, media, generation, frame } = props;
-  const [ppf, setPpf] = useState(ZOOM.initial);
+  const [ppf, setPpf] = useState(INITIAL_ZOOM);
   const scroller = useRef<HTMLDivElement>(null);
   const gesture = useRef<Gesture | null>(null);
   const [snapAt, setSnapAt] = useState<number | null>(null);
@@ -135,6 +142,42 @@ export function Timeline(props: TimelineProps) {
   const workarea = (scene.workarea as [number, number] | null | undefined) ?? null;
   const end = Math.max(sceneTime?.end ?? 0, workarea ? Math.round(workarea[1] * FPS) : 0);
   const contentWidth = PAD * 2 + (end + 5 * FPS) * ppf;
+  // The part of the lane on screen, in content px: the lane's width sets the farthest zoom, and
+  // only what falls in it (plus a margin) is drawn (B4: a 30-minute edit drew ~11k nodes zoomed in).
+  const [view, setView] = useState({ left: 0, width: 0 });
+  useEffect(() => {
+    const element = scroller.current;
+    if (!element) return;
+    let raf = 0;
+    const measure = () => {
+      raf = 0;
+      const next = { left: element.scrollLeft, width: Math.max(0, element.clientWidth - LABEL_WIDTH) };
+      setView((old) => (old.left === next.left && old.width === next.width ? old : next));
+    };
+    const schedule = () => {
+      if (!raf) raf = requestAnimationFrame(measure);
+    };
+    measure();
+    const observer = new ResizeObserver(schedule);
+    observer.observe(element);
+    element.addEventListener("scroll", schedule, { passive: true });
+    return () => {
+      cancelAnimationFrame(raf);
+      observer.disconnect();
+      element.removeEventListener("scroll", schedule);
+    };
+  }, []);
+  const laneWidth = view.width;
+  const floor = zoomFloor(end, laneWidth || 800);
+  // Frames worth drawing: the visible window plus one screen each side, so a scroll or a zoom step
+  // shows drawn content before the next measure. Unmeasured (first render): everything.
+  const shown: [number, number] = view.width
+    ? [Math.max(0, (view.left - Math.max(view.width, 400) - PAD) / ppf), (view.left + view.width + Math.max(view.width, 400) - PAD) / ppf]
+    : [0, Infinity];
+  // Frames actually on screen, no margin: the filmstrip, the costly part, draws only here.
+  const onScreen: [number, number] = view.width ? [Math.max(0, (view.left - PAD) / ppf), (view.left + view.width - PAD) / ppf] : [0, Infinity];
+  const playheadRef = useRef(frame);
+  playheadRef.current = frame;
   const x = useCallback((f: number) => PAD + f * ppf, [ppf]);
   const frameAt = useCallback(
     (clientX: number) => {
@@ -144,40 +187,126 @@ export function Timeline(props: TimelineProps) {
     [ppf],
   );
 
-  // Zoom quanh con trỏ: giây dưới con trỏ đứng yên.
+  // The frame under the anchor stays still: the pointer for the wheel; for buttons, keys and the
+  // slider the playhead when it is on screen (CapCut keeps the playhead still), else the centre.
   const zoomTo = useCallback(
     (next: number, anchorClientX?: number) => {
       const element = scroller.current;
-      const clamped = Math.min(ZOOM.max, Math.max(ZOOM.min, next));
+      const clamped = clampZoom(next, floor);
       if (!element) return setPpf(clamped);
       const box = element.getBoundingClientRect();
-      const px = (anchorClientX ?? box.left + LABEL_WIDTH + (box.width - LABEL_WIDTH) / 2) - box.left - LABEL_WIDTH;
+      const lane = element.clientWidth - LABEL_WIDTH;
+      const px = anchorClientX !== undefined
+        ? anchorClientX - box.left - LABEL_WIDTH
+        : zoomAnchor(PAD + playheadRef.current * ppf, element.scrollLeft, lane);
       const at = (px + element.scrollLeft - PAD) / ppf;
       setPpf(clamped);
       requestAnimationFrame(() => {
         element.scrollLeft = Math.max(0, PAD + at * clamped - px);
       });
     },
-    [ppf],
+    [ppf, floor],
   );
   // Không đi qua `zoomTo`: rAF của nó neo theo giây giữa khung và ghi đè scrollLeft = 0,
   // nên mở editor (và bấm Fit) từng thấy timeline lệch vài giây.
   const fit = useCallback(() => {
     const element = scroller.current;
     if (!element || !end) return;
-    setPpf(Math.min(ZOOM.max, Math.max(ZOOM.min, (element.clientWidth - LABEL_WIDTH - PAD * 4) / end)));
+    const lane = element.clientWidth - LABEL_WIDTH;
+    // The lane draws 5 s past the end: count them, or Fit leaves a scrollbar.
+    setPpf(clampZoom((lane - PAD * 4) / (end + 5 * FPS), zoomFloor(end, lane)));
     requestAnimationFrame(() => {
       element.scrollLeft = 0;
     });
   }, [end]);
-  // Vừa khung một lần khi đã biết độ dài scene.
-  const fitted = useRef(false);
+  // Once per scene, when its length is known: the zoom this browser last used on it, else Fit.
+  const sceneId = typeof scene.id === "string" ? scene.id : undefined;
+  const opened = useRef<string | null>(null);
+  // The save below runs in the same pass as the restore, still holding the previous scene's zoom.
+  const justOpened = useRef(false);
   useEffect(() => {
-    if (!fitted.current && end > 0 && scroller.current) {
-      fitted.current = true;
-      fit();
+    const element = scroller.current;
+    const id = sceneId ?? "";
+    if (opened.current === id || end <= 0 || !element) return;
+    opened.current = id;
+    justOpened.current = true;
+    const lane = element.clientWidth - LABEL_WIDTH;
+    const kept = rememberedZoom(sceneId);
+    if (kept === null || kept < zoomFloor(end, lane) || kept > ZOOM_MAX) return fit();
+    setPpf(kept);
+    requestAnimationFrame(() => {
+      element.scrollLeft = Math.max(0, PAD + playheadRef.current * kept - lane / 2);
+    });
+  }, [end, fit, sceneId]);
+  useEffect(() => {
+    if (opened.current !== (sceneId ?? "")) return;
+    if (justOpened.current) return void (justOpened.current = false);
+    const timer = setTimeout(() => rememberZoom(sceneId, ppf), 300);
+    return () => clearTimeout(timer);
+  }, [ppf, sceneId]);
+
+  // Range play: the selected clips' span, else the work area, else nothing to loop.
+  const loopRange = useMemo((): [number, number] | null => {
+    let from = Infinity;
+    let to = -Infinity;
+    for (const id of props.selection) {
+      const entity = byId.get(id);
+      const t = entity ? times.get(entity as unknown as ClipNode) : undefined;
+      if (!t || t.end <= t.start) continue;
+      from = Math.min(from, t.start);
+      to = Math.max(to, t.end);
     }
-  }, [end, fit]);
+    if (to > from) return [from, to];
+    const area = scene.workarea as [number, number] | null | undefined;
+    return area ? [Math.round(area[0] * FPS), Math.round(area[1] * FPS)] : null;
+  }, [props.selection, byId, times, scene]);
+  const toggleLoop = () => {
+    if (props.looping) props.onLoop?.(null);
+    else if (loopRange) props.onLoop?.(loopRange);
+  };
+
+  // Beat density (B3): every beat, every 2nd or every 4th, kept per scene in this browser.
+  const [beatDensity, setBeatDensity] = useState<BeatDensity>(1);
+  useEffect(() => {
+    try {
+      const kept = Number(window.localStorage.getItem(`opencmo.timeline.beats.${sceneId ?? ""}`));
+      setBeatDensity(kept === 2 || kept === 4 ? kept : 1);
+    } catch {
+      setBeatDensity(1);
+    }
+  }, [sceneId]);
+  const cycleBeats = () => {
+    const next: BeatDensity = beatDensity === 1 ? 2 : beatDensity === 2 ? 4 : 1;
+    setBeatDensity(next);
+    try {
+      window.localStorage.setItem(`opencmo.timeline.beats.${sceneId ?? ""}`, String(next));
+    } catch {
+      // Blocked storage: the density lasts until the editor closes.
+    }
+  };
+
+  // `=` and `-` zoom the timeline (⌘= / ⌘− zoom the canvas), `/` loops; Escape stops a loop.
+  // Typing in a field is left alone.
+  const keyAction = useRef<(name: string) => void>(() => undefined);
+  keyAction.current = (name) => {
+    if (name === "timelineZoomIn") zoomTo(ppf * 1.5);
+    else if (name === "timelineZoomOut") zoomTo(ppf / 1.5);
+    else if (name === "rangePlay") toggleLoop();
+    else if (name === "escape" && props.looping) props.onLoop?.(null);
+  };
+  useEffect(() => {
+    const down = (event: KeyboardEvent) => {
+      if (isTyping(event.target)) return;
+      if (event.key === "Escape") return keyAction.current("escape");
+      const name = matchTimelineShortcut(event);
+      if (!name) return;
+      event.preventDefault();
+      if (event.repeat && name === "rangePlay") return;
+      keyAction.current(name);
+    };
+    window.addEventListener("keydown", down);
+    return () => window.removeEventListener("keydown", down);
+  }, []);
 
   useEffect(() => {
     const element = scroller.current;
@@ -253,14 +382,14 @@ export function Timeline(props: TimelineProps) {
         if (node.kind !== "audio" || nodes.has(node)) continue;
         const src = (node as { src?: AssetInput }).src;
         if (src === undefined) continue;
-        for (const beat of knownBeats(typeof src === "string" ? src : JSON.stringify(src))) {
+        for (const beat of thinBeats(knownBeats(typeof src === "string" ? src : JSON.stringify(src)), beatDensity)) {
           const frame = Math.round(t.origin + (beat * FPS) / t.rate);
           if (frame >= t.start && frame <= t.end) extra.push(frame);
         }
       }
       return snapTargets(committed, nodes, extra);
     },
-    [media, props, workarea],
+    [media, props, workarea, beatDensity],
   );
 
   const onMove = useCallback(
@@ -288,15 +417,16 @@ export function Timeline(props: TimelineProps) {
       const frames = Math.round(dx / ppf);
       // Snap tắt: ngưỡng 0, chỉ dính khi trùng đúng khung.
       const threshold = snapOn.current ? SNAP_PX / ppf : 0;
+      const playhead = snapOn.current ? props.frame : undefined;
       if (g.kind === "move") {
-        const snap = snapDelta(g.edges, frames, g.snap, threshold);
+        const snap = snapDelta(g.edges, frames, g.snap, threshold, playhead);
         setSnapAt(snap?.at ?? null);
         g.op = { op: "move_elements", element_ids: g.ids, by: (snap?.delta ?? frames) / FPS };
         g.row = rowFor(g.ids, event.clientY);
         setRowTarget(g.row);
       } else if (g.kind === "trim") {
         const wanted = g.from + frames;
-        const snapped = snapFrame(wanted, g.snap, threshold);
+        const snapped = snapFrame(wanted, g.snap, threshold, playhead);
         setSnapAt(snapped);
         g.op = { op: "trim_element", element_id: g.id, edge: g.edge, at: Math.max(0, snapped ?? wanted) / FPS };
       } else if (g.kind === "marker") {
@@ -513,13 +643,14 @@ export function Timeline(props: TimelineProps) {
     const step = rulerStep(ppf);
     const out: { frame: number; major: boolean }[] = [];
     const minor = step / 5;
-    const limit = (contentWidth - PAD) / ppf;
-    for (let f = 0; f <= limit; f += minor >= 1 ? minor : step) {
+    const every = minor >= 1 ? minor : step;
+    const limit = Math.min((contentWidth - PAD) / ppf, shown[1]);
+    for (let f = Math.max(0, Math.floor(shown[0] / step) * step); f <= limit; f += every) {
       const rounded = Math.round(f);
       out.push({ frame: rounded, major: rounded % step === 0 });
     }
     return out;
-  }, [ppf, contentWidth]);
+  }, [ppf, contentWidth, shown[0], shown[1]]);
 
   const range: [number, number] = workarea
     ? [Math.round(workarea[0] * FPS), Math.round(workarea[1] * FPS)]
@@ -554,9 +685,29 @@ export function Timeline(props: TimelineProps) {
         >
           Snap
         </button>
+        <button
+          type="button"
+          className="ed2-btn ed2-snap"
+          data-testid="timeline-loop"
+          aria-pressed={props.looping === true}
+          disabled={!props.looping && !loopRange}
+          title={loopRange || props.looping ? "Loop the selected clips or the work area (/). Esc stops." : "Select clips or set a work area to loop them"}
+          onClick={toggleLoop}
+        >
+          Loop
+        </button>
+        <button
+          type="button"
+          className="ed2-btn"
+          data-testid="timeline-beats"
+          title="Which music beats show and snap: every beat, every 2nd or every 4th"
+          onClick={cycleBeats}
+        >
+          {beatDensity === 1 ? "Beats: all" : beatDensity === 2 ? "Beats: 1 in 2" : "Beats: 1 in 4"}
+        </button>
         <NewTimeline doc={doc} run={(ops) => props.run(ops)} />
         <span className="ed2-grow" />
-        <button type="button" className="ed2-icon" aria-label="Zoom out timeline" onClick={() => zoomTo(ppf / 1.5)}>
+        <button type="button" className="ed2-icon" aria-label="Zoom out timeline" title="Zoom out timeline (-)" onClick={() => zoomTo(ppf / 1.5)}>
           −
         </button>
         <input
@@ -564,13 +715,13 @@ export function Timeline(props: TimelineProps) {
           className="ed2-zoom-slider"
           aria-label="Timeline zoom"
           data-testid="timeline-zoom"
-          min={Math.log(ZOOM.min)}
-          max={Math.log(ZOOM.max)}
+          min={Math.log(floor)}
+          max={Math.log(ZOOM_MAX)}
           step={0.01}
           value={Math.log(ppf)}
           onChange={(event) => zoomTo(Math.exp(Number(event.target.value)))}
         />
-        <button type="button" className="ed2-icon" aria-label="Zoom in timeline" onClick={() => zoomTo(ppf * 1.5)}>
+        <button type="button" className="ed2-icon" aria-label="Zoom in timeline" title="Zoom in timeline (=)" onClick={() => zoomTo(ppf * 1.5)}>
           +
         </button>
         <button type="button" className="ed2-btn" data-testid="timeline-fit" onClick={fit}>
@@ -708,6 +859,9 @@ export function Timeline(props: TimelineProps) {
                       aiState={props.aiState}
                       onRetry={props.onRetry}
                       onBarDown={onBarDown}
+                      beatDensity={beatDensity}
+                      shown={shown}
+                      onScreen={onScreen}
                       onKeyframeDown={(keyframe, event) => {
                         const t = row.time;
                         if (!t || !keyframe.id) return;
@@ -740,8 +894,13 @@ export function Timeline(props: TimelineProps) {
           </div>
 
           {/* Playhead và đường gióng. */}
-          <div className="ed2-playhead" data-testid="timeline-playhead" style={{ left: LABEL_WIDTH + x(frame) }} />
-          {snapAt !== null ? <div className="ed2-snapline" style={{ left: LABEL_WIDTH + x(snapAt) }} /> : null}
+          {/* A drag that snaps onto the playhead lights the playhead instead of drawing a guide over it. */}
+          <div
+            className={snapAt === frame ? "ed2-playhead is-snapped" : "ed2-playhead"}
+            data-testid="timeline-playhead"
+            style={{ left: LABEL_WIDTH + x(frame) }}
+          />
+          {snapAt !== null && snapAt !== frame ? <div className="ed2-snapline" style={{ left: LABEL_WIDTH + x(snapAt) }} /> : null}
         </div>
       </div>
     </section>
@@ -880,6 +1039,8 @@ function LayerCell({
 // ------------------------------------------------------------------ làn clip
 
 const NO_FLASH: string[] = [];
+/** Narrowest bar that gets a filmstrip, in px. */
+const MIN_FILMSTRIP_PX = 48;
 
 function Lane({
   row,
@@ -894,7 +1055,13 @@ function Lane({
   onRetry,
   onBarDown,
   onKeyframeDown,
+  beatDensity,
+  shown,
+  onScreen,
 }: {
+  beatDensity: BeatDensity;
+  shown: [number, number];
+  onScreen: [number, number];
   row: Row;
   times: Map<ClipNode, TimeNode>;
   media: BrowserMedia;
@@ -914,7 +1081,10 @@ function Lane({
     const keyframes = ((row.entity.keyframes as Entity[] | undefined) ?? []).filter((keyframe) => keyframe.id);
     return (
       <>
-        {keyframes.map((keyframe) => (
+        {keyframes.filter((keyframe) => {
+          const at = t.origin + (Number(keyframe.time) * FPS) / t.rate;
+          return at >= shown[0] && at <= shown[1];
+        }).map((keyframe) => (
           <span
             key={keyframe.id}
             className={selection.includes(String(keyframe.id)) ? "ed2-keyframe is-selected" : "ed2-keyframe"}
@@ -929,7 +1099,11 @@ function Lane({
   }
   if (row.kind !== "clip" || !row.time) return null;
   // Sequence giữ mọi clip trên một hàng.
-  const bars: TimeNode[] = row.entity.kind === "sequence" ? row.time.children : [row.time];
+  // Only bars that reach into the drawn window, but always the selected ones (a drag's preview
+  // can carry one out of the window, and its handles must stay under the pointer).
+  const bars: TimeNode[] = (row.entity.kind === "sequence" ? row.time.children : [row.time]).filter(
+    (t) => (t.end >= shown[0] && t.start <= shown[1]) || selection.includes(String((t.node as Entity).id ?? "")),
+  );
   return (
     <>
       {bars.map((t) => (
@@ -945,6 +1119,9 @@ function Lane({
           ai={aiState?.(t.node as unknown as Entity) ?? null}
           onRetry={onRetry}
           onDown={onBarDown}
+          beatDensity={beatDensity}
+          shown={shown}
+          onScreen={onScreen}
         />
       ))}
     </>
@@ -962,7 +1139,13 @@ function Bar({
   ai,
   onRetry,
   onDown,
+  beatDensity,
+  shown,
+  onScreen,
 }: {
+  beatDensity: BeatDensity;
+  shown: [number, number];
+  onScreen: [number, number];
   t: TimeNode;
   media: BrowserMedia;
   ppf: number;
@@ -992,10 +1175,13 @@ function Bar({
       title={slip ? `${label} · Alt-drag to slip the footage inside this clip` : `${label} · Drag up or down to move it to another row`}
       onPointerDown={(event) => onDown(entity, t, event)}
     >
-      {src !== undefined ? <Wave src={src} t={t} media={media} width={width} height={height - 6} /> : null}
+      {kind === "video" && entity.src !== undefined ? (
+        <Filmstrip src={entity.src as AssetInput} t={t} media={media} ppf={ppf} shown={onScreen} height={height - 6} />
+      ) : null}
+      {src !== undefined ? <Wave src={src} t={t} media={media} ppf={ppf} shown={shown} height={height - 6} beatDensity={beatDensity} /> : null}
       {kind === "captions" && typeof entity.src === "string" ? (
         <>
-          <Words transcript={media.transcript(entity.src)} t={t} ppf={ppf} />
+          <Words transcript={media.transcript(entity.src)} t={t} ppf={ppf} shown={shown} />
           <CaptionsProblem status={media.transcriptStatus(entity.src)} transcript={media.transcript(entity.src)} t={t} id={String(entity.id ?? "")} />
         </>
       ) : null}
@@ -1101,7 +1287,23 @@ function FadeShades({ entity, ppf, width }: { entity: Entity; ppf: number; width
   );
 }
 
-function Wave({ src, t, media, width, height }: { src: AssetInput; t: TimeNode; media: BrowserMedia; width: number; height: number }) {
+function Wave({
+  src,
+  t,
+  media,
+  ppf,
+  shown,
+  height,
+  beatDensity,
+}: {
+  src: AssetInput;
+  t: TimeNode;
+  media: BrowserMedia;
+  ppf: number;
+  shown: [number, number];
+  height: number;
+  beatDensity: BeatDensity;
+}) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const [peaks, setPeaks] = useState<Peaks | null>(null);
   const key = typeof src === "string" ? src : JSON.stringify(src);
@@ -1113,27 +1315,94 @@ function Wave({ src, t, media, width, height }: { src: AssetInput; t: TimeNode; 
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, media]);
-  // Canvas không rộng quá vùng thấy được nhiều lần: vẽ theo pixel thật, có trần.
-  const pixels = Math.min(8192, Math.max(1, Math.round(width)));
+  // Only the part of the clip in the drawn window, at real pixels: a whole 30-minute clip zoomed in
+  // was one canvas capped at 8,192 px and stretched over 200,000.
+  const from = Math.max(t.start, Math.floor(shown[0]));
+  const to = Math.min(t.end, Math.ceil(shown[1]));
+  const left = (from - t.start) * ppf;
+  const pixels = Math.min(16384, Math.max(1, Math.round((to - from) * ppf)));
   const theme = useThemePref();
   useEffect(() => {
     const element = canvas.current;
-    if (!element || !peaks) return;
+    if (!element || !peaks || to <= from) return;
     element.width = pixels;
     element.height = Math.max(1, Math.round(height));
-    const from = ((t.start - t.origin) * t.rate) / FPS;
-    const to = ((t.end - t.origin) * t.rate) / FPS;
+    const sourceFrom = ((from - t.origin) * t.rate) / FPS;
+    const sourceTo = ((to - t.origin) * t.rate) / FPS;
     // Màu sóng theo theme (token --ds-wave); thiếu token thì giữ màu cũ.
     const wave = getComputedStyle(element).getPropertyValue("--ds-wave").trim() || "rgba(255,255,255,0.35)";
-    drawPeaks(element, peaks, from, to, wave);
+    drawPeaks(element, peaks, sourceFrom, sourceTo, wave);
     // Nhạc (lớp audio): vạch beat — cũng là điểm dính khi kéo clip (`targets`).
     if (t.node.kind === "audio") {
       const grid = beatsOf(key, peaks);
-      if (grid) drawBeats(element, grid.beats, from, to, "rgba(255,214,0,0.8)");
+      if (grid) drawBeats(element, thinBeats(grid.beats, beatDensity), sourceFrom, sourceTo, "rgba(255,214,0,0.8)");
     }
-  }, [peaks, pixels, height, t.start, t.end, t.origin, t.rate, key, t.node.kind, theme]);
-  if (!peaks) return null;
-  return <canvas ref={canvas} className="ed2-wave" data-testid="waveform" />;
+  }, [peaks, pixels, height, from, to, t.origin, t.rate, key, t.node.kind, theme, beatDensity]);
+  if (!peaks || to <= from) return null;
+  return <canvas ref={canvas} className="ed2-wave" data-testid="waveform" style={{ left, width: (to - from) * ppf, right: "auto" }} />;
+}
+
+/**
+ * Thumbnails along a video bar (B4), for the part of the bar in the drawn window. Each tile shows
+ * the frame at the source time under its left edge, rounded to the zoom's step.
+ */
+function Filmstrip({ src, t, media, ppf, shown, height }: { src: AssetInput; t: TimeNode; media: BrowserMedia; ppf: number; shown: [number, number]; height: number }) {
+  const canvas = useRef<HTMLCanvasElement>(null);
+  const key = typeof src === "string" ? src : JSON.stringify(src);
+  const [grabber, setGrabber] = useState<Awaited<ReturnType<typeof grabberFor>>>(null);
+  const [version, setVersion] = useState(0);
+  useEffect(() => {
+    let live = true;
+    void grabberFor(key, src, media).then((found) => live && setGrabber(found));
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, media]);
+  useEffect(() => grabber?.subscribe(() => setVersion((value) => value + 1)), [grabber]);
+  // One request per bar; dropped when the bar leaves the screen or unmounts.
+  const owner = String((t.node as Entity).id ?? `${t.start}`);
+  useEffect(() => () => grabber?.want(owner, [], 0), [grabber, owner]);
+
+  const from = Math.max(t.start, Math.floor(shown[0]));
+  const to = Math.min(t.end, Math.ceil(shown[1]));
+  const left = (from - t.start) * ppf;
+  const width = Math.min(16384, Math.max(0, Math.round((to - from) * ppf)));
+  const tileWidth = Math.max(16, height * (grabber?.tileAspect ?? 16 / 9));
+  // Source seconds under a scene frame of this bar.
+  const sourceAt = (frame: number) => ((frame - t.origin) * t.rate) / FPS;
+  const step = filmstripStep((tileWidth / ppf / FPS) * t.rate);
+
+  useEffect(() => {
+    const element = canvas.current;
+    if (!element || !grabber || width < 1 || (t.end - t.start) * ppf < Math.max(tileWidth, MIN_FILMSTRIP_PX)) {
+      grabber?.want(owner, [], height);
+      return;
+    }
+    const scale = window.devicePixelRatio || 1;
+    element.width = Math.round(width * scale);
+    element.height = Math.round(height * scale);
+    const ctx = element.getContext("2d");
+    if (!ctx) return;
+    ctx.clearRect(0, 0, element.width, element.height);
+    // Tiles sit on a grid that starts at the bar's own start, so they don't slide while scrolling.
+    const first = Math.floor(left / tileWidth);
+    const needed: number[] = [];
+    for (let index = first; index * tileWidth < left + width; index++) {
+      const at = Math.round(sourceAt(t.start + (index * tileWidth) / ppf) / step) * step;
+      if (at < 0) continue;
+      needed.push(at);
+      const tile = grabber.tile(at);
+      if (tile) ctx.drawImage(tile, (index * tileWidth - left) * scale, 0, tileWidth * scale, element.height);
+    }
+    grabber.want(owner, [...new Set(needed)], height);
+    // `version` redraws when a grabbed tile arrives.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [grabber, version, left, width, height, tileWidth, step, ppf, t.start, t.origin, t.rate, owner]);
+  // Drawn only on screen, and not on a bar narrower than MIN_FILMSTRIP_PX: a cut-by-words edit has
+  // hundreds of narrow bars, and a canvas each cost 100–230 ms per zoom step on the bench.
+  if (!grabber || width < 1 || (t.end - t.start) * ppf < Math.max(tileWidth, MIN_FILMSTRIP_PX)) return null;
+  return <canvas ref={canvas} className="ed2-wave ed2-filmstrip" aria-hidden style={{ left, width, right: "auto", opacity: 0.55 }} />;
 }
 
 /** Thời gian (frame scene) của các từ rơi vào thanh `t`. */
@@ -1162,15 +1431,17 @@ function CaptionsProblem({ status, transcript, t, id }: { status: "loading" | "f
   );
 }
 
-function Words({ transcript, t, ppf }: { transcript: Transcript | null; t: TimeNode; ppf: number }) {
+function Words({ transcript, t, ppf, shown }: { transcript: Transcript | null; t: TimeNode; ppf: number; shown: [number, number] }) {
   if (!transcript) return null;
   const words = transcript.flatMap((segment) => segment.words);
+  const from = Math.max(t.start, shown[0]);
+  const to = Math.min(t.end, shown[1]);
   return (
     <>
       {words.map((word, index) => {
         const start = t.origin + (word.start * FPS) / t.rate;
         const end = t.origin + (word.end * FPS) / t.rate;
-        if (end <= t.start || start >= t.end) return null;
+        if (end <= from || start >= to) return null;
         const left = (Math.max(start, t.start) - t.start) * ppf;
         const width = (Math.min(end, t.end) - Math.max(start, t.start)) * ppf;
         if (width < 3) return null;

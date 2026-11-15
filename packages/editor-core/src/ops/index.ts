@@ -27,6 +27,9 @@ import {
 import { OpError, OpFailure, unwrapOutcome, type OpContext } from './context';
 import { addGenerated, addText, deleteElement, enhanceGenerated, pickVariant, regenerate, setCaptionStyle, setFrame, setLayout, setProjectSettings, updateElement } from './project';
 import { moveElements, moveKeyframe, moveLayer, setWorkarea, splitElements, trimElement } from './timeline';
+// capcut-A: clip tools (plan 2026-11-15).
+import { freezeFrame, setCover, speedRamp } from './clip-tools';
+export { SPEED_RAMP_NAMES, SPEED_RAMPS, type SpeedRamp } from './clip-tools';
 import { addPart, copySettings, movePart, setKeyframe, setProps } from './inspector';
 import { cleanAudio, makeRoom, rippleDelete, setAudioRoll, setCaptionBreaks, setFade, slipElement } from './edit';
 import { deleteMarker, setMarker } from './markers';
@@ -154,6 +157,10 @@ const REGISTRY = [
 	moveLayer,
 	moveKeyframe,
 	setWorkarea,
+	// capcut-A: clip tools
+	setCover,
+	freezeFrame,
+	speedRamp,
 	setFade,
 	slipElement,
 	rippleDelete,

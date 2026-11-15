@@ -17,7 +17,7 @@ import type { CreatorInfo } from "@/lib/departments/publish/types";
 import type { ApprovalCard } from "./approval-card";
 import scheduleDefaults from "../../../../packages/contracts/schedule-defaults.json";
 
-import { shortRenders, sign } from "./studio-sign";
+import { latestRenders, sign } from "./studio-sign";
 
 /** Creator info is asked only for cards still waiting: a decided card shows what was approved. */
 async function creatorInfo(accounts: Map<string, string>, ids: string[]): Promise<Map<string, CreatorInfo>> {
@@ -191,7 +191,8 @@ export async function enrichScheduleCards(supabase: SupabaseClient, userId: stri
   );
 
   const clipIds = [...new Set(clipOf.values())];
-  const renders = await shortRenders(supabase, clipIds);
+  const latest = await latestRenders(supabase, clipIds);
+  const renders = new Map([...latest].map(([clip, render]) => [clip, render.path]));
   // A video with no connected account is downloaded and posted by the founder: the same render, signed as a download.
   const downloads = new Set(
     schedule.flatMap((c) => {
@@ -243,7 +244,8 @@ export async function enrichScheduleCards(supabase: SupabaseClient, userId: stri
         avatarUrl: (b.accountId ? avatar.get(b.accountId) : null) ?? null,
         preview: {
           ...b.preview,
-          videoUrl: render ? signed.get(render) ?? null : null,
+          // The cover the edit set (`set_cover`): the player opens on that frame, as other cards open on their still.
+          videoUrl: render ? withCover(signed.get(render) ?? null, clip ? latest.get(clip)?.cover ?? null : null) : null,
           downloadUrl: render && b.mode === "intent" ? signedDownloads.get(render) ?? null : null,
         },
         ...(caption ? { caption } : {}),
@@ -262,4 +264,10 @@ export async function enrichScheduleCards(supabase: SupabaseClient, userId: stri
       },
     };
   });
+}
+
+/** A signed video link that opens on the cover frame: a media fragment, which the browser reads and Storage ignores. */
+export function withCover(url: string | null, cover: number | null): string | null {
+  if (!url || cover === null) return url;
+  return `${url}#t=${cover.toFixed(2)}`;
 }

@@ -4694,6 +4694,13 @@ span.ed2-asst-model {
 .ed2-snapline {
   background: var(--ds-selected);
 }
+/* A drag snapped onto the playhead: the playhead itself lights up (no guide over it). */
+.ed2-playhead.is-snapped {
+  width: 2px;
+  margin-left: -0.5px;
+  background: var(--ds-selected);
+  box-shadow: 0 0 0 1px var(--ds-selected);
+}
 .ed2-drop-line {
   position: absolute;
   height: 2px;
@@ -6955,3 +6962,22 @@ html[data-theme] .ed2-zoom {
 .ed2-slides-panel .ed2-input { min-height: 32px; padding: 4px 8px; border: 1px solid var(--ds-line); border-radius: var(--ds-radius-control); background: var(--ds-raised); color: var(--ds-text); font: inherit; }
 .ed2-slides-panel textarea.ed2-input { resize: vertical; }
 .ed2-slides-panel .ed2-slide-color { flex: none; align-self: flex-start; width: 48px; height: 32px; min-height: 0; max-height: 32px; padding: 0; border: 1px solid var(--ds-line); border-radius: var(--ds-radius-control); background: none; }
+
+/* Recorder (plan 2026-11-15 A1): camera beside the script. */
+.ed2-rec { width: min(960px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow-y: auto; }
+.ed2-rec-head, .ed2-rec-tools, .ed2-rec-foot, .ed2-rec-left { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ed2-rec-body { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 12px; min-height: 0; }
+@media (max-width: 720px) { .ed2-rec-body { grid-template-columns: 1fr; } }
+.ed2-rec-stage { position: relative; display: grid; place-items: center; aspect-ratio: 16 / 9; overflow: hidden; border-radius: 8px; background: #000; }
+.ed2-rec-video { width: 100%; height: 100%; object-fit: contain; transform: scaleX(-1); }
+.ed2-rec-video.is-off { display: grid; place-items: center; transform: none; color: var(--ds-muted); }
+.ed2-rec-count { position: absolute; inset: 0; display: grid; place-items: center; font-size: 96px; font-weight: 700; color: #fff; background: rgba(0, 0, 0, 0.35); }
+.ed2-rec-badge { position: absolute; top: 8px; left: 8px; padding: 2px 8px; border-radius: 999px; font-variant-numeric: tabular-nums; font-size: var(--ds-text-12); color: #fff; background: rgba(0, 0, 0, 0.6); }
+.ed2-rec-badge[data-phase="recording"] { background: #c62828; }
+.ed2-rec-level { position: absolute; right: 8px; bottom: 8px; left: 8px; width: auto; height: 6px; }
+.ed2-rec-prompter { display: flex; flex-direction: column; gap: 12px; min-height: 200px; max-height: 420px; padding: 12px; overflow-y: auto; border: 1px solid var(--ds-line); border-radius: 8px; background: var(--ds-raised); }
+.ed2-rec-beat { margin: 0; font-weight: 600; }
+.ed2-rec-next { margin: 0; font-size: 0.7em; color: var(--ds-muted); }
+.ed2-rec-text { flex: 1; width: 100%; min-height: 180px; padding: 0; border: 0; resize: none; background: none; color: var(--ds-text); font: inherit; }
+.ed2-rec-check { display: inline-flex; align-items: center; gap: 4px; font-size: var(--ds-text-12); }
+.ed2-rec-tools select { max-width: 180px; }

@@ -50,6 +50,7 @@ export function ScriptPanel({
   run,
   playhead,
   onSeek,
+  onRecord,
 }: {
   script: Script;
   /** The script after an edit: new words and version. */
@@ -64,6 +65,8 @@ export function ScriptPanel({
   playhead: number;
   /** Clip seconds. */
   onSeek: (seconds: number) => void;
+  /** Opens the recorder with this script as the prompter; the take lands in this edit. */
+  onRecord?: () => void;
 }) {
   const markers = useMemo(() => readMarkers(doc), [doc]);
   const markerOf = (index: number) => markers.find((marker) => marker.name.startsWith(`${String(index + 1).padStart(2, "0")} · `)) ?? null;
@@ -169,6 +172,11 @@ export function ScriptPanel({
     <section className="ed2-trn ed2-scr" data-testid="script-panel" onKeyDown={(event) => event.stopPropagation()}>
       <header className="ed2-scr-head">
         <div className="ed2-scr-title">{script.title}</div>
+        {onRecord ? (
+          <button type="button" className="ed2-btn ed2-primary" data-testid="script-record" onClick={onRecord}>
+            Record
+          </button>
+        ) : null}
         <a className="ed2-btn" href={`/app/script/${encodeURIComponent(script.orderId)}/prompter`} target="_blank" rel="noopener noreferrer">
           Read on your phone
         </a>

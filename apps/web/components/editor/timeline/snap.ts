@@ -33,8 +33,16 @@ export function snapTargets(times: Map<ClipNode, TimeNode>, moving: Set<ClipNode
   return [...out];
 }
 
-/** Đích gần `frame` nhất trong `threshold` frame, hoặc null. */
-export function snapFrame(frame: number, targets: number[], threshold: number): number | null {
+/** Snap distance on screen. CapCut uses 6 px; 10 px pulled clips onto edges the user was trying to leave. */
+export const SNAP_PX = 6;
+
+/**
+ * Đích gần `frame` nhất trong `threshold` frame, hoặc null. `playhead` (nếu có) thắng mọi đích
+ * khác khi nó nằm trong ngưỡng, kể cả khi đích khác gần hơn: đặt clip đúng playhead là việc làm
+ * nhiều nhất, và hai đích cách nhau một frame thì người dùng không nhắm được cái nào.
+ */
+export function snapFrame(frame: number, targets: number[], threshold: number, playhead?: number): number | null {
+  if (playhead !== undefined && Math.abs(playhead - frame) <= threshold) return playhead;
   let best: number | null = null;
   for (const target of targets) {
     if (Math.abs(target - frame) <= threshold && (best === null || Math.abs(target - frame) < Math.abs(best - frame))) {
@@ -46,15 +54,25 @@ export function snapFrame(frame: number, targets: number[], threshold: number): 
 
 /**
  * Một lượt dính cho cả nhóm đang kéo: trong mọi mép (đầu và cuối của từng
- * clip) dời `delta`, mép nào gần đích nhất quyết định. Trả delta đã chỉnh và
- * frame của điểm dính (để vẽ đường gióng).
+ * clip) dời `delta`, mép nào gần đích nhất quyết định — trừ khi một mép chạm
+ * playhead, thì playhead thắng. Trả delta đã chỉnh và frame của điểm dính (để
+ * vẽ đường gióng, hay làm sáng playhead).
  */
 export function snapDelta(
   edges: number[],
   delta: number,
   targets: number[],
   threshold: number,
+  playhead?: number,
 ): { delta: number; at: number } | null {
+  if (playhead !== undefined) {
+    let hit: { delta: number; distance: number } | null = null;
+    for (const edge of edges) {
+      const distance = Math.abs(playhead - (edge + delta));
+      if (distance <= threshold && (!hit || distance < hit.distance)) hit = { delta: playhead - edge, distance };
+    }
+    if (hit) return { delta: hit.delta, at: playhead };
+  }
   let best: { delta: number; at: number; distance: number } | null = null;
   for (const edge of edges) {
     const target = snapFrame(edge + delta, targets, threshold);
