@@ -44,17 +44,18 @@ Checks of what it touched → `/code-review` on the step's diff → fix → tick
 
 ### B0 — research report
 
-- [ ] Read the report §2–§6 and the bundles: `pretty/core-action.*.js`, zoom in `pretty/widget-2.*.js`
+- [x] Read the report §2–§6 and the bundles: `pretty/core-action.*.js`, zoom in `pretty/widget-2.*.js`
       (`computeZoomMax`, `ViewportAmend`), snap in `pretty/widget-db03a274.*.js` (~line 15570), the find / space /
       merge methods there (`findSpace`, `canSegmentBePlacedNearby`, `couldMerge`, `findTargetTrackIndex*`), the move
       validator, `pretty/ai-beat.*.js`, range play (`exitRangePlay`, focus range), and the canvas drawing in
       `pretty/widget-3.*.js` / `widget-4.*.js` (viewport culling, thumbnail and waveform batches).
-- [ ] Measure ours first: open a 30-minute upload, scroll and zoom the timeline, record frame times (Performance panel).
-      This decides how much of B4 to build.
-- [ ] Write `docs/research/editor/2026-11-15-capcut-timeline.md` (Vietnamese): what CapCut does, what we have, the
+- [x] Measure ours first: open a 30-minute upload, scroll and zoom the timeline, record frame times (Performance panel).
+      This decides how much of B4 to build. *Done with a synthetic 30-minute edit in `timeline/bench/` (no local
+      stack in the cloud session); numbers in the report.*
+- [x] Write `docs/research/editor/2026-11-15-capcut-timeline.md` (Vietnamese): what CapCut does, what we have, the
       exact design for B1–B4, and the open questions only a runtime capture can settle. Add its row to
       `docs/research/editor/README.md`.
-- [ ] Review → commit → push.
+- [x] Review → commit → push.
 
 ### B1 — R3: zoom and snap quick wins
 
