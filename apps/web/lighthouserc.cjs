@@ -37,6 +37,10 @@ module.exports = {
       settings: {
         // The runner is a container: Chrome needs these to start.
         chromeFlags: "--no-sandbox --headless=new",
+        // Next streams metadata into <body> for a browser's user agent, and Lighthouse's is one, so this audit saw the
+        // description on some loads only. Link-preview bots get it in <head>; `lighthouse/preview-meta.mjs` checks
+        // that instead, in the same job.
+        skipAudits: ["meta-description"],
       },
     },
     assert: {

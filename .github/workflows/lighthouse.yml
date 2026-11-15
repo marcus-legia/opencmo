@@ -61,6 +61,10 @@ jobs:
           for i in $(seq 1 60); do curl -sf -o /dev/null http://127.0.0.1:3200/login && exit 0; sleep 2; done
           cat /tmp/next.log; exit 1
 
+      - name: What a link preview reads (description, Open Graph and Twitter tags in <head>, as Twitterbot)
+        working-directory: apps/web
+        run: node lighthouse/preview-meta.mjs http://127.0.0.1:3200 / /blog /blog/write-x-thread
+
       - name: Lighthouse (three runs per page, warnings only for now)
         working-directory: apps/web
         run: npx -y @lhci/cli@0.15.1 autorun --config=./lighthouserc.cjs
