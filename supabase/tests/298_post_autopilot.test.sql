@@ -31,6 +31,14 @@ create function pg_temp.post(p_id uuid, p_hours integer, p_extra jsonb default '
     jsonb_build_object('text', 'One true thing about the product.', 'proposed', jsonb_build_object(
       'platform', 'x', 'mode', 'publish', 'account_id', 'e2981000-0000-4000-8000-000000000001', 'handle', 'founder',
       'at', to_char(date_trunc('minute', now() + make_interval(hours => p_hours)) at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'))) || p_extra);
+  -- The insert's trigger picks X's next free time instead of `p_hours`; an update in review keeps the time the test set,
+  -- so the case is the one it names whatever the hour the suite runs (as in 301 and 315).
+  update public.content_items set body = jsonb_set(body, '{proposed,at}',
+      to_jsonb(to_char(date_trunc('minute', now() + make_interval(hours => p_hours)) at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')))
+  where id = p_id;
+  -- The update's sync raised the card again and cancelled the insert's; dropping the cancelled one keeps the day's card
+  -- budget as it was (one card counted per post) and leaves the test's own raise one card to replace.
+  delete from public.approvals where ref_id = p_id and status = 'cancelled';
 $$;
 create function pg_temp.card(p_item uuid) returns public.approvals language sql as $$
   select * from public.approvals where ref_id = p_item and ref_kind = 'content_item' order by created_at desc limit 1;
