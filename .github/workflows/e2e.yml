@@ -61,10 +61,11 @@ jobs:
 
       - run: npm ci
 
-      - name: Playwright's system libraries
-        # The specs drive the runner's own Google Chrome (`channel: chrome`): Playwright's Chromium cannot decode the
-        # editor's H.264 masters. Only the libraries are installed here.
-        run: npx playwright install-deps chromium
+      - name: Playwright's ffmpeg, Chromium and their system libraries
+        # Desktop specs drive the runner's own Google Chrome (`channel: chrome`): Playwright's Chromium cannot decode the
+        # editor's H.264 masters. Playwright's own ffmpeg records the video of a failed test, and its Chromium runs the
+        # mobile project (whole suite only).
+        run: npx playwright install --with-deps chromium ffmpeg
 
       - name: Smoke set
         if: matrix.suite == 'smoke'
