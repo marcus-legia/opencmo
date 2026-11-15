@@ -50,6 +50,7 @@
     "build:mcp-server": "npm run build --workspace @opencmo/mcp-server"
   },
   "overrides": {
-    "postcss": "8.5.28"
+    "postcss": "8.5.28",
+    "zod": "4.6.7"
   }
 }
