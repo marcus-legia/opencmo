@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { CRON_MONITORS, withCronMonitor } from "@/lib/ops/cron-monitor";
 
 import { cmoPausedEverywhere } from "@/lib/cmo/pause";
 import { cronAuthorized } from "@/lib/cron-auth";
@@ -19,7 +20,7 @@ export const maxDuration = 120;
  * expire, and one push per browser for new cards. Called once an hour; `email_log_claim` makes a second call send
  * nothing twice. With no sender it only counts: the digest is on the Dashboard anyway.
  */
-export async function GET(request: NextRequest) {
+async function run(request: NextRequest) {
   const started = Date.now();
   if (!cronAuthorized(request.headers.get("authorization"), "cmo-digest")) {
     return NextResponse.json({ error: "Forbidden." }, { status: 401 });
@@ -82,4 +83,12 @@ export async function GET(request: NextRequest) {
     }
   }
   return NextResponse.json({ due, sent, expiring, pushed, released: released.data ?? 0, sender: send?.name ?? null });
+}
+
+/** Checks in with Sentry's cron monitor once the caller is the clock (`lib/ops/cron-monitor.ts`). */
+export async function GET(request: NextRequest) {
+  if (!cronAuthorized(request.headers.get("authorization"), "cmo-digest")) {
+    return NextResponse.json({ error: "Forbidden." }, { status: 401 });
+  }
+  return withCronMonitor(CRON_MONITORS.digest, () => run(request));
 }
