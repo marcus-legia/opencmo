@@ -144,7 +144,7 @@ const SPECS: Spec[] = [
     id: "lurk",
     label: "LurkAPI (research, Sales; on trial instead of ScrapeCreators)",
     key: (env) => value(env, "LURK_API_KEY"),
-    unset: "Optional. Set LURK_API_KEY to read through LurkAPI; Google search and X transcripts stay on ScrapeCreators.",
+    unset: "Optional. Set LURK_API_KEY to read through LurkAPI; Google search, Facebook group posts and X transcripts stay on ScrapeCreators.",
     probe: (key) => ({ url: "https://api.lurkapi.com/v1/account/credit-balance", init: { headers: { "x-api-key": key } } }),
     judge: authFailed,
   },

@@ -47,8 +47,12 @@ export const LURK_BASE = "https://api.lurkapi.com";
 function lurkKey(): string {
   return process.env.LURK_API_KEY || "";
 }
-/** Paths Lurk does not serve (its catalogue, 2026-11-15): they stay on ScrapeCreators, when its key is set. */
-const LURK_MISSING = new Set(["/v1/google/search", "/v1/twitter/tweet/transcript"]);
+/**
+ * Paths that stay on ScrapeCreators, when its key is set: Lurk does not serve Google search or X transcripts (its
+ * catalogue, 2026-11-15), and its `/v1/facebook/post` refuses group post links (400 `invalid_params`, checked live
+ * 2026-11-15), which are the only ones Sales reads.
+ */
+const LURK_MISSING = new Set(["/v1/google/search", "/v1/twitter/tweet/transcript", "/v1/facebook/post"]);
 /** Paths Lurk serves under another name. */
 const LURK_PATH: Record<string, string> = { "/v1/credit/balance": "/v1/account/credit-balance" };
 

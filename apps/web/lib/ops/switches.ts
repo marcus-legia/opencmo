@@ -81,8 +81,8 @@ export function cmoSwitches(env: Env = process.env): Switch[] {
       on: set(env, "SCRAPECREATORS_API_KEY") || set(env, "SCRAPE_CREATORS_API_KEY") || set(env, "LURK_API_KEY"),
       detail: set(env, "LURK_API_KEY")
         ? set(env, "SCRAPECREATORS_API_KEY") || set(env, "SCRAPE_CREATORS_API_KEY")
-          ? "On, through LurkAPI (Google search and X transcripts through ScrapeCreators)."
-          : "On, through LurkAPI. Without SCRAPECREATORS_API_KEY, Sales cannot look on Facebook groups or Threads (Google search)."
+          ? "On, through LurkAPI (Google search, Facebook group posts and X transcripts through ScrapeCreators)."
+          : "On, through LurkAPI. Without SCRAPECREATORS_API_KEY, Sales cannot look on Facebook groups or Threads (Google search, Facebook group posts)."
         : set(env, "SCRAPECREATORS_API_KEY") || set(env, "SCRAPE_CREATORS_API_KEY") ? "On." : "Set SCRAPECREATORS_API_KEY or LURK_API_KEY.",
     },
     {

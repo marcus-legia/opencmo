@@ -26,13 +26,15 @@ async function main() {
 
     // Both keys: Lurk for what it serves, without ScrapeCreators-only params; Google search stays on ScrapeCreators.
     process.env.LURK_API_KEY = "lk";
-    const lurk = socialRoute("/v1/facebook/post", { url: "https://facebook.com/x", cache_max_age: "7d" });
+    const lurk = socialRoute("/v1/threads/post", { url: "https://threads.com/x", cache_max_age: "7d" });
     assert.equal(lurk?.provider, "lurk");
     assert.equal(lurk?.key, "lk");
-    assert.equal(lurk?.url, "https://api.lurkapi.com/v1/facebook/post?url=https%3A%2F%2Ffacebook.com%2Fx");
+    assert.equal(lurk?.url, "https://api.lurkapi.com/v1/threads/post?url=https%3A%2F%2Fthreads.com%2Fx");
     assert.equal(socialRoute("/v1/credit/balance", {})?.url, "https://api.lurkapi.com/v1/account/credit-balance?");
     assert.equal(socialRoute("/v1/google/search", { query: "q" })?.provider, "scrapecreators");
     assert.equal(socialRoute("/v1/twitter/tweet/transcript", { url: "u" })?.provider, "scrapecreators");
+    assert.equal(socialRoute("/v1/facebook/post", { url: "https://www.facebook.com/groups/1/posts/2/" })?.provider, "scrapecreators", "Lurk refuses group posts");
+    assert.equal(socialRoute("/v1/threads/post", { url: "u" })?.provider, "lurk");
 
     // Lurk only: Google search has nowhere to go.
     delete process.env.SCRAPECREATORS_API_KEY;
