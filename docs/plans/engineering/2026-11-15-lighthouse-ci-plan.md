@@ -53,9 +53,11 @@ timing, so they take the worst of the three runs. `/login` has no SEO budget: it
 
 What the first run found (each its own fix, not in this PR):
 
-1. **The landing page's meta description is there on the first load and missing on the next two** (`meta-description`,
-   SEO 1 → 0.91). Likely Next 16 streaming the metadata after the first byte for some agents. Crawlers and link
-   previews may then miss it too: check with a social crawler's user agent, and fix first.
+1. ~~The landing page's meta description is missing on two loads out of three.~~ **Not a bug (checked
+   2026-11-15).** Next 15 streams metadata into `<body>` for a browser's user agent and React moves it into `<head>`
+   after; Lighthouse's user agent is a browser's, so the audit raced it. Link-preview bots (Twitterbot,
+   facebookexternalhit, LinkedInBot) get it in `<head>` on production. The audit is skipped, and
+   `apps/web/lighthouse/preview-meta.mjs` checks what a preview reads, as Twitterbot, in the same job.
 2. LCP is above 2.5 s on every page (3.16 s on `/`), on Lighthouse's slow-4G phone.
 3. `/`: a colour pair below the WCAG contrast ratio (`color-contrast`), and browser errors in the console
    (`errors-in-console`; a local build without Sentry or Speed Insights may explain part of it).
