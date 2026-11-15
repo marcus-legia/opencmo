@@ -388,7 +388,7 @@ const OP_DESCRIPTIONS: Record<string, string> = {
     "Add a sub-part to an element: paints, strokes, shadows, effects, animations (e.g. {type: 'fade', phase: 'in', duration: 0.4}), ranges (text highlight), masks or gradient stops.",
   move_part: "Reorder a sub-part (paint, stroke, effect, ...) within its list.",
   move_to_row:
-    "Move clips onto another timeline row so they share it: target_id is a clip or row id from get_project_state; the scene's id gives each clip its own row again. Only the same kind shares a row: B-roll with B-roll, text with text, sounds with sounds.",
+    "Move clips onto another timeline row so they share it: target_id is a clip or row id from get_project_state; the scene's id gives each clip its own row again. Only the same kind shares a row: B-roll with B-roll, text with text, sounds with sounds. Nothing on the target row is cut: clips that would overlap one there go to a new row of the same kind right above it instead (read get_project_state to see where they landed).",
   copy_settings:
     "Make elements look like another one: copy groups of settings from from_id to to_ids — look (opacity, corners, blend), text (font, size, weight, color, case, stroke; text to text only), effects (filters, shadows), motion (animations, transition), audio (volume, mute). Never copies timing, position, wording or keyframes. Default: every group that fits each target.",
   duplicate_elements: "Duplicate elements in place.",

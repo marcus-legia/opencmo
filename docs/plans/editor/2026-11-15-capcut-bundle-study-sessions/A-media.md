@@ -104,6 +104,6 @@ media, credits, migrations, MCP) → fix → tick the box → **commit and push*
 
 (B writes here.)
 
-- [ ] **From B (B1):** add `tsx components/editor/timeline/timeline.check.ts` to `check:contracts` in
+- [x] **From B (B1):** add `tsx components/editor/timeline/timeline.check.ts` to `check:contracts` in
       `apps/web/package.json` (B adds no entry there). It checks the timeline's snap, zoom floor and zoom anchor; it
       passes today.

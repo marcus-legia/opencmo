@@ -60,7 +60,12 @@ class Grabber {
 
   /** The tiles bar `owner` shows now, replacing its earlier request; [] when it leaves the screen. */
   want(owner: string, times: number[], height: number): void {
-    if (height > 0) this.height = height;
+    if (height > this.height) {
+      // Tiles are grabbed at the tallest bar's height: a taller row would stretch the old ones, a shorter one
+      // draws them down. Only growing re-grabs, so two rows of one source at different heights do not fight.
+      this.height = height;
+      this.tiles.clear();
+    }
     if (times.length) this.asks.set(owner, times);
     else this.asks.delete(owner);
     this.next();
@@ -140,7 +145,9 @@ export function grabberFor(key: string, src: AssetInput, media: BrowserMedia): P
         if (!url) return null;
         const video = document.createElement("video");
         video.muted = true;
-        video.preload = "auto";
+        // Metadata only: each tile seeks and fetches just the bytes it needs. "auto" buffered whole videos
+        // (a 30-minute master twice over) for a handful of thumbnails.
+        video.preload = "metadata";
         video.playsInline = true;
         video.src = url;
         return new Grabber(video);
