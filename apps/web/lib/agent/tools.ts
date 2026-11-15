@@ -361,6 +361,10 @@ const OP_DESCRIPTIONS: Record<string, string> = {
     "Reorder or re-parent an element: put it in parent_id, just before before_id (null = on top). Later children draw on top.",
   move_keyframe: "Move one keyframe (by id, from get_document) to a new time in the element's own seconds.",
   set_workarea: "Set the part of the timeline that gets exported, or clear it.",
+  freeze_frame:
+    "Freeze a B-roll video clip at a clip-timeline second for `seconds`: the clip splits there, a still of that frame holds in its place, and everything starting from that second moves later. `src` is the frame image in the library (save_frame first). Not for the clip's own talking-head video.",
+  speed_ramp:
+    "Give a B-roll video clip a speed ramp preset (montage, hero, bullet, jump_cut, flash_in, flash_out): it is cut into parts at different speeds that average 1x, so its length on the timeline stays the same. Not for the clip's own talking-head video.",
   set_cover:
     "Set the cover frame (a clip-timeline second inside the exported part) that the export saves as an image and the post shows before it plays, or clear it. Pick a frame where the speaker looks at the camera, or the clearest shot of the product.",
   set_marker:

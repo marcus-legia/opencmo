@@ -524,6 +524,43 @@ function Workspace({
       children.flatMap((child) => (isRow(child) ? added(child.children ?? []) : child.id && !before.has(child.id) ? [child.id] : []));
     setSelection(added((activeScene(after) as unknown as Child).children ?? []));
   };
+  // capcut-A: freeze — draw the clip's own source frame under the playhead at its full size, save it to Media ▸
+  // Frames, then `freeze_frame` holds it. The source frame (not the whole canvas) so the still fits the clip's box.
+  const freezeClip = async (id: string, seconds: number) => {
+    const at = playback.frame;
+    const entry = [...times].find(([node]) => (node as { id?: unknown }).id === id);
+    if (!entry) throw new Error("That clip is not on the timeline.");
+    const [node, t] = entry as [Record<string, unknown>, (typeof entry)[1]];
+    const paint = ((node.paints as { type?: string; src?: unknown }[] | undefined) ?? []).find((item) => item.type === "video");
+    const src = (node.kind === "video" ? node.src : paint?.src) as Parameters<typeof media.urlOf>[0];
+    const url = src ? await media.urlOf(src) : null;
+    if (!url) throw new Error("This clip's video is not loaded yet.");
+    const sourceSeconds = Math.max(0, ((at - t.origin) * (t.rate || 1)) / 30);
+    const video = document.createElement("video");
+    video.muted = true;
+    video.preload = "auto";
+    video.crossOrigin = "anonymous";
+    video.src = url;
+    await new Promise<void>((resolve, reject) => {
+      video.addEventListener("loadeddata", () => resolve(), { once: true });
+      video.addEventListener("error", () => reject(new Error("This clip's video could not be read.")), { once: true });
+    });
+    await new Promise<void>((resolve) => {
+      video.addEventListener("seeked", () => resolve(), { once: true });
+      video.currentTime = Math.min(sourceSeconds, Math.max(0, video.duration - 0.05));
+    });
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext("2d")!.drawImage(video, 0, 0);
+    video.removeAttribute("src");
+    video.load();
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.92));
+    if (!blob) throw new Error("The frame could not be drawn.");
+    const [record] = await library.importFiles([new File([blob], `freeze-${(at / 30).toFixed(1)}s.jpg`, { type: "image/jpeg" })], "Frames");
+    if (!record) throw new Error("The frame could not be saved to your media.");
+    await run([{ op: "freeze_frame", element_id: id, at: at / 30, seconds, src: record.path }]);
+  };
   /** Chèn asset rồi chọn node vừa chèn. */
   const insertAssets = async (records: LibraryRecord[], options: { at?: { x: number; y: number }; start: number }) => {
     let last: string | null = null;
@@ -1795,6 +1832,7 @@ function Workspace({
         manifest={library.manifest as unknown as Manifest}
         sample={sampleFrame}
         clipId={clipId}
+        freeze={freezeClip}
       />
       </div>
       )}

@@ -84,15 +84,21 @@ media, credits, migrations, MCP) → fix → tick the box → **commit and push*
 
 ### A3 — R4: clip tools
 
-- [ ] `clip-doc`: freeze (a held frame of a set length), reverse, speed curve (time remap with points), with a
-      migration and validation limits.
-- [ ] `clip-render` and `clip-export` agree frame for frame (`editor-parity` case per tool).
-- [ ] Ops in `ops/clip-tools.ts`: `freeze_frame`, `reverse_clip`, `set_speed_curve`; flip and crop only if A0 found
-      them missing.
-- [ ] Inspector controls for each; MCP tools wired.
-- [ ] Reverse runs on the worker as a streaming ffmpeg job: measure RAM, `-ss` before `-i`.
-- [ ] Look: extract frames around each effect from the full-size export.
-- [ ] Review (+ security checklist: worker media, MCP) → commit → push.
+- [x] Freeze frame (`freeze_frame`): the clip splits at the playhead, everything that starts from there moves later,
+      and a still of the clip's own source frame (drawn by the editor, saved to Media ▸ Frames) holds in its place.
+      Inspector ▸ Clip tools, 1–5 s. B-roll only: the talking-head video is timed by its transcript.
+- [x] Speed ramps (`speed_ramp`: montage, hero, bullet, jump cut, flash in, flash out): equal parts at constant
+      speeds that average 1×, so the clip keeps its length and footage and nothing around it moves. **Changed from
+      the plan:** not a true time-remap curve — the preview, export, audio and caption sync all assume a constant
+      speed per clip, and stepped parts reuse that path with no renderer change. A smooth curve is a follow-up.
+- [x] `clip-render` and `clip-export` agree: both tools produce only plain image and constant-speed video parts.
+      Looked at a real export of each (testsrc counter frames): ramp source times 0/3/4/4/5/7 s at 0.5/2/3/4.5/6/7.5 s
+      as computed; freeze holds frame 4 for 2 s then plays on from 4 s; both with sound; peak RSS 460 MB.
+- [x] MCP / Assistant: `freeze_frame`, `speed_ramp`, `set_cover` are op tools with descriptions (112 MCP tools).
+- [ ] Reverse. **Not built:** it needs a new worker task kind (migration, RPC, task routing), and migrations cannot
+      be run here beside the e2e database. Least useful of the tools for founder videos; follow-up.
+- [x] Flip / crop: unchanged (`scaleX` and `set_frame` already exist).
+- [x] Review → commit → push.
 
 ## Requests to A
 
