@@ -39,9 +39,36 @@ function scKey(): string {
   return process.env.SCRAPECREATORS_API_KEY || process.env.SCRAPE_CREATORS_API_KEY || "";
 }
 
+/**
+ * LurkAPI, on trial from 2026-11-15 (owner): its API copies ScrapeCreators' paths and parameters, so the same readers
+ * parse both. Setting `LURK_API_KEY` sends every path Lurk serves to Lurk; removing it goes back to ScrapeCreators.
+ */
+export const LURK_BASE = "https://api.lurkapi.com";
+function lurkKey(): string {
+  return process.env.LURK_API_KEY || "";
+}
+/** Paths Lurk does not serve (its catalogue, 2026-11-15): they stay on ScrapeCreators, when its key is set. */
+const LURK_MISSING = new Set(["/v1/google/search", "/v1/twitter/tweet/transcript"]);
+/** Paths Lurk serves under another name. */
+const LURK_PATH: Record<string, string> = { "/v1/credit/balance": "/v1/account/credit-balance" };
+
+type Route = { provider: "scrapecreators" | "lurk"; url: string; key: string };
+/** Where one path goes, or null when no provider that serves it has a key. */
+export function socialRoute(path: string, params: Record<string, string>): Route | null {
+  const lurk = lurkKey();
+  if (lurk && !LURK_MISSING.has(path)) {
+    // Lurk trims by default and keeps its own cache times: ScrapeCreators' `trim` and `cache_max_age` are not sent.
+    const { trim: _trim, cache_max_age: _age, ...rest } = params;
+    return { provider: "lurk", url: `${LURK_BASE}${LURK_PATH[path] ?? path}?${new URLSearchParams(rest)}`, key: lurk };
+  }
+  const sc = scKey();
+  if (sc) return { provider: "scrapecreators", url: `${SC_BASE}${path}?${new URLSearchParams({ ...params, trim: "true" })}`, key: sc };
+  return null;
+}
+
 /** Đọc được mạng xã hội: có khoá thật, hoặc bản giả (CI/E2E). */
 export function socialReaderReady(): boolean {
-  return scFakeAllowed() || Boolean(scKey());
+  return scFakeAllowed() || Boolean(scKey()) || Boolean(lurkKey());
 }
 
 export type Platform = "reddit" | "x" | "tiktok" | "youtube" | "threads" | "instagram";
@@ -73,18 +100,18 @@ export class ScBudget {
 
 /** Lời gọi thô. `budget` trừ trước khi gọi — lỗi mạng vẫn tính, vì ScrapeCreators có thể đã tính. */
 export async function scGet(path: string, params: Record<string, string>, budget?: ScBudget): Promise<unknown> {
-  const key = scKey();
-  if (!key) throw new SocialReadError("Social research is not set up on this server yet.", "setup");
+  const route = socialRoute(path, params);
+  if (!route) throw new SocialReadError("Social research is not set up on this server yet.", "setup");
   // The founder's daily provider cap (spend ledger), before the lookup is paid for.
   if (!(await spendAllowed())) throw new SocialReadError(SPEND_CAP_MESSAGE, "cap");
   budget?.take();
-  const url = `${SC_BASE}${path}?${new URLSearchParams({ ...params, trim: "true" })}`;
   let response: Response;
   try {
-    response = await fetch(url, { headers: { "x-api-key": key }, signal: AbortSignal.timeout(TIMEOUT_MS), cache: "no-store" });
+    response = await fetch(route.url, { headers: { "x-api-key": route.key }, signal: AbortSignal.timeout(TIMEOUT_MS), cache: "no-store" });
   } catch {
     throw new SocialReadError("The social network did not answer in time. Try again in a minute.");
   }
+  if (route.provider === "lurk") return lurkAnswer(path, response);
   if (response.status === 401 || response.status === 403) {
     console.error("[cmo] scrapecreators: key refused", path, response.status);
     throw new SocialReadError("Social research is not set up on this server yet.", "setup");
@@ -99,6 +126,32 @@ export async function scGet(path: string, params: Record<string, string>, budget
     throw new SocialReadError("The social network did not answer. Try again in a minute.");
   }
   return response.json().catch(() => null);
+}
+
+/**
+ * Lurk's answer, read by its error `code` (lurkapi.com/docs.md#errors). Lurk charges for every call that reached the
+ * platform, `not_found` and `not_public` included, and says so in `credits_charged`.
+ *
+ * The spend ledger has no `lurk` provider yet: a Lurk lookup is recorded as a ScrapeCreators call on `lurk:<path>`, at
+ * ScrapeCreators' price (about twice Lurk's), so the daily cap errs on the safe side during the trial.
+ */
+async function lurkAnswer(path: string, response: Response): Promise<unknown> {
+  const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+  const code = typeof body?.code === "string" ? body.code : "";
+  const charged = typeof body?.credits_charged === "number" ? body.credits_charged : 0;
+  if (charged > 0 || response.ok) await recordSpend("scrapecreators", `lurk:${path}`, { call: charged > 0 ? 1 : 0 });
+  if (response.ok) return body;
+  if (code === "not_public" || code === "not_found" || code === "transcript_unavailable") {
+    throw new SocialReadError("That account or post was not found, or it is private.", "not_found");
+  }
+  if (response.status === 401 || code === "account_suspended") {
+    console.error("[cmo] lurk: key refused", path, response.status, code);
+    throw new SocialReadError("Social research is not set up on this server yet.", "setup");
+  }
+  if (response.status === 402) throw new SocialReadError("Social research is paused (out of lookup credits). Try again later.", "credits");
+  if (response.status === 429) throw new SocialReadError("Too many lookups right now. Try again in a minute.", "busy");
+  console.error("[cmo] lurk: error", path, response.status, code);
+  throw new SocialReadError("The social network did not answer. Try again in a minute.");
 }
 
 // ----------------------------------------------------------------- defensive parsing

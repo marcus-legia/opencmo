@@ -14,7 +14,7 @@ import { accountDown } from "@/lib/llm-health";
 export type ProviderState = "unset" | "invalid" | "test_key" | "unreachable" | "failing" | "ok";
 
 export type ProviderRow = {
-  id: "anthropic" | "fal" | "elevenlabs" | "motion" | "creem" | "scrapecreators";
+  id: "anthropic" | "fal" | "elevenlabs" | "motion" | "creem" | "scrapecreators" | "lurk";
   label: string;
   state: ProviderState;
   /** What the state means, or what to set. Never a secret value. */
@@ -138,6 +138,14 @@ const SPECS: Spec[] = [
     key: (env) => value(env, "SCRAPECREATORS_API_KEY", "SCRAPE_CREATORS_API_KEY"),
     unset: "Set SCRAPECREATORS_API_KEY. Without it research and Sales scans cannot read anything.",
     probe: (key) => ({ url: "https://api.scrapecreators.com/v1/credit/balance", init: { headers: { "x-api-key": key } } }),
+    judge: authFailed,
+  },
+  {
+    id: "lurk",
+    label: "LurkAPI (research, Sales; on trial instead of ScrapeCreators)",
+    key: (env) => value(env, "LURK_API_KEY"),
+    unset: "Optional. Set LURK_API_KEY to read through LurkAPI; Google search and X transcripts stay on ScrapeCreators.",
+    probe: (key) => ({ url: "https://api.lurkapi.com/v1/account/credit-balance", init: { headers: { "x-api-key": key } } }),
     judge: authFailed,
   },
 ];

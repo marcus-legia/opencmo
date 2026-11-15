@@ -254,5 +254,5 @@ export async function transcript(url: string, budget?: ScBudget): Promise<{ url:
 export async function creditBalance(): Promise<number> {
   if (scFakeAllowed()) return 9_999;
   const json = (await scGet("/v1/credit/balance", {})) as Record<string, unknown> | null;
-  return num(json?.creditCount ?? json?.credits ?? json?.balance);
+  return num(json?.creditCount ?? json?.credits_remaining ?? json?.credits ?? json?.balance);
 }

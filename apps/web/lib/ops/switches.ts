@@ -78,8 +78,12 @@ export function cmoSwitches(env: Env = process.env): Switch[] {
     {
       id: "social_reader",
       label: "Reading X, TikTok, YouTube and Reddit (research, Sales)",
-      on: set(env, "SCRAPECREATORS_API_KEY") || set(env, "SCRAPE_CREATORS_API_KEY"),
-      detail: set(env, "SCRAPECREATORS_API_KEY") || set(env, "SCRAPE_CREATORS_API_KEY") ? "On." : "Set SCRAPECREATORS_API_KEY.",
+      on: set(env, "SCRAPECREATORS_API_KEY") || set(env, "SCRAPE_CREATORS_API_KEY") || set(env, "LURK_API_KEY"),
+      detail: set(env, "LURK_API_KEY")
+        ? set(env, "SCRAPECREATORS_API_KEY") || set(env, "SCRAPE_CREATORS_API_KEY")
+          ? "On, through LurkAPI (Google search and X transcripts through ScrapeCreators)."
+          : "On, through LurkAPI. Without SCRAPECREATORS_API_KEY, Sales cannot look on Facebook groups or Threads (Google search)."
+        : set(env, "SCRAPECREATORS_API_KEY") || set(env, "SCRAPE_CREATORS_API_KEY") ? "On." : "Set SCRAPECREATORS_API_KEY or LURK_API_KEY.",
     },
     {
       id: "cron",
