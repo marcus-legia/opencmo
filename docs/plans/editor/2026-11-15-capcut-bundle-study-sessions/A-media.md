@@ -42,14 +42,14 @@ media, credits, migrations, MCP) → fix → tick the box → **commit and push*
 
 ### A0 — research report
 
-- [ ] Read the report §5 and the bundles: `pretty/audio-recorder.*.js`, recorder and cover/highlight-frame methods in
+- [x] Read the report §5 and the bundles: `pretty/audio-recorder.*.js`, recorder and cover/highlight-frame methods in
       `pretty/src-editor-5.*.js`, `pretty/partial-export.*.js`, `pretty/cover-entrance.*.js`,
       `pretty/basic-actions.*.js`, `video.*` calls in `pretty/editor.js`. Learn the behaviour; copy nothing.
-- [ ] Check ours: does export honour `scene.workarea` (`packages/clip-export/src/export.ts`, `job.ts`)? Do `scaleX < 0`
+- [x] Check ours: does export honour `scene.workarea` (`packages/clip-export/src/export.ts`, `job.ts`)? Do `scaleX < 0`
       (flip) and `set_frame` (crop) already work end to end? How is `rate` timed in `clip-doc/src/timing.ts`?
-- [ ] Write `docs/research/editor/2026-11-15-capcut-media.md` (Vietnamese): what CapCut does for R1, R2, R4, what we
+- [x] Write `docs/research/editor/2026-11-15-capcut-media.md` (Vietnamese): what CapCut does for R1, R2, R4, what we
       have, and the exact design for each step below. Add its row to `docs/research/editor/README.md`.
-- [ ] Review → commit → push.
+- [x] Review → commit → push.
 
 ### A1 — R1: record in the browser
 
