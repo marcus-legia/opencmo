@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { CRON_MONITORS, withCronMonitor } from "@/lib/ops/cron-monitor";
 
 import { BUCKETS, SOURCES_BUCKET, type Bucket } from "@/lib/storage";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -35,7 +36,7 @@ export const maxDuration = 60;
  * Lỗi giữa chừng ở bước 2 không mất dấu gì cả: hàng đợi còn nguyên, lượt cron
  * sau chạy tiếp từ đúng chỗ đó.
  */
-export async function GET(request: NextRequest) {
+async function run(request: NextRequest) {
   if (!cleanupAuthorized(request.headers.get("authorization"))) {
     return NextResponse.json({ error: "Forbidden." }, { status: 401 });
   }
@@ -201,4 +202,12 @@ async function sweepOrphans(
     console.error("[cron] quét file mồ côi thất bại", bucket, error instanceof Error ? error.message : error);
     return 0;
   }
+}
+
+/** Checks in with Sentry's cron monitor once the caller is the clock (`lib/ops/cron-monitor.ts`). */
+export async function GET(request: NextRequest) {
+  if (!cleanupAuthorized(request.headers.get("authorization"))) {
+    return NextResponse.json({ error: "Forbidden." }, { status: 401 });
+  }
+  return withCronMonitor(CRON_MONITORS.cleanup, () => run(request));
 }

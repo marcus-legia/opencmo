@@ -1,0 +1,88 @@
+name: E2E
+
+# The browser end-to-end suite (apps/web/e2e) on a local Supabase stack, the e2e Python worker and fake models: no
+# secret and no paid call, so forks run it too. Each PR and push to main runs the smoke set (the CMO loop and sign-in,
+# on the v2 app); the clock and a manual run take the whole suite on both apps, editor included.
+# Plan: docs/plans/engineering/2026-11-15-e2e-in-ci-plan.md
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  e2e:
+    name: e2e (${{ matrix.suite }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        # PR and push: smoke only. Clock and manual run: the whole suite once per app. `v1` is the default build (the
+        # v2-only specs skip themselves there); `v2` runs the v2 specs on the v2 build.
+        suite: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && fromJSON('["full-v1","full-v2"]') || fromJSON('["smoke"]') }}
+    env:
+      CI: "true"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          cache: npm
+
+      - uses: supabase/setup-cli@689adcfb80d947100a1eab127289b97d1fb07b13 # v3.2.0
+        with:
+          # Same pin as the database job in ci.yml (a newer CLI builds a storage schema the container rejects).
+          version: 2.117.0
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+
+      - name: Install ffmpeg
+        # global-setup builds the fixture video with ffmpeg, and the worker cuts it.
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends ffmpeg
+
+      - name: The engine for the e2e worker
+        # global-setup starts packages/engine/.venv312/bin/python -m tests.e2e_worker.
+        run: |
+          python -m venv packages/engine/.venv312
+          packages/engine/.venv312/bin/pip install -q -e packages/engine
+
+      - run: npm ci
+
+      - name: Playwright's ffmpeg, Chromium and their system libraries
+        # Desktop specs drive the runner's own Google Chrome (`channel: chrome`): Playwright's Chromium cannot decode the
+        # editor's H.264 masters. Playwright's own ffmpeg records the video of a failed test, and its Chromium runs the
+        # mobile project (whole suite only).
+        run: npx playwright install --with-deps chromium ffmpeg
+
+      - name: Smoke set
+        if: matrix.suite == 'smoke'
+        run: npm run test:e2e:smoke --workspace @opencmo/web
+
+      - name: Whole suite, default app
+        if: matrix.suite == 'full-v1'
+        run: npm run test:e2e --workspace @opencmo/web
+
+      - name: Whole suite, v2 app
+        if: matrix.suite == 'full-v2'
+        run: npm run test:e2e:v2 --workspace @opencmo/web
+
+      - name: Traces and videos of failed tests
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-results-${{ matrix.suite }}
+          path: apps/web/test-results
+          retention-days: 7

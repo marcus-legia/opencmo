@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { CRON_MONITORS, withCronMonitor } from "@/lib/ops/cron-monitor";
 
 import { cronAuthorized } from "@/lib/cron-auth";
 import { classifyEdits, supabaseOutcomeStore } from "@/lib/cmo/jobs/classify-edits";
@@ -25,7 +26,7 @@ export const maxDuration = 300;
  * edited approvals (`classify-edits.ts`), capped so it stays a small part of this call. A failure in any of the
  * three never fails the schedule.
  */
-export async function GET(request: NextRequest) {
+async function run(request: NextRequest) {
   if (!cronAuthorized(request.headers.get("authorization"), "cmo")) {
     return NextResponse.json({ error: "Forbidden." }, { status: 401 });
   }
@@ -54,4 +55,12 @@ export async function GET(request: NextRequest) {
       })
     : null;
   return NextResponse.json({ ...loops, expired, progress, edits });
+}
+
+/** Checks in with Sentry's cron monitor once the caller is the clock (`lib/ops/cron-monitor.ts`). */
+export async function GET(request: NextRequest) {
+  if (!cronAuthorized(request.headers.get("authorization"), "cmo")) {
+    return NextResponse.json({ error: "Forbidden." }, { status: 401 });
+  }
+  return withCronMonitor(CRON_MONITORS.cmo, () => run(request));
 }
