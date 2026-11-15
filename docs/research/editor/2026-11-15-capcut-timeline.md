@@ -154,6 +154,22 @@ Học hành vi, viết lại theo kiến trúc của mình; không chép gì c�
   (`requestIdleCallback`), cache theo nguồn + bậc zoom. Chỉ trên clip đang thấy.
 - Đo lại bằng cùng harness, ghi số trước/sau vào đây.
 
+## Kết quả B4 (đo lại, cùng harness, 2026-11-15)
+
+| Đo | Trước | Sau |
+|---|---|---|
+| Fit: bề rộng nội dung / khung | 1.894 / 1.440 px | 1.431 / 1.424 px (vừa; 7 px là nhãn vạch cuối) |
+| Zoom gần: node DOM | 10.870 | 260 |
+| 12 lần bấm "+" | 50 ms ×5, rồi 100–270 ms | 28–56 ms mỗi lần |
+| Cuộn ở zoom gần (60 khung) | trung vị 16,7, p95 17,7 ms | trung vị 16,7, p95 16,9 ms |
+| Kéo b-roll ở Fit (40 khung) | trung vị 19–21, p95 31–40 ms | trung vị ~20, p95 ~34 ms |
+| Playhead lệch sau một lần zoom bằng nút | — (neo giữa khung) | 0,2 px |
+
+Filmstrip (video thử VP9 2 phút trong harness): ô vuông cắt giữa (video dọc 9:16 ép vào 19 px thành sọc), chỉ trên
+phần đang thấy và thanh rộng từ 48 px. Bản đầu vẽ cho mọi thanh trong cửa sổ có lề: hàng trăm canvas khi các đoạn cắt
+vừa đủ rộng, mỗi bước zoom 100–230 ms; giới hạn trên đưa về như không có filmstrip. Ảnh hiện dần, khoảng một màn hình
+trong 3 giây ở harness (mỗi ô một lần tua). Trên upload thật cần owner xem lại: tốc độ tua của file trên Storage.
+
 ## Còn chưa biết (cần chạy CapCut)
 
 - Mức "Frequency" 1–5 của beat tự động nghĩa là gì (mọi beat / mỗi 2 / …?) và beat tính bằng model gì.

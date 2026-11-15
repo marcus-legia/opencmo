@@ -71,6 +71,8 @@ const media = {
   transcript: (src: string) => (src === "assets/transcript.json" ? TRANSCRIPT : null),
   transcriptStatus: () => "ready",
   bytesOf: async () => null,
+  // The bench serves a short generated test video here (`run.mts`), for the filmstrip.
+  urlOf: async (src: unknown) => (src === "assets/master.mp4" ? "/master.webm" : null),
   image: () => ({ status: "loading" }),
   video: () => ({ status: "loading" }),
   lut: () => null,

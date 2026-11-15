@@ -26,6 +26,7 @@ import { isTyping } from "../Stage";
 import { matchTimelineShortcut } from "../shortcuts";
 import type { BrowserMedia } from "../media";
 import type { AiState } from "../generate/useGenerations";
+import { filmstripStep, grabberFor } from "./filmstrip";
 import { beatsOf, drawBeats, drawPeaks, knownBeats, loadPeaks, type Peaks } from "./peaks";
 import { buildRows, CLIP_HEIGHT, ROLE_LABEL, roleOf, subtreeIds, type Row } from "./rows";
 import { rulerStep, SNAP_PX, snapDelta, snapFrame, snapTargets } from "./snap";
@@ -173,6 +174,8 @@ export function Timeline(props: TimelineProps) {
   const shown: [number, number] = view.width
     ? [Math.max(0, (view.left - Math.max(view.width, 400) - PAD) / ppf), (view.left + view.width + Math.max(view.width, 400) - PAD) / ppf]
     : [0, Infinity];
+  // Frames actually on screen, no margin: the filmstrip, the costly part, draws only here.
+  const onScreen: [number, number] = view.width ? [Math.max(0, (view.left - PAD) / ppf), (view.left + view.width - PAD) / ppf] : [0, Infinity];
   const playheadRef = useRef(frame);
   playheadRef.current = frame;
   const x = useCallback((f: number) => PAD + f * ppf, [ppf]);
@@ -858,6 +861,7 @@ export function Timeline(props: TimelineProps) {
                       onBarDown={onBarDown}
                       beatDensity={beatDensity}
                       shown={shown}
+                      onScreen={onScreen}
                       onKeyframeDown={(keyframe, event) => {
                         const t = row.time;
                         if (!t || !keyframe.id) return;
@@ -1035,6 +1039,8 @@ function LayerCell({
 // ------------------------------------------------------------------ làn clip
 
 const NO_FLASH: string[] = [];
+/** Narrowest bar that gets a filmstrip, in px. */
+const MIN_FILMSTRIP_PX = 48;
 
 function Lane({
   row,
@@ -1051,9 +1057,11 @@ function Lane({
   onKeyframeDown,
   beatDensity,
   shown,
+  onScreen,
 }: {
   beatDensity: BeatDensity;
   shown: [number, number];
+  onScreen: [number, number];
   row: Row;
   times: Map<ClipNode, TimeNode>;
   media: BrowserMedia;
@@ -1113,6 +1121,7 @@ function Lane({
           onDown={onBarDown}
           beatDensity={beatDensity}
           shown={shown}
+          onScreen={onScreen}
         />
       ))}
     </>
@@ -1132,9 +1141,11 @@ function Bar({
   onDown,
   beatDensity,
   shown,
+  onScreen,
 }: {
   beatDensity: BeatDensity;
   shown: [number, number];
+  onScreen: [number, number];
   t: TimeNode;
   media: BrowserMedia;
   ppf: number;
@@ -1164,6 +1175,9 @@ function Bar({
       title={slip ? `${label} · Alt-drag to slip the footage inside this clip` : `${label} · Drag up or down to move it to another row`}
       onPointerDown={(event) => onDown(entity, t, event)}
     >
+      {kind === "video" && entity.src !== undefined ? (
+        <Filmstrip src={entity.src as AssetInput} t={t} media={media} ppf={ppf} shown={onScreen} height={height - 6} />
+      ) : null}
       {src !== undefined ? <Wave src={src} t={t} media={media} ppf={ppf} shown={shown} height={height - 6} beatDensity={beatDensity} /> : null}
       {kind === "captions" && typeof entity.src === "string" ? (
         <>
@@ -1326,6 +1340,69 @@ function Wave({
   }, [peaks, pixels, height, from, to, t.origin, t.rate, key, t.node.kind, theme, beatDensity]);
   if (!peaks || to <= from) return null;
   return <canvas ref={canvas} className="ed2-wave" data-testid="waveform" style={{ left, width: (to - from) * ppf, right: "auto" }} />;
+}
+
+/**
+ * Thumbnails along a video bar (B4), for the part of the bar in the drawn window. Each tile shows
+ * the frame at the source time under its left edge, rounded to the zoom's step.
+ */
+function Filmstrip({ src, t, media, ppf, shown, height }: { src: AssetInput; t: TimeNode; media: BrowserMedia; ppf: number; shown: [number, number]; height: number }) {
+  const canvas = useRef<HTMLCanvasElement>(null);
+  const key = typeof src === "string" ? src : JSON.stringify(src);
+  const [grabber, setGrabber] = useState<Awaited<ReturnType<typeof grabberFor>>>(null);
+  const [version, setVersion] = useState(0);
+  useEffect(() => {
+    let live = true;
+    void grabberFor(key, src, media).then((found) => live && setGrabber(found));
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, media]);
+  useEffect(() => grabber?.subscribe(() => setVersion((value) => value + 1)), [grabber]);
+  // One request per bar; dropped when the bar leaves the screen or unmounts.
+  const owner = String((t.node as Entity).id ?? `${t.start}`);
+  useEffect(() => () => grabber?.want(owner, [], 0), [grabber, owner]);
+
+  const from = Math.max(t.start, Math.floor(shown[0]));
+  const to = Math.min(t.end, Math.ceil(shown[1]));
+  const left = (from - t.start) * ppf;
+  const width = Math.min(16384, Math.max(0, Math.round((to - from) * ppf)));
+  const tileWidth = Math.max(16, height * (grabber?.tileAspect ?? 16 / 9));
+  // Source seconds under a scene frame of this bar.
+  const sourceAt = (frame: number) => ((frame - t.origin) * t.rate) / FPS;
+  const step = filmstripStep((tileWidth / ppf / FPS) * t.rate);
+
+  useEffect(() => {
+    const element = canvas.current;
+    if (!element || !grabber || width < 1 || (t.end - t.start) * ppf < Math.max(tileWidth, MIN_FILMSTRIP_PX)) {
+      grabber?.want(owner, [], height);
+      return;
+    }
+    const scale = window.devicePixelRatio || 1;
+    element.width = Math.round(width * scale);
+    element.height = Math.round(height * scale);
+    const ctx = element.getContext("2d");
+    if (!ctx) return;
+    ctx.clearRect(0, 0, element.width, element.height);
+    // Tiles sit on a grid that starts at the bar's own start, so they don't slide while scrolling.
+    const first = Math.floor(left / tileWidth);
+    const needed: number[] = [];
+    for (let index = first; index * tileWidth < left + width; index++) {
+      const at = Math.round(sourceAt(t.start + (index * tileWidth) / ppf) / step) * step;
+      if (at < 0) continue;
+      needed.push(at);
+      const tile = grabber.tile(at);
+      if (tile) ctx.drawImage(tile, (index * tileWidth - left) * scale, 0, tileWidth * scale, element.height);
+    }
+    grabber.want(owner, [...new Set(needed)], height);
+    // `version` redraws when a grabbed tile arrives.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [grabber, version, left, width, height, tileWidth, step, ppf, t.start, t.origin, t.rate, owner]);
+  // Drawn only on screen, and not on a bar narrower than MIN_FILMSTRIP_PX: a cut-by-words edit has
+  // hundreds of narrow bars, and a canvas each cost 100–230 ms per zoom step on the bench.
+  if (!grabber || width < 1 || (t.end - t.start) * ppf < Math.max(tileWidth, MIN_FILMSTRIP_PX)) return null;
+  return <canvas ref={canvas} className="ed2-wave ed2-filmstrip" aria-hidden style={{ left, width, right: "auto", opacity: 0.55 }} />;
 }
 
 /** Thời gian (frame scene) của các từ rơi vào thanh `t`. */

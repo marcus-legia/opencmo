@@ -10,6 +10,8 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
+import { execFileSync } from "node:child_process";
+
 import { build } from "esbuild";
 import { chromium } from "playwright";
 
@@ -29,6 +31,13 @@ await build({
   minify: true,
   logLevel: "error",
 });
+// A 2-minute test pattern stands in for the master, so the filmstrip has frames to grab. VP9:
+// the bench's Chromium has no H.264. Skipped (no thumbnails) when ffmpeg is missing.
+try {
+  execFileSync("ffmpeg", ["-v", "error", "-y", "-f", "lavfi", "-i", "testsrc2=size=180x320:rate=30:duration=120", "-c:v", "libvpx-vp9", "-b:v", "200k", "-g", "30", "-deadline", "realtime", join(out, "master.webm")]);
+} catch {
+  console.error("ffmpeg not found: no filmstrip video");
+}
 const css = ["styles/design-system.css", "app/globals.css"]
   .map((file) => readFileSync(join(web, file), "utf8").replace(/^@import[^;]*;/gm, ""))
   .join("\n");
@@ -46,8 +55,9 @@ page.on("pageerror", (error) => console.error("page error:", error.message));
 // Module scripts do not load from file://: serve the two files from a made-up origin.
 await page.route("http://bench.local/**", (route) => {
   const file = new URL(route.request().url()).pathname.slice(1) || "index.html";
-  if (file !== "index.html" && file !== "bench.js") return route.fulfill({ status: 404, body: "" });
-  route.fulfill({ body: readFileSync(join(out, file)), contentType: file.endsWith(".js") ? "text/javascript" : "text/html" });
+  if (!["index.html", "bench.js", "master.webm"].includes(file)) return route.fulfill({ status: 404, body: "" });
+  const type = file.endsWith(".js") ? "text/javascript" : file.endsWith(".webm") ? "video/webm" : "text/html";
+  route.fulfill({ body: readFileSync(join(out, file)), contentType: type });
 });
 await page.goto(`http://bench.local/index.html?minutes=${minutes}&cuts=${cuts}`);
 await page.waitForSelector('[data-testid="timeline"]');
@@ -129,7 +139,8 @@ if (process.env.BENCH_SHOT_CLOSE) {
     const scroller = document.querySelector(".ed2-tl-scroll") as HTMLElement;
     scroller.scrollLeft = scroller.scrollWidth / 2;
   });
-  await page.waitForTimeout(300);
+  // Long enough for the filmstrip to grab the tiles on screen.
+  await page.waitForTimeout(3000);
   await page.screenshot({ path: process.env.BENCH_SHOT_CLOSE });
 }
 
