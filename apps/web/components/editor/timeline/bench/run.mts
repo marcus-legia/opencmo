@@ -52,6 +52,8 @@ await page.route("http://bench.local/**", (route) => {
 await page.goto(`http://bench.local/index.html?minutes=${minutes}&cuts=${cuts}`);
 await page.waitForSelector('[data-testid="timeline"]');
 await page.waitForTimeout(500);
+// BENCH_SHOT=<file.png>: a picture of the timeline as it opens, to look at.
+if (process.env.BENCH_SHOT) await page.screenshot({ path: process.env.BENCH_SHOT });
 
 const result = await page.evaluate(async () => {
   const frames = () => new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done())));

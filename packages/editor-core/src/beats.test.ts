@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { detectBeats } from './beats';
+import { detectBeats, thinBeats } from './beats';
 
 const RATE = 100;
 
@@ -50,5 +50,15 @@ describe('detectBeats (học Palmier §B7)', () => {
       for (let k = 0; k < 15 && start + k < speech.length; k++) speech[start + k] = Math.max(speech[start + k]!, (0.3 + next() * 0.5) * Math.exp(-k / 6));
     }
     expect(detectBeats(speech, RATE)).toBeNull();
+  });
+});
+
+describe('thinBeats (B3 2026-11-15)', () => {
+  const beats = [0.1, 0.6, 1.1, 1.6, 2.1, 2.6, 3.1, 3.6, 4.1];
+  it('every beat, every 2nd, every 4th; the first beat stays beat one', () => {
+    expect(thinBeats(beats, 1)).toEqual(beats);
+    expect(thinBeats(beats, 2)).toEqual([0.1, 1.1, 2.1, 3.1, 4.1]);
+    expect(thinBeats(beats, 4)).toEqual([0.1, 2.1, 4.1]);
+    expect(thinBeats([], 4)).toEqual([]);
   });
 });

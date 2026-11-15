@@ -102,6 +102,9 @@ Edit 30 phút: một hàng 400 đoạn cắt từ master, một hàng 40 b-roll,
 | Cuộn ở zoom gần, 60 khung | trung vị 16,7 ms, p95 17,7 ms |
 | Kéo một b-roll ở Fit, 40 khung | trung vị 19,2 ms, p95 31,2 ms, tệ nhất 42,5 ms |
 
+*Đo lại sau khi sửa harness (B3: các đoạn cắt nằm nối nhau, vùng hàng có chiều cao thật): cùng số node; bước zoom gần
+100–270 ms; kéo ở Fit trung vị 19–21 ms, p95 33–40 ms.*
+
 Đây chưa phải số trên laptop thật với upload thật (cần stack local + worker); máy cloud nhanh hơn laptop trung bình,
 nên số thật sẽ tệ hơn, không tốt hơn. Owner có thể chạy lại cùng lệnh trên máy mình.
 

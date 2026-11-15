@@ -92,6 +92,34 @@ export class Playback {
     }
   }
 
+  /**
+   * Range play (plan 2026-11-15 B3): while set, playing past `end` jumps back to `start`. Any
+   * pause ends it (Space, K, Escape, the Loop button), so a loop never outlives the playback.
+   */
+  loop: { start: number; end: number } | null = null;
+  /** Told whenever a loop starts or ends, so the UI can show it. */
+  onLoopChange: (on: boolean) => void = () => undefined;
+
+  private endLoop(): void {
+    if (!this.loop) return;
+    this.loop = null;
+    this.onLoopChange(false);
+  }
+
+  /** Play `[start, end)` frames over and over from `start`. */
+  playLoop(start: number, end: number): void {
+    const from = Math.max(0, Math.round(start));
+    const to = Math.min(this.range.end, Math.round(end));
+    if (to - from < 2) return;
+    if (this.playing) this.pause();
+    this.speed = 1;
+    this.loop = { start: from, end: to };
+    this.onLoopChange(true);
+    this.frame = from;
+    this.onFrame(from);
+    void this.play();
+  }
+
   /** Cả scene, không chỉ vùng làm việc: timeline cho tua tới bất kỳ đâu. */
   get range(): { start: number; end: number } {
     return { start: 0, end: this.renderer?.end ?? 0 };
@@ -100,6 +128,8 @@ export class Playback {
   seek(frame: number): void {
     const { start, end } = this.range;
     this.frame = Math.max(start, Math.min(Math.max(start, end - 1), Math.round(frame)));
+    // Seeking out of the loop leaves it: playback carries on from there as usual.
+    if (this.loop && (this.frame < this.loop.start || this.frame >= this.loop.end)) this.endLoop();
     if (this.playing) this.restart();
     this.onFrame(this.frame);
   }
@@ -119,6 +149,7 @@ export class Playback {
   }
 
   pause(): void {
+    this.endLoop();
     if (!this.playing) return;
     this.playing = false;
     this.media.playing = false;
@@ -148,7 +179,17 @@ export class Playback {
   private tick = (): void => {
     if (!this.playing || !this.renderer) return;
     const elapsed = this.media.audioContext().currentTime - this.startTime;
-    const frame = this.startFrame + Math.floor(elapsed * FPS * this.speed);
+    let frame = this.startFrame + Math.floor(elapsed * FPS * this.speed);
+    if (this.loop && this.speed > 0 && frame >= this.loop.end) {
+      // Back to the loop's start: the media tags seek there on the next sync.
+      frame = this.loop.start;
+      this.frame = frame;
+      this.restart();
+      this.sync(frame);
+      this.onFrame(frame);
+      this.raf = requestAnimationFrame(this.tick);
+      return;
+    }
     const { start, end } = this.range;
     if (frame >= end || frame < start) {
       this.frame = frame < start ? start : Math.max(start, end - 1);

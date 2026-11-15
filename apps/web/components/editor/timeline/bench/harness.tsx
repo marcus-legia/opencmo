@@ -27,6 +27,8 @@ function syntheticDoc(): ClipDocument {
     id: `cut${index}`,
     src: "assets/master.mp4",
     x: 0, y: 0, width: 1080, height: 1920,
+    // Cut segments carry their own start, back to back (as `captions.ts` writes them).
+    start: index * piece * 0.9,
     sourceIn: index * piece,
     sourceOut: index * piece + piece * 0.9,
   }));
@@ -90,7 +92,7 @@ function App() {
   }, []);
   const base = useMemo(() => () => committed.current, []);
   return (
-    <div className="ed2" style={{ height: "100vh", display: "grid" }}>
+    <div style={{ height: "100vh", display: "grid", background: "var(--ds-ink-3)", color: "var(--ds-text)" }}>
       <Timeline
         doc={preview ?? doc}
         base={base}

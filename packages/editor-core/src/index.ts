@@ -9,7 +9,7 @@ export * from './captions';
 export * from './reframe';
 export * from './summary';
 export { subtitleCues, toSrt, toVtt, type Cue } from './subtitles';
-export { detectBeats, type BeatGrid } from './beats';
+export { detectBeats, thinBeats, type BeatDensity, type BeatGrid } from './beats';
 export { DELTA_LIMIT, diffDocuments, emptyDelta, type DocumentDelta } from './delta';
 export { fold, searchSpoken, type SpokenHit } from './search';
 export * from './ops';

@@ -74,9 +74,9 @@ Checks of what it touched → `/code-review` on the step's diff → fix → tick
 
 ### B3 — R6a: beats and range play
 
-- [ ] Beat density: every beat / every 2nd / every 4th, in `beats.ts`, shown and snapped to on the timeline.
-- [ ] Range play: loop the work area or the selected clips' span (button + shortcut), stops on Escape.
-- [ ] Review → commit → push.
+- [x] Beat density: every beat / every 2nd / every 4th, in `beats.ts`, shown and snapped to on the timeline.
+- [x] Range play: loop the work area or the selected clips' span (button + shortcut), stops on Escape.
+- [x] Review → commit → push.
 
 ### B4 — R6b: timeline drawing (size set by B0's measurement)
 

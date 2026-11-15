@@ -128,15 +128,16 @@ export const SHORTCUTS: { combo: Combo; action: ActionName }[] = [
 ];
 
 /**
- * Keys the timeline handles itself (plan 2026-11-15 B1), so the shell's action table and its
+ * Keys the timeline handles itself (plan 2026-11-15 B1, B3), so the shell's action table and its
  * menus stay as they are. None of them overlaps a key in `SHORTCUTS`.
  */
-export type TimelineAction = "timelineZoomIn" | "timelineZoomOut";
+export type TimelineAction = "timelineZoomIn" | "timelineZoomOut" | "rangePlay";
 
 export const TIMELINE_SHORTCUTS: { combo: Combo; action: TimelineAction }[] = [
   { combo: { key: "=", mod: false, alt: false }, action: "timelineZoomIn" },
   { combo: { key: "+", mod: false, alt: false }, action: "timelineZoomIn" },
   { combo: { key: "-", mod: false, alt: false }, action: "timelineZoomOut" },
+  { combo: { key: "/", mod: false, alt: false, shift: false }, action: "rangePlay" },
 ];
 
 type KeyInput = Pick<KeyboardEvent, "key" | "ctrlKey" | "metaKey" | "shiftKey" | "altKey">;
@@ -259,6 +260,7 @@ export const SHORTCUT_GROUPS: { title: string; actions: [ActionName | TimelineAc
       ["timelineEnd", "Go to end"],
       ["split", "Split at playhead"],
       ["addMarker", "Add a marker at the playhead"],
+      ["rangePlay", "Loop the selected clips or the work area"],
     ],
   },
   {

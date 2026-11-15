@@ -109,3 +109,16 @@ export function detectBeats(envelope: ArrayLike<number>, rate: number): BeatGrid
   for (let position = bestPhase; position < n; position += period) beats.push(Math.round((position / rate) * 1000) / 1000);
   return { bpm: Math.round((60 * rate * 10) / period) / 10, beats, confidence: Math.round(confidence * 100) / 100 };
 }
+
+/** How many beats the timeline shows and snaps to: every beat, every 2nd or every 4th. */
+export type BeatDensity = 1 | 2 | 4;
+
+/**
+ * Every `density`-th beat of a grid, starting from its first beat, which stays beat one (plan
+ * 2026-11-15 B3). Short-form cuts land on the bar more often than on each beat; at 4 the marks
+ * are the bars of a 4/4 track.
+ */
+export function thinBeats(beats: readonly number[], density: BeatDensity): number[] {
+  if (density === 1) return [...beats];
+  return beats.filter((_, index) => index % density === 0);
+}

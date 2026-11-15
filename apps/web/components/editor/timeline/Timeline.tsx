@@ -17,7 +17,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { AssetInput, ClipDocument, ClipNode } from "@opencmo/clip-doc";
 import { FPS, type TimeNode, type Transcript } from "@opencmo/clip-render";
-import { activeScene, applyOps, laneOf, MARKER_COLORS, readMarkers, timelinesOf, timesOf, type Marker, type OpContext } from "@opencmo/editor-core";
+import { activeScene, applyOps, laneOf, thinBeats, type BeatDensity, MARKER_COLORS, readMarkers, timelinesOf, timesOf, type Marker, type OpContext } from "@opencmo/editor-core";
 
 import { useThemePref } from "@/components/theme";
 
@@ -68,6 +68,10 @@ export type TimelineProps = {
   aiState?: (entity: Entity) => AiState | null;
   /** Bấm Retry trên thanh clip hỏng. */
   onRetry?: (entity: Entity) => void;
+  /** Range play (B3): loop `[start, end)` frames, or stop with null. */
+  onLoop?: (range: [number, number] | null) => void;
+  /** A loop is playing. */
+  looping?: boolean;
 };
 
 type Gesture =
@@ -218,19 +222,64 @@ export function Timeline(props: TimelineProps) {
     return () => clearTimeout(timer);
   }, [ppf, sceneId]);
 
-  // `=` and `-` zoom the timeline (⌘= / ⌘− zoom the canvas). Typing in a field is left alone.
-  const keyZoom = useRef<(name: string) => void>(() => undefined);
-  keyZoom.current = (name) => {
+  // Range play: the selected clips' span, else the work area, else nothing to loop.
+  const loopRange = useMemo((): [number, number] | null => {
+    let from = Infinity;
+    let to = -Infinity;
+    for (const id of props.selection) {
+      const entity = byId.get(id);
+      const t = entity ? times.get(entity as unknown as ClipNode) : undefined;
+      if (!t || t.end <= t.start) continue;
+      from = Math.min(from, t.start);
+      to = Math.max(to, t.end);
+    }
+    if (to > from) return [from, to];
+    const area = scene.workarea as [number, number] | null | undefined;
+    return area ? [Math.round(area[0] * FPS), Math.round(area[1] * FPS)] : null;
+  }, [props.selection, byId, times, scene]);
+  const toggleLoop = () => {
+    if (props.looping) props.onLoop?.(null);
+    else if (loopRange) props.onLoop?.(loopRange);
+  };
+
+  // Beat density (B3): every beat, every 2nd or every 4th, kept per scene in this browser.
+  const [beatDensity, setBeatDensity] = useState<BeatDensity>(1);
+  useEffect(() => {
+    try {
+      const kept = Number(window.localStorage.getItem(`opencmo.timeline.beats.${sceneId ?? ""}`));
+      setBeatDensity(kept === 2 || kept === 4 ? kept : 1);
+    } catch {
+      setBeatDensity(1);
+    }
+  }, [sceneId]);
+  const cycleBeats = () => {
+    const next: BeatDensity = beatDensity === 1 ? 2 : beatDensity === 2 ? 4 : 1;
+    setBeatDensity(next);
+    try {
+      window.localStorage.setItem(`opencmo.timeline.beats.${sceneId ?? ""}`, String(next));
+    } catch {
+      // Blocked storage: the density lasts until the editor closes.
+    }
+  };
+
+  // `=` and `-` zoom the timeline (⌘= / ⌘− zoom the canvas), `/` loops; Escape stops a loop.
+  // Typing in a field is left alone.
+  const keyAction = useRef<(name: string) => void>(() => undefined);
+  keyAction.current = (name) => {
     if (name === "timelineZoomIn") zoomTo(ppf * 1.5);
     else if (name === "timelineZoomOut") zoomTo(ppf / 1.5);
+    else if (name === "rangePlay") toggleLoop();
+    else if (name === "escape" && props.looping) props.onLoop?.(null);
   };
   useEffect(() => {
     const down = (event: KeyboardEvent) => {
       if (isTyping(event.target)) return;
+      if (event.key === "Escape") return keyAction.current("escape");
       const name = matchTimelineShortcut(event);
-      if (!name || !name.startsWith("timelineZoom")) return;
+      if (!name) return;
       event.preventDefault();
-      keyZoom.current(name);
+      if (event.repeat && name === "rangePlay") return;
+      keyAction.current(name);
     };
     window.addEventListener("keydown", down);
     return () => window.removeEventListener("keydown", down);
@@ -310,14 +359,14 @@ export function Timeline(props: TimelineProps) {
         if (node.kind !== "audio" || nodes.has(node)) continue;
         const src = (node as { src?: AssetInput }).src;
         if (src === undefined) continue;
-        for (const beat of knownBeats(typeof src === "string" ? src : JSON.stringify(src))) {
+        for (const beat of thinBeats(knownBeats(typeof src === "string" ? src : JSON.stringify(src)), beatDensity)) {
           const frame = Math.round(t.origin + (beat * FPS) / t.rate);
           if (frame >= t.start && frame <= t.end) extra.push(frame);
         }
       }
       return snapTargets(committed, nodes, extra);
     },
-    [media, props, workarea],
+    [media, props, workarea, beatDensity],
   );
 
   const onMove = useCallback(
@@ -612,6 +661,26 @@ export function Timeline(props: TimelineProps) {
         >
           Snap
         </button>
+        <button
+          type="button"
+          className="ed2-btn ed2-snap"
+          data-testid="timeline-loop"
+          aria-pressed={props.looping === true}
+          disabled={!props.looping && !loopRange}
+          title={loopRange || props.looping ? "Loop the selected clips or the work area (/). Esc stops." : "Select clips or set a work area to loop them"}
+          onClick={toggleLoop}
+        >
+          Loop
+        </button>
+        <button
+          type="button"
+          className="ed2-btn"
+          data-testid="timeline-beats"
+          title="Which music beats show and snap: every beat, every 2nd or every 4th"
+          onClick={cycleBeats}
+        >
+          {beatDensity === 1 ? "Beats: all" : beatDensity === 2 ? "Beats: 1 in 2" : "Beats: 1 in 4"}
+        </button>
         <NewTimeline doc={doc} run={(ops) => props.run(ops)} />
         <span className="ed2-grow" />
         <button type="button" className="ed2-icon" aria-label="Zoom out timeline" title="Zoom out timeline (-)" onClick={() => zoomTo(ppf / 1.5)}>
@@ -766,6 +835,7 @@ export function Timeline(props: TimelineProps) {
                       aiState={props.aiState}
                       onRetry={props.onRetry}
                       onBarDown={onBarDown}
+                      beatDensity={beatDensity}
                       onKeyframeDown={(keyframe, event) => {
                         const t = row.time;
                         if (!t || !keyframe.id) return;
@@ -957,7 +1027,9 @@ function Lane({
   onRetry,
   onBarDown,
   onKeyframeDown,
+  beatDensity,
 }: {
+  beatDensity: BeatDensity;
   row: Row;
   times: Map<ClipNode, TimeNode>;
   media: BrowserMedia;
@@ -1008,6 +1080,7 @@ function Lane({
           ai={aiState?.(t.node as unknown as Entity) ?? null}
           onRetry={onRetry}
           onDown={onBarDown}
+          beatDensity={beatDensity}
         />
       ))}
     </>
@@ -1025,7 +1098,9 @@ function Bar({
   ai,
   onRetry,
   onDown,
+  beatDensity,
 }: {
+  beatDensity: BeatDensity;
   t: TimeNode;
   media: BrowserMedia;
   ppf: number;
@@ -1055,7 +1130,7 @@ function Bar({
       title={slip ? `${label} · Alt-drag to slip the footage inside this clip` : `${label} · Drag up or down to move it to another row`}
       onPointerDown={(event) => onDown(entity, t, event)}
     >
-      {src !== undefined ? <Wave src={src} t={t} media={media} width={width} height={height - 6} /> : null}
+      {src !== undefined ? <Wave src={src} t={t} media={media} width={width} height={height - 6} beatDensity={beatDensity} /> : null}
       {kind === "captions" && typeof entity.src === "string" ? (
         <>
           <Words transcript={media.transcript(entity.src)} t={t} ppf={ppf} />
@@ -1164,7 +1239,7 @@ function FadeShades({ entity, ppf, width }: { entity: Entity; ppf: number; width
   );
 }
 
-function Wave({ src, t, media, width, height }: { src: AssetInput; t: TimeNode; media: BrowserMedia; width: number; height: number }) {
+function Wave({ src, t, media, width, height, beatDensity }: { src: AssetInput; t: TimeNode; media: BrowserMedia; width: number; height: number; beatDensity: BeatDensity }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const [peaks, setPeaks] = useState<Peaks | null>(null);
   const key = typeof src === "string" ? src : JSON.stringify(src);
@@ -1192,9 +1267,9 @@ function Wave({ src, t, media, width, height }: { src: AssetInput; t: TimeNode; 
     // Nhạc (lớp audio): vạch beat — cũng là điểm dính khi kéo clip (`targets`).
     if (t.node.kind === "audio") {
       const grid = beatsOf(key, peaks);
-      if (grid) drawBeats(element, grid.beats, from, to, "rgba(255,214,0,0.8)");
+      if (grid) drawBeats(element, thinBeats(grid.beats, beatDensity), from, to, "rgba(255,214,0,0.8)");
     }
-  }, [peaks, pixels, height, t.start, t.end, t.origin, t.rate, key, t.node.kind, theme]);
+  }, [peaks, pixels, height, t.start, t.end, t.origin, t.rate, key, t.node.kind, theme, beatDensity]);
   if (!peaks) return null;
   return <canvas ref={canvas} className="ed2-wave" data-testid="waveform" />;
 }

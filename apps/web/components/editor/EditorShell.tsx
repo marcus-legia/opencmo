@@ -350,6 +350,14 @@ function Workspace({
   const [playing, setPlaying] = useState(false);
   const playback = useMemo(() => new Playback(media, setFrame, setPlaying), [media]);
   useEffect(() => () => playback.dispose(), [playback]);
+  // capcut-B: range play — whether a loop is playing, for the timeline's Loop button and Escape.
+  const [looping, setLooping] = useState(false);
+  useEffect(() => {
+    playback.onLoopChange = setLooping;
+    return () => {
+      playback.onLoopChange = () => undefined;
+    };
+  }, [playback]);
   useEffect(() => {
     playback.renderer = renderer;
     if (renderer) playback.seek(playback.frame);
@@ -1775,6 +1783,9 @@ function Workspace({
         flash={flash}
         aiState={(entity) => aiStateOf(entity, library.manifest, aiLabel(entity))}
         onRetry={(entity) => void retryGeneration(entity)}
+        // capcut-B: range play — loop the selected clips or the work area; any pause ends the loop.
+        onLoop={(range) => (range ? playback.playLoop(range[0], range[1]) : playback.pause())}
+        looping={looping}
         onDropMedia={(event, dropFrame) =>
           // Timeline: bắt đầu đúng chỗ thả, đặt giữa khung.
           void dropped(event).then((records) => insertAssets(records, { start: dropFrame / 30 }))
