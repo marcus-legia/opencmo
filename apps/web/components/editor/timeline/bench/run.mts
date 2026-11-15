@@ -88,6 +88,13 @@ const result = await page.evaluate(async () => {
   report.fitClick = round(await timed(() => (document.querySelector('[data-testid="timeline-fit"]') as HTMLElement).click()));
 
   const zoomIn = document.querySelector('[aria-label="Zoom in timeline"]') as HTMLElement;
+  // Zooming with the button keeps the playhead where it is on screen (B1).
+  const playheadX = () => document.querySelector('[data-testid="timeline-playhead"]')!.getBoundingClientRect().left;
+  const before = playheadX();
+  zoomIn.click();
+  await frames();
+  await frames();
+  report.playheadDriftPx = round(playheadX() - before);
   const steps: number[] = [];
   for (let index = 0; index < 12; index++) steps.push(round(await timed(() => zoomIn.click())));
   report.zoomInSteps = steps;

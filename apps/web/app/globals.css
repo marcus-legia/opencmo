@@ -4694,6 +4694,13 @@ span.ed2-asst-model {
 .ed2-snapline {
   background: var(--ds-selected);
 }
+/* A drag snapped onto the playhead: the playhead itself lights up (no guide over it). */
+.ed2-playhead.is-snapped {
+  width: 2px;
+  margin-left: -0.5px;
+  background: var(--ds-selected);
+  box-shadow: 0 0 0 1px var(--ds-selected);
+}
 .ed2-drop-line {
   position: absolute;
   height: 2px;

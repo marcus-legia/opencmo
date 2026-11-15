@@ -59,11 +59,11 @@ Checks of what it touched → `/code-review` on the step's diff → fix → tick
 
 ### B1 — R3: zoom and snap quick wins
 
-- [ ] Zoom buttons and keys anchor on the playhead when it is on screen (the wheel keeps anchoring on the cursor).
-- [ ] Max zoom-out derived from the scene's duration, not a constant.
-- [ ] Zoom level remembered per project in `localStorage` (wrapped in try/catch), restored on open; Fit still works.
-- [ ] Snap threshold and playhead-first order as the report decides; the playhead highlights when a drag snaps to it.
-- [ ] Review → commit → push.
+- [x] Zoom buttons and keys anchor on the playhead when it is on screen (the wheel keeps anchoring on the cursor).
+- [x] Max zoom-out derived from the scene's duration, not a constant.
+- [x] Zoom level remembered per project in `localStorage` (wrapped in try/catch), restored on open; Fit still works.
+- [x] Snap threshold and playhead-first order as the report decides; the playhead highlights when a drag snaps to it.
+- [x] Review → commit → push.
 
 ### B2 — R5: move rules
 

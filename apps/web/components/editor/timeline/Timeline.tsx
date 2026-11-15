@@ -22,11 +22,14 @@ import { activeScene, applyOps, laneOf, MARKER_COLORS, readMarkers, timelinesOf,
 import { useThemePref } from "@/components/theme";
 
 import { clock } from "../clock";
+import { isTyping } from "../Stage";
+import { matchTimelineShortcut } from "../shortcuts";
 import type { BrowserMedia } from "../media";
 import type { AiState } from "../generate/useGenerations";
 import { beatsOf, drawBeats, drawPeaks, knownBeats, loadPeaks, type Peaks } from "./peaks";
 import { buildRows, CLIP_HEIGHT, ROLE_LABEL, roleOf, subtreeIds, type Row } from "./rows";
-import { rulerStep, snapDelta, snapFrame, snapTargets } from "./snap";
+import { rulerStep, SNAP_PX, snapDelta, snapFrame, snapTargets } from "./snap";
+import { clampZoom, rememberedZoom, rememberZoom, zoomAnchor, zoomFloor, ZOOM_MAX } from "./zoom";
 import { NewTimeline, TimelineTabs } from "./TimelineTabs";
 
 type Entity = Record<string, unknown> & { id?: string };
@@ -34,9 +37,8 @@ type Entity = Record<string, unknown> & { id?: string };
 const LABEL_WIDTH = 232;
 const RULER_HEIGHT = 36;
 const PAD = 8;
-const SNAP_PX = 10;
 const HANDLE_PX = 8;
-const ZOOM = { min: 0.03, max: 120, initial: 1 / 0.7 };
+const INITIAL_ZOOM = 1 / 0.7;
 
 export type TimelineProps = {
   /** Document đang hiện (bản xem trước khi đang kéo). */
@@ -95,7 +97,7 @@ const BAR_CLASS: Record<string, string> = {
 
 export function Timeline(props: TimelineProps) {
   const { doc, media, generation, frame } = props;
-  const [ppf, setPpf] = useState(ZOOM.initial);
+  const [ppf, setPpf] = useState(INITIAL_ZOOM);
   const scroller = useRef<HTMLDivElement>(null);
   const gesture = useRef<Gesture | null>(null);
   const [snapAt, setSnapAt] = useState<number | null>(null);
@@ -135,6 +137,20 @@ export function Timeline(props: TimelineProps) {
   const workarea = (scene.workarea as [number, number] | null | undefined) ?? null;
   const end = Math.max(sceneTime?.end ?? 0, workarea ? Math.round(workarea[1] * FPS) : 0);
   const contentWidth = PAD * 2 + (end + 5 * FPS) * ppf;
+  // Width of the clip lane on screen (the panel minus the layer column): sets the farthest zoom.
+  const [laneWidth, setLaneWidth] = useState(0);
+  useEffect(() => {
+    const element = scroller.current;
+    if (!element) return;
+    const measure = () => setLaneWidth(Math.max(0, element.clientWidth - LABEL_WIDTH));
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  const floor = zoomFloor(end, laneWidth || 800);
+  const playheadRef = useRef(frame);
+  playheadRef.current = frame;
   const x = useCallback((f: number) => PAD + f * ppf, [ppf]);
   const frameAt = useCallback(
     (clientX: number) => {
@@ -144,40 +160,81 @@ export function Timeline(props: TimelineProps) {
     [ppf],
   );
 
-  // Zoom quanh con trỏ: giây dưới con trỏ đứng yên.
+  // The frame under the anchor stays still: the pointer for the wheel; for buttons, keys and the
+  // slider the playhead when it is on screen (CapCut keeps the playhead still), else the centre.
   const zoomTo = useCallback(
     (next: number, anchorClientX?: number) => {
       const element = scroller.current;
-      const clamped = Math.min(ZOOM.max, Math.max(ZOOM.min, next));
+      const clamped = clampZoom(next, floor);
       if (!element) return setPpf(clamped);
       const box = element.getBoundingClientRect();
-      const px = (anchorClientX ?? box.left + LABEL_WIDTH + (box.width - LABEL_WIDTH) / 2) - box.left - LABEL_WIDTH;
+      const lane = element.clientWidth - LABEL_WIDTH;
+      const px = anchorClientX !== undefined
+        ? anchorClientX - box.left - LABEL_WIDTH
+        : zoomAnchor(PAD + playheadRef.current * ppf, element.scrollLeft, lane);
       const at = (px + element.scrollLeft - PAD) / ppf;
       setPpf(clamped);
       requestAnimationFrame(() => {
         element.scrollLeft = Math.max(0, PAD + at * clamped - px);
       });
     },
-    [ppf],
+    [ppf, floor],
   );
   // Không đi qua `zoomTo`: rAF của nó neo theo giây giữa khung và ghi đè scrollLeft = 0,
   // nên mở editor (và bấm Fit) từng thấy timeline lệch vài giây.
   const fit = useCallback(() => {
     const element = scroller.current;
     if (!element || !end) return;
-    setPpf(Math.min(ZOOM.max, Math.max(ZOOM.min, (element.clientWidth - LABEL_WIDTH - PAD * 4) / end)));
+    const lane = element.clientWidth - LABEL_WIDTH;
+    // The lane draws 5 s past the end: count them, or Fit leaves a scrollbar.
+    setPpf(clampZoom((lane - PAD * 4) / (end + 5 * FPS), zoomFloor(end, lane)));
     requestAnimationFrame(() => {
       element.scrollLeft = 0;
     });
   }, [end]);
-  // Vừa khung một lần khi đã biết độ dài scene.
-  const fitted = useRef(false);
+  // Once per scene, when its length is known: the zoom this browser last used on it, else Fit.
+  const sceneId = typeof scene.id === "string" ? scene.id : undefined;
+  const opened = useRef<string | null>(null);
+  // The save below runs in the same pass as the restore, still holding the previous scene's zoom.
+  const justOpened = useRef(false);
   useEffect(() => {
-    if (!fitted.current && end > 0 && scroller.current) {
-      fitted.current = true;
-      fit();
-    }
-  }, [end, fit]);
+    const element = scroller.current;
+    const id = sceneId ?? "";
+    if (opened.current === id || end <= 0 || !element) return;
+    opened.current = id;
+    justOpened.current = true;
+    const lane = element.clientWidth - LABEL_WIDTH;
+    const kept = rememberedZoom(sceneId);
+    if (kept === null || kept < zoomFloor(end, lane) || kept > ZOOM_MAX) return fit();
+    setPpf(kept);
+    requestAnimationFrame(() => {
+      element.scrollLeft = Math.max(0, PAD + playheadRef.current * kept - lane / 2);
+    });
+  }, [end, fit, sceneId]);
+  useEffect(() => {
+    if (opened.current !== (sceneId ?? "")) return;
+    if (justOpened.current) return void (justOpened.current = false);
+    const timer = setTimeout(() => rememberZoom(sceneId, ppf), 300);
+    return () => clearTimeout(timer);
+  }, [ppf, sceneId]);
+
+  // `=` and `-` zoom the timeline (⌘= / ⌘− zoom the canvas). Typing in a field is left alone.
+  const keyZoom = useRef<(name: string) => void>(() => undefined);
+  keyZoom.current = (name) => {
+    if (name === "timelineZoomIn") zoomTo(ppf * 1.5);
+    else if (name === "timelineZoomOut") zoomTo(ppf / 1.5);
+  };
+  useEffect(() => {
+    const down = (event: KeyboardEvent) => {
+      if (isTyping(event.target)) return;
+      const name = matchTimelineShortcut(event);
+      if (!name || !name.startsWith("timelineZoom")) return;
+      event.preventDefault();
+      keyZoom.current(name);
+    };
+    window.addEventListener("keydown", down);
+    return () => window.removeEventListener("keydown", down);
+  }, []);
 
   useEffect(() => {
     const element = scroller.current;
@@ -288,15 +345,16 @@ export function Timeline(props: TimelineProps) {
       const frames = Math.round(dx / ppf);
       // Snap tắt: ngưỡng 0, chỉ dính khi trùng đúng khung.
       const threshold = snapOn.current ? SNAP_PX / ppf : 0;
+      const playhead = snapOn.current ? props.frame : undefined;
       if (g.kind === "move") {
-        const snap = snapDelta(g.edges, frames, g.snap, threshold);
+        const snap = snapDelta(g.edges, frames, g.snap, threshold, playhead);
         setSnapAt(snap?.at ?? null);
         g.op = { op: "move_elements", element_ids: g.ids, by: (snap?.delta ?? frames) / FPS };
         g.row = rowFor(g.ids, event.clientY);
         setRowTarget(g.row);
       } else if (g.kind === "trim") {
         const wanted = g.from + frames;
-        const snapped = snapFrame(wanted, g.snap, threshold);
+        const snapped = snapFrame(wanted, g.snap, threshold, playhead);
         setSnapAt(snapped);
         g.op = { op: "trim_element", element_id: g.id, edge: g.edge, at: Math.max(0, snapped ?? wanted) / FPS };
       } else if (g.kind === "marker") {
@@ -556,7 +614,7 @@ export function Timeline(props: TimelineProps) {
         </button>
         <NewTimeline doc={doc} run={(ops) => props.run(ops)} />
         <span className="ed2-grow" />
-        <button type="button" className="ed2-icon" aria-label="Zoom out timeline" onClick={() => zoomTo(ppf / 1.5)}>
+        <button type="button" className="ed2-icon" aria-label="Zoom out timeline" title="Zoom out timeline (-)" onClick={() => zoomTo(ppf / 1.5)}>
           −
         </button>
         <input
@@ -564,13 +622,13 @@ export function Timeline(props: TimelineProps) {
           className="ed2-zoom-slider"
           aria-label="Timeline zoom"
           data-testid="timeline-zoom"
-          min={Math.log(ZOOM.min)}
-          max={Math.log(ZOOM.max)}
+          min={Math.log(floor)}
+          max={Math.log(ZOOM_MAX)}
           step={0.01}
           value={Math.log(ppf)}
           onChange={(event) => zoomTo(Math.exp(Number(event.target.value)))}
         />
-        <button type="button" className="ed2-icon" aria-label="Zoom in timeline" onClick={() => zoomTo(ppf * 1.5)}>
+        <button type="button" className="ed2-icon" aria-label="Zoom in timeline" title="Zoom in timeline (=)" onClick={() => zoomTo(ppf * 1.5)}>
           +
         </button>
         <button type="button" className="ed2-btn" data-testid="timeline-fit" onClick={fit}>
@@ -740,8 +798,13 @@ export function Timeline(props: TimelineProps) {
           </div>
 
           {/* Playhead và đường gióng. */}
-          <div className="ed2-playhead" data-testid="timeline-playhead" style={{ left: LABEL_WIDTH + x(frame) }} />
-          {snapAt !== null ? <div className="ed2-snapline" style={{ left: LABEL_WIDTH + x(snapAt) }} /> : null}
+          {/* A drag that snaps onto the playhead lights the playhead instead of drawing a guide over it. */}
+          <div
+            className={snapAt === frame ? "ed2-playhead is-snapped" : "ed2-playhead"}
+            data-testid="timeline-playhead"
+            style={{ left: LABEL_WIDTH + x(frame) }}
+          />
+          {snapAt !== null && snapAt !== frame ? <div className="ed2-snapline" style={{ left: LABEL_WIDTH + x(snapAt) }} /> : null}
         </div>
       </div>
     </section>
