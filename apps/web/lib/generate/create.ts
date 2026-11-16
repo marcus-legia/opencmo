@@ -184,7 +184,7 @@ export async function requireCredits(supabase: SupabaseClient, needed: number): 
  * user's project id got "Not enough credits" (409), or with credits reached the rate limit and paid moderation, before
  * SQL said 404. Read under RLS, so another user's project and one being purged are both not found.
  */
-async function requireOwnProject(supabase: SupabaseClient, jobId: string): Promise<void> {
+export async function requireOwnProject(supabase: SupabaseClient, jobId: string): Promise<void> {
   const { data, error } = await supabase.from("jobs").select("id").eq("id", jobId).is("purging_at", null).maybeSingle<{ id: string }>();
   if (error) throw error;
   if (!data) throw new ApiError(404, "Project not found.");

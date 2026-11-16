@@ -24,7 +24,7 @@ import { priceOf, type AiModel, type GenerationKind, type GenerationSpec } from 
 
 import { ApiError } from "@/lib/api/errors";
 import { rpcOrThrow, type SupabaseClient } from "@/lib/api/handler";
-import { checkGeneration, normalizeSpec, requireCredits, startGeneration, type PreparedCreate } from "@/lib/generate/create";
+import { checkGeneration, normalizeSpec, requireCredits, requireOwnProject, startGeneration, type PreparedCreate } from "@/lib/generate/create";
 import { briefMisuse, briefShape, composePrompt, type Brief } from "@/lib/generate/brief";
 import { availableModels } from "@/lib/generate/models";
 
@@ -419,7 +419,11 @@ export async function runGeneration(env: GenerateEnv, prepared: PreparedGenerati
   // is checked first: past the balance the whole batch is refused before any piece is moderated (review C4).
   let ready: PreparedCreate[];
   try {
-    if (runs.length > 1 && !env.orderId) await requireCredits(env.supabase, runs.reduce((sum, { model, spec }) => sum + priceOf(model, spec), 0));
+    if (runs.length > 1 && !env.orderId) {
+      // Another user's project is "not found" before it is "not enough credits", as in `checkGeneration`.
+      await requireOwnProject(env.supabase, env.jobId);
+      await requireCredits(env.supabase, runs.reduce((sum, { model, spec }) => sum + priceOf(model, spec), 0));
+    }
     ready = await Promise.all(
       runs.map(({ model, spec }) =>
         checkGeneration(env.supabase, { jobId: env.jobId, clipId: env.clipId, model: model.id, spec, requestId: randomUUID(), ...(env.orderId ? { orderId: env.orderId } : {}) }),

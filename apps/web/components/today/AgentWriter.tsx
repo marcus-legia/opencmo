@@ -275,7 +275,7 @@ export function AgentWriter() {
               ) : null}
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-              {shown.length === 0 && !(tab === "week" && shownLeftOver.length) ? <div className="meta">Nothing here yet. Writer drafts the week from your strategy every Sunday.</div> : null}
+              {shown.length === 0 && !(tab === "week" && shownLeftOver.length) ? <div className="meta">{active ? `No ${PLATFORM_LABEL[active as Draft["platform"]]} drafts here. Pick All to see the rest.` : "Nothing here yet. Writer drafts the week from your strategy every Sunday."}</div> : null}
               {shown.map(renderRow)}
               {tab === "week" && shownLeftOver.length ? (
                 <>

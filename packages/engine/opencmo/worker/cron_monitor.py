@@ -39,9 +39,9 @@ SWEEP_MONITOR: dict = {
     "timezone": "Etc/UTC",
 }
 
-# httpx times each phase on its own (connect, write, read): about 6 s at worst, so a slow Sentry cannot push a long
-# sweep past its 60 s Modal timeout and lose the heartbeat with it.
-_TIMEOUT = httpx.Timeout(2.0)
+# httpx times each phase on its own (pool, connect, write, read), so the worst case is their sum: 1 + 2 + 1 + 2 = 6 s.
+# A slow Sentry then cannot push a long sweep past its 60 s Modal timeout and lose the heartbeat with it.
+_TIMEOUT = httpx.Timeout(connect=2.0, read=2.0, write=1.0, pool=1.0)
 _KEY = re.compile(r"^\w+$")
 _HOST = re.compile(r"^[\w-]+(\.[\w-]+)*$")
 _PROJECT = re.compile(r"^\d+$")
