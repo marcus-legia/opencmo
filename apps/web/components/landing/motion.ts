@@ -46,6 +46,9 @@ export function scrollToId(id: string): void {
   const target = id === "top" ? 0 : document.getElementById(id);
   if (target === null) return;
   if (lenis) {
+    // Lenis measures the page on a 250 ms debounce: right after a resize or a late layout change its scroll limit is
+    // stale, and scrollTo clamps to it (a footer link to #pricing then did not move at all). Measure now.
+    lenis.resize();
     lenis.scrollTo(target, { duration: 1.6 });
     return;
   }

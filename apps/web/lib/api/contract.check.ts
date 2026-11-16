@@ -25,6 +25,7 @@ import { join } from "node:path";
 
 import { createClient } from "@supabase/supabase-js";
 
+import { CREATE_VIDEO_HIDDEN } from "../agent/hidden";
 import { isLoopbackUrl } from "../local-supabase";
 
 const BASE = process.env.CHECK_API_BASE ?? "http://127.0.0.1:3000";
@@ -1402,11 +1403,13 @@ async function main(): Promise<void> {
     const more = await callSse(a, `/agent/sessions/${agentSession}/continue`, { extend: true });
     assert.equal(more.status, 200, JSON.stringify(more.body));
     assert.equal(more.events.at(-1)!.data.status, "done");
+    // Every credit used is billed, up to what the user has (owner, 2026-11-05; `agent_close_turn`): the hold is the
+    // gate between steps, not a cap. This turn used far more than its 5 + 10, so it takes the whole balance, no more.
     const settled = (await agentView()).session.turns.at(-1)!;
-    assert.equal(settled.credits, 15, "tính đúng phần đã giữ (5 + 10), không hơn");
-    assert.equal(await balance(a.userId), before + 10 - 15);
-    // Các ca sau tính theo số dư cũ trừ đúng lượt này.
-    await grant(start - 15 - (before + 10 - 15), "contract check: restore balance");
+    assert.equal(settled.credits, before + 10, "billed past the hold (5 + 10) up to the balance, never below zero");
+    assert.equal(await balance(a.userId), 0);
+    // The cases after this one count on the old balance minus this turn.
+    await grant(start - settled.credits, "contract check: restore balance");
   });
 
   await check("continue khi không có lượt nào chờ là 409", async () => {
@@ -1617,6 +1620,17 @@ async function main(): Promise<void> {
     const session = (opened.body as { id: string }).id;
     const first = await callSse(a, `/agent/sessions/${session}/turns`, { prompt: "/video a 15 second video about our hotel booking app" });
     const request = first.events.find((event) => event.event === "approval_request");
+    if (CREATE_VIDEO_HIDDEN) {
+      // `/video` is hidden in the web app (cmo-review-2 §2.2): the Assistant has no create_video, so the turn ends on a
+      // sentence offering what it can make instead, with no card, nothing generated and no credit held for media.
+      assert.equal(request, undefined, JSON.stringify(first.events.map((event) => [event.event, event.data])));
+      assert.equal(first.events.at(-1)!.data.status, "done");
+      const said = first.events.filter((event) => event.event === "text").map((event) => event.data.text).join("");
+      assert.match(said, /whole AI video from one prompt is not made here/);
+      const { count } = await admin.from("generations").select("id", { count: "exact", head: true }).eq("clip_id", videoClip);
+      assert.equal(count, 0, "nothing generated");
+      return;
+    }
     assert.ok(request, `no approval card: ${JSON.stringify(first.events.map((event) => [event.event, event.data]))}`);
     assert.equal(request!.data.name, "create_video");
     const card = request!.data.card as { changes: string[]; credits: number; storyboard: { beats: unknown[]; columns: string[] } };

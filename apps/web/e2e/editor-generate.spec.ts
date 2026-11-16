@@ -173,7 +173,7 @@ test("library image as first frame, B-roll in one approval card, save_frame", as
   await page.getByTestId("generate-submit").click();
   await expect
     .poll(async () => JSON.stringify(await (await page.request.get(`/api/v1/editor/document?clip_id=${clipId}`)).json()), { timeout: 30_000 })
-    .toMatch(/"prompt":"make it a snowy night","model":"fake-edit"[^}]*"sourceVideo":"generated\/[^"]+","sourceStart":0/);
+    .toMatch(/"prompt":"make it a snowy night","model":"fake-edit"[^}]*"sourceVideo":"Generated\/[^"]+","sourceStart":0/);
   await expect(page.locator('[data-testid^="clip-ai-pending-"]')).toHaveCount(0, { timeout: 240_000 });
   await expect(page.locator('[data-testid^="clip-ai-retry-"]')).toHaveCount(1);
 
@@ -185,7 +185,7 @@ test("library image as first frame, B-roll in one approval card, save_frame", as
   await page.getByTestId("ai-upscale-1080p").click();
   await expect
     .poll(async () => JSON.stringify(await (await page.request.get(`/api/v1/editor/document?clip_id=${clipId}`)).json()), { timeout: 30_000 })
-    .toMatch(/"model":"fake-upscale"[^}]*"resolution":"1080p"[^}]*"sourceVideo":"generated\/[^"]+"/);
+    .toMatch(/"model":"fake-upscale"[^}]*"resolution":"1080p"[^}]*"sourceVideo":"Generated\/[^"]+"/);
   await expect(page.locator('[data-testid^="clip-ai-pending-"]')).toHaveCount(0, { timeout: 240_000 });
   await expect(page.locator('[data-testid^="clip-ai-retry-"]')).toHaveCount(1);
 

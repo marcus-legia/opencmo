@@ -43,7 +43,9 @@ for (const screen of SCREENS) {
     for (const width of [1440, 390]) {
       await page.setViewportSize({ width, height: width < 500 ? 844 : 1000 });
       await page.goto(screen.path);
-      await expect(page.getByTestId(screen.ready)).toBeVisible();
+      // Visible only: while the page streams, React keeps the next Suspense segment in a hidden `<div id="S:0">` until
+      // its reveal script runs, so for a moment the screen's root is in the DOM twice (CI run 43843071368, dashboard).
+      await expect(page.getByTestId(screen.ready).filter({ visible: true })).toBeVisible();
       // Screens read their data client-side: look (and run axe) once loading blocks are gone.
       await expect(page.locator('main [aria-busy="true"]')).toHaveCount(0);
       const overflow = await sidewaysOverflow(page);

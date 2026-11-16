@@ -28,23 +28,23 @@ Ranked by what it does for a paying founder and for the owner's time:
 
 | Term | What it is | OpenCMO |
 |---|---|---|
-| E2E (end-to-end) test | A browser robot uses the app like a person: clicks, types, checks what shows | partial: Playwright specs in `apps/web/e2e/`, not in CI |
-| Smoke test | A few fast checks after each deploy: sign-in works, the main pages load | missing |
+| E2E (end-to-end) test | A browser robot uses the app like a person: clicks, types, checks what shows | have: `.github/workflows/e2e.yml` runs the smoke set on each PR and push to `main`, and the whole suite on both apps nightly, against a local Supabase with fake models; whole suite green on 2026-11-16 (round 2) |
+| Smoke test | A few fast checks after each deploy: sign-in works, the main pages load | partial: `test:e2e:smoke` (sign-in and the CMO loop) on each PR, not yet a required check; nothing runs after a deploy (`/api/health` is B's row in §3) |
 | Visual regression test | Screenshots compared with approved ones to catch broken layouts (Playwright `toHaveScreenshot`) | partial: golden stills for `clip-motion`, none for the web app |
-| Flaky test | A test that passes and fails on the same code; fix or quarantine it | |
+| Flaky test | A test that passes and fails on the same code; fix or quarantine it | have (rule): no retries in `playwright.config.ts`; a flaky spec is fixed, not retried (round 2 fixed a streaming race in `ui-v2-look`) |
 | Fixture, mock, fake | Saved or invented data so tests cost nothing | have: `OPENCMO_AGENT_FAKE`, `lib/cmo/social/fixtures/` |
 | Contract test | Checks that an API returns the agreed shape | have: `check:contracts` |
 | LLM eval | Scores the quality of model output against cases | have: `ai-evals.yml` |
 | Test coverage | The share of code that tests run through | |
-| Preview deployment testing | e2e against the Vercel preview URL of each PR | missing |
+| Preview deployment testing | e2e against the Vercel preview URL of each PR | missing, by choice: the preview is behind SSO and reads production; CI runs the e2e on a production build of the PR with a local Supabase instead |
 
 ## 2. Performance
 
 | Term | What it is | OpenCMO |
 |---|---|---|
 | Core Web Vitals | LCP (main content shows), INP (response to a click), CLS (layout shift) | have: `@vercel/speed-insights` measures them in production |
-| Lighthouse CI | Scores performance in CI and fails a PR when the score drops | missing |
-| Performance budget | Hard limits, e.g. under 200 kB of JS, LCP under 2.5 s | missing |
+| Lighthouse CI | Scores performance in CI and fails a PR when the score drops | partial: `.github/workflows/lighthouse.yml` on each PR (public pages, `apps/web/lighthouserc.cjs`); warnings only until 2026-11-22, then errors |
+| Performance budget | Hard limits, e.g. under 200 kB of JS, LCP under 2.5 s | partial: LCP 2.5 s, CLS 0.1 and category scores in `lighthouserc.cjs`, as warnings until 2026-11-22; no JS size budget |
 | Bundle size, bundle analyzer | Which libraries make the JS heavy | |
 | TTFB | Time to the server's first byte | |
 | Cold start | The first call to a serverless function or Modal container is slow | |
