@@ -1,0 +1,26 @@
+# gitleaks config for `.github/workflows/secrets.yml` (web hardening round 2, item 4).
+#
+# The default rules, plus the smallest allowlist that keeps known non-secrets from failing a PR. A one-off fixture in
+# a test (a fake token, a made-up key) is marked on its own line with a `gitleaks:allow` comment instead of being
+# added here: an allowlisted path or pattern hides every future secret that matches it.
+
+title = "opencmo"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Supabase CLI local stack: the fixed demo JWTs every `supabase start` prints (iss = supabase-demo)"
+regexTarget = "secret"
+regexes = [
+  # Header {"alg":"HS256","typ":"JWT"}, payload starting {"iss":"supabase-demo",. Only the CLI's demo issuer matches;
+  # a real project's keys carry iss "supabase" and a project ref.
+  '''^eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIi[A-Za-z0-9_-]*\.[A-Za-z0-9_-]+$''',
+]
+
+[[allowlists]]
+description = "Vendors' public API docs kept for agents; their examples (YOUR_API_KEY, sample ids) are not ours"
+paths = [
+  '''^docs/creem-llm\.txt$''',
+  '''^docs/zernio\.txt$''',
+]

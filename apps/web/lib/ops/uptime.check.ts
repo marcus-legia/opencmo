@@ -9,12 +9,52 @@ import path from "node:path";
 
 import { config as middleware } from "../../middleware";
 import { CRON_MONITORS, withCronMonitor } from "./cron-monitor";
-import { healthReport } from "./health";
+import { healthReport, QUEUE_STUCK_AFTER_SECONDS } from "./health";
+import { readSentryDsn } from "./sentry-dsn";
 
 async function main() {
   // Health: which part is down, never why.
-  assert.deepEqual(await healthReport(async () => true), { ok: true, checks: { web: "ok", database: "ok" } });
-  assert.deepEqual(await healthReport(async () => false), { ok: false, checks: { web: "ok", database: "down" } });
+  const now = Date.parse("2026-11-16T12:00:00Z");
+  const empty = async () => null;
+  assert.deepEqual(await healthReport(async () => true, empty, now), {
+    ok: true,
+    checks: { web: "ok", database: "ok", queue: "ok" },
+    oldest_queued_seconds: null,
+  });
+  assert.deepEqual(await healthReport(async () => false, empty, now), {
+    ok: false,
+    checks: { web: "ok", database: "down", queue: "ok" },
+    oldest_queued_seconds: null,
+  });
+
+  // The queue: a job waiting past the threshold fails the check; one inside it, or a queue we cannot read, does not.
+  const waiting = (seconds: number) => async () => now - seconds * 1000;
+  const fresh = await healthReport(async () => true, waiting(90), now);
+  assert.equal(fresh.ok, true);
+  assert.equal(fresh.checks.queue, "ok");
+  assert.equal(fresh.oldest_queued_seconds, 90);
+  assert.equal((await healthReport(async () => true, waiting(QUEUE_STUCK_AFTER_SECONDS), now)).ok, true, "at the threshold is not stuck yet");
+  const stuck = await healthReport(async () => true, waiting(QUEUE_STUCK_AFTER_SECONDS + 1), now);
+  assert.equal(stuck.ok, false, "a stuck queue pages the owner through the uptime monitor");
+  assert.equal(stuck.checks.queue, "stuck");
+  const unread = await healthReport(async () => true, async () => undefined, now);
+  assert.equal(unread.ok, true, "local and CI have no service key: unknown, not down");
+  assert.equal(unread.checks.queue, "unknown");
+  assert.equal(unread.oldest_queued_seconds, null);
+  assert.equal((await healthReport(async () => true, waiting(-5), now)).oldest_queued_seconds, 0, "clock skew never reads negative");
+
+  // Sentry's DSN: the cut-off value production had on 2026-11-16 must read as invalid, not as "on".
+  const key = "0123456789abcdef0123456789abcdef"; // gitleaks:allow (made-up DSN key)
+  assert.equal(readSentryDsn(undefined).state, "off");
+  assert.equal(readSentryDsn("  ").state, "off");
+  assert.equal(readSentryDsn(`https://${key}@o1.ingest.us.sentry.io/42`).state, "ok");
+  assert.equal(readSentryDsn(` https://${key}@o1.ingest.us.sentry.io/42\n`).state, "ok", "whitespace from a paste is trimmed");
+  assert.equal(readSentryDsn(`https://${key}@sentry.example.com/sub/path/42`).state, "ok", "self-hosted path prefix");
+  assert.equal(readSentryDsn(`http://${key}@localhost:9000/1`).state, "ok", "a single-label host");
+  assert.equal(readSentryDsn(`https://${key}@o1.ingest.us.`).state, "invalid", "the truncation found in production");
+  assert.equal(readSentryDsn(`https://${key}@o1.ingest.us.sentry.io/`).state, "invalid", "no project id");
+  assert.equal(readSentryDsn("https://o1.ingest.us.sentry.io/42").state, "invalid", "no public key");
+  assert.equal(readSentryDsn(`${key}@o1.ingest.us.sentry.io/42`).state, "invalid", "no scheme");
 
   // The route itself, with no database configured: 503, never cached.
   delete process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -22,7 +62,11 @@ async function main() {
   const down = await GET();
   assert.equal(down.status, 503);
   assert.equal(down.headers.get("cache-control"), "no-store");
-  assert.deepEqual(await down.json(), { ok: false, checks: { web: "ok", database: "down" } });
+  assert.deepEqual(await down.json(), {
+    ok: false,
+    checks: { web: "ok", database: "down", queue: "unknown" },
+    oldest_queued_seconds: null,
+  });
 
   // The middleware skips /api/health (a ping a minute needs no session check), and only it.
   const matcher = new RegExp(`^${middleware.matcher[0]}$`);

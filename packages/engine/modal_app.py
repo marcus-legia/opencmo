@@ -556,7 +556,24 @@ def sweep() -> None:
 
     Database errors only warn: the cron runs again in a minute, and a 504 on an empty queue (13/09 11:00) is not an
     incident.
+
+    Each run ends with a heartbeat to Sentry's monitor `modal-sweep` (`opencmo/worker/cron_monitor.py`): `ok` when the
+    sweep got through, `error` when it raised. No heartbeat at all means Modal stopped calling it.
     """
+    from opencmo.worker import cron_monitor
+
+    finished = False
+    try:
+        _sweep_once()
+        finished = True
+    finally:
+        cron_monitor.check_in(
+            cron_monitor.SWEEP_SLUG, "ok" if finished else "error", cron_monitor.SWEEP_MONITOR
+        )
+
+
+def _sweep_once() -> None:
+    """One pass of `sweep()`: reconcile, claim, dispatch the CMO."""
     from opencmo.backends.retry import TransientError
     from opencmo.worker.kinds import task_kinds
 
