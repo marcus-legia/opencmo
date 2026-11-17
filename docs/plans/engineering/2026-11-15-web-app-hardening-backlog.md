@@ -61,21 +61,21 @@ Ranked by what it does for a paying founder and for the owner's time:
 
 | Term | What it is | OpenCMO |
 |---|---|---|
-| Observability | Logs, metrics and traces | partial: Sentry (`@sentry/nextjs`) wired, but production's DSN was cut off and nothing reached Sentry until the owner fixes it (round 2); a bad DSN now logs `sentry_dsn_invalid` at boot and shows on Live switches |
+| Observability | Logs, metrics and traces | partial: Sentry (`@sentry/nextjs`) wired, but production's DSN was cut off and nothing reached Sentry until the owner fixes it (round 2); a bad DSN now logs `sentry_dsn_invalid` at boot and shows on Live switches. The worker's silent fallbacks (Scribe failed, no face detector) are now codes in `media_manifest.warnings`, shown on `/app/settings/failures` (round 4, B) |
 | Distributed tracing | Following one request through web → Supabase → Modal | |
 | Uptime / synthetic monitoring | A bot calls the site every minute and alerts when it fails | partial: `/api/health` ready; the Sentry uptime monitor waits on the owner. Cron monitors for Modal's three web crons and the `sweep` heartbeat (`modal-sweep`) report once the DSNs are set |
-| Alerting, on-call | A message (Telegram, Slack, email) when a threshold is crossed | missing: one Sentry alert rule waits on the owner |
+| Alerting, on-call | A message (Telegram, Slack, email) when a threshold is crossed | partial: `/api/cron/failures` sends one Sentry event per new failure group each hour (fingerprinted, so Sentry's "new issue" rule emails once per group; round 4, B); cron and uptime monitors exist. Waits on the owner's Sentry alert rule; no on-call rotation (one person) |
 | SLO, SLA, error budget | A stability promise, e.g. 99.9 % of requests succeed | |
 | Health check endpoint | A route such as `/api/health` that says the system is alive | have: `/api/health` (web, database, oldest queued job; 503 past 10 minutes) |
 | Retry with exponential backoff | Try again, waiting longer each time | |
 | Idempotency key | Sending a request twice does not charge twice | have: Creem grants once per transaction or order |
 | Circuit breaker | Stop calling a provider that is down for a while | |
 | Graceful degradation, fallback | One part fails, the rest keeps working | have: e.g. social reads fall back from LurkAPI to ScrapeCreators |
-| Dead letter queue | Where failed jobs wait to be read and run again | partial: leases requeue a dead attempt up to three times; a stuck queue fails `/api/health`; the owner reads every failed or stuck piece of work, grouped by error, at `/app/settings/failures` (round 3, C). Re-running is still the founder's button |
+| Dead letter queue | Where failed jobs wait to be read and run again | partial: leases requeue a dead attempt up to three times; a stuck queue fails `/api/health`; the owner reads every failed or stuck piece of work, grouped by error, at `/app/settings/failures` (round 3, C), with uploads published with a fallback under "Warnings" (round 4, B), and hears of a new group through Sentry. Re-running is still the founder's button |
 | Rate limiting | A cap on requests per user or IP | have |
 | Backup, PITR | Restore the database to a point in time | |
 | RTO, RPO | How long a restore takes; how much data may be lost | |
-| Incident, postmortem | A written record of an outage and what was learned | partial: `/app/settings/failures` shows what founders hit in the last 7, 30 or 90 days and how many accounts (round 3, C), the evidence a postmortem starts from; no written incident template yet |
+| Incident, postmortem | A written record of an outage and what was learned | done: `docs/runbooks/incident.md` (how the owner learns, the first ten minutes, telling founders, a postmortem template; round 4, B); `/app/settings/failures` is the evidence a postmortem starts from |
 
 ## 4. Deploy and CI/CD
 

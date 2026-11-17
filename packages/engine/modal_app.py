@@ -678,10 +678,11 @@ def cmo_schedule() -> None:
     log.info("AI CMO schedule: %s", cmo_dispatch.call_cron(*web, "/api/cron/cmo"))
 
 
-@app.function(secrets=[secret], schedule=modal.Cron("2 * * * *"), timeout=150)
+@app.function(secrets=[secret], schedule=modal.Cron("2 * * * *"), timeout=210)
 def cmo_digest() -> None:
     """Hourly: release cards held past a day's budget, send each founder's digest at their local hour, email the
     cards about to expire and push new cards (P6). Every send is claimed in SQL, so a second call sends nothing.
+    Then the founder-failure alert (`/api/cron/failures`): one Sentry event per failure group of the last hour.
     """
     from opencmo.worker import cmo_dispatch
 
@@ -689,7 +690,15 @@ def cmo_digest() -> None:
     if web is None:
         log.error("OPENCMO_WEB_URL or CRON_SECRET missing: the digest did not run")
         return
-    log.info("Digest: %s", cmo_dispatch.call_cron(*web, "/api/cron/cmo-digest", timeout=140.0))
+    # The alert runs even when the digest fails: an hour that breaks the digest is the hour to hear about.
+    digest_error = None
+    try:
+        log.info("Digest: %s", cmo_dispatch.call_cron(*web, "/api/cron/cmo-digest", timeout=140.0))
+    except Exception as exc:  # noqa: BLE001 - re-raised below, after the alert
+        digest_error = exc
+    log.info("Failure alerts: %s", cmo_dispatch.call_cron(*web, "/api/cron/failures", timeout=55.0))
+    if digest_error is not None:
+        raise digest_error
 
 
 @app.function(secrets=[secret], schedule=modal.Cron("0 3 * * *"), timeout=90)

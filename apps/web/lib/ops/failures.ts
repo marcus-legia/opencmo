@@ -39,6 +39,17 @@ export type FailureGroup = {
   latest: FailureRow[];
 };
 
+/** One warning code from `ops_failure_groups`: uploads published with that fallback. */
+export type UploadWarning = {
+  code: string;
+  jobs: number;
+  accounts: number;
+  first_seen: string;
+  last_seen: string;
+  /** Job ids, newest first: for the page only, never sent to Sentry. */
+  latest: string[];
+};
+
 export type FailuresReport = {
   since: string;
   days: number;
@@ -46,6 +57,8 @@ export type FailuresReport = {
   accounts: number;
   stuck: number;
   groups: FailureGroup[];
+  /** Uploads the worker published with a fallback (`media_manifest.warnings`): they never end `failed`. */
+  warnings: UploadWarning[];
 };
 
 /** What the founder was doing, in the owner's words. The table name stays beside it, for the lookup in Supabase. */
@@ -76,4 +89,19 @@ export function displayKey(key: string): string {
 export function ago(at: string, now: Date = new Date()): string {
   // A clock a little ahead of the database is not "in the future".
   return `${duration(Math.max(0, (now.getTime() - new Date(at).getTime()) / 1000))} ago`;
+}
+
+/**
+ * What a warning code from the worker (`packages/engine/opencmo/worker/process_job.py`) means for the founder, in the
+ * owner's words. A code the page does not know yet still shows as itself.
+ */
+const WARNING_LABEL: Record<string, string> = {
+  transcript_failed: "Published without a transcript: Scribe failed, so the editor shows no words and no captions.",
+  framing_centre_no_detector: "Framed in the centre: the worker has no face detector (the [face] extra, its model or libEGL).",
+  framing_centre_no_frames: "Framed in the centre: face tracking could not read a frame of the video.",
+  framing_centre_tracking_failed: "Framed in the centre: face tracking raised an error.",
+};
+
+export function warningLabel(code: string): string {
+  return WARNING_LABEL[code] ?? code;
 }
