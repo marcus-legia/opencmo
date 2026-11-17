@@ -179,6 +179,17 @@ export async function requireCredits(supabase: SupabaseClient, needed: number): 
   if (left < needed) throw new ApiError(409, `Not enough credits: ${needed} needed, ${left} left. Top up on the Credits page.`);
 }
 
+/**
+ * The same refusal `create_generation` gives for a project that is not the caller's, made first: without it another
+ * user's project id got "Not enough credits" (409), or with credits reached the rate limit and paid moderation, before
+ * SQL said 404. Read under RLS, so another user's project and one being purged are both not found.
+ */
+export async function requireOwnProject(supabase: SupabaseClient, jobId: string): Promise<void> {
+  const { data, error } = await supabase.from("jobs").select("id").eq("id", jobId).is("purging_at", null).maybeSingle<{ id: string }>();
+  if (error) throw error;
+  if (!data) throw new ApiError(404, "Project not found.");
+}
+
 export type PreparedCreate = { request: CreateRequest; model: AiModel; spec: GenerationSpec };
 
 /**
@@ -186,6 +197,7 @@ export type PreparedCreate = { request: CreateRequest; model: AiModel; spec: Gen
  * Several of these can run at once (`/video`); `startGeneration` then holds credits one by one.
  */
 export async function checkGeneration(supabase: SupabaseClient, request: CreateRequest): Promise<PreparedCreate> {
+  await requireOwnProject(supabase, request.jobId);
   await loadCatalog(supabase);
   const model = availableModel(request.model);
   if (!model) throw new ApiError(422, "This model is not available.");

@@ -28,23 +28,23 @@ Ranked by what it does for a paying founder and for the owner's time:
 
 | Term | What it is | OpenCMO |
 |---|---|---|
-| E2E (end-to-end) test | A browser robot uses the app like a person: clicks, types, checks what shows | partial: Playwright specs in `apps/web/e2e/`, not in CI |
-| Smoke test | A few fast checks after each deploy: sign-in works, the main pages load | missing |
+| E2E (end-to-end) test | A browser robot uses the app like a person: clicks, types, checks what shows | have: `.github/workflows/e2e.yml` runs the smoke set on each PR and push to `main`, and the whole suite on both apps nightly, against a local Supabase with fake models; whole suite green on 2026-11-16 (round 2) |
+| Smoke test | A few fast checks after each deploy: sign-in works, the main pages load | partial: `test:e2e:smoke` (sign-in and the CMO loop) on each PR, not yet a required check; nothing runs after a deploy (`/api/health` is B's row in §3) |
 | Visual regression test | Screenshots compared with approved ones to catch broken layouts (Playwright `toHaveScreenshot`) | partial: golden stills for `clip-motion`, none for the web app |
-| Flaky test | A test that passes and fails on the same code; fix or quarantine it | |
+| Flaky test | A test that passes and fails on the same code; fix or quarantine it | have (rule): no retries in `playwright.config.ts`; a flaky spec is fixed, not retried (round 2 fixed a streaming race in `ui-v2-look`) |
 | Fixture, mock, fake | Saved or invented data so tests cost nothing | have: `OPENCMO_AGENT_FAKE`, `lib/cmo/social/fixtures/` |
 | Contract test | Checks that an API returns the agreed shape | have: `check:contracts` |
 | LLM eval | Scores the quality of model output against cases | have: `ai-evals.yml` |
 | Test coverage | The share of code that tests run through | |
-| Preview deployment testing | e2e against the Vercel preview URL of each PR | missing |
+| Preview deployment testing | e2e against the Vercel preview URL of each PR | missing, by choice: the preview is behind SSO and reads production; CI runs the e2e on a production build of the PR with a local Supabase instead |
 
 ## 2. Performance
 
 | Term | What it is | OpenCMO |
 |---|---|---|
 | Core Web Vitals | LCP (main content shows), INP (response to a click), CLS (layout shift) | have: `@vercel/speed-insights` measures them in production |
-| Lighthouse CI | Scores performance in CI and fails a PR when the score drops | missing |
-| Performance budget | Hard limits, e.g. under 200 kB of JS, LCP under 2.5 s | missing |
+| Lighthouse CI | Scores performance in CI and fails a PR when the score drops | partial: `.github/workflows/lighthouse.yml` on each PR (public pages, `apps/web/lighthouserc.cjs`); warnings only until 2026-11-22, then errors |
+| Performance budget | Hard limits, e.g. under 200 kB of JS, LCP under 2.5 s | partial: LCP 2.5 s, CLS 0.1 and category scores in `lighthouserc.cjs`, as warnings until 2026-11-22; no JS size budget |
 | Bundle size, bundle analyzer | Which libraries make the JS heavy | |
 | TTFB | Time to the server's first byte | |
 | Cold start | The first call to a serverless function or Modal container is slow | |
@@ -61,17 +61,17 @@ Ranked by what it does for a paying founder and for the owner's time:
 
 | Term | What it is | OpenCMO |
 |---|---|---|
-| Observability | Logs, metrics and traces | have: Sentry (`@sentry/nextjs`) |
+| Observability | Logs, metrics and traces | partial: Sentry (`@sentry/nextjs`) wired, but production's DSN was cut off and nothing reached Sentry until the owner fixes it (round 2); a bad DSN now logs `sentry_dsn_invalid` at boot and shows on Live switches |
 | Distributed tracing | Following one request through web → Supabase → Modal | |
-| Uptime / synthetic monitoring | A bot calls the site every minute and alerts when it fails | missing |
-| Alerting, on-call | A message (Telegram, Slack, email) when a threshold is crossed | |
+| Uptime / synthetic monitoring | A bot calls the site every minute and alerts when it fails | partial: `/api/health` ready; the Sentry uptime monitor waits on the owner. Cron monitors for Modal's three web crons and the `sweep` heartbeat (`modal-sweep`) report once the DSNs are set |
+| Alerting, on-call | A message (Telegram, Slack, email) when a threshold is crossed | missing: one Sentry alert rule waits on the owner |
 | SLO, SLA, error budget | A stability promise, e.g. 99.9 % of requests succeed | |
-| Health check endpoint | A route such as `/api/health` that says the system is alive | |
+| Health check endpoint | A route such as `/api/health` that says the system is alive | have: `/api/health` (web, database, oldest queued job; 503 past 10 minutes) |
 | Retry with exponential backoff | Try again, waiting longer each time | |
 | Idempotency key | Sending a request twice does not charge twice | have: Creem grants once per transaction or order |
 | Circuit breaker | Stop calling a provider that is down for a while | |
 | Graceful degradation, fallback | One part fails, the rest keeps working | have: e.g. social reads fall back from LurkAPI to ScrapeCreators |
-| Dead letter queue | Where failed jobs wait to be read and run again | |
+| Dead letter queue | Where failed jobs wait to be read and run again | partial: leases requeue a dead attempt up to three times; a stuck queue fails `/api/health` |
 | Rate limiting | A cap on requests per user or IP | have |
 | Backup, PITR | Restore the database to a point in time | |
 | RTO, RPO | How long a restore takes; how much data may be lost | |
@@ -98,15 +98,15 @@ Ranked by what it does for a paying founder and for the owner's time:
 | Term | What it is | OpenCMO |
 |---|---|---|
 | OWASP Top 10 | The ten most common web vulnerability classes; worth reading once | |
-| XSS, CSRF, SQL injection, SSRF | The classic attacks; SSRF matters wherever the app fetches a URL a user gave | |
+| XSS, CSRF, SQL injection, SSRF | The classic attacks; SSRF matters wherever the app fetches a URL a user gave | have: SSRF guard `apps/web/lib/net/address.ts` |
 | IDOR, broken access control | Change an id in a URL and see someone else's data; OWASP's first item | |
 | RLS | Row Level Security in Postgres, the main guard against IDOR | have |
 | Prompt injection | Outside text makes a model follow an attacker's instructions; Sales reads Reddit and Threads | have: `lib/cmo/untrusted.ts` |
 | SAST, DAST | Scanning the code (CodeQL, Semgrep) and the running app (OWASP ZAP) | partial: CodeQL, no DAST |
 | SCA | Scanning dependencies for known vulnerabilities (`npm audit`, Dependabot) | have: Dependabot |
-| Secret scanning | Catching keys committed to the repo (gitleaks, push protection) | missing |
+| Secret scanning | Catching keys committed to the repo (gitleaks, push protection) | have: GitHub secret scanning and push protection; gitleaks on each PR (`secrets.yml`); full history scanned 2026-11-16, no live secret. Off: GitHub's non-provider patterns (owner) |
 | Supply chain attack | A malicious npm package; lockfiles and pinned versions limit it | |
-| CSP, security headers | Content Security Policy, HSTS, X-Frame-Options | |
+| CSP, security headers | Content Security Policy, HSTS, X-Frame-Options | have: `apps/web/next.config.ts` (`script-src 'unsafe-inline'`, no nonce: owner decision 2026-11-16) |
 | Least privilege | Each key has only the rights it needs | |
 | 2FA, MFA | On GitHub, Vercel, Supabase, Creem, Modal | |
 | Audit log | Who did what, and when | |

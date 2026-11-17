@@ -112,6 +112,8 @@ html[data-theme="dark"] .k.pg-main{--bg:#121110;--panel:#181715;--raised:#201e1c
 /* ---- Calendar.dc.html ---- */
 .pg-calendar a{color:var(--accent)}
 .pg-calendar a:hover{color:var(--accent-hover)}
+/* A link inside a sentence is told apart by more than its colour (axe link-in-text-block; WCAG 1.4.1). */
+.pg-calendar .pp-state a,.pg-calendar p.meta a{text-decoration:underline;text-underline-offset:2px}
 .k.pg-calendar{--bg:#f7f6f3;--panel:#ffffff;--raised:#f1efeb;--hover:#ebe8e3;--line:#e7e3dc;--line-2:#d8d2c8;--text:#191816;--muted:#625b52;--subtle:#736c62;--accent:#3b4cca;--accent-hover:#2f3fb0;--accent-ink:#ffffff;--accent-wash:#e9ebfa;--ok:#1e8a5e;--ok-wash:#e3f3ec;--warn:#a86a12;--warn-wash:#f8eedc;--top:#ffffff;
 font-family:Geist,ui-sans-serif,system-ui,sans-serif;color:var(--text);background:var(--bg);min-height:100vh;font-size:14px;line-height:1.45;-webkit-font-smoothing:antialiased}
 html[data-theme="dark"] .k.pg-calendar{--bg:#121110;--panel:#181715;--raised:#201e1c;--hover:#262421;--line:#2a2825;--line-2:#36332f;--text:#f2efe9;--muted:#a59e93;--subtle:#8a847b;--accent:#8b97ff;--accent-hover:#a8b1ff;--accent-ink:#0e1024;--accent-wash:#22264a;--ok:#4cc497;--ok-wash:#173328;--warn:#e7a948;--warn-wash:#3a2c14;--top:#0e0d0c}

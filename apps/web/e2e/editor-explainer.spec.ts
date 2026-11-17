@@ -20,7 +20,7 @@ type Child = { id?: string; kind?: string; name?: string; hidden?: boolean; sour
 type Doc = { document: { stage: { children: { width: number; height: number; workarea?: number[]; children?: Child[] }[] } } };
 
 /** The fake vaccine storyboard (`lib/agent/providers/fake-explainers.ts`), in order. */
-const BEAT_WORDS = [12, 15, 12, 12, 12, 10];
+const BEAT_WORDS = [12, 15, 12, 13, 12, 10];
 
 test("New edit: /explain → storyboard → go → the one card → approve → stills → the explainer renders, plays and gets captions", async ({ page }, testInfo) => {
   test.setTimeout(900_000);
@@ -40,7 +40,7 @@ test("New edit: /explain → storyboard → go → the one card → approve → 
   await page.getByLabel("Message the assistant").fill("/explain How a vaccine teaches your immune system to fight a virus");
   await page.getByTestId("assistant-send").click();
   // The storyboard names the picture of every beat before any code.
-  await expect(page.getByTestId("assistant-reply").last()).toContainText(/Explainer script[^]*Picture: a syringe icon[^]*Shall I make it\?/, { timeout: 120_000 });
+  await expect(page.getByTestId("assistant-reply").last()).toContainText(/Explainer script[^]*Picture: a drawn syringe slides in[^]*Shall I make it\?/, { timeout: 120_000 });
 
   await page.getByLabel("Message the assistant").fill("go");
   await page.getByTestId("assistant-send").click();
@@ -49,7 +49,7 @@ test("New edit: /explain → storyboard → go → the one card → approve → 
   await expect(page.locator(".ed2-asst-list img")).toHaveCount(0);
   await expect(page.getByTestId("assistant-approval")).toContainText(/Explainer “.+” · \d+s · 16:9 · paper, playful · voice .+ · up to \d+ credits/);
   await expect(page.getByTestId("assistant-approval")).toContainText("Beat 1 · Voice:");
-  await expect(page.getByTestId("assistant-approval")).toContainText("Picture: a syringe icon");
+  await expect(page.getByTestId("assistant-approval")).toContainText("Picture: a drawn syringe slides in from the left");
   await page.screenshot({ path: testInfo.outputPath("01-explainer-card.png") });
   await page.getByTestId("assistant-approve").click();
   // Approved: stills come back from the server render and show in the panel, then the render starts without a second card.

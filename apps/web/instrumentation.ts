@@ -1,19 +1,20 @@
 import * as Sentry from "@sentry/nextjs";
 
 import { errorFields, logEvent } from "./lib/log";
+import { INVALID_DSN_MESSAGE, readSentryDsn } from "./lib/ops/sentry-dsn";
 
 /**
- * Sentry phía server. Không có DSN thì không khởi tạo gì cả — nhờ vậy chạy local
- * và chạy CI không phải cấu hình thêm, và không có sự kiện rác nào được gửi đi.
+ * Server-side Sentry. Without a DSN nothing starts, so local runs and CI need no setup and send nothing. A DSN that is
+ * set but malformed is logged at boot: Sentry's SDK drops it silently, which hid a cut-off DSN for eight days.
  */
 export function register() {
-  const dsn = process.env.NEXT_PUBLIC_SENTRY_DSN;
-  if (!dsn) return;
+  const sentry = readSentryDsn(process.env.NEXT_PUBLIC_SENTRY_DSN);
+  if (sentry.state === "invalid") logEvent("error", "sentry_dsn_invalid", { message: INVALID_DSN_MESSAGE });
+  if (sentry.state !== "ok") return;
 
   Sentry.init({
-    dsn,
-    // Không lấy mẫu trace: ở giai đoạn này ta cần LỖI, không cần biểu đồ hiệu
-    // năng — và mỗi trace là một phần hạn mức miễn phí bị tiêu.
+    dsn: sentry.dsn,
+    // No trace sampling: at this stage we need errors, not performance charts, and every trace spends free quota.
     tracesSampleRate: 0,
   });
 }

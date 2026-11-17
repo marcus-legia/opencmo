@@ -21,7 +21,7 @@
     "check:modal": "tsx lib/modal.check.ts",
     "test:e2e": "tsx e2e/run.ts",
     "test:e2e:v2": "NEXT_PUBLIC_OPENCMO_UI=v2 tsx e2e/run.ts ui-v2",
-    "test:e2e:smoke": "NEXT_PUBLIC_OPENCMO_UI=v2 tsx e2e/run.ts login ui-v2-setup ui-v2-activation ui-v2-writer ui-v2-core-drafts ui-v2-decisions ui-v2-today ui-v2-dashboard ui-v2-schedule ui-v2-post-photos ui-v2-pages --grep-invert \"tài khoản free thấy hạn xoá|Writer filters drafts per platform\"",
+    "test:e2e:smoke": "NEXT_PUBLIC_OPENCMO_UI=v2 tsx e2e/run.ts login ui-v2-setup ui-v2-activation ui-v2-writer ui-v2-core-drafts ui-v2-decisions ui-v2-today ui-v2-dashboard ui-v2-schedule ui-v2-post-photos ui-v2-pages --grep-invert \"tài khoản free thấy hạn xoá\"",
     "test:e2e:writer": "NEXT_PUBLIC_OPENCMO_UI=v2 tsx e2e/run.ts ui-v2-writer",
     "test:e2e:schedule": "NEXT_PUBLIC_OPENCMO_UI=v2 tsx e2e/run.ts ui-v2-schedule",
     "test:e2e:slides": "NEXT_PUBLIC_OPENCMO_UI=v2 tsx e2e/run.ts ui-v2-slides",

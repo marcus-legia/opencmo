@@ -10,6 +10,7 @@ import { mcpEndpoint } from "@/lib/cmo/connect";
 import { publishAnalytics } from "@/lib/departments/publish/analytics";
 import { emailSender } from "@/lib/notify/email";
 import { vapidFromEnv } from "@/lib/notify/push";
+import { readSentryDsn } from "@/lib/ops/sentry-dsn";
 
 export type Switch = {
   id: string;
@@ -28,6 +29,7 @@ export function cmoSwitches(env: Env = process.env): Switch[] {
   const zernio = publishAnalytics(env);
   const push = vapidFromEnv(env) !== null;
   const mcp = mcpEndpoint(env as NodeJS.ProcessEnv) !== null;
+  const sentry = readSentryDsn(env.NEXT_PUBLIC_SENTRY_DSN).state;
   return [
     {
       id: "ui_v2",
@@ -102,6 +104,17 @@ export function cmoSwitches(env: Env = process.env): Switch[] {
       detail: mcp
         ? "On. The MCP server on Modal also needs OPENCMO_MCP_CONFIRM_KEY in its secret opencmo-mcp."
         : "Set OPENCMO_MCP_URL (and OPENCMO_MCP_CONFIRM_KEY in the Modal secret opencmo-mcp).",
+    },
+    {
+      id: "sentry",
+      label: "Error reports and cron monitors (Sentry)",
+      on: sentry === "ok",
+      detail:
+        sentry === "ok"
+          ? "On. The worker's sweep reports to Sentry only with SENTRY_DSN in the Modal secret opencmo."
+          : sentry === "invalid"
+            ? "NEXT_PUBLIC_SENTRY_DSN is set but is not a valid DSN (cut off?), so Sentry is off. Copy it again from Sentry and redeploy."
+            : "Set NEXT_PUBLIC_SENTRY_DSN and redeploy (it is inlined at build).",
     },
     {
       id: "paused",

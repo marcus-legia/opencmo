@@ -77,7 +77,10 @@ export function AgentWriter() {
   const listed = tab === "week" ? [...thisWeek.filter((d) => d.column === "waiting"), ...thisWeek.filter((d) => d.column !== "waiting")] : tab === "drafts" ? drafts.filter((d) => d.column === "drafting" || d.column === "planned") : [];
   // A filter whose chips are gone (one platform left, or the chosen one no longer has drafts) no longer applies.
   const active = platform && platforms.length > 1 && platforms.includes(platform as Draft["platform"]) ? platform : null;
-  const shown = active ? listed.filter((d) => d.platform === active) : listed;
+  const byPlatform = (list: Draft[]) => (active ? list.filter((d) => d.platform === active) : list);
+  const shown = byPlatform(listed);
+  // Last week's drafts sit under the same chips: a platform chosen above filters them too.
+  const shownLeftOver = byPlatform(leftOver);
   const firstOpen = open ?? waiting.find((d) => d.approvalId)?.id ?? waiting[0]?.id ?? null;
   // The side card: this week's first seven, in the order they go out.
   const week = thisWeek.slice(0, 7);
@@ -272,15 +275,15 @@ export function AgentWriter() {
               ) : null}
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-              {shown.length === 0 && !(tab === "week" && leftOver.length) ? <div className="meta">Nothing here yet. Writer drafts the week from your strategy every Sunday.</div> : null}
+              {shown.length === 0 && !(tab === "week" && shownLeftOver.length) ? <div className="meta">{active ? `No ${PLATFORM_LABEL[active as Draft["platform"]]} drafts here. Pick All to see the rest.` : "Nothing here yet. Writer drafts the week from your strategy every Sunday."}</div> : null}
               {shown.map(renderRow)}
-              {tab === "week" && leftOver.length ? (
+              {tab === "week" && shownLeftOver.length ? (
                 <>
                   <div style={{ display: "flex", alignItems: "baseline", gap: "8px", margin: "14px 0 2px" }} data-testid="writer-left-over">
                     <span style={{ fontWeight: "600" }}>From last week</span>
-                    <span className="meta">· {leftOver.length} not approved yet: approve or skip them</span>
+                    <span className="meta">· {shownLeftOver.length} not approved yet: approve or skip them</span>
                   </div>
-                  {leftOver.map(renderRow)}
+                  {shownLeftOver.map(renderRow)}
                 </>
               ) : null}
             </div>

@@ -136,10 +136,22 @@ test("AI CMO: lập lịch, soạn bài X, duyệt, đánh dấu đã đăng, qu
   const { data: briefed } = await admin.from("cmo_runs").select("input").eq("user_id", userId).eq("kind", "sales_scan").order("created_at", { ascending: false }).limit(1);
   expect(String((briefed?.[0]?.input as { brief?: string })?.brief)).toContain("reddit.com");
 
-  // A video task becomes a calendar item whose Upload video link opens the editor (the user brings their own video).
+  // A video asked in the chat orders its script and storyboard (cmo-review-3 I0; the founder makes the videos,
+  // owner 2026-11-09): a price card first, nothing ordered before Approve, then the calendar item whose Upload video
+  // link opens the editor (the founder records and uploads their own video) and the Writer run that holds the price.
+  const scriptRuns = async () =>
+    (await admin.from("cmo_runs").select("id", { count: "exact", head: true }).eq("user_id", userId).eq("kind", "write_video_brief")).count ?? 0;
   await page.getByLabel("Ask your CMO").fill("Plan a short video about onboarding");
   await page.getByRole("button", { name: "Send" }).click();
-  await expect(page.locator(".cmo-msg.is-cmo").last()).toContainText("Added to your calendar", { timeout: 60_000 });
+  const scriptCard = page.getByRole("group", { name: "Confirm" });
+  await expect(scriptCard).toContainText("Write a script and storyboard", { timeout: 60_000 });
+  // One credit, said in the singular (the card read "1 credits").
+  await expect(scriptCard.locator(".cmo-confirm-card p")).toHaveText("1 credit");
+  await expect(scriptCard).toContainText("You record the video yourself");
+  expect(await scriptRuns()).toBe(0);
+  await page.getByTestId("cmo-confirm-approve").click();
+  await expect(page.locator(".cmo-msg.is-cmo").last()).toContainText("On it", { timeout: 60_000 });
+  await expect.poll(scriptRuns, { timeout: 30_000 }).toBe(1);
   const uploadVideo = page.getByTestId("cmo-upload-video").first();
   await expect(uploadVideo).toBeVisible({ timeout: 30_000 });
   await expect(uploadVideo).toHaveAttribute("href", "/app/editor?panel=upload");
