@@ -11,6 +11,13 @@ on:
   schedule:
     - cron: "17 2 * * *"
   workflow_dispatch:
+    inputs:
+      update_snapshots:
+        # The visual baselines come from this runner's fonts and Chrome (apps/web/e2e/ui-v2-visual.spec.ts says how to
+        # refresh them). Ticked: one job runs only that spec with --update-snapshots and uploads the new images.
+        description: "Take new visual baselines (ui-v2-visual) and upload them as an artifact"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -29,7 +36,8 @@ jobs:
       matrix:
         # PR and push: smoke only. Clock and manual run: the whole suite once per app. `v1` is the default build (the
         # v2-only specs skip themselves there); `v2` runs the v2 specs on the v2 build.
-        suite: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && fromJSON('["full-v1","full-v2"]') || fromJSON('["smoke"]') }}
+        # A manual run with `update_snapshots`: only the visual baselines.
+        suite: ${{ inputs.update_snapshots && fromJSON('["visual-update"]') || (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && fromJSON('["full-v1","full-v2"]') || fromJSON('["smoke"]') }}
     env:
       CI: "true"
     steps:
@@ -78,6 +86,20 @@ jobs:
       - name: Whole suite, v2 app
         if: matrix.suite == 'full-v2'
         run: npm run test:e2e:v2 --workspace @opencmo/web
+
+      - name: New visual baselines
+        if: matrix.suite == 'visual-update'
+        # `all`: every image from this runner, not only the ones that fail (the default `changed` keeps the rest).
+        run: npm run test:e2e:visual --workspace @opencmo/web -- --update-snapshots=all
+
+      - name: Upload the new visual baselines
+        if: matrix.suite == 'visual-update'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-visual-snapshots
+          path: apps/web/e2e/ui-v2-visual.spec.ts-snapshots
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Traces and videos of failed tests
         if: failure()

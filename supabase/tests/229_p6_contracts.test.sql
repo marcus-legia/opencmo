@@ -7,7 +7,7 @@ create extension if not exists pgtap with schema extensions;
 begin;
 set search_path to public, extensions;
 
-select plan(37);
+select plan(38);
 
 -- Grants and RLS.
 select ok((select bool_and(relrowsecurity) from pg_class where oid in ('public.push_subscriptions'::regclass,
@@ -34,7 +34,10 @@ set local request.jwt.claims = '{"sub":"e2290000-0000-4000-8000-00000000000a","r
 create temp table s (id uuid) on commit drop;
 grant all on s to authenticated;
 insert into s select public.push_subscribe('https://fcm.googleapis.com/fcm/send/abc', repeat('A', 87), repeat('b', 22), 'Firefox');
-select is((select count(*)::int from public.push_subscriptions), 1, 'the founder reads their subscription');
+-- Since 20270129010000_table_grants no user reads the table (the push sender is the service role).
+reset role;
+select is((select count(*)::int from public.push_subscriptions where user_id = 'e2290000-0000-4000-8000-00000000000a'), 1, 'the subscription is saved for the founder');
+set local role authenticated;
 select is(public.push_subscribe('https://fcm.googleapis.com/fcm/send/abc', repeat('C', 87), repeat('d', 22), 'Firefox'), (select id from s),
   'subscribing again updates the same row');
 select throws_ok($$ select public.push_subscribe('http://push.example/x', repeat('A', 87), repeat('b', 22), null) $$, '22023',
@@ -42,6 +45,11 @@ select throws_ok($$ select public.push_subscribe('http://push.example/x', repeat
 select throws_ok($$ select public.push_subscribe('https://fcm.googleapis.com/fcm/send/y', 'short', repeat('b', 22), null) $$, '22023',
   'The push keys are not valid.', 'the keys are checked');
 set local request.jwt.claims = '{"sub":"e2290000-0000-4000-8000-00000000000b","role":"authenticated"}';
+select throws_ok($$ select count(*) from public.push_subscriptions $$, '42501', null, 'another founder has no grant');
+-- The policy stays for a later reader: grant inside this rolled-back transaction and check it still isolates.
+reset role;
+grant select on public.push_subscriptions to authenticated;
+set local role authenticated;
 select is((select count(*)::int from public.push_subscriptions), 0, 'another founder reads none');
 select ok(not public.push_unsubscribe('https://fcm.googleapis.com/fcm/send/abc'), 'and cannot remove it');
 set local request.jwt.claims = '{"sub":"e2290000-0000-4000-8000-00000000000a","role":"authenticated"}';

@@ -9,7 +9,8 @@ select plan(14);
 select ok(has_function_privilege('authenticated', 'public.studio_record_usage(uuid,text,integer,integer,integer,integer)', 'execute'),
   'the runner records usage under the founder''s brain session');
 select ok(not has_function_privilege('anon', 'public.studio_record_usage(uuid,text,integer,integer,integer,integer)', 'execute'), 'anon cannot');
-select ok(has_table_privilege('authenticated', 'public.work_order_usage', 'select'), 'founders read their usage');
+-- Since 20270129010000_table_grants: no page reads the table; usage reaches the founder through the order's RPCs.
+select ok(not has_table_privilege('authenticated', 'public.work_order_usage', 'select'), 'founders read their usage only through RPCs');
 select ok(not has_table_privilege('authenticated', 'public.work_order_usage', 'insert'), 'but never write it');
 
 insert into auth.users (id, email) values ('e2090000-0000-4000-8000-00000000000a', 'a9@test.local');

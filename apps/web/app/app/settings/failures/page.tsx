@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 
 import { PageHeader, Screen } from "@/components/screens/parts";
 import { Panel, TableWrap } from "@/components/ui";
-import { ago, displayKey, failureWindow, sourceLabel, WINDOWS, type FailuresReport } from "@/lib/ops/failures";
+import { ago, displayKey, failureWindow, sourceLabel, warningLabel, WINDOWS, type FailuresReport } from "@/lib/ops/failures";
 import { createServerClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -24,6 +24,8 @@ export default async function FailuresPage({ searchParams }: { searchParams: Pro
   if (error || !data) throw new Error(`ops_failures_report failed: ${error?.message ?? "no data"}`);
   const report = data as FailuresReport;
   const groups = report.groups;
+  // A report from before 20270130010000 has no warnings section.
+  const warnings = report.warnings ?? [];
   const now = new Date();
 
   return (
@@ -98,6 +100,35 @@ export default async function FailuresPage({ searchParams }: { searchParams: Pro
       ) : (
         <Panel id="failures-none" title="Groups">
           <p className="v2-panel-body scr-muted">Nothing failed for founders in this window, and nothing is stuck.</p>
+        </Panel>
+      )}
+
+      {/* Uploads the worker published with a fallback: they never end `failed`, so they are not in the groups above. */}
+      {warnings.length ? (
+        warnings.map((warning, i) => (
+          <Panel key={warning.code} id={`warning-${i}`} title={`Warning · ${warning.code}`}>
+            <p className="v2-panel-body">
+              <b>{warningLabel(warning.code)}</b>
+            </p>
+            <p className="v2-panel-body scr-muted">
+              {warning.accounts} {warning.accounts === 1 ? "founder" : "founders"}, {warning.jobs}{" "}
+              {warning.jobs === 1 ? "upload" : "uploads"}. First {ago(warning.first_seen, now)}, last{" "}
+              {ago(warning.last_seen, now)}. <code>jobs.media_manifest.warnings</code>
+            </p>
+            <p className="v2-panel-body" style={{ wordBreak: "break-all" }}>
+              {/* One id per line: the owner copies them into Supabase. */}
+              {warning.latest.map((id, j) => (
+                <span key={id}>
+                  {j ? <br /> : null}
+                  <code>{id}</code>
+                </span>
+              ))}
+            </p>
+          </Panel>
+        ))
+      ) : (
+        <Panel id="warnings-none" title="Warnings">
+          <p className="v2-panel-body scr-muted">No warnings</p>
         </Panel>
       )}
     </Screen>

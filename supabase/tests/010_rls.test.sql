@@ -4,9 +4,9 @@
 -- Câu thứ hai mới là câu quan trọng — một policy viết sai thường vẫn cho chủ sở
 -- hữu thấy đồ của mình.
 --
--- Về ghi: RLS KHÔNG ném lỗi khi update/delete không khớp policy, nó lặng lẽ
--- sửa 0 hàng. Nên insert kiểm bằng `throws_ok` (42501), còn update/delete kiểm
--- bằng "returning không trả hàng nào". Cả hai đều là "không ghi được".
+-- Writes: since 20270129010000_table_grants a user holds no insert, update or delete grant on any table (every
+-- write is a SECURITY DEFINER RPC), so a direct write is refused with 42501 before RLS runs. The anon block checks
+-- the same for reads: anon holds no grant on these tables (supabase/tests/323_table_grants lists every grant).
 create extension if not exists pgtap with schema extensions;
 
 begin;
@@ -99,14 +99,15 @@ select throws_ok(
   '42501', null, 'A không insert thẳng vào rate_limits'
 );
 
--- Update/delete không ném lỗi, chỉ không chạm được hàng nào — kể cả hàng của chính A.
-select is_empty(
+-- Since 20270129010000_table_grants a user holds no update grant at all, so a direct update is refused
+-- outright (42501) instead of silently touching no row, even on A's own rows.
+select throws_ok(
   $$ update public.tasks set status = 'done' where id = 'a6000000-0000-4000-8000-00000000000a' returning id $$,
-  'A không tự chốt task'
+  '42501', null, 'A cannot mark a task done herself'
 );
-select is_empty(
+select throws_ok(
   $$ update public.clips set settings = '{"x": 1}'::jsonb where id = 'a2000000-0000-4000-8000-00000000000a' returning id $$,
-  'A không tự sửa settings gốc của clip'
+  '42501', null, 'A cannot edit a clip''s source settings'
 );
 
 -- ---------------------------------------------------------------- storage
@@ -150,10 +151,11 @@ set local role postgres;
 reset request.jwt.claims;
 set local role anon;
 
-select is_empty($$ select job_id from public.artifacts $$, 'anon không đọc artifacts');
-select is_empty($$ select settings from public.clips $$, 'anon không đọc settings của clip');
-select is_empty($$ select id from public.media_assets $$, 'anon không đọc media_assets');
-select is_empty($$ select id from public.tasks $$, 'anon không đọc tasks');
+-- Since 20270129010000_table_grants anon holds no grant on these tables: refused outright, not just empty.
+select throws_ok($$ select job_id from public.artifacts $$, '42501', null, 'anon cannot read artifacts');
+select throws_ok($$ select settings from public.clips $$, '42501', null, 'anon cannot read a clip''s settings');
+select throws_ok($$ select id from public.media_assets $$, '42501', null, 'anon cannot read media_assets');
+select throws_ok($$ select id from public.tasks $$, '42501', null, 'anon cannot read tasks');
 select throws_ok($$ select bucket from public.rate_limits $$, '42501', null, 'anon cannot read rate_limits');
 select is_empty($$ select name from storage.objects $$, 'anon không đọc file nào');
 

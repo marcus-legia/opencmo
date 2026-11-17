@@ -6,7 +6,7 @@ create extension if not exists pgtap with schema extensions;
 begin;
 set search_path to public, extensions;
 
-select plan(26);
+select plan(28);
 
 -- ================================================================ seed two users, one row each per table
 insert into auth.users (id, email) values
@@ -66,6 +66,9 @@ select is(
 );
 
 -- ================================================================ user A sees only A's rows
+-- 20270129010000_table_grants took select on these three away from users (no page reads them); their policies stay,
+-- so grant it inside this rolled-back transaction to keep testing the policy expressions themselves.
+grant select on public.scene_codes, public.editor_feedback, public.work_order_usage to authenticated;
 set local role authenticated;
 set local request.jwt.claims = '{"sub":"e3190000-0000-4000-8000-00000000000a"}';
 
@@ -105,6 +108,13 @@ select is((select count(*)::int from public.clips), 0, 'and so are its clips');
 reset role;
 set local role anon;
 set local request.jwt.claims = '{}';
+-- Since 20270129010000_table_grants anon holds no grant on either table: refused before any policy runs.
+select throws_ok($$ select count(*) from public.jobs $$, '42501', null, 'anon has no grant on jobs');
+select throws_ok($$ select count(*) from public.clips $$, '42501', null, 'anon has no grant on clips');
+-- Both policies are TO public, so they still apply to anon: grant inside this rolled-back transaction and check them.
+reset role;
+grant select on public.jobs, public.clips to anon;
+set local role anon;
 select is((select count(*)::int from public.jobs), 0, 'anon sees no job');
 select is((select count(*)::int from public.clips), 0, 'anon sees no clip');
 

@@ -118,8 +118,19 @@ def _attempt_is_published(store: Any, job: Job) -> bool:
     return row.get("status") == "done" and row.get("attempt_id") == job.attempt_id
 
 
-def _transcribe(master: Path, work: Path) -> str | None:
-    """The master's words as the editor's transcript file, or None when there is no speech.
+#: Why an upload was published without something it normally has (`media_manifest.warnings`). The owner's failures
+#: page and the hourly alert read these (supabase/migrations/20270130010000_ops_warnings_and_alerts.sql): neither
+#: fallback fails the job, so without a code they were invisible (CLAUDE.md "Known traps"). Codes only, never the
+#: exception text, which can hold a key or a signed URL. "No speech" is not a warning: the video is as it should be.
+TRANSCRIPT_FAILED = "transcript_failed"
+FRAMING_NO_DETECTOR = "framing_centre_no_detector"
+FRAMING_NO_FRAMES = "framing_centre_no_frames"
+FRAMING_FAILED = "framing_centre_tracking_failed"
+
+
+def _transcribe(master: Path, work: Path) -> tuple[str | None, str | None]:
+    """The master's words as the editor's transcript file (None when there is no speech), and a warning code when
+    Scribe failed.
 
     A Scribe failure does not fail the job: the video is still the user's to edit by hand, and
     captions can be made later from the Inspector.
@@ -130,16 +141,35 @@ def _transcribe(master: Path, work: Path) -> str | None:
         transcript = transcribe_audio(audio, Config())
     except Exception:
         log.warning("Transcript failed; publishing the video without one", exc_info=True)
-        return None
-    return to_ds_transcript(transcript.segments) if transcript.segments else None
+        return None, TRANSCRIPT_FAILED
+    return (to_ds_transcript(transcript.segments) if transcript.segments else None), None
 
 
-def _focus(master: Path, info: Any, duration: float, aspect: str) -> dict[str, list[list[float]]] | None:
-    """The editor's face tracks for the master, or None. A failure here never fails the upload: the video is
-    still the user's to edit, framed in the centre."""
+def _face_detector_ready() -> bool:
+    """Whether MediaPipe imports and its detector starts (model file, libEGL). Asked only after a pass read no frame,
+    to tell a worker image without the detector from a video that would not decode."""
+    try:
+        from mediapipe.tasks import python as mp_python  # type: ignore
+        from mediapipe.tasks.python import vision  # type: ignore
+
+        model = os.getenv("OPENCMO_FACE_MODEL")
+        if not model:
+            # Only a dev machine has no baked model; `face_model_path` would download it on the upload path.
+            return True
+        options = vision.FaceDetectorOptions(base_options=mp_python.BaseOptions(model_asset_path=model))
+        vision.FaceDetector.create_from_options(options).close()
+    except Exception:  # noqa: BLE001 - ImportError, a missing model, OSError from libEGL: all "no detector"
+        return False
+    return True
+
+
+def _focus(master: Path, info: Any, duration: float, aspect: str) -> tuple[dict[str, list[list[float]]] | None, str | None]:
+    """The editor's face tracks for the master (or None), and a warning code when the speaker is framed in the centre
+    because tracking could not run. A failure here never fails the upload: the video is still the user's to edit,
+    framed in the centre. No tracks with no code is fine: nothing to follow, or no face in the video."""
     frame_aspect = ASPECTS.get(aspect, 9 / 16)
     if not needs_tracking(info.width, info.height, frame_aspect):
-        return None
+        return None, None
     try:
         track, covered = face_track(master, duration, width=info.width, height=info.height)
         # A pass cut short by its budget gives keys up to where it got; the editor holds the last centre after.
@@ -152,8 +182,11 @@ def _focus(master: Path, info: Any, duration: float, aspect: str) -> dict[str, l
         )
     except Exception:
         log.warning("Face tracking failed; publishing the video framed in the centre", exc_info=True)
-        return None
-    return focus if focus["frame"] or focus["reframe"] else None
+        return None, FRAMING_FAILED
+    if covered <= 0:
+        # `face_track` read no frame: the detector is missing (`[face]` extra, model, libEGL) or nothing decoded.
+        return None, FRAMING_NO_FRAMES if _face_detector_ready() else FRAMING_NO_DETECTOR
+    return (focus if focus["frame"] or focus["reframe"] else None), None
 
 
 def _process_upload(run: JobRun, *, previous: dict[str, Any] | None) -> None:
@@ -224,12 +257,12 @@ def _process_upload(run: JobRun, *, previous: dict[str, Any] | None) -> None:
 
     run.set_stage("reframe")
     aspect = job.aspect if job.aspect != "auto" else "9:16"
-    focus = _focus(master, master_info, master_info.duration, aspect)
+    focus, framing_warning = _focus(master, master_info, master_info.duration, aspect)
     run.check_lease()
 
     run.set_stage("transcribe")
     transcript_object = None
-    transcript_body = _transcribe(master, work)
+    transcript_body, transcript_warning = _transcribe(master, work)
     if transcript_body is not None:
         transcript_file = work / "master.transcript.json"
         transcript_file.write_text(transcript_body, encoding="utf-8")
@@ -258,6 +291,7 @@ def _process_upload(run: JobRun, *, previous: dict[str, Any] | None) -> None:
         "storage_path": None,
         "preview_path": preview_object,
     }
+    warnings = [code for code in (framing_warning, transcript_warning) if code]
     run.mark_publication_sent()
     published = store.complete_job_publication(
         job.id,
@@ -281,6 +315,7 @@ def _process_upload(run: JobRun, *, previous: dict[str, Any] | None) -> None:
                     **({"focus": focus} if focus else {}),
                 }
             },
+            **({"warnings": warnings} if warnings else {}),
         },
     )
     if not published:

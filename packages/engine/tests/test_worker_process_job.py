@@ -318,3 +318,79 @@ def test_the_edit_length_cap_is_the_contract_the_web_reads():
     contract = Path(process_job.__file__).resolve().parents[3] / "contracts" / "upload-limits.json"
     assert process_job.MAX_EDIT_SECONDS == json.loads(contract.read_text(encoding="utf-8"))["max_edit_seconds"]
     assert "upload-limits.json" in (Path(__file__).resolve().parents[1] / "modal_app.py").read_text(encoding="utf-8")
+
+
+# ---------------------------------------------------------------- warnings: why a fallback happened
+
+
+def _warnings(store: FakeStore) -> list[str] | None:
+    return _published(store)["manifest"].get("warnings")
+
+
+def test_a_clean_upload_publishes_no_warnings(media):
+    media["faces"] = []  # a 16:9 talk with no face: centred, but nothing went wrong
+    store = FakeStore()
+    process_job.process(store, _job())
+    assert _warnings(store) is None
+
+
+def test_no_speech_is_not_a_warning(media):
+    media["transcript"] = Transcript(segments=[])
+    store = FakeStore()
+    process_job.process(store, _job())
+    assert _published(store)["manifest"]["masters"]
+    assert _warnings(store) is None
+
+
+def test_a_failed_transcript_publishes_its_code_and_never_the_error_text(media):
+    media["transcript"] = RuntimeError("401 from https://api.elevenlabs.io?xi-api-key=sk_secret")
+    store = FakeStore()
+    process_job.process(store, _job())
+    assert _warnings(store) == ["transcript_failed"]
+    assert "sk_secret" not in json.dumps(_published(store))
+
+
+def test_a_face_pass_that_raised_publishes_its_code(media):
+    media["faces"] = RuntimeError("decoder crashed")
+    store = FakeStore()
+    process_job.process(store, _job())
+    assert _warnings(store) == ["framing_centre_tracking_failed"]
+
+
+def test_a_face_pass_that_read_no_frame_without_a_detector_says_so(media, monkeypatch):
+    media["covered"] = 0.0
+    monkeypatch.setattr(process_job, "_face_detector_ready", lambda: False)
+    store = FakeStore()
+    process_job.process(store, _job())
+    assert _warnings(store) == ["framing_centre_no_detector"]
+
+
+def test_a_face_pass_that_read_no_frame_with_a_detector_blames_the_frames(media, monkeypatch):
+    media["covered"] = 0.0
+    monkeypatch.setattr(process_job, "_face_detector_ready", lambda: True)
+    store = FakeStore()
+    process_job.process(store, _job())
+    assert _warnings(store) == ["framing_centre_no_frames"]
+
+
+def test_both_fallbacks_publish_both_codes(media, monkeypatch):
+    media["covered"] = 0.0
+    media["transcript"] = TimeoutError("scribe")
+    monkeypatch.setattr(process_job, "_face_detector_ready", lambda: False)
+    store = FakeStore()
+    process_job.process(store, _job())
+    assert _warnings(store) == ["framing_centre_no_detector", "transcript_failed"]
+
+
+def test_the_detector_check_says_no_when_mediapipe_cannot_load(monkeypatch):
+    import builtins
+
+    real_import = builtins.__import__
+
+    def refuse(name, *args, **kwargs):
+        if name.startswith("mediapipe"):
+            raise ImportError(name)
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", refuse)
+    assert process_job._face_detector_ready() is False

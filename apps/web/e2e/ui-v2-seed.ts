@@ -5,6 +5,14 @@ import { createClient } from "@supabase/supabase-js";
 import type { E2EUser } from "./global-setup";
 import { state } from "./helpers";
 
+/** The one document that takes a founder past Setup (also seeded by ui-v2-visual.spec.ts for its own founder). */
+export const ONBOARDING_DOCUMENT = {
+  kind: "product",
+  version: 1,
+  created_by: "user",
+  body: { name: "OpenCMO", one_liner: "An AI CMO for solo founders." },
+} as const;
+
 /**
  * The v2 specs need founders past Setup: `/app` sends a founder with no documents to `/app/setup`. One product
  * document is enough; a second run finds it and inserts nothing.
@@ -14,7 +22,7 @@ export async function ensureOnboarded(): Promise<void> {
   const admin = createClient(url, service, { auth: { persistSession: false } });
   for (const user of [users.a, users.b]) {
     const { error } = await admin.from("marketing_documents").upsert(
-      { user_id: user.id, kind: "product", version: 1, created_by: "user", body: { name: "OpenCMO", one_liner: "An AI CMO for solo founders." } },
+      { user_id: user.id, ...ONBOARDING_DOCUMENT },
       { onConflict: "user_id,kind,version", ignoreDuplicates: true },
     );
     if (error) throw new Error(`Could not seed a document: ${error.message}`);
