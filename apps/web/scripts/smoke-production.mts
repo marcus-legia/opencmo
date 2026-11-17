@@ -93,7 +93,10 @@ function headerChecks(path: string, headers: Headers): void {
 /** Same-origin script chunks a page loads; nothing from another host is fetched. */
 function chunksOf(html: string): string[] {
   const out = new Set<string>();
-  for (const m of html.matchAll(/<script[^>]+src="(\/_next\/static\/[\w\-./~]+\.js)"/g)) out.add(m[1]!);
+  // A chunk may carry a query (Vercel's Skew Protection adds `?dpl=…`): keep it, so the chunk of this deploy is read.
+  for (const m of html.matchAll(/<script[^>]+src="(\/_next\/static\/[\w\-./~]+\.js(?:\?[^"]*)?)"/g)) {
+    out.add(m[1]!.replaceAll("&amp;", "&"));
+  }
   return [...out];
 }
 

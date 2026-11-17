@@ -132,6 +132,7 @@ npm run dev                         # Docker → local Supabase → Next.js + wo
 
 npm run db:reset && npm run db:test # migrations + pgTAP
 npm run typecheck && npm run build
+(cd apps/web && npx tsx scripts/bundle-budget.mts)  # first-load JS of the loop's pages vs bundle-budget.json
 cd apps/web && npm run check:contracts && npm run test:e2e
 ```
 
@@ -163,6 +164,11 @@ render or export, extract a frame from the full-size file (not `*.preview.mp4`) 
 - Face tracking does not fail an upload either: without the engine's `[face]` extra, the model, or
   `libegl1`/`libgles2`, the master is published framed in the centre (speaker possibly half cut).
   Check the worker log for "framing in the centre" and `masters[clip].focus` in the job manifest.
+- A failure with a clean message (a job or run that ends `failed`) never reaches Sentry: owners read them at
+  `/app/settings/failures`. A production deploy is checked by `.github/workflows/post-deploy.yml`, which does nothing
+  until the repository variable `PRODUCTION_URL` is set.
+- pgTAP `320_advisor_guard` fails a migration whose policy calls `auth.uid()` (or `current_setting()`) per row instead
+  of `(select auth.uid())`, whose function has no `search_path`, or whose trigger function users can call.
 
 ## Layout
 

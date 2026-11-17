@@ -104,17 +104,25 @@ begin
     where r.user_id not in (select id from owners)
   ),
   -- One bug is one row: ids (uuids, and long tokens with two digits or more) and numbers are collapsed, whitespace too.
-  -- A number keeps its unit (`<n> ms`, `<n>s`, `<n>p`), a digit inside a word stays (`mp4`, `h264`), and a 4xx or 5xx
-  -- code not followed by a unit stays, so an expired token (401) and an outage (500) are two rows. The key is cut after
-  -- it is normalized, so two long errors that differ only by an id's length still meet.
+  -- A number keeps its unit (`<n> ms`, `<n>s`, `<n>p`) and a digit inside a word stays (`mp4`, `h264`). A 4xx or 5xx
+  -- code stays only where it reads as an HTTP status (after "status", "HTTP", "code", "error", "returned", "answered",
+  -- or before a reason phrase such as "Internal Server Error"), so an expired token (401) and an outage (500) are two
+  -- rows while "Retried 450 times" and "Retried 37 times" are one. The code is held as `HTTP_<code>` while the numbers
+  -- collapse, then put back. The key is cut after it is normalized, so two long errors that differ only by an id's
+  -- length still meet.
   k as (
     select f.source, f.kind, f.id, f.user_id, f.at, f.stuck, left(f.error, 300) as error,
-      left(btrim(regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(f.error,
+      regexp_replace(left(btrim(regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(
+        regexp_replace(regexp_replace(f.error,
         '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', '<id>', 'gi'),
         '(?=[A-Za-z_-]*[0-9][A-Za-z_-]*[0-9])[A-Za-z0-9_-]{16,}', '<id>', 'g'),
+        '\m(status|http|code|error|returned|responded|answered)(\s+code)?(\s*[:=]?\s*)([45][0-9][0-9])\M',
+          '\1\2\3HTTP_\4', 'gi'),
+        '\m([45][0-9][0-9])(\s+(bad|unauthorized|forbidden|not|internal|service|gateway|too|conflict|payment|unprocessable|request|precondition|method|gone))',
+          'HTTP_\1\2', 'gi'),
         '\m[0-9]+([.,][0-9]+)*(ms|s|m|h|p|px|k|kb|mb|gb|x)\M', '<n>\2', 'gi'),
-        '\m(?![45][0-9][0-9]\M(?!\s*(ms|s|sec|seconds|min|minutes|h|hours|px|kb|mb|gb|%)))[0-9]+([.,][0-9]+)*\M', '<n>', 'gi'),
-        '\s+', ' ', 'g')), 300) as key
+        '\m[0-9]+([.,][0-9]+)*\M', '<n>', 'g'),
+        '\s+', ' ', 'g')), 300), 'HTTP_([45][0-9][0-9])', '\1', 'g') as key
     from f
   ),
   g as (
@@ -138,8 +146,10 @@ begin
   select jsonb_build_object(
     'since', v_since,
     'days', p_days,
-    'failures', (select count(*) from k),
-    'accounts', (select count(distinct user_id) from k),
+    -- Stuck work is listed whatever the window, so it stays out of "failures in the last N days" and is counted
+    -- once, under `stuck`.
+    'failures', (select count(*) from k where not stuck),
+    'accounts', (select count(distinct user_id) from k where not stuck),
     'stuck', (select count(*) from k where stuck),
     'groups', coalesce((
       select jsonb_agg(jsonb_build_object(
