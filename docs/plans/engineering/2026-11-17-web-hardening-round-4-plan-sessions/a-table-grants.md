@@ -92,7 +92,7 @@ RPC).
 - Tests the revoke changed (same intent, stricter): `010` (direct updates and anon reads now 42501), `108`, `112`,
   `119`, `131`, `198`, `209`, `221`, `229`, `319`. Where a table kept its policy but lost the grant, the test grants
   inside its rolled-back transaction so the policy is still tested.
-- Verified: whole pgTAP suite 215 files / 3582 tests pass; `npm run typecheck` green; e2e smoke 50 passed; whole
+- Verified: whole pgTAP suite 215 files / 3582 tests pass (216 / 3596 after rebasing on B and C; B creates no table or view); `npm run typecheck` green; e2e smoke 50 passed; whole
   `full-v2` suite 103 passed; no `permission denied` in either. `npm run check:api`: 36 checks fail identically with
   the old wide grants and with this migration (no model keys or providers in this container), so none comes from
   the revoke. `supabase/schema/current.sql` regenerated: no change (it is dumped without privileges).
