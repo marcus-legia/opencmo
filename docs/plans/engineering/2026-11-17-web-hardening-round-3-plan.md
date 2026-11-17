@@ -99,7 +99,10 @@ Done 2026-11-17 (`686b262`): all three checklists ticked; whole-branch review fo
 
 ## For the owner (not for the sessions)
 
-- **Merge #227 first**, then fix the Sentry DSN (Vercel, redeploy) and Modal's `SENTRY_DSN` (round 2's steps).
-- **Supabase → Auth → leaked-password protection: on.** One switch; it rejects passwords found in known breaches.
+- **Merge #227 first.** Round 2's Sentry steps (Vercel's DSN, Modal's `SENTRY_DSN`) were done by the owner on 2026-11-16.
+- **Leaked-password protection** (owner, 2026-11-17): Not needed: founders sign in with Google only (`signInWithOAuth`; password sign-in exists only in
+  `lib/api/contract.check.ts` against a local stack). Instead, check that the **Email** provider is off in Supabase →
+  Authentication → Providers: if it is on, anyone with the public anon key can create a password account through the
+  Auth API, though the app has no form for it.
 - **2026-11-22:** Lighthouse budgets become errors (`apps/web/lighthouserc.cjs`, round 2 note).
 - **Staging database:** still not now (round 2's reasoning holds).

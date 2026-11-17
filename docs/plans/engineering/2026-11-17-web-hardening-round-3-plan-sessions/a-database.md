@@ -53,7 +53,10 @@ edit an applied migration; a new migration changes what is live.
 
 ## For the owner (write here, do not do)
 
-- Supabase → Authentication → leaked-password protection: on.
+- Leaked-password protection (owner, 2026-11-17): Not needed: founders sign in with Google only (`signInWithOAuth`; password sign-in exists only in
+  `lib/api/contract.check.ts` against a local stack). Instead, check that the **Email** provider is off in Supabase →
+  Authentication → Providers: if it is on, anyone with the public anon key can create a password account through the
+  Auth API, though the app has no form for it.
 - After the merge: `supabase db push` (applies `20270127010000_advisors_clean.sql`), then read the advisors again.
   What should remain: `authenticated_security_definer_function_executable` (our RPC surface, listed in `182_*`),
   `rls_enabled_no_policy` 19 (intended, `321_*`), `unused_index` 15 (kept, re-read 2027-01-15),
