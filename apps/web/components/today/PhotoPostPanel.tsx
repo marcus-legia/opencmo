@@ -241,7 +241,7 @@ export function PhotoPostPanel({ connectedPlatforms, live, onScheduled }: { conn
             <textarea className="v2-input" rows={2} maxLength={1000} value={notes} onChange={(e) => setNotes(e.target.value)} />
           </label>
           <div className="v2-actions">
-            <Button compact variant="quiet" disabled={busy !== null || notes.trim().length < 3} onClick={() => void writeCaption()}>
+            <Button compact variant="secondary" disabled={busy !== null || notes.trim().length < 3} onClick={() => void writeCaption()}>
               {busy === "caption" ? "Writing the caption…" : `Write the caption · ${CAPTION_CREDITS} credit`}
             </Button>
           </div>

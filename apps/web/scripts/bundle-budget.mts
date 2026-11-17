@@ -71,7 +71,9 @@ for (const [route, limit] of Object.entries(budget.routes)) {
 if (failures.length && !printOnly) {
   console.error(
     `\nbundle-budget: ${failures.join("; ")}.\n` +
-      "Find what grew with the build's \"First Load JS\" column; raise a line in bundle-budget.json only with the reason in the PR.",
+      "Which library grew: in CI, the job's artifact `bundle-report` (client.html, a treemap of every chunk); locally,\n" +
+      "`ANALYZE=1 NEXT_PUBLIC_OPENCMO_UI=v2 npm run build`, then open apps/web/.next/analyze/client.html.\n" +
+      "Raise a line in bundle-budget.json only with the reason in the PR.",
   );
   process.exit(1);
 }

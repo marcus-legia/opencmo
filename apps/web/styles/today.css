@@ -76,7 +76,9 @@ html[data-theme="dark"] .k.pg-main{--bg:#121110;--panel:#181715;--raised:#201e1c
 .pg-main .vt{display:inline-flex;gap:2px;padding:2px;border-radius:7px;background:var(--bg);border:1px solid var(--line)}
 .pg-main .vt button{height:24px;padding:0 9px;border:0;border-radius:5px;background:transparent;color:var(--muted);font-size:13px}
 .pg-main .vt button[aria-selected="true"]{background:var(--raised);color:var(--text)}
-.pg-main .post{margin:12px 0;font-size:15.5px;line-height:1.55;white-space:pre-line;color:var(--text)}
+/* A post's text, not a status chip that is also `.post` (the Calendar's Posted chip sat 12px low; round 4).
+   `:where` keeps the rule's specificity, so `.pg-agentwriter .post` still wins. */
+.pg-main .post:where(:not(.st)){margin:12px 0;font-size:15.5px;line-height:1.55;white-space:pre-line;color:var(--text)}
 .pg-main .when{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:6px;background:var(--bg);border:1px solid var(--line);color:var(--text);font-size:13.5px}
 .pg-main .beats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin:12px 0}
 .pg-main .beat{border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--bg)}
@@ -373,6 +375,11 @@ html[data-theme="dark"] .k.pg-agentwriter{--bg:#121110;--panel:#181715;--raised:
 .pg-agentwriter .ask{display:flex;align-items:center;gap:8px;padding:6px 6px 6px 12px;border:1px solid var(--line-2);border-radius:10px;background:var(--panel)}
 .pg-agentwriter .ask input{flex:1 1 auto;min-width:0;border:0;background:transparent;font:inherit;font-size:14.5px;color:var(--text);outline:none;height:32px}
 .pg-agentwriter .ask input::placeholder{color:var(--subtle)}
+/* At 390 px the input, the kind and the button do not fit on one line: the button squeezed to three lines with its
+   first and last cut (visual regression, round 4). The form wraps, and the button never breaks its own label. */
+.pg-agentwriter .ask{flex-wrap:wrap}
+.pg-agentwriter .ask input{flex-basis:160px}
+.pg-agentwriter .ask button{white-space:nowrap;margin-left:auto}
 .pg-agentwriter .live{position:relative;display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--ok)}
 
 /* ---- Logs.dc.html ---- */

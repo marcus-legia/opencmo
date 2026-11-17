@@ -30,7 +30,7 @@ Ranked by what it does for a paying founder and for the owner's time:
 |---|---|---|
 | E2E (end-to-end) test | A browser robot uses the app like a person: clicks, types, checks what shows | have: `.github/workflows/e2e.yml` runs the smoke set on each PR and push to `main`, and the whole suite on both apps nightly, against a local Supabase with fake models; whole suite green on 2026-11-16 (round 2) |
 | Smoke test | A few fast checks after each deploy: sign-in works, the main pages load | partial: `test:e2e:smoke` (sign-in and the CMO loop) on each PR, not yet a required check; after each production deploy `.github/workflows/post-deploy.yml` runs `apps/web/scripts/smoke-production.mts` (GET only: `/api/health`, the catalogue price, public pages, CSP and HSTS, the bundle's Sentry DSN), skipped with a warning until the owner sets `PRODUCTION_URL` (round 3). No signed-in check after a deploy |
-| Visual regression test | Screenshots compared with approved ones to catch broken layouts (Playwright `toHaveScreenshot`) | partial: golden stills for `clip-motion`, none for the web app |
+| Visual regression test | Screenshots compared with approved ones to catch broken layouts (Playwright `toHaveScreenshot`) | done (round 4): the CMO loop's six v2 screens at 1440 and 390, plus today in dark, in the nightly `full-v2` (`e2e/ui-v2-visual.spec.ts`; baselines from CI via `e2e.yml`'s `update_snapshots`); golden stills for `clip-motion` |
 | Flaky test | A test that passes and fails on the same code; fix or quarantine it | have (rule): no retries in `playwright.config.ts`; a flaky spec is fixed, not retried (round 2 fixed a streaming race in `ui-v2-look`) |
 | Fixture, mock, fake | Saved or invented data so tests cost nothing | have: `OPENCMO_AGENT_FAKE`, `lib/cmo/social/fixtures/` |
 | Contract test | Checks that an API returns the agreed shape | have: `check:contracts` |
@@ -45,7 +45,7 @@ Ranked by what it does for a paying founder and for the owner's time:
 | Core Web Vitals | LCP (main content shows), INP (response to a click), CLS (layout shift) | have: `@vercel/speed-insights` measures them in production |
 | Lighthouse CI | Scores performance in CI and fails a PR when the score drops | partial: `.github/workflows/lighthouse.yml` on each PR (public pages, `apps/web/lighthouserc.cjs`); warnings only until 2026-11-22, then errors |
 | Performance budget | Hard limits, e.g. under 200 kB of JS, LCP under 2.5 s | partial: LCP 2.5 s, CLS 0.1 and category scores in `lighthouserc.cjs`, as warnings until 2026-11-22; first-load JS of the CMO loop's routes and the editor checked against `apps/web/bundle-budget.json` in CI's `web` job, failing (round 3) |
-| Bundle size, bundle analyzer | Which libraries make the JS heavy | partial: per-route first-load JS budget (`scripts/bundle-budget.mts`, round 3); no analyzer to say which library grew |
+| Bundle size, bundle analyzer | Which libraries make the JS heavy | done (round 4): per-route first-load JS budget (`scripts/bundle-budget.mts`, round 3); when it fails, CI builds again with `@next/bundle-analyzer` (`ANALYZE=1`) and uploads the client treemap as `bundle-report` |
 | TTFB | Time to the server's first byte | |
 | Cold start | The first call to a serverless function or Modal container is slow | |
 | p50, p95, p99 latency | Median, slowest 5 %, slowest 1 % of response times; watch p95, not the average | |

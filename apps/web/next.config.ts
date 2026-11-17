@@ -1,3 +1,4 @@
+import bundleAnalyzer from "@next/bundle-analyzer";
 import { withSentryConfig } from "@sentry/nextjs/config";
 import type { NextConfig } from "next";
 
@@ -130,11 +131,17 @@ const config: NextConfig = {
 };
 
 /**
+ * `ANALYZE=1` only (CI's `web` job, when the JS budget fails): writes webpack-bundle-analyzer's treemaps to
+ * `.next/analyze/` so the failure says which library grew. Off, the wrapper returns the config unchanged.
+ */
+const withBundleAnalyzer = bundleAnalyzer({ enabled: process.env.ANALYZE === "1", openAnalyzer: false });
+
+/**
  * Uploads source maps so browser stack traces in Sentry point at our source, not minified chunks. The upload needs
  * `SENTRY_AUTH_TOKEN` (set on Vercel only); without it local and CI builds skip the step instead of warning. The maps
  * are deleted after upload, so they are never served publicly.
  */
-export default withSentryConfig(config, {
+export default withSentryConfig(withBundleAnalyzer(config), {
   org: "opencmo",
   project: "opencmo",
   authToken: process.env.SENTRY_AUTH_TOKEN,

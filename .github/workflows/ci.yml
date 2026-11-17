@@ -87,8 +87,26 @@ jobs:
           NEXT_PUBLIC_OPENCMO_UI: v2
       # First-load JS of the CMO loop's routes against apps/web/bundle-budget.json (Lighthouse sees only public pages).
       - name: JS budget of the signed-in app
+        id: budget
         working-directory: apps/web
         run: npx tsx scripts/bundle-budget.mts
+      # Only when the budget fails: build again with @next/bundle-analyzer and keep its client treemap, so the failure
+      # says which library grew, not only which route. `.next` is a hidden folder: upload-artifact skips it unless told.
+      - name: Bundle report (the budget failed)
+        if: failure() && steps.budget.outcome == 'failure'
+        run: npm run build
+        env:
+          NEXT_PUBLIC_OPENCMO_UI: v2
+          ANALYZE: "1"
+      - name: Upload the bundle report
+        if: failure() && steps.budget.outcome == 'failure'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: bundle-report
+          path: apps/web/.next/analyze/client.html
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14
 
   motion:
     # Explainer renderer (packages/clip-motion): unit tests, then golden stills rendered by
