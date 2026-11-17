@@ -27,13 +27,14 @@ From 2026-10-30, Supabase no longer grants Data API access on new `public` table
 unreachable from supabase-js, PostgREST, GraphQL and the worker's `/rest/v1`.
 
 ```sql
-grant select on public.<table> to anon;                                        -- only if anon must read it
-grant select, insert, update, delete on public.<table> to authenticated;       -- trim to what RLS and RPCs need
+grant select on public.<table> to authenticated;   -- only when a user's session client reads it (writes are RPCs)
+grant select on public.<table> to anon;            -- only when a signed-out page reads it
 grant select, insert, update, delete on public.<table> to service_role;
 ```
 
-Grant the least each role needs. Most of our tables give `authenticated` `select` only (writes go through RPCs, web
-rule 1). Assert the grants in the table's pgTAP test.
+Since round 4 (`20270129010000_table_grants`), `anon` and `authenticated` start with nothing on a new table, view or
+sequence, and `supabase/tests/323_table_grants` lists every grant they hold: add each new one there in the same PR, or
+the suite fails. Never grant `insert`/`update`/`delete` to a user role (web rule 1).
 
 ## Every migration has a pgTAP test
 

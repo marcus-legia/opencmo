@@ -200,7 +200,7 @@ html[data-ui="v2"] .k :is(.td-menu, .cmo-messages) :is(ul, ol), html[data-ui="v2
 .td-legacy { max-width: 1320px; margin: 0 auto; padding: 22px 24px 40px; }
 /* The inbox card's own page is a legacy page, both a card host and a v2 host: the host takes the card's padding away,
    the v2 host gives its border back, and the text touched the edge (visual regression, round 4). Pad it again. */
-.td-legacy .v2-inbox .v2-card-heading + .v2-card-body, .td-legacy .v2-inbox .v2-card-body { padding: 14px 16px; }
+.td-legacy .v2-inbox .v2-card-body { padding: 14px 16px; }
 .td-newmenu .v2-button { height: 32px; min-height: 0; padding: 0 12px; border-radius: 7px; border: 1px solid var(--line-2); background: transparent; color: var(--text); font: 400 14px Geist, ui-sans-serif, system-ui, sans-serif; letter-spacing: 0; text-transform: none; }
 .v2.td-newmenu .v2-button.v2-button { height: 32px; min-height: 0; padding: 0 12px; border-radius: 7px; border: 1px solid var(--line-2); background: transparent; color: var(--text); font: 400 14px Geist, ui-sans-serif, system-ui, sans-serif; letter-spacing: 0; text-transform: none; }
 .v2.td-newmenu .v2-button.v2-button:hover { background: var(--hover); }

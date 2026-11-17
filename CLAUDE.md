@@ -133,6 +133,8 @@ npm run dev                         # Docker → local Supabase → Next.js + wo
 npm run db:reset && npm run db:test # migrations + pgTAP
 npm run typecheck && npm run build
 (cd apps/web && npx tsx scripts/bundle-budget.mts)  # first-load JS of the loop's pages vs bundle-budget.json
+(cd apps/web && npm run test:e2e:visual)   # the loop's screenshots; baselines come from CI (spec header)
+(cd apps/web && ANALYZE=1 NEXT_PUBLIC_OPENCMO_UI=v2 npm run build)  # .next/analyze/client.html: which library a route's JS comes from
 cd apps/web && npm run check:contracts && npm run test:e2e
 ```
 
@@ -160,10 +162,12 @@ render or export, extract a frame from the full-size file (not `*.preview.mp4`) 
 ## Known traps
 
 - A Scribe failure does not fail an upload: the video is published without a transcript and
-  the editor shows "no speech". Check the worker log, not the job status, when words are missing.
+  the editor shows "no speech".
 - Face tracking does not fail an upload either: without the engine's `[face]` extra, the model, or
   `libegl1`/`libgles2`, the master is published framed in the centre (speaker possibly half cut).
-  Check the worker log for "framing in the centre" and `masters[clip].focus` in the job manifest.
+- Both fallbacks write a code in the job's manifest `warnings` (`transcript_failed`, `framing_centre_*`); owners read
+  them under Warnings at `/app/settings/failures`, and the hourly `/api/cron/failures` sends every failure group and
+  warning of the last hour to Sentry (one issue per group).
 - A failure with a clean message (a job or run that ends `failed`) never reaches Sentry: owners read them at
   `/app/settings/failures`. A production deploy is checked by `.github/workflows/post-deploy.yml`, which does nothing
   until the repository variable `PRODUCTION_URL` is set.
@@ -204,6 +208,8 @@ scripts/dev.mjs         one-command dev stack
 5. Money only moves through `credit_hold` / `credit_settle` / `credit_refund` /
    `credit_held`. After a new migration, regenerate `supabase/schema/current.sql` with
    `scripts/dump-schema.sh`.
+6. A new table, view or sequence grants nothing to `anon` or `authenticated`: grant what the app reads (`select`
+   only) in the same migration and add it to `supabase/tests/323_table_grants`.
 
 ## Billing (owner, 2026-11-04)
 

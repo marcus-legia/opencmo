@@ -14,17 +14,17 @@
  * `failure-alerts.check.ts` runs it without Sentry or a database.
  */
 import type { CronMonitor } from "./cron-monitor";
-import { displayKey, sourceLabel, type FailureGroup, type UploadWarning } from "./failures";
+import { displayKey, sourceLabel, warningLabel, type FailureGroup, type UploadWarning } from "./failures";
 
 /** Modal calls the route right after the hourly digest (`cmo_digest` in `modal_app.py`), so it runs on its schedule. */
 export const FAILURES_MONITOR = { slug: "cron-failures", crontab: "2 * * * *", maxRuntime: 1 } as const satisfies CronMonitor;
 
 /**
- * The window the alert reads: two hours for an hourly clock. The call lands anywhere from :02 to :05 (after the
- * digest), so exactly one hour would leave gaps between runs, and a group whose only failures fell in one would never
- * become an issue. The overlap costs nothing: the fingerprint folds a group's events into one issue.
+ * The window the alert reads: a little over the hour between runs. The call lands anywhere from :02 to :05 (after the
+ * digest), so exactly one hour could leave a gap. It stays short of two hours on purpose: a wider window re-sends
+ * failures the last run already reported, and Sentry reopens an issue the owner resolved after a fix as a regression.
  */
-export const ALERT_WINDOW_MINUTES = 120;
+export const ALERT_WINDOW_MINUTES = 70;
 
 /** The answer of `ops_failure_groups`. */
 export type FailureGroupsAnswer = {
@@ -66,7 +66,7 @@ export function alertEvents(answer: FailureGroupsAnswer): AlertEvent[] {
   );
   const warnings = (answer.warnings ?? []).map(
     (warning): AlertEvent => ({
-      message: cut(`Upload published with a fallback: ${warning.code}`),
+      message: cut(`Upload published with a fallback: ${warningLabel(warning.code)}`),
       level: "warning",
       fingerprint: ["founder-failure", "jobs", "warning", warning.code],
       tags: { alert: "founder-failure", source: "jobs", kind: "warning" },

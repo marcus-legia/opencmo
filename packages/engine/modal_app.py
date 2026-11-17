@@ -678,7 +678,7 @@ def cmo_schedule() -> None:
     log.info("AI CMO schedule: %s", cmo_dispatch.call_cron(*web, "/api/cron/cmo"))
 
 
-@app.function(secrets=[secret], schedule=modal.Cron("2 * * * *"), timeout=210)
+@app.function(secrets=[secret], schedule=modal.Cron("2 * * * *"), timeout=240)
 def cmo_digest() -> None:
     """Hourly: release cards held past a day's budget, send each founder's digest at their local hour, email the
     cards about to expire and push new cards (P6). Every send is claimed in SQL, so a second call sends nothing.
@@ -696,7 +696,13 @@ def cmo_digest() -> None:
         log.info("Digest: %s", cmo_dispatch.call_cron(*web, "/api/cron/cmo-digest", timeout=140.0))
     except Exception as exc:  # noqa: BLE001 - re-raised below, after the alert
         digest_error = exc
-    log.info("Failure alerts: %s", cmo_dispatch.call_cron(*web, "/api/cron/failures", timeout=55.0))
+    try:
+        log.info("Failure alerts: %s", cmo_dispatch.call_cron(*web, "/api/cron/failures", timeout=55.0))
+    except Exception:
+        if digest_error is None:
+            raise
+        # Both failed: the digest's error is the one the run reports; the alert's still reaches the log.
+        log.exception("Failure alerts did not run")
     if digest_error is not None:
         raise digest_error
 

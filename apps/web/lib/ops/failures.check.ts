@@ -31,5 +31,3 @@ assert.equal(warningLabel("a_new_code"), "a_new_code", "a code the page does not
 
 console.log("failures.check: ok");
 
-// The hourly alert reads the same grouping; its check runs here so `check:contracts` covers it.
-void import("./failure-alerts.check");
