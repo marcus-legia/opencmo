@@ -87,6 +87,9 @@ Order and waits:
 
 ## After all three sessions (the lead, this session)
 
+Done 2026-11-17 (`686b262`): all three checklists ticked; whole-branch review found 8, fixed 4 (the commit lists the
+4 kept and why); the "For the lead" lines are in `CLAUDE.md` and `ci.yml`; the PR description is written.
+
 1. Every checklist ticked, or the reason it is not written beside it.
 2. Whole-branch `/code-review high` on `origin/claude/web-hardening-plan-e5d0c4...HEAD` (or `origin/main...HEAD` once
    #227 has merged), plus the `security-review-checklist` skill. Fix, one review commit.
