@@ -440,6 +440,13 @@ html[data-theme="dark"] .k.pg-setup{--bg:#121110;--panel:#181715;--raised:#201e1
 .pg-setup .stepper .n{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:var(--raised);font-size:12px;font-weight:600}
 .pg-setup .stepper button[data-done="true"] .n{background:var(--ok-wash);color:var(--ok)}
 .pg-setup .stepper button[aria-current="step"] .n{background:var(--accent);color:var(--accent-ink)}
+/* The header is one 56px row: at phone width three labelled pills wrapped into three rows and pushed step 1 off the
+   top (round 4 screenshots). Other steps keep only their number there. */
+@media (max-width:640px){
+  .pg-setup .stepper{flex-wrap:nowrap}
+  .pg-setup .stepper button:not([aria-current="step"]){font-size:0;gap:0;padding:0 4px}
+  .pg-setup .stepper button:not([aria-current="step"]) .n{font-size:12px}
+}
 .pg-setup .card{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:20px}
 .pg-setup h1{margin:0;font-size:28px;font-weight:600;letter-spacing:-0.6px;line-height:1.2}
 .pg-setup .lead{margin:8px 0 0;color:var(--muted);font-size:15px;line-height:1.55;max-width:520px}
