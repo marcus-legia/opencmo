@@ -81,6 +81,11 @@ Order and waits:
 
 ## After all three sessions (the lead, this session)
 
+Done 2026-11-17 (`eb370f5`, `336c670`): all three checklists ticked. The lead took C's CI baselines (12 of 13; C's
+container could not download the artifact), found a real bug in the 13th (`setup-390`: the stepper wrapped over the
+header) and fixed it; that one baseline waits for the owner (below). Whole-branch review found 9, fixed 6 (the commit
+lists the 3 kept and why); `security-review-checklist` found nothing; the "For the lead" lines are in.
+
 1. Every checklist ticked, or the reason it is not written beside it.
 2. Whole-branch `/code-review high` on `origin/claude/wrb-hardening-review-1eiien...HEAD` (or `origin/main...HEAD`
    once #227 and #228 have merged), plus the `security-review-checklist` skill. Fix, one review commit.
@@ -89,6 +94,10 @@ Order and waits:
    order. Then mark the PR ready.
 
 ## For the owner (not for the sessions)
+
+- **One screenshot baseline:** Actions → run `44073316471` (E2E, update_snapshots) → download `e2e-visual-snapshots`,
+  copy only `setup-390.png` into `apps/web/e2e/ui-v2-visual.spec.ts-snapshots/`, look at it (the step pills sit on
+  one line in the header), commit. Until then the nightly `full-v2` fails on that one shot.
 
 - Merge order: #227, #228, then this PR. `supabase db push` after each, before its web deploy.
 - Round 3's open steps still hold (#228's description: Email provider off, `rls_auto_enable`, `PRODUCTION_URL`).
