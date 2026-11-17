@@ -4,7 +4,7 @@ create extension if not exists pgtap with schema extensions;
 begin;
 set search_path to public, extensions;
 
-select plan(7);
+select plan(8);
 
 insert into auth.users (id, email) values
   ('e1190000-0000-4000-8000-00000000000a', 'fa@test.local'),
@@ -18,11 +18,16 @@ set local role authenticated;
 set local request.jwt.claims = '{"sub":"e1190000-0000-4000-8000-00000000000a"}';
 
 select isnt(public.send_feedback('missing_capability', 'User wanted a ProRes export; only H.264 exists.', null, 'medium'), null, 'ghi được một phản hồi');
-select is((select count(*) from public.editor_feedback)::int, 1, 'người dùng thấy phản hồi của mình');
+-- Since 20270129010000_table_grants no user reads the table (the owner reads it as the service role).
+select throws_ok($$ select count(*) from public.editor_feedback $$, '42501', null, 'a user does not read the table');
+reset role;
+select is((select count(*) from public.editor_feedback where user_id = 'e1190000-0000-4000-8000-00000000000a')::int, 1, 'the feedback is saved for its sender');
+set local role authenticated;
 select throws_ok($$ select public.send_feedback('rant', 'x') $$, '22023', 'Unknown feedback category.', 'loại lạ bị từ chối');
 select throws_ok($$ select public.send_feedback('failure', '  ') $$, '22023', null, 'tóm tắt rỗng bị từ chối');
 select throws_ok($$ insert into public.editor_feedback (user_id, category, summary) values ('e1190000-0000-4000-8000-00000000000a', 'failure', 'x') $$, '42501', null, 'không ghi thẳng vào bảng');
 select isnt(public.send_feedback('failure', 'Export failed on a long clip.', null, null, 'e1192000-0000-4000-8000-00000000000b'), null, 'clip của người khác vẫn ghi được');
+reset role;
 select is((select clip_id from public.editor_feedback where summary like 'Export failed%'), null, '...nhưng không gắn clip của người khác');
 
 select * from finish();

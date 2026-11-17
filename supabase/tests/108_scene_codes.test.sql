@@ -24,7 +24,9 @@ select is(
   'trả sha256 hex của code'
 );
 select is(public.save_scene_code('return (t) => {};'), public.save_scene_code('return (t) => {};'), 'cùng code cùng hash');
-select is((select count(*) from public.scene_codes)::int, 1, 'không ghi lần hai');
+reset role;
+select is((select count(*) from public.scene_codes)::int, 1, 'the same code is stored once');
+set local role authenticated;
 select throws_ok($$ select public.save_scene_code('   ') $$, '22023', 'Write the scene code first.', 'code rỗng bị chặn');
 select throws_ok($$ select public.save_scene_code(repeat('x', 32001)) $$, '22023',
   'The scene code is longer than 32000 characters.', 'code quá dài bị chặn');
@@ -34,7 +36,8 @@ select throws_ok($$ insert into public.scene_codes (user_id, hash, code)
 
 -- Người B: không đọc được code của A, không render được bằng hash của A.
 set local request.jwt.claims = '{"sub":"e1080000-0000-4000-8000-00000000000b"}';
-select is((select count(*) from public.scene_codes)::int, 0, 'B không thấy code của A');
+-- Since 20270129010000_table_grants no user reads the table at all (only save_scene_code and the worker do).
+select throws_ok($$ select count(*) from public.scene_codes $$, '42501', null, 'B cannot read A''s code (no user reads the table)');
 
 select * from finish();
 rollback;

@@ -107,7 +107,7 @@ Ranked by what it does for a paying founder and for the owner's time:
 | Secret scanning | Catching keys committed to the repo (gitleaks, push protection) | have: GitHub secret scanning and push protection; gitleaks on each PR (`secrets.yml`); full history scanned 2026-11-16, no live secret. Off: GitHub's non-provider patterns (owner) |
 | Supply chain attack | A malicious npm package; lockfiles and pinned versions limit it | |
 | CSP, security headers | Content Security Policy, HSTS, X-Frame-Options | have: `apps/web/next.config.ts` (`script-src 'unsafe-inline'`, no nonce: owner decision 2026-11-16) |
-| Least privilege | Each key has only the rights it needs | partial: every function `authenticated` can call is listed (`182_*`); trigger functions revoked and anon calls no security definer function but `email_unsubscribe` (`320_*`); service-role-only tables hold no user grant (`321_*`). Many older tables still carry Supabase's default full grants to `anon`, held back by RLS only (round 3 note) |
+| Least privilege | Each key has only the rights it needs | partial: every function `authenticated` can call is listed (`182_*`); trigger functions revoked and anon calls no security definer function but `email_unsubscribe` (`320_*`); service-role-only tables hold no user grant (`321_*`). have (round 4, A): `anon` and `authenticated` hold only the table rights the app reads (`anon` select on `billing_catalog`; `authenticated` select on 56 tables and views, no write, no truncate, no sequence), new tables and sequences start with none, and `323_*` lists every grant (`20270129010000_table_grants`) |
 | 2FA, MFA | On GitHub, Vercel, Supabase, Creem, Modal | |
 | Audit log | Who did what, and when | |
 | WAF, bot protection | Vercel Firewall, BotID | |

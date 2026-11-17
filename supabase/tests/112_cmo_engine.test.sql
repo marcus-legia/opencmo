@@ -138,7 +138,12 @@ select throws_ok($$ select public.cmo_decide_post('e1123000-0000-4000-8000-00000
 set local request.jwt.claims = '{"sub":"e1120000-0000-4000-8000-00000000000b"}';
 select is((select count(*) from public.content_items), 0::bigint, 'B không thấy lịch của A');
 select is((select count(*) from public.cmo_memories), 0::bigint, 'B không thấy trí nhớ của A');
-select is((select count(*) from public.operation_log), 0::bigint, 'B không thấy nhật ký của A');
+select throws_ok($$ select count(*) from public.operation_log $$, '42501', null, 'B has no grant on the operation log (20270129010000)');
+-- The policy stays for a later reader: grant inside this rolled-back transaction and check it still isolates.
+reset role;
+grant select on public.operation_log to authenticated;
+set local role authenticated;
+select is((select count(*) from public.operation_log), 0::bigint, 'B does not see A''s operation log');
 select throws_ok($$ select public.cmo_decide_post('e1123000-0000-4000-8000-00000000000a', 'approve') $$,
   'P0002', 'Post not found.', 'B không duyệt bài của A');
 

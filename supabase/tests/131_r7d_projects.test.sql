@@ -5,7 +5,7 @@ create extension if not exists pgtap with schema extensions;
 begin;
 set search_path to public, extensions;
 
-select plan(10);
+select plan(11);
 
 insert into auth.users (id, email) values
   ('e1310000-0000-4000-8000-00000000000a', 'r7d-a@test.local'),
@@ -32,14 +32,21 @@ create temporary table made as
 alter table made add column blank_clip uuid;
 update made set blank_clip = public.create_blank_edit('Launch teaser', '9:16');
 
+-- Since 20270129010000_table_grants users read projects only through list_projects(); the rows are checked as the
+-- table owner, filtered to A.
+reset role;
 select is((select kind from public.projects where job_id = (select clip_job from made)), 'clip', 'create_upload_edit → project clip');
 select is((select p.kind from public.projects p join public.clips c on c.job_id = p.job_id where c.id = (select blank_clip from made)),
   'edit', 'create_blank_edit → project edit');
-select is((select count(*)::int from public.projects), 2, 'mỗi lượt tạo đúng một hàng (người dùng chỉ thấy hàng của mình)');
+select is((select count(*)::int from public.projects where user_id = 'e1310000-0000-4000-8000-00000000000a'), 2, 'each create writes exactly one row');
+create temporary table a_clips as select job_id from public.projects
+  where user_id = 'e1310000-0000-4000-8000-00000000000a' and kind = 'clip';
+grant select on a_clips to authenticated;
+set local role authenticated;
 
 select is(
   (select array_agg(id order by id) from public.list_projects()),
-  (select array_agg(job_id order by job_id) from public.projects where kind = 'clip'),
+  (select array_agg(job_id order by job_id) from a_clips),
   'thư viện = uploads, không có New edit trống'
 );
 select is((select count(*)::int from public.list_projects(null, null, 'nothing-matches', 24)), 0, 'tìm theo tên vẫn chạy');
@@ -54,7 +61,12 @@ select throws_ok(
 );
 
 set local request.jwt.claims = '{"sub":"e1310000-0000-4000-8000-00000000000b"}';
-select is((select count(*)::int from public.projects), 0, 'người khác không thấy project của A');
+select throws_ok($$ select count(*) from public.projects $$, '42501', null, 'B has no grant on projects');
+-- The policy stays for a later reader: grant inside this rolled-back transaction and check it still isolates.
+reset role;
+grant select on public.projects to authenticated;
+set local role authenticated;
+select is((select count(*)::int from public.projects), 0, 'B does not see A''s projects');
 select is((select count(*)::int from public.list_projects()), 0, 'thư viện của B rỗng');
 
 reset role;

@@ -10,7 +10,8 @@ select plan(42);
 
 -- Grants and RLS.
 select ok(not has_table_privilege('authenticated', 'public.subreddit_rules', 'insert'), 'a founder does not write subreddit rules');
-select ok(has_table_privilege('authenticated', 'public.subreddit_rules', 'select'), 'a founder reads them');
+-- Since 20270129010000_table_grants only the Sales runner (service role) reads the shared cache; no web page does.
+select ok(not has_table_privilege('authenticated', 'public.subreddit_rules', 'select'), 'a founder does not read them either');
 select ok(not has_table_privilege('anon', 'public.sales_settings', 'select'), 'anon reads no Sales settings');
 select ok(not has_table_privilege('authenticated', 'public.sales_settings', 'update'), 'settings change only through the RPC');
 select ok(has_function_privilege('authenticated', 'public.sales_settings_save(text[],jsonb,text[])', 'execute'), 'a founder saves settings');
@@ -35,7 +36,7 @@ set local request.jwt.claims = '{"sub":"e2210000-0000-4000-8000-00000000000a","r
 select is((public.sales_settings_save(array['r/SaaS', ' Entrepreneur ', 'saas'], '[["Video", " editor "]]')).excluded_subreddits,
   array['entrepreneur', 'saas'], 'names are trimmed, lowercased, without r/ and deduplicated');
 select is((select co_occurrence from public.sales_settings), '[["video", "editor"]]'::jsonb, 'pairs are trimmed and lowercased');
-select is((select count(*)::int from public.subreddit_rules), 1, 'a founder reads the shared rules');
+select throws_ok($$ select count(*) from public.subreddit_rules $$, '42501', null, 'a founder has no grant on the shared rules');
 select throws_ok($$ select public.sales_settings_save(array['no spaces here'], '[]') $$, '22023',
   'A subreddit name has 2 to 21 letters, digits or underscores.', 'a bad subreddit name is refused');
 select throws_ok($$ select public.sales_settings_save('{}', '[["one"]]') $$, '22023', 'Each pair has exactly two terms.',
