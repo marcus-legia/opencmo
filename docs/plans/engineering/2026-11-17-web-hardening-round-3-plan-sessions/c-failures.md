@@ -15,25 +15,25 @@ Owns: `supabase/migrations/20270128*` (new), `supabase/tests/322_*` (new), one l
 
 ## Todo, in order
 
-- [ ] 1. **Map the failures.** In `supabase/schema/current.sql`, list every table where work ends failed or blocked
+- [x] 1. **Map the failures.** In `supabase/schema/current.sql`, list every table where work ends failed or blocked
   with a message: at least `jobs`, `tasks`, `cmo_runs`, `generations`, `studio_steps`, `work_orders`. Write the list
   (table, status value, error column, the `kind` that says what the work was) at the top of the migration. Include
   work stuck past its lease (`running` with an expired lease), since the founder sees it as hanging.
-- [ ] 2. **`ops_failures_report(p_days int)`**, `security definer`, `search_path = ''`, owner-only exactly like
+- [x] 2. **`ops_failures_report(p_days int)`**, `security definer`, `search_path = ''`, owner-only exactly like
   `cmo_funnel_report` (`app_owners` by the caller's email, under the owner's own session; anyone else gets the same
   error a missing function would). Returns, per source and kind: failures, accounts hit, first and last seen, the
   error text grouped (trimmed, numbers and ids collapsed so one bug is one row), the 20 latest rows with their ids.
   Owner accounts left out. No email, no prompt, no document: ids only (the owner looks a user up in Supabase).
   `p_days` limited to 1–90. Grant to `authenticated`, revoke from `anon`, add it to 182.
-- [ ] 3. **pgTAP `322_*`**: a non-owner gets nothing; owner accounts are excluded; grouping merges two failures that
+- [x] 3. **pgTAP `322_*`**: a non-owner gets nothing; owner accounts are excluded; grouping merges two failures that
   differ only by an id; a stuck lease counts; `p_days` out of range is refused.
-- [ ] 4. **`lib/ops/failures.ts`** (rows, the grouping key for display, durations) and `failures.check.ts`.
-- [ ] 5. **`/app/settings/failures`**, owner only (404 otherwise, like `/app/settings/funnel`), in the style of the
+- [x] 4. **`lib/ops/failures.ts`** (rows, the grouping key for display, durations) and `failures.check.ts`.
+- [x] 5. **`/app/settings/failures`**, owner only (404 otherwise, like `/app/settings/funnel`), in the style of the
   costs and funnel pages: `?days=7|30|90`, the groups sorted by accounts hit, each with its latest rows. Link it from
   `/app/settings` next to Costs and Funnel, owners only. Empty state says nothing failed in the window.
-- [ ] 6. Look at it: seed a few failures locally, take a 1440 px and a 390 px screenshot, check both by eye.
-- [ ] 7. Update the backlog rows you own (plan, "Shared files").
-- [ ] 8. **Review**: `/code-review high` on your diff, then the `security-review-checklist` skill (owner-only check, no
+- [x] 6. Look at it: seed a few failures locally, take a 1440 px and a 390 px screenshot, check both by eye.
+- [x] 7. Update the backlog rows you own (plan, "Shared files").
+- [x] 8. **Review**: `/code-review high` on your diff, then the `security-review-checklist` skill (owner-only check, no
   data of another founder beyond ids and error text, `security definer` hygiene). Fix what is confirmed. Commit
   (`git add` your paths only, message ends with the review line), `git pull --rebase`, push.
 
@@ -44,11 +44,26 @@ Owns: `supabase/migrations/20270128*` (new), `supabase/tests/322_*` (new), one l
 
 ## For the owner (write here, do not do)
 
-- After the merge: `supabase db push` before the web deploy (a deploy first only gives the owner a 404 on this page).
+- After the merge: `supabase db push` before the web deploy. If the web goes first, `/app/settings/failures` throws (the
+  function is missing) and Settings hides the owner links, since `ops_is_owner` is missing too.
+- Then open `/app/settings` signed in as an owner: an "Owner" panel links Costs, Funnel and Failures.
 
 ## For the lead
 
 (Lines that belong in `CLAUDE.md` or files C does not own.)
+
+- `supabase/tests/182_…`: C added **two** lines, not one: `ops_failures_report(integer)` and `ops_is_owner()`. Review
+  found that Settings had no cheap way to know the caller is an owner (`app_owners` has no read policy), so the links
+  were probing the whole report on every visit. `ops_is_owner` answers yes or no for the caller only.
+- The owner refusal is `42501 'Not available.'`, exactly like `cmo_funnel_report`, not PostgREST's missing-function
+  error the checklist mentions; the page turns it into a 404, so to a founder it looks the same.
+- Optional `CLAUDE.md` line under "Known traps": "A failure with a clean message never reaches Sentry; owners read them
+  at `/app/settings/failures`." 
+
+Done in C's commit (2026-11-17): eight sources (the six named plus `schedule_slots`, so failed publishes show, and
+`agent_turns` for the Editor Assistant), with stuck leases and hung onboardings. Checked by eye at 1440 and 390 px with
+seeded failures (owner sees groups; a founder gets the 404 and no ids). Not tested in pgTAP: the generate-task and
+run-order duplicates being left out (seeding a generation needs a full spec); the logic is in the migration's `raw` CTE.
 
 Out of scope, noted for later: an alert when one group crosses a threshold (would reuse the Sentry alert rule once
 round 2's DSN is fixed); writing the worker's silent fallbacks (no transcript, centre framing) as warnings a page can

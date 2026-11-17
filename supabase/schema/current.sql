@@ -9661,6 +9661,147 @@ $_$;
 
 
 --
+-- Name: ops_failures_report(integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.ops_failures_report(p_days integer DEFAULT 7) RETURNS jsonb
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_email text := lower(coalesce(auth.jwt()->>'email', ''));
+  v_since timestamptz;
+  v_stuck_after interval := interval '10 minutes';
+  v_result jsonb;
+begin
+  if not exists (select 1 from public.app_owners where email = v_email) then
+    raise exception 'Not available.' using errcode = '42501';
+  end if;
+  if p_days is null or p_days < 1 or p_days > 90 then
+    raise exception 'Pick 1 to 90 days.' using errcode = '22023';
+  end if;
+  v_since := now() - make_interval(days => p_days);
+
+  with raw as (
+    select 'jobs'::text as source, j.kind, j.id, j.user_id, coalesce(j.finished_at, j.created_at) as at, j.error, false as stuck
+      from public.jobs j where j.status = 'failed' and coalesce(j.finished_at, j.created_at) >= v_since
+    union all
+    select 'jobs', j.kind, j.id, j.user_id, j.lease_until, null, true
+      from public.jobs j where j.status = 'running' and j.lease_until < now() - v_stuck_after
+    union all
+    select 'tasks', t.kind, t.id, t.user_id, coalesce(t.finished_at, t.created_at), t.error, false
+      from public.tasks t where t.status = 'failed' and coalesce(t.finished_at, t.created_at) >= v_since
+        and not (t.kind = 'generate' and exists (select 1 from public.generations g where g.task_id = t.id))
+    union all
+    select 'tasks', t.kind, t.id, t.user_id, t.lease_until, null, true
+      from public.tasks t where t.status = 'running' and t.lease_until < now() - v_stuck_after
+    union all
+    select 'cmo_runs', r.kind, r.id, r.user_id, coalesce(r.finished_at, r.created_at), r.error, false
+      from public.cmo_runs r where r.status = 'failed' and coalesce(r.finished_at, r.created_at) >= v_since
+    union all
+    select 'cmo_runs', r.kind, r.id, r.user_id, r.lease_until, null, true
+      from public.cmo_runs r where r.status = 'running' and r.lease_until < now() - v_stuck_after
+    union all
+    select 'cmo_runs', r.kind, r.id, r.user_id, coalesce(r.started_at, r.created_at), null, true
+      from public.cmo_runs r
+      where r.status = 'running' and r.kind = 'onboard' and r.lease_until is null
+        and coalesce(r.started_at, r.created_at) < now() - interval '30 minutes'
+    union all
+    select 'generations', g.kind, g.id, g.user_id, coalesce(g.finished_at, g.created_at), g.error, false
+      from public.generations g where g.status = 'failed' and coalesce(g.finished_at, g.created_at) >= v_since
+    union all
+    select 'studio_steps', s.kind || '/' || s.tool, s.id, s.user_id, greatest(s.created_at, s.decided_at, s.claimed_at), s.error, false
+      from public.studio_steps s where s.status = 'failed' and greatest(s.created_at, s.decided_at, s.claimed_at) >= v_since
+    union all
+    select 'work_orders', w.department || '/' || w.kind, w.id, w.user_id, coalesce(w.finished_at, w.updated_at),
+        concat_ws(': ', w.error->>'code', w.error->>'message'), false
+      from public.work_orders w where w.status = 'failed' and coalesce(w.finished_at, w.updated_at) >= v_since
+        and not exists (select 1 from public.cmo_runs r where r.id = w.run_id and r.status = 'failed')
+    union all
+    select 'schedule_slots', s.platform, s.id, s.user_id, s.updated_at, s.error->>'message', false
+      from public.schedule_slots s where s.status = 'failed' and s.updated_at >= v_since
+    union all
+    select 'schedule_slots', s.platform, s.id, s.user_id, s.lease_until, null, true
+      from public.schedule_slots s where s.status = 'publishing' and s.lease_until < now() - v_stuck_after
+    union all
+    select 'agent_turns', 'assistant', t.id, a.user_id, coalesce(t.finished_at, t.created_at), t.error, false
+      from public.agent_turns t join public.agent_sessions a on a.id = t.session_id
+      where t.status = 'failed' and coalesce(t.finished_at, t.created_at) >= v_since
+  ),
+  owners as (
+    select u.id from auth.users u join public.app_owners o on o.email = lower(u.email)
+  ),
+  f as (
+    select r.source, r.kind, r.id, r.user_id, r.at, r.stuck,
+      coalesce(nullif(btrim(r.error), ''),
+        case when r.stuck then 'Stuck: still running past its lease or time limit.' else 'Failed with no error text.' end) as error
+    from raw r
+    where r.user_id not in (select id from owners)
+  ),
+  -- One bug is one row: ids (uuids, and long tokens with two digits or more) and numbers are collapsed, whitespace too.
+  -- A number keeps its unit (`<n> ms`, `<n>s`, `<n>p`), a digit inside a word stays (`mp4`, `h264`), and a 4xx or 5xx
+  -- code not followed by a unit stays, so an expired token (401) and an outage (500) are two rows. The key is cut after
+  -- it is normalized, so two long errors that differ only by an id's length still meet.
+  k as (
+    select f.source, f.kind, f.id, f.user_id, f.at, f.stuck, left(f.error, 300) as error,
+      left(btrim(regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(f.error,
+        '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', '<id>', 'gi'),
+        '(?=[A-Za-z_-]*[0-9][A-Za-z_-]*[0-9])[A-Za-z0-9_-]{16,}', '<id>', 'g'),
+        '\m[0-9]+([.,][0-9]+)*(ms|s|m|h|p|px|k|kb|mb|gb|x)\M', '<n>\2', 'gi'),
+        '\m(?![45][0-9][0-9]\M(?!\s*(ms|s|sec|seconds|min|minutes|h|hours|px|kb|mb|gb|%)))[0-9]+([.,][0-9]+)*\M', '<n>', 'gi'),
+        '\s+', ' ', 'g')), 300) as key
+    from f
+  ),
+  g as (
+    select source, kind, key, count(*) as failures, count(distinct user_id) as accounts,
+      min(at) as first_seen, max(at) as last_seen, bool_or(stuck) as stuck
+    from k group by source, kind, key
+    order by count(distinct user_id) desc, count(*) desc, max(at) desc
+    limit 100
+  ),
+  latest as (
+    select k.source, k.kind, k.key,
+      jsonb_agg(jsonb_build_object('id', k.id, 'user_id', k.user_id, 'at', k.at, 'error', k.error, 'stuck', k.stuck)
+        order by k.at desc) as rows
+    from (
+      select k.*, row_number() over (partition by k.source, k.kind, k.key order by k.at desc) as rn
+      from k join g using (source, kind, key)
+    ) k
+    where k.rn <= 20
+    group by k.source, k.kind, k.key
+  )
+  select jsonb_build_object(
+    'since', v_since,
+    'days', p_days,
+    'failures', (select count(*) from k),
+    'accounts', (select count(distinct user_id) from k),
+    'stuck', (select count(*) from k where stuck),
+    'groups', coalesce((
+      select jsonb_agg(jsonb_build_object(
+          'source', g.source, 'kind', g.kind, 'key', g.key, 'failures', g.failures, 'accounts', g.accounts,
+          'first_seen', g.first_seen, 'last_seen', g.last_seen, 'stuck', g.stuck, 'latest', l.rows)
+        order by g.accounts desc, g.failures desc, g.last_seen desc)
+      from g join latest l using (source, kind, key)
+    ), '[]'::jsonb)
+  ) into v_result;
+  return v_result;
+end;
+$$;
+
+
+--
+-- Name: ops_is_owner(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.ops_is_owner() RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select exists (select 1 from public.app_owners where email = lower(coalesce(auth.jwt()->>'email', '')));
+$$;
+
+
+--
 -- Name: orphan_keep_paths(text); Type: FUNCTION; Schema: public; Owner: -
 --
 

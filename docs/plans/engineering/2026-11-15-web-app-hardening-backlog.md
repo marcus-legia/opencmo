@@ -71,11 +71,11 @@ Ranked by what it does for a paying founder and for the owner's time:
 | Idempotency key | Sending a request twice does not charge twice | have: Creem grants once per transaction or order |
 | Circuit breaker | Stop calling a provider that is down for a while | |
 | Graceful degradation, fallback | One part fails, the rest keeps working | have: e.g. social reads fall back from LurkAPI to ScrapeCreators |
-| Dead letter queue | Where failed jobs wait to be read and run again | partial: leases requeue a dead attempt up to three times; a stuck queue fails `/api/health` |
+| Dead letter queue | Where failed jobs wait to be read and run again | partial: leases requeue a dead attempt up to three times; a stuck queue fails `/api/health`; the owner reads every failed or stuck piece of work, grouped by error, at `/app/settings/failures` (round 3, C). Re-running is still the founder's button |
 | Rate limiting | A cap on requests per user or IP | have |
 | Backup, PITR | Restore the database to a point in time | |
 | RTO, RPO | How long a restore takes; how much data may be lost | |
-| Incident, postmortem | A written record of an outage and what was learned | |
+| Incident, postmortem | A written record of an outage and what was learned | partial: `/app/settings/failures` shows what founders hit in the last 7, 30 or 90 days and how many accounts (round 3, C), the evidence a postmortem starts from; no written incident template yet |
 
 ## 4. Deploy and CI/CD
 

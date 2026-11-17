@@ -60,6 +60,8 @@ insert into allowed values
   ('cmo_decide_post(uuid,text,text,text)'),
   ('cmo_edit_correction(uuid,text,boolean)'),
   ('cmo_funnel_report(integer)'),  -- 20270126010000: refuses anyone not in app_owners, like provider_spend_report
+  ('ops_failures_report(integer)'),  -- 20270128010000 (round 3, C): refuses anyone not in app_owners, like cmo_funnel_report
+  ('ops_is_owner()'),  -- 20270128010000 (round 3, C): whether the caller is an owner, nothing about anyone else
   ('cmo_order_script(text,date)'),
   ('cmo_post_myself(uuid,text,text)'),
   ('cmo_script_edit_beat(uuid,integer,text,text,timestamp with time zone)'),

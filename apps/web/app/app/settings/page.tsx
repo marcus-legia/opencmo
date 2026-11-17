@@ -1,4 +1,7 @@
+import Link from "next/link";
+
 import { SettingsView } from "@/components/clipping/web/SettingsView";
+import { Panel } from "@/components/ui";
 import { UI_V2 } from "@/lib/screens/flag";
 import { SettingsScreen } from "@/components/screens/settings/SettingsScreen";
 import { SettingsFrame } from "@/components/today/SettingsFrame";
@@ -11,13 +14,37 @@ export default async function SettingsPage() {
   // MCP (API keys, Connected apps) is a paid-plan feature; the cards show the upgrade path instead.
   const supabase = await createServerClient();
   const user = await currentUser();
-  const { data: profile } = user ? await supabase.from("profiles").select("plan").eq("id", user.id).maybeSingle() : { data: null };
+  // The owner pages answer only `app_owners`, which is not readable under RLS; `ops_is_owner` says yes or no for the caller.
+  const [{ data: profile }, owner] = user
+    ? await Promise.all([
+        supabase.from("profiles").select("plan").eq("id", user.id).maybeSingle(),
+        supabase.rpc("ops_is_owner").then(({ data }) => data === true),
+      ])
+    : [{ data: null }, false];
   const paid = isPaidPlan((profile as { plan?: string } | null)?.plan);
+  const ownerLinks = owner ? <OwnerLinks /> : null;
   if (UI_V2)
     return (
       <SettingsFrame current="general">
         <SettingsScreen mcpEndpoint={mcpEndpoint()} paid={paid} />
+        {ownerLinks}
       </SettingsFrame>
     );
-  return <SettingsView mcpEndpoint={mcpEndpoint()} paid={paid} />;
+  return (
+    <>
+      <SettingsView mcpEndpoint={mcpEndpoint()} paid={paid} />
+      {ownerLinks}
+    </>
+  );
+}
+
+function OwnerLinks() {
+  return (
+    <Panel id="settings-owner" title="Owner">
+      <p className="v2-panel-body">
+        <Link href="/app/settings/costs">Costs</Link> · <Link href="/app/settings/funnel">Funnel</Link> ·{" "}
+        <Link href="/app/settings/failures">Failures</Link>
+      </p>
+    </Panel>
+  );
 }
