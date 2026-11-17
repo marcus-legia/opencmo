@@ -36,6 +36,18 @@ export function readSentryDsn(raw: string | undefined): SentryDsnState {
 }
 
 /** What the boot log says when the DSN is set but unusable. Never the value: the log is searchable by anyone on Vercel. */
-export const INVALID_DSN_MESSAGE =
-  "NEXT_PUBLIC_SENTRY_DSN is set but is not a valid Sentry DSN (expected https://<key>@<host>/<project id>); " +
-  "Sentry is off. Copy the DSN again from Sentry → Project settings → Client keys, then redeploy (it is inlined at build).";
+const NOT_A_DSN = "NEXT_PUBLIC_SENTRY_DSN is set but is not a valid Sentry DSN (expected https://<key>@<host>/<project id>)";
+const WHERE_TO_COPY = "Copy the DSN again from Sentry → Project settings → Client keys";
+
+export const INVALID_DSN_MESSAGE = `${NOT_A_DSN}; Sentry is off. ${WHERE_TO_COPY}, then redeploy (it is inlined at build).`;
+
+/**
+ * Fails `next build` when the DSN is set but unparsable (web hardening round 3, item 1): the DSN is inlined into the
+ * client bundle at build time, so a bad one found at boot is already a deploy that reports nothing. Unset stays
+ * allowed (local, CI). The message names the variable, never its value: the build log is readable by the whole team.
+ */
+export function assertSentryDsn(raw: string | undefined): void {
+  if (readSentryDsn(raw).state === "invalid") {
+    throw new Error(`${NOT_A_DSN}. ${WHERE_TO_COPY}, or unset it to build without Sentry.`);
+  }
+}

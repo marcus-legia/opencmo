@@ -74,8 +74,8 @@ select is_empty($$ select data from public.artifacts where job_id = 'b1000000-00
 select is_empty($$ select id from public.media_assets where user_id = 'b0000000-0000-4000-8000-00000000000b' $$, 'A không thấy B-roll của B');
 select is_empty($$ select id from public.tasks where user_id = 'b0000000-0000-4000-8000-00000000000b' $$, 'A không thấy task của B');
 
--- Bảng đếm nhịp không có policy nào: kể cả hàng của chính mình cũng không đọc được.
-select is_empty($$ select bucket from public.rate_limits $$, 'không ai đọc được rate_limits');
+-- rate_limits has no policy and, since 20270127010000, no grant to users: even one's own rows are refused.
+select throws_ok($$ select bucket from public.rate_limits $$, '42501', null, 'nobody reads rate_limits');
 
 -- ------------------------------------------------------------ A không ghi
 select throws_ok(
@@ -154,7 +154,7 @@ select is_empty($$ select job_id from public.artifacts $$, 'anon không đọc a
 select is_empty($$ select settings from public.clips $$, 'anon không đọc settings của clip');
 select is_empty($$ select id from public.media_assets $$, 'anon không đọc media_assets');
 select is_empty($$ select id from public.tasks $$, 'anon không đọc tasks');
-select is_empty($$ select bucket from public.rate_limits $$, 'anon không đọc rate_limits');
+select throws_ok($$ select bucket from public.rate_limits $$, '42501', null, 'anon cannot read rate_limits');
 select is_empty($$ select name from storage.objects $$, 'anon không đọc file nào');
 
 set local role postgres;

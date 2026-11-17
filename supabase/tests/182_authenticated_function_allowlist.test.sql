@@ -4,6 +4,7 @@
 -- A new function is on this surface by default (Postgres grants EXECUTE to PUBLIC). This test
 -- fails until it is either listed here — a conscious decision that users may call it directly,
 -- with its own ownership checks and limits — or revoked from `authenticated`.
+-- Trigger functions are never listed: 320_advisor_guard requires them revoked (20270127010000).
 -- `create_generation` skips the route's moderation when called directly; the worker checks the prompt again (`check_prompt`).
 create extension if not exists pgtap with schema extensions;
 
@@ -60,6 +61,8 @@ insert into allowed values
   ('cmo_decide_post(uuid,text,text,text)'),
   ('cmo_edit_correction(uuid,text,boolean)'),
   ('cmo_funnel_report(integer)'),  -- 20270126010000: refuses anyone not in app_owners, like provider_spend_report
+  ('ops_failures_report(integer)'),  -- 20270128010000 (round 3, C): refuses anyone not in app_owners, like cmo_funnel_report
+  ('ops_is_owner()'),  -- 20270128010000 (round 3, C): whether the caller is an owner, nothing about anyone else
   ('cmo_order_script(text,date)'),
   ('cmo_post_myself(uuid,text,text)'),
   ('cmo_script_edit_beat(uuid,integer,text,text,timestamp with time zone)'),
@@ -74,7 +77,6 @@ insert into allowed values
   ('cmo_job_daily_limit(text)'),
   ('cmo_job_price(text)'),
   ('cmo_mark_posted(uuid,text)'),
-  ('cmo_memories_classify()'),
   ('cmo_pause()'),
   ('cmo_rate_drafts(jsonb)'),
   ('cmo_read_hit(text)'),
@@ -108,7 +110,6 @@ insert into allowed values
   ('finish_cmo_run(uuid,boolean,text)'),
   ('generation_active_limit()'),
   ('get_or_create_editor_project(uuid,jsonb,jsonb)'),
-  ('handle_new_user()'),
   ('is_paid(uuid)'),
   ('job_hold_credits()'),
   ('list_projects(timestamp with time zone,uuid,text,integer)'),
@@ -131,7 +132,6 @@ insert into allowed values
   ('provider_usage_record_mine(text,integer,text)'),
   ('rate_agent_turn(uuid,integer,text,text)'),
   ('rate_limit_hit(text,integer,integer)'),
-  ('refund_media_captions_from_task()'),
   ('register_media_asset(uuid,text,text,uuid)'),
   ('rename_blank_edit(uuid,text)'),
   ('repurpose_post(uuid,text)'),

@@ -9,8 +9,9 @@ on:
 permissions:
   contents: read
 
-# Every job runs on every pull request and every push to main: the repo is public, so Actions
-# minutes are free, and a full run catches what a path filter would miss.
+# Every job runs on every pull request and every push to main: a full run catches what a path filter would miss.
+# The repo is private since 2026-10-16, so these minutes count against the plan's quota; a path filter is the lever
+# if they ever run out, not skipping jobs.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -79,7 +80,15 @@ jobs:
       - run: npm run test:mcp-server
       # The Modal image runs this bundle: a module it cannot resolve fails here, not at deploy.
       - run: npm run build:mcp-server
+      # Built as the v2 app, the one founders get (like lighthouse.yml and dast.yml), so the JS budget below measures
+      # the screens that ship; the v1 build is still built and tested by the nightly e2e (`full-v1`).
       - run: npm run build
+        env:
+          NEXT_PUBLIC_OPENCMO_UI: v2
+      # First-load JS of the CMO loop's routes against apps/web/bundle-budget.json (Lighthouse sees only public pages).
+      - name: JS budget of the signed-in app
+        working-directory: apps/web
+        run: npx tsx scripts/bundle-budget.mts
 
   motion:
     # Explainer renderer (packages/clip-motion): unit tests, then golden stills rendered by

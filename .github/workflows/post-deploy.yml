@@ -1,0 +1,72 @@
+name: Post-deploy smoke
+
+# Checks production right after Vercel deploys it (web hardening round 3, item 2): CI tests a PR's code on a local
+# stack and never sees the deploy's env, DSN, catalogue or headers. GET only, no sign-in, no secret; a failure fails the
+# run and GitHub mails the owner. Script: apps/web/scripts/smoke-production.mts.
+#
+# Triggers:
+#   - deployment_status: Vercel's GitHub integration posts one per state change of every deploy; only a successful one
+#     in a Production environment runs the job. Vercel names it "Production", or "Production – <project>" when more
+#     than one project shares the repository, hence `startsWith`. GitHub runs the copy of this file at the deployed
+#     commit. Vercel's docs now also offer `repository_dispatch` (`vercel.deployment.promoted`, payload `url`); it is
+#     left out so one deploy starts one run. If Vercel stops posting deployment_status, switch to it.
+#   - workflow_dispatch: by hand, optionally with the commit the domain should serve.
+on:
+  deployment_status:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: Commit the domain should serve (7+ characters; empty = do not wait for a given deploy)
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: smoke production
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.deployment_status.state == 'success' && startsWith(github.event.deployment.environment, 'Production'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Job-level, so the skipped runs for previews and pending states never cancel a production check in flight. A newer
+    # production deploy does cancel the older check: the domain no longer serves it.
+    concurrency:
+      group: post-deploy-production
+      cancel-in-progress: true
+    steps:
+      # Until the owner sets the variable, a deploy's run warns and stops green (a red run on every deploy would teach
+      # everyone to ignore this workflow); a run by hand fails, since someone asked for a check that cannot happen.
+      - name: The production domain is configured
+        id: target
+        env:
+          PRODUCTION_URL: ${{ vars.PRODUCTION_URL }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ -n "$PRODUCTION_URL" ]; then echo "ready=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          echo "::warning::Set the repository variable PRODUCTION_URL (Settings → Secrets and variables → Actions → Variables) to the production origin, e.g. https://opencmo.io; production was not checked."
+          if [ "$EVENT" = "workflow_dispatch" ]; then exit 1; fi
+
+      - if: steps.target.outputs.ready == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            apps/web/scripts/smoke-production.mts
+            apps/web/lib/ops/sentry-dsn.ts
+          sparse-checkout-cone-mode: false
+
+      - if: steps.target.outputs.ready == 'true'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+
+      # Event values reach the script through env only, never through `${{ }}` in the command; the script validates them.
+      - name: Smoke
+        if: steps.target.outputs.ready == 'true'
+        env:
+          SMOKE_URL: ${{ vars.PRODUCTION_URL }}
+          SMOKE_EXPECT_COMMIT: ${{ github.event.deployment.sha || inputs.commit }}
+        run: npx --yes tsx@4.23.15 apps/web/scripts/smoke-production.mts

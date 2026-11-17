@@ -25,8 +25,8 @@ the repo's history.
   Then add `.github/workflows/secrets.yml` running gitleaks on each PR's diff, and a `.gitleaks.toml` allowlisting the
   local Supabase CLI demo keys (see `lighthouse.yml`'s comment) and test fixtures, nothing broader.
 - [x] 5. Update the backlog's §3 and §5 state columns for what round 1 and this session made true.
-- [ ] 6. `/code-review` and the `security-review-checklist` skill on your diff, fix, commit (`git add` your paths
-  only), `git pull --rebase`, push.
+- [x] 6. `/code-review` and the `security-review-checklist` skill on your diff, fix, commit (`git add` your paths
+  only), `git pull --rebase`, push. (Done in the whole-branch review, `4d7fac5`.)
 
 ## What B found and changed (2026-11-16)
 

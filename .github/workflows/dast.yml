@@ -1,0 +1,87 @@
+name: DAST
+
+# OWASP ZAP baseline scan (passive: it spiders and reads responses, it sends no attack payloads) of a production build
+# of this commit with a local Supabase, every night and by hand (web hardening round 3, item 3). It never touches
+# production: the target is 127.0.0.1. Setup copied from lighthouse.yml on purpose (no shared action this round).
+# Rules: .zap/rules.tsv (all WARN for the first week, so the run stays green while the findings are triaged).
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dast
+  cancel-in-progress: false
+
+jobs:
+  zap:
+    name: zap baseline
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      NEXT_PUBLIC_OPENCMO_UI: v2
+      NEXT_PUBLIC_SITE_URL: http://127.0.0.1:3200
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          cache: npm
+
+      - uses: supabase/setup-cli@689adcfb80d947100a1eab127289b97d1fb07b13 # v3.2.0
+        with:
+          version: 2.117.0
+
+      - name: Supabase with what the public pages read (database, API gateway, REST, auth)
+        run: supabase start -x realtime,storage-api,imgproxy,mailpit,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
+
+      - name: A made-up catalogue, so the landing page shows its pricing section
+        run: psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f apps/web/lighthouse/seed.sql
+
+      - name: Point the build at the local stack
+        # The local stack's keys are the CLI's fixed demo keys, not secrets.
+        run: |
+          supabase status -o env | sed -n 's/^\(API_URL\|ANON_KEY\)="\(.*\)"$/\1=\2/p' > /tmp/sb.env
+          echo "NEXT_PUBLIC_SUPABASE_URL=$(grep ^API_URL= /tmp/sb.env | cut -d= -f2-)" >> "$GITHUB_ENV"
+          echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$(grep ^ANON_KEY= /tmp/sb.env | cut -d= -f2-)" >> "$GITHUB_ENV"
+
+      - run: npm ci
+
+      - name: Production build
+        run: npm run build --workspace @opencmo/web
+
+      - name: Serve it
+        working-directory: apps/web
+        run: |
+          nohup npm run start -- --port 3200 > /tmp/next.log 2>&1 &
+          for i in $(seq 1 60); do curl -sf -o /dev/null http://127.0.0.1:3200/login && exit 0; sleep 2; done
+          cat /tmp/next.log; exit 1
+
+      # ZAP 2.17.0 (`stable`, 2026-11-03), pinned by the multi-arch index digest; the same digest is published on
+      # Docker Hub as zaproxy/zap-stable. Exit codes: 0 clean, 1 a FAIL rule matched, 2 warnings only (not returned
+      # with -I), 3 the scan itself broke. Host network so the container reaches 127.0.0.1:3200.
+      - name: ZAP baseline (passive)
+        run: |
+          mkdir -p zap-wrk && cp .zap/rules.tsv zap-wrk/ && chmod -R a+rwX zap-wrk
+          docker run --rm --network host -v "$PWD/zap-wrk:/zap/wrk:rw" \
+            ghcr.io/zaproxy/zaproxy@sha256:9624669db72f54d86c4b46a7064518bd9bf79d8c61a4c31befa9923489f328af \
+            zap-baseline.py -t http://127.0.0.1:3200 -c rules.tsv -m 2 -I \
+              -r report.html -J report.json -w report.md
+
+      - name: Reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: zap-reports
+          path: zap-wrk
+          retention-days: 14
+
+      - name: Stop Supabase
+        if: always()
+        run: supabase stop --no-backup
