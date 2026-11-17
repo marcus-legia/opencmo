@@ -30,7 +30,7 @@ and #228 merge, then `main`. Merge order: #227, #228, this one.
      two layout bugs in the CMO loop's v2 screens by accident (two `v2-dashboard` nodes, a page scroll at 390 px).
   5. **The JS budget says a route grew, not which library grew** (backlog §2 "Bundle size": no analyzer).
 
-Not in this round, on purpose: a staging database (round 2's reasoning holds), a signed-in check after each production
+Not in this round, on purpose: a staging database or Supabase Branching (owner, 2026-11-17: "do not do Supabase Branching"; CI runs every suite on a local Supabase), a signed-in check after each production
 deploy (it would need a standing account and credits in production: owner decision first), load tests, an N+1 audit
 of routes (no slow route in Speed Insights yet).
 
