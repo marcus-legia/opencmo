@@ -50,9 +50,9 @@ Ranked by what it does for a paying founder and for the owner's time:
 | Cold start | The first call to a serverless function or Modal container is slow | |
 | p50, p95, p99 latency | Median, slowest 5 %, slowest 1 % of response times; watch p95, not the average | |
 | Load test, stress test | Many simulated users at once (k6, Artillery) | missing |
-| N+1 query | A database call inside a loop; the classic slowdown | |
-| Index, `EXPLAIN ANALYZE` | How Postgres runs a query and whether it uses an index | |
-| Connection pooling | Sharing database connections (Supabase Supavisor) | |
+| N+1 query | A database call inside a loop; the classic slowdown | not checked: round 3 indexed the foreign keys only; no route audit yet |
+| Index, `EXPLAIN ANALYZE` | How Postgres runs a query and whether it uses an index | have: production's advisors clean (round 3, `20270127010000`: 38 foreign-key indexes, `(select auth.uid())` in RLS, a primary key on `write_budget_ledger`); `supabase/tests/320_advisor_guard` fails CI on a per-row `auth.uid()` policy. 15 unused indexes kept, re-read 2027-01-15 |
+| Connection pooling | Sharing database connections (Supabase Supavisor) | have: nothing opens a Postgres connection itself; the web app and the worker go through PostgREST (HTTP), which pools (checked 2026-11-17) |
 | Caching | CDN, ISR, `"use cache"`, stale-while-revalidate: keep a result instead of computing it again | |
 | Code splitting, lazy loading | Load only the code of the page in use | |
 | Memory leak | RAM that grows and never comes back | |
@@ -107,7 +107,7 @@ Ranked by what it does for a paying founder and for the owner's time:
 | Secret scanning | Catching keys committed to the repo (gitleaks, push protection) | have: GitHub secret scanning and push protection; gitleaks on each PR (`secrets.yml`); full history scanned 2026-11-16, no live secret. Off: GitHub's non-provider patterns (owner) |
 | Supply chain attack | A malicious npm package; lockfiles and pinned versions limit it | |
 | CSP, security headers | Content Security Policy, HSTS, X-Frame-Options | have: `apps/web/next.config.ts` (`script-src 'unsafe-inline'`, no nonce: owner decision 2026-11-16) |
-| Least privilege | Each key has only the rights it needs | |
+| Least privilege | Each key has only the rights it needs | partial: every function `authenticated` can call is listed (`182_*`); trigger functions revoked and anon calls no security definer function but `email_unsubscribe` (`320_*`); service-role-only tables hold no user grant (`321_*`). Many older tables still carry Supabase's default full grants to `anon`, held back by RLS only (round 3 note) |
 | 2FA, MFA | On GitHub, Vercel, Supabase, Creem, Modal | |
 | Audit log | Who did what, and when | |
 | WAF, bot protection | Vercel Firewall, BotID | |

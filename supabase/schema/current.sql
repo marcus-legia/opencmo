@@ -458,6 +458,7 @@ $$;
 
 CREATE FUNCTION public.agent_extend_credits() RETURNS integer
     LANGUAGE sql IMMUTABLE
+    SET search_path TO ''
     AS $$ select 10 $$;
 
 
@@ -2667,6 +2668,7 @@ $$;
 
 CREATE FUNCTION public.auto_transcript_daily_seconds() RETURNS numeric
     LANGUAGE sql IMMUTABLE
+    SET search_path TO ''
     AS $$ select 10800::numeric $$;
 
 
@@ -2676,6 +2678,7 @@ CREATE FUNCTION public.auto_transcript_daily_seconds() RETURNS numeric
 
 CREATE FUNCTION public.autopilot_min_window() RETURNS interval
     LANGUAGE sql IMMUTABLE
+    SET search_path TO ''
     AS $$ select interval '1 hour' $$;
 
 
@@ -3143,6 +3146,7 @@ $$;
 
 CREATE FUNCTION public.caption_profiles() RETURNS text[]
     LANGUAGE sql IMMUTABLE
+    SET search_path TO ''
     AS $$ select array['instagram_caption', 'tiktok_caption', 'youtube'] $$;
 
 
@@ -3186,6 +3190,7 @@ $$;
 
 CREATE FUNCTION public.captions_credits(p_seconds numeric) RETURNS integer
     LANGUAGE sql IMMUTABLE
+    SET search_path TO ''
     AS $$ select greatest(1, ceil(p_seconds / 60.0)::int) $$;
 
 
@@ -3195,6 +3200,7 @@ CREATE FUNCTION public.captions_credits(p_seconds numeric) RETURNS integer
 
 CREATE FUNCTION public.captions_max_seconds() RETURNS integer
     LANGUAGE sql IMMUTABLE
+    SET search_path TO ''
     AS $$ select 1800 $$;
 
 
@@ -3249,6 +3255,7 @@ $$;
 
 CREATE FUNCTION public.capture_daily_limit() RETURNS integer
     LANGUAGE sql IMMUTABLE
+    SET search_path TO ''
     AS $$ select 30 $$;
 
 
@@ -3340,6 +3347,7 @@ $$;
 
 CREATE FUNCTION public.check_transcript_body(p_body text) RETURNS void
     LANGUAGE plpgsql IMMUTABLE
+    SET search_path TO ''
     AS $$
 declare
   v_json jsonb;
@@ -3779,6 +3787,7 @@ $$;
 
 CREATE FUNCTION public.cmo_as_written() RETURNS real
     LANGUAGE sql IMMUTABLE
+    SET search_path TO ''
     AS $$ select 0.95::real $$;
 
 
@@ -3788,6 +3797,7 @@ CREATE FUNCTION public.cmo_as_written() RETURNS real
 
 CREATE FUNCTION public.cmo_brain_started(p_input jsonb) RETURNS boolean
     LANGUAGE sql IMMUTABLE
+    SET search_path TO ''
     AS $$ select coalesce(p_input->>'source', '') in ('schedule', 'event', 'replan') $$;
 
 
@@ -4570,6 +4580,7 @@ $$;
 
 CREATE FUNCTION public.cmo_free_onboard_runs() RETURNS integer
     LANGUAGE sql IMMUTABLE
+    SET search_path TO ''
     AS $$ select 2 $$;
 
 
@@ -4657,6 +4668,7 @@ $$;
 
 CREATE FUNCTION public.cmo_job_daily_limit(p_kind text) RETURNS integer
     LANGUAGE sql IMMUTABLE
+    SET search_path TO ''
     AS $$
   select case p_kind when 'plan_week' then 5 when 'post_draft' then 10 when 'sales_scan' then 3
     when 'competitor_research' then 2 when 'pull_metrics' then 2 when 'summarize_memory' then 1 when 'review_week' then 1
@@ -4675,6 +4687,7 @@ $$;
 
 CREATE FUNCTION public.cmo_job_price(p_kind text) RETURNS integer
     LANGUAGE sql IMMUTABLE
+    SET search_path TO ''
     AS $$
   select case p_kind when 'plan_week' then 1 when 'post_draft' then 1 when 'sales_scan' then 5
     when 'competitor_research' then 2 when 'pull_metrics' then 0 when 'summarize_memory' then 0 when 'review_week' then 0
@@ -5350,6 +5363,7 @@ $$;
 
 CREATE FUNCTION public.cmo_read_limit(p_bucket text) RETURNS integer
     LANGUAGE sql IMMUTABLE
+    SET search_path TO ''
     AS $$
   select case p_bucket
     -- Review R4: the in-app CMO chat counts here (its in-memory caps start again on every continue).
@@ -6296,6 +6310,7 @@ $$;
 
 CREATE FUNCTION public.cmo_video_seconds() RETURNS integer
     LANGUAGE sql IMMUTABLE
+    SET search_path TO ''
     AS $$ select 60 $$;
 
 
@@ -11877,6 +11892,7 @@ $$;
 
 CREATE FUNCTION public.purge_in_progress() RETURNS boolean
     LANGUAGE sql STABLE
+    SET search_path TO ''
     AS $$
   select coalesce(current_setting('opencmo.purge', true), '') = 'on';
 $$;
@@ -15436,6 +15452,7 @@ $$;
 
 CREATE FUNCTION public.signup_credits() RETURNS integer
     LANGUAGE sql IMMUTABLE
+    SET search_path TO ''
     AS $$ select 0 $$;
 
 
@@ -16577,6 +16594,7 @@ $$;
 
 CREATE FUNCTION public.studio_video_budget() RETURNS integer
     LANGUAGE sql IMMUTABLE
+    SET search_path TO ''
     AS $$ select 60 $$;
 
 
@@ -17051,6 +17069,7 @@ $$;
 
 CREATE FUNCTION public.voice_note_cap() RETURNS integer
     LANGUAGE sql IMMUTABLE
+    SET search_path TO ''
     AS $$ select 60 $$;
 
 
@@ -17060,6 +17079,7 @@ CREATE FUNCTION public.voice_note_cap() RETURNS integer
 
 CREATE FUNCTION public.voice_note_days() RETURNS integer
     LANGUAGE sql IMMUTABLE
+    SET search_path TO ''
     AS $$ select 60 $$;
 
 
@@ -18011,6 +18031,7 @@ $$;
 
 CREATE FUNCTION public.write_budget_bytes() RETURNS bigint
     LANGUAGE sql IMMUTABLE
+    SET search_path TO ''
     AS $$
   select 128::bigint * 1024 * 1024;
 $$;
@@ -18022,6 +18043,7 @@ $$;
 
 CREATE FUNCTION public.write_budget_rows(p_table text) RETURNS integer
     LANGUAGE sql IMMUTABLE
+    SET search_path TO ''
     AS $$
   select case p_table when 'marketing_documents' then 300 else 1200 end;
 $$;
@@ -19168,7 +19190,22 @@ CREATE TABLE public.write_budget_ledger (
     user_id uuid NOT NULL,
     table_name text NOT NULL,
     bytes bigint NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    id bigint NOT NULL
+);
+
+
+--
+-- Name: write_budget_ledger_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.write_budget_ledger ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.write_budget_ledger_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
 );
 
 
@@ -20099,6 +20136,14 @@ ALTER TABLE ONLY public.worker_operations
 
 
 --
+-- Name: write_budget_ledger write_budget_ledger_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.write_budget_ledger
+    ADD CONSTRAINT write_budget_ledger_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: zernio_profiles zernio_profiles_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -20123,10 +20168,24 @@ ALTER TABLE ONLY public.zernio_receipts
 
 
 --
+-- Name: account_metrics_social_account_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX account_metrics_social_account_id_idx ON public.account_metrics USING btree (social_account_id);
+
+
+--
 -- Name: account_metrics_user_idx; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX account_metrics_user_idx ON public.account_metrics USING btree (user_id, day DESC);
+
+
+--
+-- Name: agent_messages_turn_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX agent_messages_turn_id_idx ON public.agent_messages USING btree (turn_id);
 
 
 --
@@ -20144,6 +20203,13 @@ CREATE INDEX agent_sessions_job_idx ON public.agent_sessions USING btree (job_id
 
 
 --
+-- Name: agent_sessions_user_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX agent_sessions_user_id_idx ON public.agent_sessions USING btree (user_id);
+
+
+--
 -- Name: agent_tool_calls_turn_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -20158,10 +20224,24 @@ CREATE INDEX agent_turn_ratings_user_idx ON public.agent_turn_ratings USING btre
 
 
 --
+-- Name: agent_turns_checkpoint_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX agent_turns_checkpoint_id_idx ON public.agent_turns USING btree (checkpoint_id);
+
+
+--
 -- Name: agent_turns_open_idx; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX agent_turns_open_idx ON public.agent_turns USING btree (created_at) WHERE (status = ANY (ARRAY['running'::text, 'awaiting_browser'::text, 'awaiting_approval'::text, 'awaiting_input'::text, 'awaiting_continue'::text]));
+
+
+--
+-- Name: agent_usage_turn_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX agent_usage_turn_id_idx ON public.agent_usage USING btree (turn_id);
 
 
 --
@@ -20221,6 +20301,13 @@ CREATE UNIQUE INDEX brand_kits_user_name_idx ON public.brand_kits USING btree (u
 
 
 --
+-- Name: caption_translations_clip_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX caption_translations_clip_id_idx ON public.caption_translations USING btree (clip_id);
+
+
+--
 -- Name: caption_translations_user_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -20277,6 +20364,13 @@ CREATE INDEX cmo_draft_ratings_user_idx ON public.cmo_draft_ratings USING btree 
 
 
 --
+-- Name: cmo_goals_run_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX cmo_goals_run_id_idx ON public.cmo_goals USING btree (run_id);
+
+
+--
 -- Name: cmo_goals_user_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -20284,10 +20378,24 @@ CREATE INDEX cmo_goals_user_idx ON public.cmo_goals USING btree (user_id, week D
 
 
 --
+-- Name: cmo_insights_run_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX cmo_insights_run_id_idx ON public.cmo_insights USING btree (run_id);
+
+
+--
 -- Name: cmo_insights_user_idx; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX cmo_insights_user_idx ON public.cmo_insights USING btree (user_id, kind, created_at DESC);
+
+
+--
+-- Name: cmo_lessons_run_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX cmo_lessons_run_id_idx ON public.cmo_lessons USING btree (run_id);
 
 
 --
@@ -20302,6 +20410,13 @@ CREATE INDEX cmo_lessons_user_idx ON public.cmo_lessons USING btree (user_id, we
 --
 
 CREATE UNIQUE INDEX cmo_memories_source_outcome_key ON public.cmo_memories USING btree (source_outcome) WHERE (source_outcome IS NOT NULL);
+
+
+--
+-- Name: cmo_memories_source_run_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX cmo_memories_source_run_idx ON public.cmo_memories USING btree (source_run);
 
 
 --
@@ -20347,6 +20462,20 @@ CREATE INDEX cmo_runs_user_created_idx ON public.cmo_runs USING btree (user_id, 
 
 
 --
+-- Name: cmo_voice_events_correction_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX cmo_voice_events_correction_id_idx ON public.cmo_voice_events USING btree (correction_id);
+
+
+--
+-- Name: cmo_voice_events_document_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX cmo_voice_events_document_id_idx ON public.cmo_voice_events USING btree (document_id);
+
+
+--
 -- Name: cmo_voice_events_user_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -20365,6 +20494,13 @@ CREATE UNIQUE INDEX content_items_caption_key ON public.content_items USING btre
 --
 
 CREATE INDEX content_items_clip_idx ON public.content_items USING btree (clip_id) WHERE (clip_id IS NOT NULL);
+
+
+--
+-- Name: content_items_run_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX content_items_run_id_idx ON public.content_items USING btree (run_id);
 
 
 --
@@ -20424,6 +20560,13 @@ CREATE INDEX credit_orders_user_idx ON public.credit_orders USING btree (user_id
 
 
 --
+-- Name: creem_customers_user_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX creem_customers_user_id_idx ON public.creem_customers USING btree (user_id);
+
+
+--
 -- Name: creem_subscriptions_annual_due_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -20442,6 +20585,13 @@ CREATE INDEX creem_subscriptions_user_idx ON public.creem_subscriptions USING bt
 --
 
 CREATE INDEX creem_transactions_user_idx ON public.creem_transactions USING btree (user_id);
+
+
+--
+-- Name: creem_webhook_receipts_user_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX creem_webhook_receipts_user_id_idx ON public.creem_webhook_receipts USING btree (user_id);
 
 
 --
@@ -20466,10 +20616,31 @@ CREATE INDEX deliverables_post_idx ON public.deliverables USING btree (post_id) 
 
 
 --
+-- Name: deliverables_user_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX deliverables_user_id_idx ON public.deliverables USING btree (user_id);
+
+
+--
+-- Name: editor_feedback_clip_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX editor_feedback_clip_id_idx ON public.editor_feedback USING btree (clip_id);
+
+
+--
 -- Name: editor_feedback_created_idx; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX editor_feedback_created_idx ON public.editor_feedback USING btree (created_at DESC);
+
+
+--
+-- Name: editor_feedback_user_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX editor_feedback_user_id_idx ON public.editor_feedback USING btree (user_id);
 
 
 --
@@ -20515,6 +20686,13 @@ CREATE INDEX generations_after_idx ON public.generations USING btree (after_id) 
 
 
 --
+-- Name: generations_clip_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX generations_clip_id_idx ON public.generations USING btree (clip_id);
+
+
+--
 -- Name: generations_end_after_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -20522,10 +20700,24 @@ CREATE INDEX generations_end_after_idx ON public.generations USING btree (end_af
 
 
 --
+-- Name: generations_job_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX generations_job_id_idx ON public.generations USING btree (job_id);
+
+
+--
 -- Name: generations_live_hash_idx; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX generations_live_hash_idx ON public.generations USING btree (job_id, spec_hash) WHERE (status = ANY (ARRAY['queued'::text, 'running'::text, 'done'::text]));
+
+
+--
+-- Name: generations_media_asset_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX generations_media_asset_id_idx ON public.generations USING btree (media_asset_id);
 
 
 --
@@ -20599,6 +20791,13 @@ CREATE UNIQUE INDEX look_checks_one_round ON public.look_checks USING btree (ref
 
 
 --
+-- Name: look_checks_order_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX look_checks_order_id_idx ON public.look_checks USING btree (order_id);
+
+
+--
 -- Name: look_checks_sent_back_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -20610,6 +20809,13 @@ CREATE INDEX look_checks_sent_back_idx ON public.look_checks USING btree (create
 --
 
 CREATE INDEX look_checks_task_idx ON public.look_checks USING btree (task_id);
+
+
+--
+-- Name: look_checks_user_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX look_checks_user_id_idx ON public.look_checks USING btree (user_id);
 
 
 --
@@ -20641,10 +20847,24 @@ CREATE INDEX media_assets_user_idx ON public.media_assets USING btree (user_id, 
 
 
 --
+-- Name: media_transcripts_user_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX media_transcripts_user_id_idx ON public.media_transcripts USING btree (user_id);
+
+
+--
 -- Name: operation_log_user_at_idx; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX operation_log_user_at_idx ON public.operation_log USING btree (user_id, platform, action, at DESC);
+
+
+--
+-- Name: opportunities_run_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX opportunities_run_id_idx ON public.opportunities USING btree (run_id);
 
 
 --
@@ -20739,6 +20959,27 @@ CREATE INDEX push_subscriptions_user_idx ON public.push_subscriptions USING btre
 
 
 --
+-- Name: schedule_slots_account_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX schedule_slots_account_id_idx ON public.schedule_slots USING btree (account_id);
+
+
+--
+-- Name: schedule_slots_approval_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX schedule_slots_approval_id_idx ON public.schedule_slots USING btree (approval_id);
+
+
+--
+-- Name: schedule_slots_deliverable_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX schedule_slots_deliverable_id_idx ON public.schedule_slots USING btree (deliverable_id);
+
+
+--
 -- Name: schedule_slots_due_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -20753,6 +20994,13 @@ CREATE INDEX schedule_slots_external_idx ON public.schedule_slots USING btree (e
 
 
 --
+-- Name: schedule_slots_media_task_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX schedule_slots_media_task_id_idx ON public.schedule_slots USING btree (media_task_id);
+
+
+--
 -- Name: schedule_slots_one_live; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -20764,6 +21012,13 @@ CREATE UNIQUE INDEX schedule_slots_one_live ON public.schedule_slots USING btree
 --
 
 CREATE INDEX schedule_slots_user_idx ON public.schedule_slots USING btree (user_id, publish_at);
+
+
+--
+-- Name: short_batches_order_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX short_batches_order_id_idx ON public.short_batches USING btree (order_id);
 
 
 --
@@ -20785,6 +21040,13 @@ CREATE INDEX short_batches_user_idx ON public.short_batches USING btree (user_id
 --
 
 CREATE INDEX shorts_batch_idx ON public.shorts USING btree (batch_id);
+
+
+--
+-- Name: shorts_parent_clip_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX shorts_parent_clip_id_idx ON public.shorts USING btree (parent_clip_id);
 
 
 --
@@ -20823,6 +21085,13 @@ CREATE INDEX studio_steps_order_idx ON public.studio_steps USING btree (order_id
 
 
 --
+-- Name: studio_steps_redo_of_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX studio_steps_redo_of_idx ON public.studio_steps USING btree (redo_of);
+
+
+--
 -- Name: studio_steps_user_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -20830,10 +21099,31 @@ CREATE INDEX studio_steps_user_idx ON public.studio_steps USING btree (user_id, 
 
 
 --
+-- Name: tasks_asset_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX tasks_asset_id_idx ON public.tasks USING btree (asset_id);
+
+
+--
+-- Name: tasks_clip_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX tasks_clip_id_idx ON public.tasks USING btree (clip_id);
+
+
+--
 -- Name: tasks_editor_revision_idx; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX tasks_editor_revision_idx ON public.tasks USING btree (editor_revision_id, created_at DESC) WHERE (editor_revision_id IS NOT NULL);
+
+
+--
+-- Name: tasks_job_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX tasks_job_id_idx ON public.tasks USING btree (job_id);
 
 
 --
@@ -20858,10 +21148,24 @@ CREATE INDEX tasks_user_created_idx ON public.tasks USING btree (user_id, create
 
 
 --
+-- Name: upload_reservations_project_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX upload_reservations_project_id_idx ON public.upload_reservations USING btree (project_id);
+
+
+--
 -- Name: upload_reservations_user_status_idx; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX upload_reservations_user_status_idx ON public.upload_reservations USING btree (user_id, status, expires_at);
+
+
+--
+-- Name: work_order_events_order_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX work_order_events_order_id_idx ON public.work_order_events USING btree (order_id);
 
 
 --
@@ -20879,6 +21183,13 @@ CREATE INDEX work_order_usage_order_idx ON public.work_order_usage USING btree (
 
 
 --
+-- Name: work_order_usage_user_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX work_order_usage_user_id_idx ON public.work_order_usage USING btree (user_id);
+
+
+--
 -- Name: work_orders_item_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -20890,6 +21201,13 @@ CREATE INDEX work_orders_item_idx ON public.work_orders USING btree (item_id) WH
 --
 
 CREATE UNIQUE INDEX work_orders_one_root ON public.work_orders USING btree (user_id, week) WHERE (parent_id IS NULL);
+
+
+--
+-- Name: work_orders_parent_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX work_orders_parent_id_idx ON public.work_orders USING btree (parent_id);
 
 
 --
@@ -20911,6 +21229,13 @@ CREATE INDEX work_orders_run_idx ON public.work_orders USING btree (run_id) WHER
 --
 
 CREATE INDEX work_orders_user_idx ON public.work_orders USING btree (user_id, week, status);
+
+
+--
+-- Name: worker_operations_job_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX worker_operations_job_id_idx ON public.worker_operations USING btree (job_id);
 
 
 --
@@ -22603,7 +22928,7 @@ ALTER TABLE public.credit_orders ENABLE ROW LEVEL SECURITY;
 -- Name: credit_orders credit_orders_own; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY credit_orders_own ON public.credit_orders FOR SELECT TO authenticated USING ((user_id = auth.uid()));
+CREATE POLICY credit_orders_own ON public.credit_orders FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
 
 
 --
@@ -22712,7 +23037,7 @@ ALTER TABLE public.mcp_grants ENABLE ROW LEVEL SECURITY;
 -- Name: mcp_grants mcp_grants_select_own; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY mcp_grants_select_own ON public.mcp_grants FOR SELECT TO authenticated USING ((user_id = auth.uid()));
+CREATE POLICY mcp_grants_select_own ON public.mcp_grants FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
 
 
 --
@@ -22932,7 +23257,7 @@ CREATE POLICY "read own order events" ON public.work_order_events FOR SELECT TO 
 -- Name: work_order_usage read own order usage; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "read own order usage" ON public.work_order_usage FOR SELECT TO authenticated USING ((user_id = auth.uid()));
+CREATE POLICY "read own order usage" ON public.work_order_usage FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
 
 
 --
@@ -23192,14 +23517,14 @@ CREATE POLICY "đọc catalog" ON public.ai_models FOR SELECT TO authenticated U
 
 CREATE POLICY "đọc clip thuộc job của mình" ON public.clips FOR SELECT USING ((EXISTS ( SELECT 1
    FROM public.jobs j
-  WHERE ((j.id = clips.job_id) AND (j.user_id = auth.uid()) AND (j.purging_at IS NULL)))));
+  WHERE ((j.id = clips.job_id) AND (j.user_id = ( SELECT auth.uid() AS uid)) AND (j.purging_at IS NULL)))));
 
 
 --
 -- Name: scene_codes đọc code cảnh của mình; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "đọc code cảnh của mình" ON public.scene_codes FOR SELECT TO authenticated USING ((user_id = auth.uid()));
+CREATE POLICY "đọc code cảnh của mình" ON public.scene_codes FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
 
 
 --
@@ -23263,7 +23588,7 @@ CREATE POLICY "đọc insight của mình" ON public.cmo_insights FOR SELECT TO 
 -- Name: jobs đọc job của chính mình; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "đọc job của chính mình" ON public.jobs FOR SELECT USING (((auth.uid() = user_id) AND (purging_at IS NULL)));
+CREATE POLICY "đọc job của chính mình" ON public.jobs FOR SELECT USING (((( SELECT auth.uid() AS uid) = user_id) AND (purging_at IS NULL)));
 
 
 --
@@ -23321,7 +23646,7 @@ CREATE POLICY "đọc phiên assistant của mình" ON public.agent_sessions FOR
 -- Name: editor_feedback đọc phản hồi của mình; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "đọc phản hồi của mình" ON public.editor_feedback FOR SELECT TO authenticated USING ((user_id = auth.uid()));
+CREATE POLICY "đọc phản hồi của mình" ON public.editor_feedback FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
 
 
 --
@@ -23335,7 +23660,7 @@ CREATE POLICY "đọc project của mình" ON public.projects FOR SELECT TO auth
 -- Name: editor_skills đọc skill của mình; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY "đọc skill của mình" ON public.editor_skills FOR SELECT USING ((user_id = auth.uid()));
+CREATE POLICY "đọc skill của mình" ON public.editor_skills FOR SELECT USING ((user_id = ( SELECT auth.uid() AS uid)));
 
 
 --
