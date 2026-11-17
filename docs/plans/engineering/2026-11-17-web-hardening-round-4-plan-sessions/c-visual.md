@@ -27,6 +27,14 @@ checks), `.github/workflows/e2e.yml`, `apps/web/scripts/bundle-budget.mts`, `app
   from your container's, take the baselines from CI: add a `workflow_dispatch` input `update_snapshots` to `e2e.yml`
   that runs the spec with `--update-snapshots` and uploads the new images as an artifact; download them, commit, run
   again green. Write that update path at the top of the spec.
+  - **Not finished: CI's baselines are not committed yet.** Done: the `update_snapshots` input and the path in the
+    spec's header; [run 44033495535](https://github.com/marcus-legia/opencmo/actions/runs/44033495535) made CI's 13
+    images (artifact `e2e-visual-snapshots`, id 14306860731, kept until 2026-11-24). The nightly suite on this branch
+    ([run 44034618134](https://github.com/marcus-legia/opencmo/actions/runs/44034618134)) proves CI's pixels differ
+    from the container's: 12 of 13 shots fail (setup 1440 passes), 104 other full-v2 tests pass, full-v1 green.
+    Blocked: this session could not download the artifact (GitHub serves it from
+    `productionresultssa1.blob.core.windows.net`; the host was added to the environment, then the download itself was
+    refused by the session's permission check). Until the owner's step below, `full-v2` fails on these 12 shots.
 - [x] 5. **Every shot is a real screen**: look at each baseline at full size before committing it. A baseline of a
   broken screen is worse than none. If one shows an app bug (overflow, overlap, cut text), fix the component and keep
   the shot; say which in the commit.
@@ -43,6 +51,10 @@ checks), `.github/workflows/e2e.yml`, `apps/web/scripts/bundle-budget.mts`, `app
 
 ## For the owner (write here, do not do)
 
+- **Once, now** (item 4): open run 44033495535 → Artifacts → `e2e-visual-snapshots`, download, look at the 13 images,
+  copy them over `apps/web/e2e/ui-v2-visual.spec.ts-snapshots/`, commit, and run `e2e.yml` by hand without the box:
+  `full-v2` should pass. (Or let a session with that download allowed do it.)
+
 - When a screen changes on purpose, the nightly run fails with a diff: run `e2e.yml` by hand with `update_snapshots`,
   look at the images, commit them.
 
@@ -55,3 +67,14 @@ checks), `.github/workflows/e2e.yml`, `apps/web/scripts/bundle-budget.mts`, `app
   founder with the same document instead of a copy), `package-lock.json` (the analyzer's packages, additions only,
   npm 11), and three app CSS fixes the screenshots proved (`styles/today.css`, `styles/today-app.css`,
   `components/today/PhotoPostPanel.tsx`; listed in the commit).
+
+## Done
+
+Items 1, 2, 3, 5, 6, 7 done; item 4 half done (above). Verified: the spec 13/13, then `--repeat-each 3` 39/39 at the
+default threshold (local, Playwright's Chromium); every baseline looked at full size, four app bugs they showed fixed
+(Writer composer cut at 390, inbox card text against its border, Calendar's Posted chip 12px low, slideshow page's
+buttons unstyled); `npm run typecheck`, `check:contracts`, v2 `next build` + `bundle-budget.mts` green; with
+`/app/writer` lowered locally the budget fails, its message points at the report, and `ANALYZE=1` writes
+`.next/analyze/client.html`; CI: the update job green and uploaded 13 images, the nightly run shows the expected 12
+pixel failures against container baselines. `/code-review high` (10 findings, all fixed) and the security checklist
+(nothing) on the diff, in commit 967d231.
