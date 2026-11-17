@@ -3,6 +3,7 @@ import type { NextConfig } from "next";
 
 import { CATEGORY_REDIRECTS } from "./content/blog/categories";
 import blogRedirects from "./content/blog/redirects.json";
+import { assertSentryDsn } from "./lib/ops/sentry-dsn";
 
 /**
  * Security headers.
@@ -76,8 +77,21 @@ function securityHeaders(): { key: string; value: string }[] {
   ];
 }
 
+/**
+ * On Vercel, the commit this deploy was built from, so the post-deploy smoke (`scripts/smoke-production.mts`) can tell
+ * whether the domain already serves the deploy it was started for. A header rather than a custom build id: Next's own
+ * build id stays per build (open tabs still hard-reload after any redeploy) and keeps its ad-blocker guard. A commit id
+ * says nothing a closed-source repo needs to hide. Read at build, like the rest of `headers()`.
+ */
+function deployHeaders(): { key: string; value: string }[] {
+  const commit = process.env.VERCEL_GIT_COMMIT_SHA ?? "";
+  return /^[0-9a-f]{7,40}$/.test(commit) ? [{ key: "X-Deploy-Commit", value: commit }] : [];
+}
+
 const e2eBuild = process.env.OPENCMO_E2E_BUILD === "1";
 const config: NextConfig = {
+  // `X-Powered-By: Next.js` tells a scanner which framework's CVEs to try first and tells users nothing (ZAP 10037).
+  poweredByHeader: false,
   // Test và dev có thể cùng mở trên máy: không ghi đè manifest của nhau.
   distDir: e2eBuild ? ".next-e2e" : ".next",
   // Clip là file lớn: app không bao giờ proxy chúng, chỉ phát signed URL trỏ
@@ -91,7 +105,10 @@ const config: NextConfig = {
    */
   transpilePackages: ["@opencmo/editor-core", "@opencmo/skills", "@opencmo/clip-doc", "@opencmo/clip-render", "@opencmo/clip-assets", "@opencmo/clip-icons"],
   async headers() {
-    return [{ source: "/:path*", headers: securityHeaders() }];
+    // Evaluated by `next build` (and `next dev`), not by `next start`, which reads the built manifest: the bad-DSN gate
+    // belongs to building, since the DSN is inlined into the client bundle there.
+    assertSentryDsn(process.env.NEXT_PUBLIC_SENTRY_DSN);
+    return [{ source: "/:path*", headers: [...securityHeaders(), ...deployHeaders()] }];
   },
   /**
    * Slug bài viết là bất biến; đổi slug thì slug cũ phải vào

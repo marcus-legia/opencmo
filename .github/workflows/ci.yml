@@ -80,6 +80,10 @@ jobs:
       # The Modal image runs this bundle: a module it cannot resolve fails here, not at deploy.
       - run: npm run build:mcp-server
       - run: npm run build
+      # First-load JS of the CMO loop's routes against apps/web/bundle-budget.json (Lighthouse sees only public pages).
+      - name: JS budget of the signed-in app
+        working-directory: apps/web
+        run: npx tsx scripts/bundle-budget.mts
 
   motion:
     # Explainer renderer (packages/clip-motion): unit tests, then golden stills rendered by

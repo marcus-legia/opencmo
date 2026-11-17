@@ -1,0 +1,12 @@
+{
+  "note": "First-load JS per route, kB (1000 bytes) gzipped, checked by scripts/bundle-budget.mts after `next build`. Baseline 2026-11-17 (round 3) + 10 %, rounded up. `/` is the public landing page, for comparison; the editor is the last step of the loop, not the entry, so it gets its own larger line. Raise a line only with the reason in the PR.",
+  "routes": {
+    "/": 231,
+    "/app": 375,
+    "/app/writer": 326,
+    "/app/schedule": 325,
+    "/app/sales": 249,
+    "/app/settings": 290,
+    "/app/editor/[clipId]": 589
+  }
+}

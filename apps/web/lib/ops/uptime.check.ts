@@ -10,7 +10,7 @@ import path from "node:path";
 import { config as middleware } from "../../middleware";
 import { CRON_MONITORS, withCronMonitor } from "./cron-monitor";
 import { healthReport, QUEUE_STUCK_AFTER_SECONDS } from "./health";
-import { readSentryDsn } from "./sentry-dsn";
+import { assertSentryDsn, readSentryDsn } from "./sentry-dsn";
 
 async function main() {
   // Health: which part is down, never why.
@@ -55,6 +55,13 @@ async function main() {
   assert.equal(readSentryDsn(`https://${key}@o1.ingest.us.sentry.io/`).state, "invalid", "no project id");
   assert.equal(readSentryDsn("https://o1.ingest.us.sentry.io/42").state, "invalid", "no public key");
   assert.equal(readSentryDsn(`${key}@o1.ingest.us.sentry.io/42`).state, "invalid", "no scheme");
+  // The build gate (round 3): unset and valid pass; a cut-off value throws, and the message never carries the value.
+  assert.doesNotThrow(() => assertSentryDsn(undefined));
+  assert.doesNotThrow(() => assertSentryDsn(`https://${key}@o1.ingest.us.sentry.io/42`));
+  assert.throws(
+    () => assertSentryDsn(`https://${key}@o1.ingest.us.`),
+    (e: Error) => e.message.includes("NEXT_PUBLIC_SENTRY_DSN") && !e.message.includes(key),
+  );
 
   // The route itself, with no database configured: 503, never cached.
   delete process.env.NEXT_PUBLIC_SUPABASE_URL;
