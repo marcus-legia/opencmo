@@ -7,15 +7,15 @@ test("landing, đăng nhập và các màn workspace giữ bố cục và điề
     await page.setViewportSize({ width, height: 960 });
     await page.goto("/");
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-    // Landing v3 có ba ô website (hero, pricing, CTA cuối trang); kiểm ô ở hero.
+    // Landing có nhiều ô website (hero, pricing, CTA cuối trang); kiểm ô ở hero.
     await expect(page.locator("#hero-site")).toBeVisible();
     // Hero: eyebrow, H1, ô website. Landing không có ô link video
     // (docs/cmo/tham-khao.md §6: "content downloader" là mục cấm của bên thanh toán).
-    // Video duy nhất trong main là demo "See it work" dựng từ UI của chính OpenCMO.
+    // Landing 17/11 bỏ video demo (thay bằng chữ chạy theo scroll), nên main không còn video nào.
     await expect(page.locator(".lv-hero .lv-eyebrow")).toBeVisible();
     await expect(page.locator(".lv-hero .lv-pill-form button")).toBeVisible();
     await expect(page.locator("main input[type=url]")).toHaveCount(0);
-    await expect(page.locator("main video")).toHaveCount(1);
+    await expect(page.locator("main video")).toHaveCount(0);
     // Bốn trang pháp lý phải tới được từ footer khi chưa đăng nhập.
     for (const name of ["Terms", "Privacy", "Acceptable Use", "Refunds"]) {
       await expect(page.getByRole("contentinfo").getByRole("link", { name, exact: true })).toBeVisible();
@@ -33,7 +33,7 @@ test("landing, đăng nhập và các màn workspace giữ bố cục và điề
   }
   await page.goto("/");
   await page.locator("#hero-site").fill("example.com");
-  await page.locator(".lv-hero").getByRole("button", { name: "Start with your website" }).click();
+  await page.locator(".lv-hero").getByRole("button", { name: "See who's asking" }).click();
   await expect(page).toHaveURL(/\/login\?site=/);
   await expect(page.getByRole("button", { name: "Continue with Google" })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("login-mobile.png"), fullPage: true });
