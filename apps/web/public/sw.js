@@ -1,6 +1,7 @@
 /*
  * Ferreto's service worker (P6 C1): web push only. A push carries no payload, so it says nothing by itself: the worker
- * asks the app how many cards wait (same origin, the founder's own session) and shows that. A tap opens the queue;
+ * asks the app what to say (same origin, the founder's own session): an autopilot post about to go out, else how many
+ * cards wait. A tap opens the queue;
  * nothing is ever decided from a notification. No caching, no offline: the app stays exactly as it is without it.
  */
 self.addEventListener("install", () => self.skipWaiting());
@@ -9,6 +10,25 @@ self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim(
 self.addEventListener("push", (event) => {
   event.waitUntil(
     (async () => {
+      // Wave 2: an autopilot post about to go out comes first; its tap opens that card.
+      try {
+        const res = await fetch("/api/v1/notify/next", { credentials: "same-origin", cache: "no-store" });
+        if (res.ok) {
+          const json = await res.json();
+          const soon = json && (json.data ? json.data.autopilot : json.autopilot);
+          if (soon && typeof soon.line === "string" && typeof soon.approvalId === "string") {
+            await self.registration.showNotification("Ferreto", {
+              body: soon.line,
+              icon: "/icon.svg",
+              tag: "autopilot-" + soon.approvalId,
+              data: { url: "/app/inbox/" + encodeURIComponent(soon.approvalId) },
+            });
+            return;
+          }
+        }
+      } catch (_) {
+        // Fall back to the waiting count.
+      }
       let body = "Cards wait for your decision.";
       try {
         const res = await fetch("/api/v1/account", { credentials: "same-origin", cache: "no-store" });

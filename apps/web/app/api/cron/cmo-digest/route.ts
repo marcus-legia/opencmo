@@ -7,7 +7,8 @@ import { localClock } from "@/lib/cmo/digest";
 import { readAll } from "@/lib/cmo/jobs/progress-run";
 import { emailSender } from "@/lib/notify/email";
 import { pushNewCards, vapidFromEnv } from "@/lib/notify/push";
-import { digestDue, sendDigestEmail, sendExpiringEmails, type Founder } from "@/lib/notify/send";
+import { pushAutopilotSoon } from "@/lib/notify/autopilot";
+import { digestDue, sendDigestEmail, type Founder } from "@/lib/notify/send";
 import { SITE_URL } from "@/lib/site";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -17,8 +18,8 @@ export const maxDuration = 120;
 /**
  * Releases held cards whose day has come, then sends the morning digest to founders at their `digest_hour` on the days
  * `digest_days` allows (or up to two hours after, when today's has not gone out: a failed send is retried; a morning
- * with nothing new is logged as skipped), one email for each schedule card about to
- * expire, and one push per browser for new cards. Called once an hour; `email_log_claim` makes a second call send
+ * with nothing new is logged as skipped), one push per autopilot post two hours before it
+ * goes out, and one push per browser for new cards. Called once an hour; `email_log_claim` makes a second call send
  * nothing twice. With no sender it only counts: the digest is on the Dashboard anyway.
  */
 async function run(request: NextRequest) {
@@ -63,20 +64,17 @@ async function run(request: NextRequest) {
       console.warn("[cron] cmo-digest: not sent", profile.id, err instanceof Error ? err.message : err);
     }
   }
-  // One email before a time-bound card expires (schedule cards), at most once per card.
-  let expiring = 0;
-  if (send) {
-    try {
-      // Leaves the push round its own share of the run.
-      expiring = await sendExpiringEmails(admin, send, { appUrl: SITE_URL, now, deadline: started + (maxDuration - 50) * 1000 });
-    } catch (err) {
-      console.warn("[cron] cmo-digest: expiring emails not sent", err instanceof Error ? err.message : err);
-    }
-  }
   // One push per browser for the cards raised since its last push (P6 C1); none without VAPID keys.
   let pushed = 0;
+  let autopilot = 0;
   const vapid = vapidFromEnv();
   if (vapid) {
+    // Autopilot posts going out within two hours: one push per card, before the round of new cards.
+    try {
+      autopilot = await pushAutopilotSoon(admin, vapid, fetch, { now, deadline: started + (maxDuration - 50) * 1000 });
+    } catch (err) {
+      console.warn("[cron] cmo-digest: autopilot pushes not sent", err instanceof Error ? err.message : err);
+    }
     try {
       // A batch can take one push timeout (10 s) past the deadline; the admin client gives up at maxDuration - 10 s.
       pushed = await pushNewCards(admin, vapid, fetch, { deadline: started + (maxDuration - 25) * 1000 });
@@ -84,7 +82,7 @@ async function run(request: NextRequest) {
       console.warn("[cron] cmo-digest: pushes not sent", err instanceof Error ? err.message : err);
     }
   }
-  return NextResponse.json({ due, sent, skipped, expiring, pushed, released: released.data ?? 0, sender: send?.name ?? null });
+  return NextResponse.json({ due, sent, skipped, pushed, autopilot, released: released.data ?? 0, sender: send?.name ?? null });
 }
 
 /** Checks in with Sentry's cron monitor once the caller is the clock (`lib/ops/cron-monitor.ts`). */
