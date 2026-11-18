@@ -111,3 +111,20 @@ Every person in Sales gets three tabs: **Public reply** (the first step), **DM**
 - Daily caps keep it personal; the Acceptable Use Policy already forbids bulk and unsolicited messaging.
 - Wave: owner to decide whether DM drafts join wave 3 (before 30/11) and email drafts wait for wave 4 (Google's
   review of the Gmail scope takes time).
+
+### Who is ready for a DM or an email (owner agreed 2026-11-19)
+
+One check for every platform, from the person's own post and its thread only; Ferreto never reads or keeps a
+personal profile.
+1. A buyer like the founder's customers, in their own words ("I run a two-person studio"); vendors and unclear
+   authors are left out.
+2. Wants it now (the existing evidence quote).
+3. Warm: answered the founder's public reply, still active in the thread, or wrote "DM me / email me".
+4. Fresh: posted in the last 7 days.
+5. A way to reach them: the platform has DMs and the community allows them; for email, an address in the post or
+   thread, or on the business website they linked in it.
+
+Reply first is the default. **DM ready** = 1, 2, 4, a DM path, and 3 or a post asking for tools. **Email ready** =
+DM ready + an email by rule 5 + warm or invited. The tabs stay locked until a person qualifies, with the reason in
+one line; the founder may still paste an address they know. Hacker News has no DMs. To check "warm" outside Reddit
+and Hacker News, `reply-outcomes` gains Threads and Facebook group re-reads (manual marking until then).
