@@ -288,6 +288,50 @@ function WriteReplies({ count, busy, onPlan, onStarted }: { count: number; busy:
   );
 }
 
+/** "Reddit, Hacker News and Threads". */
+function places(list: SalesPlatform[]): string {
+  const names = list.map((p) => PLATFORM_LABEL[p]);
+  return names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names.at(-1)}` : (names[0] ?? "");
+}
+
+/**
+ * The scan's verdict when it found no one (free-scan plan B3): a plain answer about the product's fit, with what it
+ * searched and where, so the founder can judge the search. Not an error and not a paywall push.
+ */
+function NoOneAsked({ scan, onEdit }: { scan: NonNullable<SalesScreen["lastScan"]>; onEdit: () => void }) {
+  const answered = scan.platforms.filter((p) => !scan.failed.includes(p));
+  return (
+    <section className="card" data-testid="sales-none" style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "14px" }}>
+      <h2 style={{ margin: "0", fontSize: "16px", fontWeight: "600" }}>No one asked about this in the last 30 days.</h2>
+      {scan.queries.length ? (
+        <div>
+          <div className="meta" style={{ marginBottom: "6px" }}>
+            We searched for:
+          </div>
+          <ul style={{ margin: "0", paddingLeft: "18px", fontSize: "14px", display: "flex", flexDirection: "column", gap: "2px" }}>
+            {scan.queries.map((q) => (
+              <li key={q}>{q}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      <div className="meta">
+        {answered.length ? `Looked on ${places(answered)}` : "No place answered"}
+        {scan.scanned ? `, ${scan.scanned} ${scan.scanned === 1 ? "conversation" : "conversations"} read` : ""}.
+        {scan.failed.length ? ` ${places(scan.failed)} did not answer.` : ""}
+      </div>
+      <p style={{ margin: "0", fontSize: "14px", color: "var(--muted)" }}>
+        Sales searched with the words it took from your website. If your customers describe the problem differently, tell it what to look for.
+      </p>
+      <div>
+        <button type="button" className="ghost" onClick={onEdit}>
+          Edit what Sales looks for
+        </button>
+      </div>
+    </section>
+  );
+}
+
 function ThreadRow({ t, free, open, onToggle, onPlan, onDecide }: { t: Thread; free: boolean; open: boolean; onToggle: () => void; onPlan: (action: string) => void; onDecide: (t: Thread, action: "replied" | "dismissed", reason?: string, text?: string) => Promise<void> }) {
   const [draft, setDraft] = useState(t.draft ?? "");
   const [copied, setCopied] = useState(false);
@@ -598,7 +642,7 @@ export function AgentSales() {
 
         {tab === "threads" && data ? (
           <>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", margin: "14px 0 10px", flexWrap: "wrap" }}>
+            <div style={{ display: list.length === 0 && data.lastScan?.verdict === "none" ? "none" : "flex", alignItems: "center", gap: "8px", margin: "14px 0 10px", flexWrap: "wrap" }}>
               <span style={{ fontWeight: "600" }}>
                 {worth.length} {worth.length === 1 ? "thread" : "threads"} worth a reply
               </span>
@@ -610,7 +654,8 @@ export function AgentSales() {
               <span className="pill">Score</span>
             </div>
             {live && undrafted > 0 ? <WriteReplies count={undrafted} busy={scanActive(scan) && scan.kind === "sales_reply_drafts"} onPlan={setPlanFor} onStarted={startedScan} /> : null}
-            {list.length === 0 ? <div className="meta">No threads yet. Sales scans the communities your customers use and scores what it finds.</div> : null}
+            {list.length === 0 && data.lastScan?.verdict === "none" ? <NoOneAsked scan={data.lastScan} onEdit={openSettings} /> : null}
+            {list.length === 0 && data.lastScan?.verdict !== "none" ? <div className="meta">No threads yet. Sales scans the communities your customers use and scores what it finds.</div> : null}
             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }} role={list.length ? "list" : undefined} aria-label={list.length ? "Threads" : undefined}>
               {list.map((t) => (
                 <ThreadRow key={t.id} t={t} free={free} open={open === t.id} onToggle={() => setOpen(open === t.id ? null : t.id)} onPlan={setPlanFor} onDecide={decide} />

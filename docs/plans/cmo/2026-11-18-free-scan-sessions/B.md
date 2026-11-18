@@ -32,7 +32,7 @@ Read the plan's Global constraints and shared contract first. Production runs UI
 - `CmoWorkspace.tsx` (v1): pass `action="scan for customers"` when the 402 came from `sales_scan`.
 - Look at it in a browser at 1440px and 390px. Commit `Free scan B2: cards lead with the evidence; replies after a plan` and push.
 
-### - [ ] B3. The fit verdict
+### - [x] B3. The fit verdict
 
 - `lastScan.verdict === "none"` and no cards: a calm empty state, not an error: "No one asked about this in the last
   30 days." then "We searched for:" with `lastScan.queries` as a short list, and the places it looked
