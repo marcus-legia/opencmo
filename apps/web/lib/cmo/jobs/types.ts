@@ -26,8 +26,10 @@ export type CmoJobKind =
   /** Daily core drafts D4: the founder's "Rewrite for <platform>" on a post card (`repurpose_post` in SQL queues it). */
   | "repurpose_post"
   /** Daily core drafts D7: the caption of the founder's own photo post (`photo_post_caption` in SQL queues it). */
-  | "photo_caption";
-export const CMO_JOB_KINDS: CmoJobKind[] = ["plan_week", "post_draft", "sales_scan", "competitor_research", "pull_metrics", "summarize_memory", "review_week", "write_video_brief", "write_caption", "publish_post", "niche_video_research", "distill_ratings", "repurpose_post", "photo_caption"];
+  | "photo_caption"
+  /** Free scan A5: the reply drafts of the cards a free scan saved without one, after the founder pays. */
+  | "sales_reply_drafts";
+export const CMO_JOB_KINDS: CmoJobKind[] = ["plan_week", "post_draft", "sales_scan", "competitor_research", "pull_metrics", "summarize_memory", "review_week", "write_video_brief", "write_caption", "publish_post", "niche_video_research", "distill_ratings", "repurpose_post", "photo_caption", "sales_reply_drafts"];
 
 /** What a weekly goal counts. Only things the product can measure itself. */
 export type GoalMetric = "posts" | "replies" | "views";
@@ -229,6 +231,28 @@ export type SubredditRule = {
   min_account_age_days?: number | null;
   megathread?: boolean;
 };
+/**
+ * Free scan (docs/plans/cmo/2026-11-18-free-scan-plan.md): what a Sales scan returns. `queries` and `scanned` let the
+ * screen say what was searched when nothing was found, so "none" reads as a product-fit answer, not an error.
+ */
+export type SalesScanVerdict = "found" | "none";
+export type SalesScanOutput = {
+  cards: number;
+  skipped: number;
+  dropped: number;
+  refund: boolean;
+  platforms: SalesPlatform[];
+  failed: SalesPlatform[];
+  /** Ran as the account's free scan: no drafts were written. */
+  free: boolean;
+  /** What it searched, shown when nothing was found. */
+  queries: string[];
+  /** Threads read after the filters. */
+  scanned: number;
+  /** "none" when cards === 0. */
+  verdict: SalesScanVerdict;
+};
+
 /** The founder's Sales settings (`sales_settings`). */
 /** The founder's Sales settings; `platforms` are the places Sales may look (at least one, `sales_settings.platforms`). */
 export type SalesSettings = { excluded: string[]; pairs: [string, string][]; platforms: SalesPlatform[] };

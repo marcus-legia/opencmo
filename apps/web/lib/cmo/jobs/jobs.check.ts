@@ -326,7 +326,12 @@ async function main() {
   const empty = mem4.enqueue("sales_scan");
   await drainCmoQueue(mem4.store);
   assert.equal(empty.status, "done", `lượt rỗng vẫn xong (${empty.error})`);
-  assert.deepEqual(empty.output, { cards: 0, refund: true, platforms: ["reddit", "hn", "facebook", "threads"], failed: [] }, "lượt rỗng hoàn credit");
+  // Free scan A1: nothing found still says what it searched, so the screen can show the "no one asked" answer.
+  assert.deepEqual(
+    empty.output,
+    { cards: 0, skipped: 0, dropped: 0, refund: true, platforms: ["reddit", "hn", "facebook", "threads"], failed: [], free: false, queries: ["late payments"], scanned: 0, verdict: "none" },
+    "an empty scan refunds and keeps its searches",
+  );
   assert.equal(empty.steps.at(-1)!.label, "No conversations worth joining today");
 
   // An injected search (the evals' seam) replaces Reddit: only its threads become cards.
@@ -415,7 +420,7 @@ async function main() {
   // The same Threads post under threads.net with a tracking param is the one already seen: nothing new is scored.
   const dup = await scanWith(["threads"], {}, { social: async () => [social("threads", 7, "https://threads.net/@someone/post/C7?xmt=abc")] }, ["https://www.threads.com/@someone/post/C7"]);
   assert.equal(dup.run.status, "done", `dup (${dup.run.error})`);
-  assert.deepEqual(dup.run.output, { cards: 0, refund: true, platforms: ["threads"], failed: [] });
+  assert.deepEqual(dup.run.output, { cards: 0, skipped: 0, dropped: 0, refund: true, platforms: ["threads"], failed: [], free: false, queries: ["late invoice payments"], scanned: 0, verdict: "none" });
   assert.ok(!dup.run.steps.some((s) => s.tool === "score_thread"), "nothing was scored");
   // B3 review: a URL the database would refuse (a group's home page, a Threads link with a trailing slash, a post on
   // another platform's host) is dropped before scoring, so one bad row never loses the run's other cards.

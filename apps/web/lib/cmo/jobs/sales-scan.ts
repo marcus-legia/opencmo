@@ -34,7 +34,7 @@ import { safeForSales } from "../sales/ban-risk";
 import { skillText } from "../skills";
 import { fakeAllowed, LlmError } from "./llm";
 import type { JobContext, JobOutput } from "./runner";
-import { mayMention, toVerdict, type Documents, type Opportunity, type SalesSettings, type ScorePart, type SubredditVerdict } from "./types";
+import { mayMention, toVerdict, type Documents, type Opportunity, type SalesScanOutput, type SalesSettings, type ScorePart, type SubredditVerdict } from "./types";
 
 export const PASS_SCORE = 60;
 const MAX_QUERIES = 8;
@@ -357,7 +357,7 @@ function fakeScores(threads: RedditThread[]): Scored[] {
   }));
 }
 
-export async function salesScan(ctx: JobContext): Promise<JobOutput> {
+export async function salesScan(ctx: JobContext): Promise<SalesScanOutput & JobOutput> {
   const { store, run } = ctx;
   // A brief from the CMO chat or a Reddit item on the calendar (H3): it steers the searches, not the scoring rules.
   const brief = typeof run.input.brief === "string" ? run.input.brief.slice(0, 300) : "";
@@ -420,6 +420,20 @@ export async function salesScan(ctx: JobContext): Promise<JobOutput> {
     });
     return out.queries.map((q) => q.trim().slice(0, 80)).filter(Boolean);
   }, (q) => `${Math.min(q.length, MAX_QUERIES)} searches from your pains`);
+
+  const searched = queries.slice(0, MAX_QUERIES);
+  const output = (scanned: number, o: { cards: number; skipped?: number; dropped?: number }): SalesScanOutput => ({
+    cards: o.cards,
+    skipped: o.skipped ?? 0,
+    dropped: o.dropped ?? 0,
+    refund: o.cards === 0,
+    platforms,
+    failed,
+    free: false,
+    queries: searched,
+    scanned,
+    verdict: o.cards > 0 ? "found" : "none",
+  });
 
   const threads: ScanThread[] = !platforms.includes("reddit") ? [] : await ctx.step("reddit_search", "Searching Reddit", async () => {
     const found: ScanThread[] = [];
@@ -521,7 +535,7 @@ export async function salesScan(ctx: JobContext): Promise<JobOutput> {
 
   if (!scanned.length) {
     await ctx.step("create_card", "No conversations worth joining today", async () => 0);
-    return { cards: 0, refund: true, platforms, failed };
+    return output(0, { cards: 0 });
   }
 
   const ranked = await ctx.step("score_thread", "Scoring each thread", async () => {
@@ -548,7 +562,7 @@ export async function salesScan(ctx: JobContext): Promise<JobOutput> {
 
   if (!ranked.length) {
     await ctx.step("create_card", "No conversations worth joining today", async () => 0);
-    return { cards: 0, refund: true, platforms, failed };
+    return output(scanned.length, { cards: 0 });
   }
 
   // P5 R1: each community's rules, read as data and cached for a week, decide whether the product may be named.
@@ -729,5 +743,5 @@ export async function salesScan(ctx: JobContext): Promise<JobOutput> {
     (n) => `${Math.max(0, n)} ${n === 1 ? "card" : "cards"} in Approvals${skipped.length ? ` · ${skipped.length} skipped by community rules` : ""}`,
   );
   const cards = Math.max(0, saved);
-  return { cards, skipped: skipped.length, dropped: toDraft.length - items.length, refund: cards === 0, platforms, failed };
+  return output(scanned.length, { cards, skipped: skipped.length, dropped: toDraft.length - items.length });
 }

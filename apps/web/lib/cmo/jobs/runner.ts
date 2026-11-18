@@ -91,6 +91,10 @@ export const JOBS: Record<CmoJobKind, Job> = {
   repurpose_post: repurposePost,
   // Daily core drafts D7: only the founder's "Write the caption" on a photo post queues it (SQL `photo_post_caption`).
   photo_caption: photoCaption,
+  // Free scan A5: replaced by the real job; until then SQL refuses the kind, so nothing can queue it.
+  sales_reply_drafts: async () => {
+    throw new Error("Writing the replies is not available yet.");
+  },
 };
 
 /** The run was claimed again by another worker (its lease ran out): stop quietly and write nothing more. */
