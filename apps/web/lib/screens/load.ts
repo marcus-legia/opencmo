@@ -1,7 +1,7 @@
 import "server-only";
 
 import type { SupabaseClient } from "@/lib/api/handler";
-import { loadDigestInput, localClock } from "@/lib/cmo/digest";
+import { DIGEST_DAYS, loadDigestInput, localClock } from "@/lib/cmo/digest";
 import { buildToday } from "@/lib/cmo/today";
 import { loadTodayInput } from "@/lib/cmo/today-input";
 import { CMO_SKILLS } from "@/lib/cmo/skills/index.gen";
@@ -623,6 +623,35 @@ async function settings({ supabase, userId }: LoadContext): Promise<Partial<Sett
     weeklyCreditBudget: async () => (await prof).weekly_credit_budget,
     timezone: async () => (await prof).timezone,
     digestHour: async () => (await prof).digest_hour,
+    // Wave 2 B2: own reads, like autopilot's, so the shared profile read does not depend on this migration.
+    digestDays: async () => {
+      const r = await supabase.from("profiles").select("digest_days").eq("id", userId).maybeSingle<{ digest_days: string | null }>();
+      if (r.error) throw new Error(`profiles: ${r.error.message}`);
+      return DIGEST_DAYS.find((d) => d === r.data?.digest_days) ?? "weekdays";
+    },
+    emailLog: async () => {
+      const r = await supabase.rpc("my_email_log", { p_limit: 30 });
+      if (r.error) throw new Error(`my_email_log: ${r.error.message}`);
+      const count = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? Math.max(0, Math.round(v)) : 0);
+      type Row = { id: string; kind: string; day: string; status: string; subject: string | null; summary: Record<string, unknown> | null; created_at: string; sent_at: string | null };
+      return ((r.data ?? []) as Row[]).flatMap((row): SettingsScreen["emailLog"] => {
+        const kind = (["digest", "weekly", "push", "expiring"] as const).find((k) => k === row.kind);
+        const status = row.status === "sent" || row.status === "skipped" ? row.status : null;
+        if (!kind || !status) return [];
+        const s = row.summary;
+        return [{
+          id: row.id,
+          kind,
+          day: String(row.day).slice(0, 10),
+          status,
+          subject: row.subject ? row.subject.slice(0, 200) : null,
+          summary: s && typeof s === "object"
+            ? { people: count(s.people), followUps: count(s.followUps), posts: count(s.posts), ...(typeof s.note === "string" ? { note: s.note.slice(0, 200) } : {}) }
+            : null,
+          at: iso(row.sent_at ?? row.created_at) ?? new Date(0).toISOString(),
+        }];
+      });
+    },
     // Its own read: `profile()` feeds every screen, and must not fail on a database that has not had this migration.
     autopilot: async () => {
       const r = await supabase.from("profiles").select("autopilot_platforms, autopilot_hours, autopilot_note, autopilot_paused").eq("id", userId).maybeSingle();

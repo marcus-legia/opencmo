@@ -82,10 +82,12 @@ export type Digest = {
   summary: { people: number; followUps: number; posts: number };
 };
 
-export type DigestDays = "weekdays" | "daily" | "monday" | "off";
+export const DIGEST_DAYS = ["weekdays", "daily", "monday", "off"] as const;
+export type DigestDays = (typeof DIGEST_DAYS)[number];
 
 export function digestScheduleLabel(days: DigestDays, hour: number): string {
   const at = `${String(hour).padStart(2, "0")}:00`;
+  if (days === "off") return "never: it is off";
   if (days === "weekdays") return `every weekday at ${at}`;
   if (days === "monday") return `every Monday at ${at}`;
   return `every morning at ${at}`;
@@ -341,11 +343,12 @@ export async function loadDigestInput(
     if (!t) return [];
     return [{ title: t.title.replace(/\s+/g, " ").trim().slice(0, 200), source: sourceOf(t.platform, t.community), replies: o.outcome_replies, url: o.outcome_url || t.url }];
   });
-  // A post's deadline: autopilot's time, or the time its card expires. Whichever comes first leads the line.
+  // A post's deadline: autopilot's time, the time its card expires, or the time it is set to go out. The nearest leads.
   const postCards = cards
     .filter((c) => c.kind === "post" || c.kind === "schedule")
-    .map((c) => ({ c, at: [c.auto_at, c.expires_at].filter((x): x is string => !!x).sort()[0] ?? null }))
-    .sort((a, b) => (a.at ?? "9999").localeCompare(b.at ?? "9999"));
+    // Compared as instants: the database writes "+00:00", not "Z".
+    .map((c) => ({ c, at: [c.auto_at, c.expires_at, c.post_at].filter((x): x is string => !!x).sort((a, b) => Date.parse(a) - Date.parse(b))[0] ?? null }))
+    .sort((a, b) => (a.at ? Date.parse(a.at) : Infinity) - (b.at ? Date.parse(b.at) : Infinity));
   const first = postCards[0];
   const posts: DigestPosts = {
     waiting: postCards.length,
@@ -378,8 +381,8 @@ export async function loadDigestInput(
   };
 }
 
-/** The founder's local hour and date label in their time zone (an unknown zone falls back to UTC). */
-export function localClock(now: Date, timezone: string): { hour: number; dateLabel: string } {
+/** The founder's local hour, weekday (0 Sunday to 6 Saturday) and date label in their time zone (unknown zone: UTC). */
+export function localClock(now: Date, timezone: string): { hour: number; weekday: number; dateLabel: string } {
   const zone = (() => {
     try {
       new Intl.DateTimeFormat("en-GB", { timeZone: timezone });
@@ -389,6 +392,19 @@ export function localClock(now: Date, timezone: string): { hour: number; dateLab
     }
   })();
   const hour = Number(new Intl.DateTimeFormat("en-GB", { timeZone: zone, hour: "2-digit", hourCycle: "h23" }).format(now));
+  const short = new Intl.DateTimeFormat("en-US", { timeZone: zone, weekday: "short" }).format(now);
+  const weekday = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(short);
   const dateLabel = new Intl.DateTimeFormat("en-GB", { timeZone: zone, weekday: "long", day: "numeric", month: "short" }).format(now);
-  return { hour, dateLabel };
+  return { hour, weekday, dateLabel };
 }
+
+/** Whether the morning email may go out on this local weekday. */
+export function digestDayAllowed(days: DigestDays, weekday: number): boolean {
+  if (days === "off") return false;
+  if (days === "weekdays") return weekday >= 1 && weekday <= 5;
+  if (days === "monday") return weekday === 1;
+  return true;
+}
+
+/** What a skipped morning's log row says. */
+export const DIGEST_SKIPPED_NOTE = "Nothing new: no person, follow-up or post due";

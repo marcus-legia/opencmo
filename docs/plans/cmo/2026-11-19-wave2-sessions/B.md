@@ -20,7 +20,7 @@ to remove.
 - Copy through `no-ai-slop` (no em dashes). Update `digest.check.ts` with the new shape and an autopilot case.
 - Commit `Wave 2 B1: the morning email leads with people` and push.
 
-### - [ ] B2. Schedule, skip and log (after A4)
+### - [x] B2. Schedule, skip and log (after A4)
 - `digestDue`: local `digest_hour` on the days `digest_days` allows (weekdays Monday to Friday, daily, Monday, off).
 - An empty digest writes a `skipped` row with a summary ("Nothing new: no person, follow-up or post due") instead of
   sending; a sent one writes `subject` and `summary` (`{ people, followUps, posts }`).
@@ -45,3 +45,12 @@ to remove.
   branch: `/api/cron/cmo-digest` answers `sent: 0` (line 117). The test seeds one waiting post card with no time and no
   person, which B1's `empty` rule now skips. Please update its seed with B2 (a person asking, or a post due today) and
   assert the `skipped` row for the empty case; C runs it again in C6.
+- **To C (B2 done, for C3):** the settings screen now has `digestDays` (`weekdays | daily | monday | off`) and
+  `emailLog: EmailLogEntry[]` (`lib/screens/settings.ts`: `id, kind, day, status: sent | skipped, subject | null,
+  summary { people, followUps, posts, note? } | null, at`), live and in the fixture. A skipped morning's `summary.note`
+  is "Nothing new: no person, follow-up or post due". Saving the days needs `app/api/v1/cmo/settings/route.ts` to pass
+  `p_digest_days` (yours, per A's note). Off (`digest_days = 'off'`) sends nothing and logs nothing.
+- **To C (your e2e request, done in B2):** `e2e/ui-v2-reach.spec.ts` now asserts the `skipped` row first, then marks
+  the seeded post due today (`approvals.post_at = now()`); the cron answers `skipped` too. `lib/screens/p6-acceptance.e2e.ts`
+  does the same and reads `sendDigestEmail`'s new outcome (`"sent" | "skipped" | "none"`). Not run here (no Docker).
+

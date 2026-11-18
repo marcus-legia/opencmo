@@ -103,14 +103,23 @@ test("the morning digest lands in the mail catcher and its link opens the card b
   await admin.from("profiles").update({ timezone: "UTC", digest_hour: hour }).eq("id", user.id);
   await admin.from("email_log").delete().eq("user_id", user.id);
   await admin.from("notify_settings").upsert({ user_id: user.id, email_digest: true });
+  await admin.from("profiles").update({ digest_days: "daily" }).eq("id", user.id);
   // The digest links the first card that waits: cards other specs left waiting for this shared user would come first.
   await admin.from("approvals").update({ status: "cancelled" }).eq("user_id", user.id).eq("status", "waiting");
+  // Wave 2 B2: a morning with nothing new sends nothing and is logged as skipped.
+  const empty = await request.get("/api/cron/cmo-digest", { headers: { authorization: "Bearer e2e-cron-secret" } });
+  expect((await empty.json()).sent, "nothing new, nothing sent").toBe(0);
+  const { data: skippedRows } = await admin.from("email_log").select("status, summary").eq("user_id", user.id).eq("kind", "digest");
+  expect(skippedRows).toEqual([{ status: "skipped", summary: expect.objectContaining({ people: 0, note: expect.stringMatching(/^Nothing new/) }) }]);
+  await admin.from("email_log").delete().eq("user_id", user.id);
   const { data: item, error } = await admin
     .from("content_items")
     .insert({ user_id: user.id, department: "post", platform: "x", day: new Date().toISOString().slice(0, 10), idea: "Digest card", status: "in_review", body: { text: "A digest card: cut by words.", alternates: [] } })
     .select("id")
     .single();
   expect(error).toBeNull();
+  // A post due today makes the morning worth an email.
+  await admin.from("approvals").update({ post_at: new Date().toISOString() }).eq("ref_id", item!.id);
   try {
     const cron = await request.get("/api/cron/cmo-digest", { headers: { authorization: "Bearer e2e-cron-secret" } });
     expect(cron.ok()).toBeTruthy();

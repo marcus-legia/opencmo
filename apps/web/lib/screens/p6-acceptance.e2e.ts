@@ -168,9 +168,12 @@ async function main() {
   // F1: the digest in the local mail catcher, once a day, with the unsubscribe footer.
   const sender = emailSender();
   assert.equal(sender?.name, "local", "OPENCMO_DIGEST_LOCAL_MAIL=1 sends to the local mail catcher");
-  const founder = { id: userId, email, timezone: "UTC", digest_hour: new Date().getUTCHours() };
-  assert.ok(await sendDigestEmail(admin as never, sender!, founder, { appUrl: "http://127.0.0.1:3000", now: new Date() }), "the digest is sent");
-  assert.equal(await sendDigestEmail(admin as never, sender!, founder, { appUrl: "http://127.0.0.1:3000", now: new Date() }), false, "once a day");
+  const founder = { id: userId, email, timezone: "UTC", digest_hour: new Date().getUTCHours(), digest_days: "daily" as const };
+  // Wave 2 B2: a morning with nothing new is not sent, so one waiting post is due today (going out now).
+  const firstWaiting = ok(await admin.from("approvals").select("id").eq("user_id", userId).eq("status", "waiting").eq("kind", "post").limit(1).single(), "a waiting post") as { id: string };
+  ok(await admin.from("approvals").update({ post_at: new Date().toISOString() }).eq("id", firstWaiting.id).select("id"), "due today");
+  assert.equal(await sendDigestEmail(admin as never, sender!, founder, { appUrl: "http://127.0.0.1:3000", now: new Date() }), "sent", "the digest is sent");
+  assert.equal(await sendDigestEmail(admin as never, sender!, founder, { appUrl: "http://127.0.0.1:3000", now: new Date() }), "none", "once a day");
   const mail = (process.env.OPENCMO_LOCAL_MAIL_URL ?? "http://127.0.0.1:54324").replace(/\/$/, "");
   const list = (await (await fetch(`${mail}/api/v1/search?query=${encodeURIComponent(`to:${email}`)}`)).json()) as { messages: { ID: string; Subject: string }[] };
   assert.equal(list.messages.length, 1);

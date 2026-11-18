@@ -4,7 +4,8 @@
 
 import { z } from "zod";
 
-import { AccountSchema, CmoStateSchema } from "./common";
+import { DIGEST_DAYS } from "../cmo/digest";
+import { AccountSchema, CmoStateSchema, iso } from "./common";
 
 /** Bounds of the weekly credit budget; `save_cmo_settings` enforces the same (brain plan W1-1). */
 export const BUDGET_MIN = 0;
@@ -24,6 +25,22 @@ export const AutopilotSchema = z.object({
 });
 export type Autopilot = z.infer<typeof AutopilotSchema>;
 
+export const EmailLogEntrySchema = z.object({
+  id: z.string(),
+  kind: z.enum(["digest", "weekly", "push", "expiring"]),
+  /** The founder's local date the email was for. */
+  day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  status: z.enum(["sent", "skipped"]),
+  /** Null on a skipped morning. */
+  subject: z.string().max(200).nullable(),
+  /** How many people, follow-ups and waiting posts the email named; `note` says why a morning was skipped. */
+  summary: z
+    .object({ people: z.number().int().min(0), followUps: z.number().int().min(0), posts: z.number().int().min(0), note: z.string().max(200).optional() })
+    .nullable(),
+  at: iso,
+});
+export type EmailLogEntry = z.infer<typeof EmailLogEntrySchema>;
+
 export const SettingsScreenSchema = z.object({
   accounts: z.array(AccountSchema),
   cmo: CmoStateSchema,
@@ -32,6 +49,10 @@ export const SettingsScreenSchema = z.object({
   timezone: z.string().max(64),
   /** Local hour of the morning digest, 0–23; null = off. */
   digestHour: z.number().int().min(0).max(23).nullable(),
+  /** Which days the morning email comes (`profiles.digest_days`). */
+  digestDays: z.enum(DIGEST_DAYS),
+  /** Emails sent and mornings skipped in the last 14 days, newest first (`my_email_log`). */
+  emailLog: z.array(EmailLogEntrySchema).max(30),
   plan: z.object({ name: z.string().max(40), credits: z.number().int().nullable() }),
   autopilot: AutopilotSchema,
 });

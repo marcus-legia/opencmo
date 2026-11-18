@@ -72,7 +72,7 @@ assert.equal(nextCheckAt(NOW).toISOString(), "2026-10-30T00:05:00.000Z");
 assert.equal(nextCheckAt(new Date("2026-10-29T00:01:00Z")).toISOString(), "2026-10-29T00:05:00.000Z");
 
 // The digest itself is checked in `lib/cmo/digest.check.ts`; its clock here.
-assert.deepEqual(localClock(new Date("2026-10-29T00:30:00Z"), "Asia/Ho_Chi_Minh"), { hour: 7, dateLabel: "Thursday 29 Oct" });
+assert.deepEqual(localClock(new Date("2026-10-29T00:30:00Z"), "Asia/Ho_Chi_Minh"), { hour: 7, weekday: 4, dateLabel: "Thursday 29 Oct" });
 assert.equal(localClock(new Date("2026-10-29T00:30:00Z"), "Not/AZone").hour, 0, "an unknown zone falls back to UTC");
 
 // Paging: every row, pages never overlap (review item 7).

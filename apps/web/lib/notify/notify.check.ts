@@ -57,10 +57,16 @@ async function main() {
   assert.ok(footer.text.includes(url) && footer.html.includes("Stop these emails"));
 
   // The digest goes out at its hour, or up to two hours later when today's has not (a failed send is retried then).
-  assert.ok(digestDue(8, 8) && digestDue(9, 8) && digestDue(10, 8) && !digestDue(11, 8) && !digestDue(7, 8));
-  assert.ok(digestDue(23, 23) && !digestDue(0, 23) && !digestDue(1, 23), "the catch-up stops at midnight (the claim is per local date)");
-  assert.ok(digestDue(22, 22) && digestDue(23, 22) && !digestDue(0, 22));
-  assert.ok(!digestDue(8, null), "no digest hour, no digest");
+  const due = (hour: number, digest_hour: number | null, digest_days: "weekdays" | "daily" | "monday" | "off" = "daily", weekday = 3) =>
+    digestDue({ hour, weekday }, { digest_hour, digest_days });
+  assert.ok(due(8, 8) && due(9, 8) && due(10, 8) && !due(11, 8) && !due(7, 8));
+  assert.ok(due(23, 23) && !due(0, 23) && !due(1, 23), "the catch-up stops at midnight (the claim is per local date)");
+  assert.ok(due(22, 22) && due(23, 22) && !due(0, 22));
+  assert.ok(!due(8, null), "no digest hour, no digest");
+  // Wave 2 B2: the days the founder picked, by local weekday (0 Sunday).
+  assert.ok(due(8, 8, "weekdays", 1) && due(8, 8, "weekdays", 5) && !due(8, 8, "weekdays", 6) && !due(8, 8, "weekdays", 0), "weekdays: Monday to Friday");
+  assert.ok(due(8, 8, "monday", 1) && !due(8, 8, "monday", 2), "Mondays only");
+  assert.ok(due(8, 8, "daily", 0) && !due(8, 8, "off", 1), "every day, or never");
 
   // A failure after the claim (here while building the email) records the claim as failed, so it never stays
   // `claimed` and blocks that card's email for good.
