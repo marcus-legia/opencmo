@@ -6,7 +6,7 @@
  * leads, Post comes with it, video is a side tool. Every claim here must be true of the product today (CLAUDE.md
  * "Don't ship coming soon"); Sales reads exactly the platforms in `lib/cmo/social/conversations.ts` SALES_PLATFORMS.
  */
-import { DEPT_ICON, LUCIDE, STEP_ICON, type SocialKey } from "./icons";
+import { LUCIDE, STEP_ICON, type SocialKey } from "./icons";
 
 /**
  * The name the landing page shows. Only the landing page uses it for now: the site-wide `SITE_NAME` (legal pages,
@@ -96,8 +96,7 @@ export const INCLUDED = [
   { icon: STEP_ICON.score, title: "Scored threads", body: "Each with the quote that shows why" },
   { icon: STEP_ICON.reach, title: "Drafted replies", body: "From your business plan, checked against each community's rules" },
   { icon: STEP_ICON.post, title: "A week of posts", body: "For X, LinkedIn and Threads, approved in one go" },
-  { icon: DEPT_ICON.video, title: "Video editor", body: "Clips from videos you record" },
-  { icon: LUCIDE.wand, title: "Monthly credits", body: "For the AI work" },
+    { icon: LUCIDE.wand, title: "Fair use, no per-click prices", body: "One allowance you can see in Settings" },
 ];
 
 export function faqs(p: Prices | null): { q: string; a: string }[] {
@@ -117,54 +116,11 @@ export function faqs(p: Prices | null): { q: string; a: string }[] {
 export type MenuItem = { title: string; sub: string; href: string; social?: SocialKey; icon?: string };
 export type Menu = { id: string; label: string; width: number; cols: 1 | 2; items?: MenuItem[]; href?: string };
 
-const mi = (title: string, sub: string, href: string, o: { social?: SocialKey; icon?: string }): MenuItem => ({ title, sub, href, ...o });
-
 export const MENUS: Menu[] = [
-  {
-    id: "product", label: "Product", width: 380, cols: 1,
-    items: [
-      mi("AI CMO", "Turns one goal into a weekly plan", "/ai-cmo", { icon: DEPT_ICON.cmo }),
-      mi("AI post writer", "Posts for X, LinkedIn, Threads and more", "/ai-post-writer", { icon: DEPT_ICON.post }),
-      mi("AI video editor", "Finish your own videos: captions, cuts, voice-over", "/ai-video-editor", { icon: DEPT_ICON.video }),
-      mi("Customer conversations", "Find people asking for what you built", "/find-customers", { icon: DEPT_ICON.sales }),
-      mi("Brand kit", "Your colors, fonts and captions", "/brand-kit", { icon: LUCIDE.palette }),
-    ],
-  },
-  {
-    id: "solutions", label: "Solutions", width: 360, cols: 1,
-    items: [
-      mi("Solo founders", "Marketing without hiring", "/for/solo-founders", { icon: LUCIDE.user }),
-      mi("Indie hackers", "Launch and grow in public", "/for/indie-hackers", { icon: LUCIDE.rocket }),
-      mi("SaaS startups", "Content from what you ship", "/for/saas", { icon: LUCIDE.layers }),
-      mi("Agencies", "One team for every client", "/for/agencies", { icon: LUCIDE.briefcase }),
-      mi("Creators & coaches", "Plan, write and finish every recording", "/for/creators", { icon: LUCIDE.mic }),
-    ],
-  },
-  {
-    id: "channels", label: "Channels", width: 560, cols: 2,
-    items: ([
-      ["tiktok", "TikTok videos", "/channels/tiktok"],
-      ["youtubeshorts", "YouTube Shorts", "/channels/youtube-shorts"],
-      ["instagram", "Instagram Reels", "/channels/instagram-reels"],
-      ["x", "X posts", "/channels/x"],
-      ["linkedin", "LinkedIn posts", "/channels/linkedin"],
-      ["threads", "Threads posts", "/channels/threads"],
-      ["facebook", "Facebook pages & groups", "/channels/facebook"],
-      ["reddit", "Reddit marketing", "/channels/reddit"],
-    ] as const).map(([k, t, href]) => mi(t, "", href, { social: k })),
-  },
-  {
-    id: "resources", label: "Resources", width: 380, cols: 1,
-    items: [
-      mi("Blog", "Founder-led marketing, week by week", "/blog", { icon: LUCIDE.book }),
-      mi("Guides", "Playbooks for each channel", "/guides", { icon: LUCIDE.compass }),
-      mi("Free tools", "Hook, caption and post generators", "/tools", { icon: LUCIDE.wand }),
-      mi("Compare", "Ferreto vs Buffer, Hootsuite", "/compare", { icon: LUCIDE.scale }),
-      mi("Changelog", "What shipped this month", "/changelog", { icon: LUCIDE.history }),
-    ],
-  },
+  { id: "how", label: "How it works", width: 0, cols: 1, href: "#departments" },
   { id: "pricing", label: "Pricing", width: 0, cols: 1, href: "#pricing" },
   { id: "faq", label: "FAQ", width: 0, cols: 1, href: "#faq" },
+  { id: "blog", label: "Blog", width: 0, cols: 1, href: "/blog" },
 ];
 
 export type FootLink = { t: string; href: string; social?: SocialKey };
@@ -172,10 +128,6 @@ export type FootLink = { t: string; href: string; social?: SocialKey };
 const fl = (t: string, href: string, social?: SocialKey): FootLink => ({ t, href, social });
 
 export const FOOTER_COLUMNS: { title: string; links: FootLink[] }[] = [
-  { title: "Product", links: [fl("AI CMO", "/ai-cmo"), fl("AI video editor", "/ai-video-editor"), fl("AI post writer", "/ai-post-writer"), fl("Customer conversations", "/find-customers"), fl("Brand kit", "/brand-kit"), fl("Pricing", "#pricing")] },
-  { title: "Solutions", links: [fl("Solo founders", "/for/solo-founders"), fl("Indie hackers", "/for/indie-hackers"), fl("SaaS startups", "/for/saas"), fl("Agencies", "/for/agencies"), fl("Creators & coaches", "/for/creators")] },
-  { title: "Channels", links: [fl("TikTok videos", "/channels/tiktok"), fl("YouTube Shorts", "/channels/youtube-shorts"), fl("Instagram Reels", "/channels/instagram-reels"), fl("LinkedIn posts", "/channels/linkedin"), fl("Reddit marketing", "/channels/reddit"), fl("X posts", "/channels/x")] },
-  { title: "Free tools", links: [fl("Video hook generator", "/tools/hook-generator"), fl("Caption generator", "/tools/caption-generator"), fl("LinkedIn post generator", "/tools/linkedin-post-generator"), fl("X thread writer", "/tools/x-thread-writer"), fl("Reddit thread finder", "/tools/reddit-thread-finder")] },
-  { title: "Resources", links: [fl("Blog", "/blog"), fl("Guides", "/guides"), fl("Ferreto vs Buffer", "/compare/buffer"), fl("Ferreto vs Hootsuite", "/compare/hootsuite"), fl("Changelog", "/changelog")] },
-  { title: "Connect", links: [fl("X", "#", "x"), fl("LinkedIn", "#", "linkedin"), fl("YouTube", "#", "youtube"), fl("TikTok", "#", "tiktok"), fl("Reddit", "#", "reddit")] },
+  { title: "Product", links: [fl("How it works", "#departments"), fl("Pricing", "#pricing"), fl("FAQ", "#faq")] },
+  { title: "Resources", links: [fl("Blog", "/blog")] },
 ];

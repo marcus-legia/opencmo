@@ -93,7 +93,8 @@ export function LandingNav({ user }: { user: boolean }) {
                     else openMenu(m, e.currentTarget);
                   } else {
                     setOpen(null);
-                    onAnchorClick(m.id)(e);
+                    // An in-page anchor scrolls; a page link (the blog) navigates as a normal link.
+                    if (m.href?.startsWith("#")) onAnchorClick(m.href.slice(1))(e);
                   }
                 }}
               >
