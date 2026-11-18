@@ -143,6 +143,8 @@ export type QueuedRun = {
   kind: CmoJobKind;
   input: Record<string, unknown>;
   attempt: number;
+  /** What the run holds (`cmo_runs.credits`); 0 for a free run. Unset in older stores: not free. */
+  credits?: number;
 };
 
 export type ItemStatus = "planned" | "drafting" | "in_review" | "approved" | "published" | "skipped" | "failed";
@@ -313,6 +315,8 @@ export interface CmoStore {
   subredditRule(subreddit: string): Promise<SubredditRule | null>;
   saveSubredditRule(rule: Omit<SubredditRule, "read_at">): Promise<void>;
   salesSettings(userId: string): Promise<SalesSettings>;
+  /** The account has a plan or credits left (SQL `cmo_paid`): a free scan of an unpaid account writes no drafts. */
+  paid(userId: string): Promise<boolean>;
   /** Product mentions in the founder's last ten posted replies (SQL `sales_mention_count_for`). */
   recentMentions(userId: string): Promise<number>;
   /** Drafts already handed out that may name the product and still wait on the founder: they count toward the rule. */

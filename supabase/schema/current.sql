@@ -4041,7 +4041,7 @@ CREATE TABLE public.opportunities (
     CONSTRAINT opportunities_min_karma_check CHECK (((min_karma >= 0) AND (min_karma <= 1000000))),
     CONSTRAINT opportunities_platform_check CHECK ((platform = ANY (ARRAY['reddit'::text, 'hn'::text, 'facebook'::text, 'threads'::text]))),
     CONSTRAINT opportunities_priority_check CHECK ((priority = ANY (ARRAY['high'::text, 'medium'::text, 'low'::text]))),
-    CONSTRAINT opportunities_reply_check CHECK (((char_length(reply) >= 1) AND (char_length(reply) <= 3000))),
+    CONSTRAINT opportunities_reply_check CHECK ((char_length(reply) <= 3000)),
     CONSTRAINT opportunities_reply_or_skip CHECK (((reply IS NOT NULL) OR (rule = 'skip'::text))),
     CONSTRAINT opportunities_rule_check CHECK ((rule = ANY (ARRAY['safe'::text, 'requires_disclosure'::text, 'no_product_mention'::text, 'not_verified'::text, 'skip'::text, 'mention_ok'::text, 'help_only'::text]))),
     CONSTRAINT opportunities_rule_why_check CHECK ((char_length(rule_why) <= 200)),
@@ -5923,6 +5923,10 @@ declare
   v_rule text;
   v_karma integer;
   v_age integer;
+  -- The account's free scan (priced 0, 20270131010000) saves its cards without a draft: '' means not drafted yet.
+  v_free boolean := exists (
+    select 1 from public.cmo_runs r where r.id = p_run and r.user_id = p_user and r.kind = 'sales_scan' and r.credits = 0
+  );
 begin
   if p_items is null or jsonb_typeof(p_items) <> 'array' or jsonb_array_length(p_items) > 10 then
     raise exception 'These conversations are not valid.' using errcode = '22023';
@@ -5938,7 +5942,7 @@ begin
       when 'help_only' then 'no_product_mention'
       else case when v_item->>'rule' in ('safe', 'requires_disclosure', 'no_product_mention', 'not_verified', 'skip') then v_item->>'rule' end
     end;
-    if v_rule is distinct from 'skip' and coalesce(v_item->>'reply', '') = '' then
+    if v_rule is distinct from 'skip' and coalesce(v_item->>'reply', '') = '' and not v_free then
       continue;
     end if;
     if coalesce(v_item->>'platform', 'reddit') not in ('reddit', 'hn', 'facebook', 'threads') then
@@ -5958,7 +5962,7 @@ begin
       left(coalesce(v_item->>'author', ''), 100), left(coalesce(v_item->>'snippet', ''), 1200),
       nullif(v_item->>'posted_at', '')::timestamptz, greatest(0, coalesce((v_item->>'comments')::integer, 0)),
       v_score, coalesce(v_item->'score_parts', '[]'::jsonb),
-      case when v_rule = 'skip' then null else left(v_item->>'reply', 3000) end,
+      case when v_rule = 'skip' then null else left(coalesce(v_item->>'reply', ''), 3000) end,
       case when v_score >= 85 then 'high' when v_score >= 70 then 'medium' else 'low' end,
       v_gen, v_rule, left(nullif(trim(coalesce(v_item->>'rule_why', '')), ''), 200),
       case when v_karma between 0 and 1000000 then v_karma end,

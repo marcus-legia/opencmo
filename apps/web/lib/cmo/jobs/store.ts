@@ -215,6 +215,7 @@ export function supabaseStore(admin: BaseClient): CmoStore {
       if (error) throw new Error(`opportunities: ${error.message}`);
       return new Set(((data ?? []) as { url: string }[]).map((r) => r.url));
     },
+    paid: (userId) => rpc<boolean>("cmo_paid", { p_user: userId }),
     saveOpportunities: (userId, runId, items) => rpc<number>("cmo_save_opportunities", { p_user: userId, p_run: runId, p_items: items }),
     async subredditRule(subreddit) {
       const { data, error } = await admin

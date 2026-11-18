@@ -31,6 +31,8 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
   const rules = new Map<string, SubredditRule>();
   const salesSettings: SalesSettings = { excluded: [], pairs: [], platforms: [...SALES_PLATFORMS] };
   const mentions = { used: 0 };
+  /** The account's plan (`cmo_paid`); checks flip it to run a free scan. */
+  const account = { paid: true };
   const insights: CompetitorInsight[] = [];
   const niche: NicheVideoInsight[] = [];
   const metrics: MetricRow[] = [];
@@ -54,7 +56,7 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
       if (!run) return null;
       run.status = "running";
       run.attempt += 1;
-      return { id: run.id, user_id: run.user_id, kind: run.kind, input: run.input, attempt: run.attempt };
+      return { id: run.id, user_id: run.user_id, kind: run.kind, input: run.input, attempt: run.attempt, ...(run.credits !== undefined ? { credits: run.credits } : {}) };
     },
     async step(run, steps) {
       const r = runs.find((x) => x.id === run.id)!;
@@ -163,11 +165,14 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
       rules.set(rule.subreddit.toLowerCase(), { ...rule, subreddit: rule.subreddit.toLowerCase(), read_at: new Date().toISOString() });
     },
     salesSettings: async () => salesSettings,
+    paid: async () => account.paid,
     recentMentions: async () => mentions.used,
     // Saved threads here are never decided, so every mention draft still waits.
     waitingMentions: async () => opps.filter((o) => o.rule === "safe" || o.rule === "requires_disclosure").length,
-    async saveOpportunities(_u, _r, list) {
-      const fresh = list.filter((o) => !opps.some((x) => x.url === o.url));
+    async saveOpportunities(_u, runId, list) {
+      // As `cmo_save_opportunities`: a card with no draft is kept only by the account's free scan (priced 0).
+      const free = runs.some((r) => r.id === runId && r.kind === "sales_scan" && r.credits === 0);
+      const fresh = list.filter((o) => !opps.some((x) => x.url === o.url) && (o.rule === "skip" || o.reply.length > 0 || free));
       opps.push(...fresh);
       return fresh.length;
     },
@@ -214,10 +219,10 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
       return true;
     },
   };
-  const enqueue = (kind: QueuedRun["kind"], input: Record<string, unknown> = {}) => {
-    const run: RunState = { id: id(), user_id: "u1", kind, input, attempt: 0, status: "queued", steps: [], error: null, output: null };
+  const enqueue = (kind: QueuedRun["kind"], input: Record<string, unknown> = {}, credits?: number) => {
+    const run: RunState = { id: id(), user_id: "u1", kind, input, attempt: 0, status: "queued", steps: [], error: null, output: null, ...(credits !== undefined ? { credits } : {}) };
     runs.push(run);
     return run;
   };
-  return { store, posting, runs, items, opps, rules, salesSettings, mentions, insights, niche, metrics, zernio, replies, lessons, goals, results, enqueue, voice, videos, captions, variants, photoCaptions, ratings, ratingRules };
+  return { store, posting, runs, items, opps, rules, salesSettings, mentions, account, insights, niche, metrics, zernio, replies, lessons, goals, results, enqueue, voice, videos, captions, variants, photoCaptions, ratings, ratingRules };
 }

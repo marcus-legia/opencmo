@@ -361,7 +361,7 @@ export async function salesScan(ctx: JobContext): Promise<SalesScanOutput & JobO
   const { store, run } = ctx;
   // A brief from the CMO chat or a Reddit item on the calendar (H3): it steers the searches, not the scoring rules.
   const brief = typeof run.input.brief === "string" ? run.input.brief.slice(0, 300) : "";
-  const { docs, memories, seen, settings, mentionsUsed, mentionsWaiting = 0, voice } = await ctx.step(
+  const { docs, memories, seen, settings, mentionsUsed, mentionsWaiting = 0, voice, paid = true } = await ctx.step(
     "read_doc",
     "Read your product and strategy",
     async () => ({
@@ -373,6 +373,8 @@ export async function salesScan(ctx: JobContext): Promise<SalesScanOutput & JobO
       settings: await store.salesSettings(run.user_id),
       mentionsUsed: await store.recentMentions(run.user_id),
       mentionsWaiting: await store.waitingMentions(run.user_id),
+      // Free scan A3: read once here, so a retried run decides the same way.
+      paid: await store.paid(run.user_id),
       voice: voiceBlock(
         (await store.voiceNotes(run.user_id, 5))
           .filter((n) => safeForSales(n.body))
@@ -382,6 +384,10 @@ export async function salesScan(ctx: JobContext): Promise<SalesScanOutput & JobO
   );
 
   // Nowhere to look is the founder's switch, not a failure to read: say which switch, before any search is paid for.
+  // The account's free scan (free scan plan, A3): the run is priced 0 and the account has no plan or credits. It
+  // finds, scores and reads the rules; the replies wait for `sales_reply_drafts` after paying. Read from the run and
+  // the account, never from `input`, which the founder can write.
+  const free = run.credits === 0 && !paid;
   const platforms = scanPlatforms(run.input, settings);
   if (!platforms.length) throw new LlmError(NOWHERE);
   const failed: SalesPlatform[] = [];
@@ -429,7 +435,7 @@ export async function salesScan(ctx: JobContext): Promise<SalesScanOutput & JobO
     refund: o.cards === 0,
     platforms,
     failed,
-    free: false,
+    free,
     queries: searched,
     scanned,
     verdict: o.cards > 0 ? "found" : "none",
@@ -664,7 +670,7 @@ export async function salesScan(ctx: JobContext): Promise<SalesScanOutput & JobO
   const toDraft = planned.filter((p) => p.rule !== "skip");
 
   let answered: string | null = null;
-  const replies = !toDraft.length ? [] : await ctx.step("draft_reply", `Drafting ${toDraft.length} replies`, async () => {
+  const replies = free || !toDraft.length ? [] : await ctx.step("draft_reply", `Drafting ${toDraft.length} replies`, async () => {
     const avoid = avoidList(docs);
     return (
       await ctx.think({
@@ -727,14 +733,15 @@ export async function salesScan(ctx: JobContext): Promise<SalesScanOutput & JobO
       score: r.result.score,
       score_parts: r.result.parts,
       reply: (replyFor.get(i) ?? "").slice(0, 3000),
-      gen,
+      ...(free ? {} : { gen }),
       rule: r.rule,
       rule_why: r.why.slice(0, 200),
       ...(r.needs.minKarma ? { min_karma: r.needs.minKarma } : {}),
       ...(r.needs.minAccountAgeDays ? { min_account_age_days: r.needs.minAccountAgeDays } : {}),
       ...(r.thread.platform !== "reddit" ? { platform: r.thread.platform } : {}),
     }))
-    .filter((o) => o.reply.length > 0);
+    // A free scan keeps every card undrafted (reply ''); a paid one drops a card whose draft failed its checks.
+    .filter((o) => free || o.reply.length > 0);
 
   const saved = await ctx.step(
     "create_card",
