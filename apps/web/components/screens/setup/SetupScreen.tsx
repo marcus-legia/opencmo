@@ -7,7 +7,7 @@ import { PlanSheet, isPlanRequired } from "@/components/billing/PlanSheet";
 import { api, jsonBody } from "@/components/clipping/api";
 import { Icon } from "@/components/icons";
 import { DOCUMENT_KINDS } from "@/lib/cmo/documents";
-import { setupFinished, setupSteps, type OnboardingStatus } from "@/lib/cmo/onboard-status";
+import { setupDestination, setupFinished, setupSteps, type OnboardingStatus } from "@/lib/cmo/onboard-status";
 import type { CmoState } from "@/lib/cmo/state";
 
 import { SetupQuestions } from "./SetupQuestions";
@@ -16,9 +16,10 @@ const POLL_MS = 2_000;
 
 /**
  * Setup (S13): the website, then the work itself (CMO review 3, 3.2). The first run is free (3.1): reading the site
- * writes the four documents, then the first week's plan and drafts start at once (`lib/cmo/onboard.ts`). Setup shows
- * each real step as it ends (the run's `steps`, then the plan and draft runs, read every 2 s) and asks three optional
- * questions meanwhile. When the drafts are done it goes to the Dashboard, where Today opens with the strategy.
+ * writes the four documents, then the free Sales scan and the first week's plan and drafts start at once
+ * (`lib/cmo/onboard.ts`, free-scan plan). Setup shows each real step as it ends (the run's `steps`, then the scan, plan
+ * and draft runs, read every 2 s) and asks three optional questions meanwhile. It ends on Sales while the scan runs or
+ * once it found people (`setupDestination`), on the Dashboard otherwise. A `?site=` from the landing starts at once.
  *
  * Everything else is asked for later, where a task needs it: an account is connected when the first post is
  * scheduled, the Brand Kit when the first slideshow is built, and the goal comes on the week's plan card.
@@ -37,6 +38,9 @@ export function SetupScreen() {
   // The run that was there before this page started one (a typo's failed run): until the new run shows up, the poll
   // must not read the old one's end as this one's.
   const previousRun = useRef<string | null>(null);
+  // `?site=` from the landing starts reading once per page load, and only for an account that never onboarded: a reload
+  // after a failed run shows the form instead of spending the one retry (`start_cmo_run` refuses a second running one).
+  const autoStarted = useRef(false);
 
   const read = useCallback(async () => {
     const next = await api<OnboardingStatus>("/cmo/onboarding");
@@ -76,7 +80,7 @@ export function SetupScreen() {
           setPhase("form");
           return;
         }
-        if (setupFinished(next, endedAt.current ? Date.now() - endedAt.current : 0)) router.push("/app");
+        if (setupFinished(next, endedAt.current ? Date.now() - endedAt.current : 0)) router.push(setupDestination(next));
       } catch {
         // A missed read is retried on the next tick.
       }
@@ -105,14 +109,23 @@ export function SetupScreen() {
   }
 
   const steps = status ? setupSteps(status) : [];
-  const site = params.get("site")?.slice(0, 300) ?? "";
+  const site = params.get("site")?.trim().slice(0, 300) ?? "";
+
+  useEffect(() => {
+    if (phase !== "form" || !site || !status || status.run !== null || autoStarted.current) return;
+    autoStarted.current = true;
+    void start(site);
+    // `start` is recreated each render; the ref is what keeps this to one call.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, site, status]);
   const doneCount = steps.filter((x) => x.state === "done").length;
-  // The real order (cmo-review-3): the website, the documents and first week the CMO writes from it, then the feed.
-  // A plan is asked for on the first decision, an account when the first post is scheduled: neither is a Setup step.
+  // The real order (free-scan plan): the website, the documents the CMO writes from it, then the first people asking.
+  // A plan is asked for on the first reply or post, an account when the first post is scheduled: neither is a Setup step.
+  const scanStarted = status?.scan != null;
   const stepper = [
     { n: 1, label: "Website", cur: phase !== "working", done: phase === "working" },
-    { n: 2, label: "What it learned", cur: phase === "working", done: false },
-    { n: 3, label: "First week", cur: false, done: false },
+    { n: 2, label: "What it learned", cur: phase === "working" && !scanStarted, done: phase === "working" && scanStarted },
+    { n: 3, label: "First people", cur: phase === "working" && scanStarted, done: false },
   ];
 
   return (
@@ -149,10 +162,10 @@ export function SetupScreen() {
           <div style={{ display: "flex", flexWrap: "wrap", gap: "32px", alignItems: "flex-start" }}>
             <div style={{ flex: "1 1 420px", minWidth: "0" }}>
               <div className="meta" style={{ marginBottom: "10px" }}>
-                Step 2 of 3{status?.suggestedHandle ? ` · @${status.suggestedHandle}` : ""}
+                Step {scanStarted ? 3 : 2} of 3{status?.suggestedHandle ? ` · @${status.suggestedHandle}` : ""}
               </div>
-              <h1>Your CMO is reading your website.</h1>
-              <p className="lead">It writes the documents every agent works from, then plans your first week and drafts your first posts. Nothing is posted: every draft waits for your approval.</p>
+              <h1>{scanStarted ? "Sales is looking for people who need you." : "Your CMO is reading your website."}</h1>
+              <p className="lead">It writes the documents every agent works from, then looks for people describing the problem you solve, in their own words. Your first week of posts comes after. Nothing is posted: every draft waits for your approval.</p>
               {status ? (
                 <div className="card v2" style={{ marginTop: "24px" }}>
                   <SetupQuestions status={status} />
@@ -161,7 +174,7 @@ export function SetupScreen() {
             </div>
             <div className="card" style={{ flex: "1 1 320px", maxWidth: "400px" }} data-testid="setup-progress">
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "8px" }}>
-                <span style={{ fontWeight: "600" }}>Your documents</span>
+                <span style={{ fontWeight: "600" }}>Your first run</span>
                 <span className="meta">
                   {doneCount} of {steps.length}
                 </span>
@@ -183,7 +196,7 @@ export function SetupScreen() {
                       ) : null}
                     </span>
                     <span style={{ flex: "1", color: step.state === "waiting" ? "var(--muted)" : undefined }}>{step.label}</span>
-                    <span className="meta">{step.state === "done" ? "done" : step.state === "running" ? "writing" : step.state === "failed" ? "did not finish" : "next"}</span>
+                    <span className="meta">{step.state === "done" ? "done" : step.state === "running" ? (step.id === "scan" ? "looking" : "writing") : step.state === "failed" ? "did not finish" : "next"}</span>
                   </div>
                 ))}
               </div>
@@ -251,11 +264,11 @@ function WebsiteStep({ initial, error, onStart }: { initial: string; error: stri
         </div>
         <div className="task">
           <span className="dot d-wait mono" style={{ fontSize: "12px" }}>2</span>
-          <span style={{ flex: "1" }}>Writer plans your first week and drafts your first posts. This first run is free.</span>
+          <span style={{ flex: "1" }}>Sales finds people who describe the problem you solve and shows you their words. This first scan is free.</span>
         </div>
         <div className="task">
           <span className="dot d-wait mono" style={{ fontSize: "12px" }}>3</span>
-          <span style={{ flex: "1" }}>You read them in your feed. To approve and post, you pick a plan.</span>
+          <span style={{ flex: "1" }}>Writer plans your week and drafts your first posts. To reply and post, you pick a plan.</span>
         </div>
       </div>
     </div>

@@ -41,7 +41,7 @@ Read the plan's Global constraints and shared contract first. Production runs UI
 - Copy goes through no-ai-slop: no em dashes, no hype.
 - Commit `Free scan B3: say plainly when no one is asking` and push.
 
-### - [ ] B4. Setup leads to Sales (after A4)
+### - [x] B4. Setup leads to Sales (after A4)
 
 - Setup's steps: "Website / What it learned / First people" (`SetupScreen.tsx:113-115`); "What happens next" names the
   scan first (finding people who describe the problem, with their words), then the week's posts.

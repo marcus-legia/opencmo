@@ -30,7 +30,7 @@ const stepsOf = (value: unknown): NonNullable<OnboardingStatus["run"]>["steps"] 
 
 /**
  * What Setup polls every 2 s while onboarding runs (CMO review 3, 3.2): the latest onboarding run with its steps, then
- * the plan and draft runs started after it, and the answers already given. Read under RLS.
+ * the scan, plan and draft runs started after it, and the answers already given. Read under RLS.
  */
 export const GET = withApi({}, async ({ supabase, user }) => {
   const [{ data: onboard, error }, { data: profile }, { data: product }] = await Promise.all([
@@ -41,23 +41,31 @@ export const GET = withApi({}, async ({ supabase, user }) => {
   if (error) throw apiErrorFromPostgrest(error);
   let plan: RunState | null = null;
   let draft: RunState | null = null;
+  let scan: RunState | null = null;
+  let scanCards: number | null = null;
   if (onboard) {
     const { data: after } = await supabase
       .from("cmo_runs")
-      .select("kind, status, created_at")
-      .in("kind", ["plan_week", "post_draft"])
+      .select("kind, status, output, created_at")
+      .in("kind", ["plan_week", "post_draft", "sales_scan"])
       .gte("created_at", onboard.created_at)
       .order("created_at", { ascending: true })
       .limit(10);
-    const rows = (after ?? []) as { kind: string; status: RunState }[];
+    const rows = (after ?? []) as { kind: string; status: RunState; output: { cards?: unknown } | null }[];
     plan = rows.find((row) => row.kind === "plan_week")?.status ?? null;
     draft = rows.find((row) => row.kind === "post_draft")?.status ?? null;
+    // The free scan onboarding queued (free-scan plan, A4): Setup ends on Sales when it runs or found people.
+    const first = rows.find((row) => row.kind === "sales_scan");
+    scan = first?.status ?? null;
+    scanCards = typeof first?.output?.cards === "number" ? first.output.cards : null;
   }
   const handle = typeof product?.body.x_handle === "string" ? product.body.x_handle.replace(/^@/, "").trim() : "";
   const status: OnboardingStatus = {
     run: onboard
       ? { id: onboard.id, status: onboard.status === "queued" ? "running" : onboard.status, error: onboard.error, steps: stepsOf(onboard.steps), createdAt: onboard.created_at }
       : null,
+    scan,
+    scanCards,
     plan,
     draft,
     answers: { xHandle: profile?.x_handle ?? null, platforms: profile?.post_platforms ?? null, heardFrom: profile?.heard_from ?? null },

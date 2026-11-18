@@ -5,10 +5,12 @@
  */
 import assert from "node:assert/strict";
 
-import { setupFinished, setupSteps, type OnboardingStatus } from "./onboard-status";
+import { setupDestination, setupFinished, setupSteps, type OnboardingStatus } from "./onboard-status";
 
 const base: OnboardingStatus = {
   run: { id: "r", status: "running", error: null, steps: [], createdAt: "2026-11-10T08:00:00Z" },
+  scan: null,
+  scanCards: null,
   plan: null,
   draft: null,
   answers: { xHandle: null, platforms: null, heardFrom: null },
@@ -36,5 +38,28 @@ assert.equal(setupFinished({ ...done, plan: null }, 16_000), true, "no plan foll
 assert.equal(setupFinished({ ...done, run: null }, 99_000), false);
 assert.equal(setupFinished({ ...done, plan: "queued" }, 60_000), false);
 assert.equal(setupFinished({ ...done, plan: "queued" }, 121_000), true, "a plan waiting in the founder's Claude does not keep Setup forever");
+
+// The free scan (free-scan plan): its step sits between the documents and the plan, and only when the run queued one.
+assert.equal(setupSteps(base).some((s) => s.id === "scan"), false);
+assert.deepEqual(
+  setupSteps({ ...base, scan: "running" }).map((s) => s.id),
+  ["site", "product", "strategy", "competitors", "content_strategy", "scan", "plan", "draft"],
+);
+assert.equal(setupSteps({ ...base, scan: "queued" }).find((s) => s.id === "scan")!.label, "Finding people who describe the problem");
+
+// With a scan, Setup ends with it (the plan may still run); never before the documents are saved.
+assert.equal(setupFinished({ ...base, scan: "done" }, 0), false);
+assert.equal(setupFinished({ ...done, scan: "running", plan: "done", draft: "done" }, 5_000), false, "the drafts do not end Setup while the scan runs");
+assert.equal(setupFinished({ ...done, scan: "running" }, 121_000), true, "a slow scan does not keep Setup forever");
+assert.equal(setupFinished({ ...done, scan: "done", plan: "queued" }, 0), true);
+assert.equal(setupFinished({ ...done, scan: "failed" }, 0), true);
+
+// Where it goes: Sales while the scan runs or when it found people; the Dashboard otherwise.
+assert.equal(setupDestination({ ...done, scan: "running" }), "/app/sales");
+assert.equal(setupDestination({ ...done, scan: "queued" }), "/app/sales");
+assert.equal(setupDestination({ ...done, scan: "done", scanCards: 4 }), "/app/sales");
+assert.equal(setupDestination({ ...done, scan: "done", scanCards: 0 }), "/app");
+assert.equal(setupDestination({ ...done, scan: "failed" }), "/app");
+assert.equal(setupDestination(done), "/app");
 
 console.log("onboard-status.check: every check passed");
