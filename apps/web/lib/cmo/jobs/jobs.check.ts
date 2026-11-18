@@ -332,6 +332,11 @@ async function main() {
     { cards: 0, skipped: 0, dropped: 0, refund: true, platforms: ["reddit", "hn", "facebook", "threads"], failed: [], free: false, queries: ["late payments"], scanned: 0, verdict: "none" },
     "an empty scan refunds and keeps its searches",
   );
+  // Free scan A5: nothing waiting for a reply is done, and refunds.
+  const noCards = mem4.enqueue("sales_reply_drafts", {}, 1);
+  await drainCmoQueue(mem4.store);
+  assert.equal(noCards.status, "done", `no cards to draft still finishes (${noCards.error})`);
+  assert.deepEqual(noCards.output, { drafted: 0, cards: 0, refund: true }, "no cards to draft refunds");
   assert.equal(empty.steps.at(-1)!.label, "No conversations worth joining today");
 
   // An injected search (the evals' seam) replaces Reddit: only its threads become cards.

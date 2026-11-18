@@ -204,6 +204,21 @@ export type Opportunity = {
   platform?: SalesPlatform;
 };
 
+/** A card the free scan saved without a reply (free scan A5). */
+export type UndraftedOpportunity = {
+  id: string;
+  url: string;
+  platform: SalesPlatform;
+  community: string;
+  title: string;
+  author: string;
+  snippet: string;
+  posted_at: string | null;
+  comments: number;
+  rule: SubredditVerdict;
+  rule_why: string | null;
+};
+
 /**
  * What a subreddit's rules allow (P5 R1, widened in 5.1): name the product (`safe`), name it only with the relation
  * stated (`requires_disclosure`), help only (`no_product_mention`), help only because the rules could not be read
@@ -311,6 +326,17 @@ export interface CmoStore {
   /** Thread links that already became cards (dismissed ones too): W4 never offers them again. */
   seenUrls(userId: string): Promise<Set<string>>;
   saveOpportunities(userId: string, runId: string, items: Opportunity[]): Promise<number>;
+  /** Free scan A5: the founder's cards still in review with no reply yet (`reply = ''`, not skipped), newest first. */
+  undraftedOpportunities(userId: string, limit: number): Promise<UndraftedOpportunity[]>;
+  /** Fills one undrafted card's reply (`cmo_save_opportunity_reply`); `rule` may only tighten it to help only. */
+  saveOpportunityReply(
+    userId: string,
+    runId: string,
+    id: string,
+    reply: string,
+    gen: { model: string; prompt_version: string },
+    rule?: { rule: "no_product_mention"; why: string },
+  ): Promise<boolean>;
   /** P5 R1: a subreddit's cached verdict (any age; the scan decides what is fresh), and saving a new one. */
   subredditRule(subreddit: string): Promise<SubredditRule | null>;
   saveSubredditRule(rule: Omit<SubredditRule, "read_at">): Promise<void>;

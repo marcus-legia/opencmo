@@ -28,6 +28,8 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
   const runs: RunState[] = [];
   const items: ItemRow[] = [];
   const opps: Opportunity[] = [];
+  /** URLs of cards the founder already decided (replied or dismissed): no reply is written for them. */
+  const decided = new Set<string>();
   const rules = new Map<string, SubredditRule>();
   const salesSettings: SalesSettings = { excluded: [], pairs: [], platforms: [...SALES_PLATFORMS] };
   const mentions = { used: 0 };
@@ -169,6 +171,32 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
     recentMentions: async () => mentions.used,
     // Saved threads here are never decided, so every mention draft still waits.
     waitingMentions: async () => opps.filter((o) => o.rule === "safe" || o.rule === "requires_disclosure").length,
+    // Cards are keyed by URL here: the memory store has no row ids.
+    undraftedOpportunities: async (_u, limit) =>
+      opps
+        .filter((o) => o.reply === "" && o.rule !== "skip" && !decided.has(o.url))
+        .reverse()
+        .slice(0, limit)
+        .map((o) => ({
+          id: o.url,
+          url: o.url,
+          platform: o.platform ?? "reddit",
+          community: o.community,
+          title: o.title,
+          author: o.author,
+          snippet: o.snippet,
+          posted_at: o.posted_at,
+          comments: o.comments,
+          rule: o.rule ?? "not_verified",
+          rule_why: o.rule_why ?? null,
+        })),
+    async saveOpportunityReply(_u, runId, id, reply, gen, rule) {
+      if (!runs.some((r) => r.id === runId && r.kind === "sales_reply_drafts")) throw new Error("cmo_save_opportunity_reply: Run not found.");
+      const card = opps.find((o) => o.url === id && o.reply === "" && o.rule !== "skip" && !decided.has(o.url));
+      if (!card || !reply.trim()) return false;
+      Object.assign(card, { reply: reply.trim().slice(0, 3000), gen }, rule ? { rule: rule.rule, rule_why: rule.why.slice(0, 200) } : {});
+      return true;
+    },
     async saveOpportunities(_u, runId, list) {
       // As `cmo_save_opportunities`: a card with no draft is kept only by the account's free scan (priced 0).
       const free = runs.some((r) => r.id === runId && r.kind === "sales_scan" && r.credits === 0);
@@ -224,5 +252,5 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
     runs.push(run);
     return run;
   };
-  return { store, posting, runs, items, opps, rules, salesSettings, mentions, account, insights, niche, metrics, zernio, replies, lessons, goals, results, enqueue, voice, videos, captions, variants, photoCaptions, ratings, ratingRules };
+  return { store, posting, runs, items, opps, decided, rules, salesSettings, mentions, account, insights, niche, metrics, zernio, replies, lessons, goals, results, enqueue, voice, videos, captions, variants, photoCaptions, ratings, ratingRules };
 }

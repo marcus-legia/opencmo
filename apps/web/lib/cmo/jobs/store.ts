@@ -4,7 +4,7 @@ import type { SupabaseClient as BaseClient } from "@supabase/supabase-js";
 
 import { DOCUMENT_KINDS, type DocumentKind } from "../documents";
 import { latestPerTopic } from "./context";
-import type { CmoStore, DraftRating, CompetitorInsight, ConnectedAccountRow, ReplyOutcomeDue, ZernioPostRow, Documents, NicheVideoInsight, SubredditRule, Goal, ItemRow, Lesson, MemoryEvent, QueuedRun } from "./types";
+import type { CmoStore, DraftRating, CompetitorInsight, ConnectedAccountRow, ReplyOutcomeDue, ZernioPostRow, Documents, NicheVideoInsight, SubredditRule, Goal, ItemRow, Lesson, MemoryEvent, QueuedRun, UndraftedOpportunity } from "./types";
 import { isoDay, toVerdict } from "./types";
 import { enqueueDueDrafts } from "../schedule";
 import { planOrDefault } from "../posting-plan";
@@ -216,6 +216,29 @@ export function supabaseStore(admin: BaseClient): CmoStore {
       return new Set(((data ?? []) as { url: string }[]).map((r) => r.url));
     },
     paid: (userId) => rpc<boolean>("cmo_paid", { p_user: userId }),
+    async undraftedOpportunities(userId, limit) {
+      const { data, error } = await admin
+        .from("opportunities")
+        .select("id, url, platform, community, title, author, snippet, posted_at, comments, rule, rule_why")
+        .eq("user_id", userId)
+        .eq("status", "in_review")
+        .eq("reply", "")
+        .neq("rule", "skip")
+        .order("created_at", { ascending: false })
+        .limit(limit);
+      if (error) throw new Error(`opportunities: ${error.message}`);
+      return ((data ?? []) as (Omit<UndraftedOpportunity, "rule"> & { rule: unknown })[]).map((row) => ({ ...row, rule: toVerdict(row.rule) }));
+    },
+    saveOpportunityReply: (userId, runId, id, reply, gen, rule) =>
+      rpc<boolean>("cmo_save_opportunity_reply", {
+        p_user: userId,
+        p_run: runId,
+        p_id: id,
+        p_reply: reply,
+        p_gen: gen,
+        p_rule: rule?.rule ?? null,
+        p_rule_why: rule?.why ?? null,
+      }),
     saveOpportunities: (userId, runId, items) => rpc<number>("cmo_save_opportunities", { p_user: userId, p_run: runId, p_items: items }),
     async subredditRule(subreddit) {
       const { data, error } = await admin

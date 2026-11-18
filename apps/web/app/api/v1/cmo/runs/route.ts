@@ -8,7 +8,8 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 const body = z.object({
-  kind: z.enum(["plan_week", "post_draft", "sales_scan"]),
+  // Free scan A5: "Write the replies" on /app/sales, after paying (input `{}`; SQL refuses it for an unpaid account).
+  kind: z.enum(["plan_week", "post_draft", "sales_scan", "sales_reply_drafts"]),
   idea: z.string().trim().max(300).optional(),
 });
 

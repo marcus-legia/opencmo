@@ -11,7 +11,7 @@ new `sales-reply-drafts.ts`, the job registry/runner entries for the new kind, `
 
 ## Tasks
 
-### - [ ] A1. The contract (push first: B and C wait on it)
+### - [x] A1. The contract (push first: B and C wait on it)
 
 - Add `SalesScanVerdict` and `SalesScanOutput` to `lib/cmo/jobs/types.ts` exactly as in the plan; add
   `"sales_reply_drafts"` to the job kind union.
@@ -20,7 +20,7 @@ new `sales-reply-drafts.ts`, the job registry/runner entries for the new kind, `
   filters, `verdict` = `cards > 0 ? "found" : "none"`, `free` = false for now.
 - `npm run typecheck`. Commit `Free scan A1: the scan's output contract` and push.
 
-### - [ ] A2. SQL: the free scan and the new kind
+### - [x] A2. SQL: the free scan and the new kind
 
 pgTAP first (count as you write):
 - an unpaid account's first `sales_scan` through `cmo_enqueue` is priced 0 and holds nothing;
@@ -35,7 +35,7 @@ Migration: `create or replace cmo_first_run_free` from its body in `current.sql`
 `sales_reply_drafts` (copy their current bodies from `current.sql`, change only those lines). Dump the schema.
 `npm run db:reset && npm run db:test` green. Commit `Free scan A2: the first scan is free; reply drafts job kind` and push.
 
-### - [ ] A3. A free scan writes no drafts
+### - [x] A3. A free scan writes no drafts
 
 - The scan knows it is the free one from the run itself: `run.credits === 0` and the account is unpaid (read through
   the store with the service role, `cmo_paid`). Never from `input`.
@@ -47,7 +47,7 @@ Migration: `create or replace cmo_first_run_free` from its body in `current.sql`
   eval script the case file names.
 - Commit `Free scan A3: a free scan finds and scores, it does not draft` and push.
 
-### - [ ] A4. Onboarding queues the scan
+### - [x] A4. Onboarding queues the scan
 
 - In `runOnboarding` (`lib/cmo/onboard.ts`), after the documents are saved and before `startFirstWeek`, queue
   `sales_scan` with `{ source: "onboarding" }` when the founder has no `sales_scan` run that is not failed. Kick it
@@ -58,7 +58,7 @@ Migration: `create or replace cmo_first_run_free` from its body in `current.sql`
 - Check the onboarding route's time budget (`ROUTE_MS`): the scan goes through the queue, not inline.
 - Commit `Free scan A4: onboarding starts the free scan` and push.
 
-### - [ ] A5. `sales_reply_drafts`
+### - [x] A5. `sales_reply_drafts`
 
 - Move the drafting part of `sales-scan.ts` (the `draft_reply` think call, `replyProblems` check, mention budget) into a
   function both jobs call; the scan's behaviour for paid runs stays byte-for-byte the same prompt.
@@ -71,7 +71,8 @@ Migration: `create or replace cmo_first_run_free` from its body in `current.sql`
 
 ## Requests
 
-- [ ] **From B (B2):** `app/api/v1/cmo/runs/route.ts` accepts only `plan_week | post_draft | sales_scan`. With A5, add
+- [x] **From B (B2):** `app/api/v1/cmo/runs/route.ts` accepts only `plan_week | post_draft | sales_scan`. With A5, add
   `"sales_reply_drafts"` to its `kind` enum (input `{}`), so "Write the replies · 1 credit" on `/app/sales` can start it
   with `POST /cmo/runs {kind: "sales_reply_drafts"}`. B already sends that body and follows the run like a scan
   (`cmo_runs` row: `status`, `steps`, `output`); an `output.drafted: number` would let the card say how many it wrote.
+  **Done in A5:** the route accepts it; the run's output is `{ drafted, cards, refund }` (`SalesReplyDraftsOutput`).

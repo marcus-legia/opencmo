@@ -163,7 +163,7 @@ async function runFree(fixture: RedditFixture, env: EvalEnv): Promise<CaseResult
   const wrong = cards.map((o) => byUrl.get(o.url)!).filter((t) => t.expect === "exclude");
   const output = state.output as { free?: boolean; verdict?: string; cards?: number };
   const drafted = state.steps.some((s) => s.tool === "draft_reply");
-  return [
+  const freeResults: CaseResult[] = [
     { id: id("run"), epoch: env.epoch, pass: true, decided_by: "code" },
     {
       id: id("cards"),
@@ -180,6 +180,29 @@ async function runFree(fixture: RedditFixture, env: EvalEnv): Promise<CaseResult
       notes: [...(drafted ? ["ran draft_reply"] : []), ...cards.filter((o) => o.reply !== "").map((o) => `reply text on ${byUrl.get(o.url)!.key}`)],
     },
   ];
+
+  // Free scan A5: the founder pays, then "Write the replies" drafts every undrafted card with the scan's own checks.
+  mem.account.paid = true;
+  const write = mem.enqueue("sales_reply_drafts", {}, 1);
+  await env.drain(mem.store, { runId: write.id, budgetMs: 240_000 });
+  const after = mem.runs.find((r) => r.id === write.id);
+  if (after?.status !== "done") return [...freeResults, { id: id("replies:run"), epoch: env.epoch, pass: false, decided_by: "error", notes: [after?.error ?? "the replies run did not finish"] }];
+  const written = (after.output as { drafted?: number }).drafted ?? 0;
+  const mentions = cards.filter((o) => o.rule === "safe" || o.rule === "requires_disclosure").length;
+  freeResults.push({
+    id: id("replies:written"),
+    epoch: env.epoch,
+    pass: written === cards.length && cards.every((o) => o.reply.length > 0 && !!o.gen) && mentions <= 1,
+    decided_by: "code",
+    notes: [`${written} of ${cards.length} written`, `${mentions} may name the product`],
+  });
+  const product = String(fixture.docs.product?.name ?? "");
+  for (const card of cards) {
+    const thread = byUrl.get(card.url)!;
+    const issues = [...replyIssues(thread, card.reply, product), ...quoteIssues(card, toThread(thread, now))];
+    freeResults.push(await cascade(id(`replies:${thread.key}`), env.epoch, issues, env.judge, { job: "w4", docs: fixture.docs, output: card.reply, criteria: [HELPS_FIRST] }));
+  }
+  return freeResults;
 }
 
 export const salesCase: EvalCase = {

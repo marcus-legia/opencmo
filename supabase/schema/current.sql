@@ -5981,6 +5981,41 @@ $$;
 
 
 --
+-- Name: cmo_save_opportunity_reply(uuid, uuid, uuid, text, jsonb, text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_save_opportunity_reply(p_user uuid, p_run uuid, p_id uuid, p_reply text, p_gen jsonb, p_rule text DEFAULT NULL::text, p_rule_why text DEFAULT NULL::text) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_reply text := btrim(coalesce(p_reply, ''), E' \t\n\r');
+  v_gen jsonb := case when jsonb_typeof(p_gen) = 'object' then jsonb_strip_nulls(jsonb_build_object(
+    'model', left(p_gen->>'model', 100), 'prompt_version', left(p_gen->>'prompt_version', 40))) else '{}'::jsonb end;
+begin
+  if v_reply = '' or char_length(v_reply) > 3000 then
+    raise exception 'A reply is 1 to 3000 characters.' using errcode = '22023';
+  end if;
+  if p_rule is not null and p_rule <> 'no_product_mention' then
+    raise exception 'A reply''s rule can only become help only.' using errcode = '22023';
+  end if;
+  if not exists (
+    select 1 from public.cmo_runs r where r.id = p_run and r.user_id = p_user and r.kind = 'sales_reply_drafts'
+  ) then
+    raise exception 'Run not found.' using errcode = 'P0002';
+  end if;
+  update public.opportunities o set
+    reply = v_reply,
+    gen = v_gen,
+    rule = coalesce(p_rule, o.rule),
+    rule_why = case when p_rule is null then o.rule_why else left(nullif(btrim(coalesce(p_rule_why, '')), ''), 200) end
+  where o.id = p_id and o.user_id = p_user and o.status = 'in_review' and o.reply = '' and o.rule is distinct from 'skip';
+  return found;
+end;
+$$;
+
+
+--
 -- Name: photo_posts; Type: TABLE; Schema: public; Owner: -
 --
 
