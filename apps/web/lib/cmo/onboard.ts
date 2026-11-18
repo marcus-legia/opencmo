@@ -18,12 +18,13 @@ import { firstRow, rpcOrThrow, type SupabaseClient } from "@/lib/api/handler";
 
 import { DOCUMENT_KINDS } from "./documents";
 import { draftDocuments, GenerateError } from "./generate";
-import { kickFirstWeek, startCmoRun, type StartedRun } from "./jobs/start";
+import { kickCmoQueue, kickFirstWeek, startCmoRun, type StartedRun } from "./jobs/start";
 import { readSite, SiteError } from "./site";
 
 type RunRow = { id: string };
 
-export type Onboarded = { runId: string; firstWeek: boolean };
+/** `firstScan`: the free Sales scan was queued (free scan plan, A4); Setup waits on it to lead to `/app/sales`. */
+export type Onboarded = { runId: string; firstWeek: boolean; firstScan: boolean };
 
 /** `started`: when the route began, so the first week's deadline counts everything before the model work. */
 export async function runOnboarding(supabase: SupabaseClient, userId: string, site: string, started = Date.now()): Promise<Onboarded> {
@@ -57,6 +58,8 @@ export async function runOnboarding(supabase: SupabaseClient, userId: string, si
     if (error instanceof ApiError) throw error;
     throw new ApiError(known && error instanceof SiteError ? 422 : 502, message);
   }
+  // The people asking come first (free scan plan, A4): the scan is queued and kicked before the week's plan.
+  const firstScan = await startFirstScan(supabase, started);
   // Only a founder whose first week never got going gets one at once; reading the website again otherwise rewrites the
   // documents only. A failed first plan or draft does not count, so reading the site again retries it (free once for an
   // account without a plan: `cmo_first_run_free`).
@@ -68,11 +71,11 @@ export async function runOnboarding(supabase: SupabaseClient, userId: string, si
   type Row = { status: string; input: { brain?: unknown } | null };
   const real = (rows: unknown) => ((rows ?? []) as Row[]).filter((row) => row.input?.brain !== "claude");
   const planRows = real(plans);
-  if (planRows.length === 0) return { runId: run.id, firstWeek: await startFirstWeek(supabase, userId, started) };
+  if (planRows.length === 0) return { runId: run.id, firstWeek: await startFirstWeek(supabase, userId, started), firstScan };
   // The plan is done and its draft failed: draft again. Not while the plan still runs (its own trigger drafts).
   const planDone = planRows.some((row) => row.status === "done");
-  if (planDone && real(drafts).length === 0) return { runId: run.id, firstWeek: await startFirstDraft(supabase) };
-  return { runId: run.id, firstWeek: false };
+  if (planDone && real(drafts).length === 0) return { runId: run.id, firstWeek: await startFirstDraft(supabase), firstScan };
+  return { runId: run.id, firstWeek: false, firstScan };
 }
 
 /** The plan is there but its first draft failed: queue the draft again (the plan's own trigger only queues it once). */
@@ -118,6 +121,34 @@ function progress(supabase: SupabaseClient, runId: string) {
 
 /** The onboarding route's time limit (`maxDuration` 300 s), less a margin, from the route's start: `after()` work must end before the platform kills it. */
 const ROUTE_MS = 280_000;
+
+/** What the scan may take in `after()`: started later than this before the route's deadline, it waits for the sweep. */
+const SCAN_MS = 150_000;
+
+/**
+ * Queues the founder's first Sales scan, once: none that is queued, running or done yet (a failed one is tried again,
+ * as `cmo_first_run_free` gives the free scan back). It goes through the queue, never inline: the documents are saved
+ * and the route answers at once. False when it was not queued: Sales not set up on this server (503), paused, capped,
+ * or no plan after the free one. Onboarding goes on either way; Sales then shows what is missing.
+ */
+async function startFirstScan(supabase: SupabaseClient, started: number): Promise<boolean> {
+  const { data, error } = await supabase.from("cmo_runs").select("id").eq("kind", "sales_scan").neq("status", "failed").limit(1);
+  if (error) {
+    console.error("[cmo] could not read the Sales runs", error.message);
+    return false;
+  }
+  if ((data ?? []).length > 0) return false;
+  let scan: StartedRun;
+  try {
+    scan = await startCmoRun(supabase, "sales_scan", { source: "onboarding" }, { kick: false });
+  } catch (error) {
+    console.error("[cmo] could not queue the first Sales scan", error);
+    return false;
+  }
+  const left = started + ROUTE_MS - Date.now();
+  if (scan.status === "queued" && left > SCAN_MS) kickCmoQueue(scan.id, left - 5_000);
+  return true;
+}
 
 /**
  * Queues the week's plan and runs it, then today's draft (`kickFirstWeek`). False when the plan could not be queued
