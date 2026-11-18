@@ -10,7 +10,7 @@ Read the plan's Global constraints first.
 
 ## Tasks
 
-### - [ ] C1. Copy says what the free tier is (after A1)
+### - [x] C1. Copy says what the free tier is (after A1)
 
 - FAQ (`data.ts` about line 111) and the pricing small print (`PricingSection.tsx:71`): free = one real scan, the
   people asking with their own words; replies are written once you pick a plan; nothing is posted for you. Keep the
@@ -40,6 +40,12 @@ Read the plan's Global constraints first.
   `npm run check:contracts`.
 - Add the plan's row to `docs/plans/cmo/README.md`. Open the PR `claude/free-scan` → `main` with the screenshots and
   what was checked. Do not merge.
+
+C1 notes (2026-11-18): also changed the billing pages, `PlanSheet` body line, the chat paywall line, `llms.txt`
+and the Free plan's features in `lib/pricing.ts`, plus `e2e/ui-v2-activation.spec.ts` for the new PlanSheet line.
+Left for their owners: Setup's "This first run is free" lines (B), the 402 text of `cmo_require_paid` (A, still true),
+and the "AI CMO" tagline in `lib/site.ts`, `BlogCta.tsx`, `oauth/consent` and "in your voice" in `llms.txt` (renaming
+group). `check:pricing` needs the Supabase CLI and was not run in the C1 container.
 
 ## Requests
 
