@@ -103,12 +103,11 @@ export function faqs(p: Prices | null): { q: string; a: string }[] {
   const price = p ? ` $${p.annual} a month billed annually, or $${p.monthly} month to month.` : "";
   return [
     { q: `What does ${BRAND} do?`, a: `${BRAND} reads your website, then searches Reddit, Hacker News, Threads and Facebook groups for people describing the problem you solve. Each one comes with the quote that shows why, and a draft reply based on your business plan. You post it from your own account. It also plans a week of posts for X, LinkedIn and Threads.` },
-    { q: `Does ${BRAND} post anything without me?`, a: "No. Every post and reply waits in your inbox until you approve it. You can also edit or skip it." },
-    { q: "What does it do with video?", a: "It builds slideshows and post images from the words you approved, and cuts short clips from videos you recorded and finished in the editor. In the editor you cut by editing the transcript and ask the agent for captions, B-roll or a voice-over." },
+    { q: `Does ${BRAND} post anything without me?`, a: "Not unless you ask it to. Every reply and post waits for you to approve, edit or skip it. If you turn on autopilot for X, Threads or LinkedIn, a single post you leave untouched goes out at the time its card shows. Replies always wait for you." },
     { q: "Which platforms does Sales search?", a: "Reddit, Hacker News, Threads and Facebook groups. It drafts a reply; you post it yourself." },
     { q: "Will it like, follow or DM people for me?", a: `No. There are no automated likes, follows, DMs or replies. ${BRAND} drafts; you decide what to say and where.` },
     { q: "Is there a free trial?", a: `Your first scan is free, with no card. Give it your website, and within minutes you see the people asking for what you built, each with the words they wrote. Pick a plan and it writes a reply to each one. You post each reply yourself; nothing is posted for you.${price}` },
-    { q: "What does the plan include?", a: `Everything: the searches, the drafted replies, the weekly posts, and the editor with captions and voice-over.${price}` },
+    { q: "What does the plan include?", a: `The searches, the drafted replies and the weekly posts, under a fair-use allowance. A bar in the app shows how much of this month's allowance you used. If it runs out, new searches pause until it resets; your drafts and posts keep working.${price}` },
     { q: "Can I cancel?", a: "Yes, anytime. Annual plans are refunded for the unused months." },
   ];
 }
