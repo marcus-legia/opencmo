@@ -13,6 +13,7 @@ import { mondayOf } from "@/lib/cmo/jobs/summarize-memory";
 import { planOrDefault } from "@/lib/cmo/posting-plan";
 import { localDay, localMidnight, localMonday } from "@/lib/time-zone";
 import { PUBLISH_PLATFORMS } from "@/lib/departments/publish/types";
+import { isPaidPlan } from "@/lib/pricing";
 import { SITE_URL } from "@/lib/site";
 
 import scheduleDefaults from "../../../../packages/contracts/schedule-defaults.json";
@@ -30,7 +31,7 @@ import type { DashboardScreen } from "./dashboard";
 import { SKILL_READERS, type LibraryScreen } from "./library";
 import type { RailStatus } from "./rail";
 import type { ResearchScreen } from "./research";
-import type { SalesScreen } from "./sales";
+import type { SalesScan, SalesScreen } from "./sales";
 import { SALES_PLATFORMS } from "../cmo/social/conversations";
 import type { ScreenData, ScreenName } from "./registry";
 import type { ScheduleScreen } from "./schedule";
@@ -1357,17 +1358,59 @@ async function studioScreen({ supabase }: LoadContext): Promise<Partial<StudioSc
   });
 }
 
-async function sales({ supabase }: LoadContext): Promise<Partial<SalesScreen>> {
+/** A finished scan's `output` (`SalesScanOutput`) as the screen reads it; scans from before the contract get defaults. */
+function toLastScan(output: unknown, at: string): SalesScan | null {
+  if (!output || typeof output !== "object") return null;
+  const o = output as Record<string, unknown>;
+  const count = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? Math.max(0, Math.round(v)) : 0);
+  const places = (v: unknown) => SALES_PLATFORMS.filter((p) => Array.isArray(v) && v.includes(p));
+  const cards = count(o.cards);
+  return {
+    cards,
+    platforms: places(o.platforms),
+    failed: places(o.failed),
+    free: o.free === true,
+    queries: (Array.isArray(o.queries) ? o.queries : []).filter((q): q is string => typeof q === "string" && q.trim() !== "").slice(0, 20).map((q) => q.trim().slice(0, 200)),
+    scanned: count(o.scanned),
+    verdict: o.verdict === "found" || o.verdict === "none" ? o.verdict : cards > 0 ? "found" : "none",
+    at: new Date(at).toISOString(),
+  };
+}
+
+async function sales({ supabase, userId }: LoadContext): Promise<Partial<SalesScreen>> {
+  // SQL `cmo_paid`: a paid plan or credits left. Read once; the threads wait on it so an unpaid account's rows are read
+  // without the reply column, and a failed read fails the threads too rather than sending text that was not paid for.
+  const paid = (async () => {
+    const r = await supabase.from("profiles").select("plan, credit_balance").eq("id", userId).maybeSingle<{ plan: string | null; credit_balance: number | string | null }>();
+    if (r.error || !r.data) throw new Error(`profiles: ${r.error?.message ?? "missing"}`);
+    return isPaidPlan(r.data.plan) || Number(r.data.credit_balance ?? 0) > 0;
+  })();
   return parts<SalesScreen>("sales", {
+    free: async () => !(await paid),
+    lastScan: async () => {
+      const r = await supabase.from("cmo_runs").select("output, finished_at, created_at").eq("kind", "sales_scan").eq("status", "done").order("created_at", { ascending: false }).limit(1).maybeSingle<{ output: unknown; finished_at: string | null; created_at: string }>();
+      if (r.error) throw new Error(`cmo_runs: ${r.error.message}`);
+      return r.data ? toLastScan(r.data.output, r.data.finished_at ?? r.data.created_at) : null;
+    },
     threads: async () => {
-      const [rows, cards] = await Promise.all([
-        supabase.from("opportunities").select("id, platform, url, community, title, posted_at, comments, score, score_parts, reply, status, rule, rule_why, min_karma, min_account_age_days").order("created_at", { ascending: false }).limit(30),
+      const free = !(await paid);
+      const base = "id, platform, url, community, title, posted_at, comments, score, score_parts, status, rule, rule_why, min_karma, min_account_age_days";
+      const columns = free ? base : `${base}, reply`;
+      // Free: whether a reply exists is all the screen needs, and the reply itself stays in the database.
+      const [rows, cards, written] = await Promise.all([
+        supabase.from("opportunities").select(columns).order("created_at", { ascending: false }).limit(30),
         waitingByRef(supabase, "opportunity"),
+        free
+          ? supabase.from("opportunities").select("id").neq("reply", "").order("created_at", { ascending: false }).limit(30).then((r) => new Set((must(r, "opportunities") as { id: string }[]).map((x) => x.id)))
+          : Promise.resolve(null),
       ]);
       type Part = { label?: string; score?: number; max?: number; evidence?: string };
-      return (must(rows, "opportunities") as { id: string; platform: string | null; url: string; community: string; title: string; posted_at: string | null; comments: number; score: number; score_parts: Part[] | null; reply: string | null; status: "in_review" | "replied" | "dismissed"; rule: string | null; rule_why: string | null; min_karma: number | null; min_account_age_days: number | null }[])
+      return (must(rows, "opportunities") as unknown as { id: string; platform: string | null; url: string; community: string; title: string; posted_at: string | null; comments: number; score: number; score_parts: Part[] | null; reply?: string | null; status: "in_review" | "replied" | "dismissed"; rule: string | null; rule_why: string | null; min_karma: number | null; min_account_age_days: number | null }[])
         .map((r) => {
           const kind = salesRuleKind(r.rule);
+          // A free account never holds reply text (free-scan plan): `reply` was not selected for it.
+          const reply = free ? null : r.reply || null;
+          const drafted = r.rule === "skip" || (free ? written!.has(r.id) : reply !== null);
           const needs = salesNeeds(r.min_karma, r.min_account_age_days);
           const parts = (r.score_parts ?? []).filter((p) => ["Pain", "Fit", "Timing", "Reach", "Evidence"].includes(p.label ?? "") && typeof p.score === "number" && typeof p.max === "number" && p.max > 0);
           return {
@@ -1387,9 +1430,10 @@ async function sales({ supabase }: LoadContext): Promise<Partial<SalesScreen>> {
             },
             parts: parts.map((p) => ({ label: p.label as "Pain", score: p.score!, max: p.max! })),
             quotes: parts.filter((p) => typeof p.evidence === "string" && p.evidence).map((p) => ({ text: p.evidence!.slice(0, 400), from: p.label!.toLowerCase() })),
-            draft: r.rule === "skip" ? null : r.reply,
+            draft: r.rule === "skip" ? null : reply,
+            drafted,
             draftChecks:
-              kind === "skipped" || !r.reply
+              kind === "skipped" || !reply
                 ? null
                 : `No links · under 120 words · ${kind === "mention_allowed" || kind === "requires_disclosure" ? "product named at most once, saying it is yours" : "no product mention"}`,
             status: r.status === "in_review" ? ("open" as const) : r.status,
