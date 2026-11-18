@@ -72,6 +72,7 @@ insert into allowed values
   ('cmo_onboard_step(uuid,jsonb)'),
   ('cmo_onboarding_answers(jsonb)'),
   ('cmo_script_open(uuid)'),
+  ('plan_usage()'),  -- wave 2 A2: the founder's own fair-use bar, read-only
   ('post_video_start(uuid,uuid)'),
   ('post_video_wanted(uuid)'),
   ('cmo_job_daily_limit(text)'),

@@ -12,7 +12,7 @@ Plan: [`../2026-11-19-wave2-plan.md`](../2026-11-19-wave2-plan.md). Branch `clau
 Create `lib/billing/usage.ts` with `PlanUsage` exactly as in the plan and a `parsePlanUsage(row)` helper with its
 check. Typecheck. Commit `Wave 2 A1: plan usage contract` and push.
 
-### - [ ] A2. `plan_usage()` and the pause at 100%
+### - [x] A2. `plan_usage()` and the pause at 100%
 - RPC `plan_usage()` (security definer, `require_user()`): `used` = credits debited to the founder in the current
   period from `credit_ledger` (holds settled or held, refunds subtracted), `allowance` = the plan's
   `billing_catalog.credits` (yearly plans: per month), `resetsAt` = the next period start from the subscription,
