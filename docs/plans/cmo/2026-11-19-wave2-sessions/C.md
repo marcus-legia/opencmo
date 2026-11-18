@@ -1,6 +1,6 @@
 # Session C — UI, copy, e2e
 
-Plan: [`../2026-11-19-wave2-plan.md`](../2026-11-19-wave2-plan.md). Branch `claude/ui-redesign`. Match the canvas
+Plan: [`../2026-11-19-wave2-plan.md`](../2026-11-19-wave2-plan.md). Branch `claude/launch`. Match the canvas
 boards (https://claude.ai/artifact/H7VT5UZAqnxDbVSrqEBFHZ): top bar, Settings · Plan and billing, Settings ·
 Notifications: emails sent, the chat part. Production runs UI v2.
 

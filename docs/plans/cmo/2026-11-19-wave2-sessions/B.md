@@ -1,6 +1,6 @@
 # Session B — email and jobs
 
-Plan: [`../2026-11-19-wave2-plan.md`](../2026-11-19-wave2-plan.md). Branch `claude/ui-redesign`. The target is the
+Plan: [`../2026-11-19-wave2-plan.md`](../2026-11-19-wave2-plan.md). Branch `claude/launch`. The target is the
 canvas board "Proposed: morning email" (https://claude.ai/artifact/H7VT5UZAqnxDbVSrqEBFHZ); "Email today" shows what
 to remove.
 

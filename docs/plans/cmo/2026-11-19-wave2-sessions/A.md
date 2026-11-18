@@ -1,6 +1,6 @@
 # Session A — SQL and billing
 
-Plan: [`../2026-11-19-wave2-plan.md`](../2026-11-19-wave2-plan.md). Branch `claude/ui-redesign`. Load the
+Plan: [`../2026-11-19-wave2-plan.md`](../2026-11-19-wave2-plan.md). Branch `claude/launch`. Load the
 `supabase-migrations` skill before SQL. Migrations from `20270131020000`, pgTAP from `329_`.
 
 **Owns:** new migrations and pgTAP files, `supabase/schema/current.sql`, new `apps/web/lib/billing/usage.ts`
