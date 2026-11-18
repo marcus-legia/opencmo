@@ -4,6 +4,7 @@ import { AccountUsageLoader } from "@/components/clipping/web/AccountUsage";
 import { LocalTime } from "@/components/LocalTime";
 
 import { packsOnSale, plansOnSale } from "@/lib/billing-catalog";
+import { parsePlanUsage } from "@/lib/billing/usage";
 import { isPaidPlan } from "@/lib/pricing";
 import { UI_V2 } from "@/lib/screens/flag";
 import { createServerClient } from "@/lib/supabase/server";
@@ -21,7 +22,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   const site = typeof siteParam === "string" ? siteParam.slice(0, 300) : undefined;
   const supabase = await createServerClient();
 
-  const [{ data: profile }, { data: ledger }, plans, packs] = await Promise.all([
+  const [{ data: profile }, { data: ledger }, plans, packs, { data: usage }] = await Promise.all([
     supabase
       .from("profiles")
       .select("plan, creem_customer_id")
@@ -34,6 +35,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
       .returns<LedgerEntry[]>(),
     plansOnSale(),
     packsOnSale(),
+    supabase.rpc("plan_usage"),
   ]);
 
   const planId = profile?.plan ?? "free";
@@ -50,6 +52,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
         packs={packs}
         planCredit={planCredit}
         ledger={ledger ?? []}
+        usage={parsePlanUsage(usage)}
         hasPortal={Boolean(profile?.creem_customer_id)}
         justPaid={justPaid === "1"}
         start={start === "1"}

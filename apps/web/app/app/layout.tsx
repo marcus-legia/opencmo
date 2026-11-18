@@ -77,7 +77,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <>
       <script dangerouslySetInnerHTML={{ __html: RAIL_BOOT + THEME_BOOT }} />
       <TimezoneSync />
-      <WebShell {...account}>{children}</WebShell>
+      <WebShell credits={account.credits} plan={account.plan} email={account.email} userId={account.userId} pending={account.pending}>
+        {children}
+      </WebShell>
     </>
   );
 }

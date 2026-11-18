@@ -65,7 +65,7 @@ for (const kind of KINDS) {
   });
 }
 
-test("the phone layout keeps the feed and the chat on the page; 1024 has the chat as a drawer elsewhere", async ({ page }) => {
+test("the phone layout keeps the feed and the chat on the page; 1024 folds the chat elsewhere", async ({ page }) => {
   await signIn(page, state().users.a);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/app?sample=1");
@@ -77,6 +77,7 @@ test("the phone layout keeps the feed and the chat on the page; 1024 has the cha
 
   await page.setViewportSize({ width: 1024, height: 900 });
   await page.goto("/app/writer?sample=1");
+  await page.locator("#v2-chat").getByRole("button", { name: "Open the chat" }).click();
   await expect(page.locator("#v2-chat").getByLabel("Ask your CMO")).toBeVisible();
 });
 

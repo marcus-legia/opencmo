@@ -1,4 +1,5 @@
 import { rpcOrThrow, withApi } from "@/lib/api/handler";
+import { parsePlanUsage, type PlanUsage } from "@/lib/billing/usage";
 import { cmoPending } from "@/lib/cmo/pending";
 
 export const dynamic = "force-dynamic";
@@ -18,15 +19,18 @@ type AccountSummary = {
   job_hold_credits: number;
   /** Việc CMO chờ duyệt; null khi không đếm được. Shell làm mới nó cùng credit. */
   cmo_pending: number | null;
+  /** The fair-use bar (wave 2). An unreadable row reads as free: the RPC still refuses a paused scan on its own. */
+  usage: PlanUsage;
 };
 
 /**
  * Account summary đọc một snapshot database gồm credit, plan và quota UTC.
  */
 export const GET = withApi({}, async ({ supabase }) => {
-  const [summary, pending] = await Promise.all([
-    rpcOrThrow<Omit<AccountSummary, "cmo_pending">>(supabase, "account_summary", {}),
+  const [summary, pending, usage] = await Promise.all([
+    rpcOrThrow<Omit<AccountSummary, "cmo_pending" | "usage">>(supabase, "account_summary", {}),
     cmoPending(supabase),
+    supabase.rpc("plan_usage"),
   ]);
-  return { ...summary, cmo_pending: pending } satisfies AccountSummary;
+  return { ...summary, cmo_pending: pending, usage: parsePlanUsage(usage.data) } satisfies AccountSummary;
 });

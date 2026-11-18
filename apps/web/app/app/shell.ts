@@ -1,3 +1,4 @@
+import { parsePlanUsage, type PlanUsage } from "@/lib/billing/usage";
 import { cmoPending } from "@/lib/cmo/pending";
 import type { createServerClient } from "@/lib/supabase/server";
 import type { SignedInUser } from "@/lib/supabase/user";
@@ -12,6 +13,8 @@ export type ShellAccount = {
   userId: string | null;
   /** Việc CMO đang chờ duyệt — dòng phụ "N waiting" của Dashboard trên rail. */
   pending: number | null;
+  /** The fair-use bar on the v2 top bar (wave 2): a percentage, not a balance. */
+  usage: PlanUsage;
 };
 
 /**
@@ -30,10 +33,11 @@ export async function shellAccount(
   supabase: ServerClient,
   user: SignedInUser,
 ): Promise<ShellAccount> {
-  const [{ data: balance }, { data: profile }, pending] = await Promise.all([
+  const [{ data: balance }, { data: profile }, pending, { data: usage }] = await Promise.all([
     supabase.rpc("credit_balance", { p_user_id: user.id }),
     supabase.from("profiles").select("plan").eq("id", user.id).maybeSingle<{ plan: string }>(),
     cmoPending(supabase),
+    supabase.rpc("plan_usage"),
   ]);
 
   return {
@@ -42,5 +46,6 @@ export async function shellAccount(
     email: user.email ?? null,
     userId: user.id,
     pending,
+    usage: parsePlanUsage(usage),
   };
 }

@@ -1,19 +1,21 @@
-import Link from "next/link";
-
-import { BalanceV2 } from "@/components/billing/BalanceV2";
 import { BillingButton } from "@/components/billing/BillingButton";
-import { AccountUsageLoader } from "@/components/clipping/web/AccountUsage";
 import { LocalTime } from "@/components/LocalTime";
 import { SettingsFrame } from "@/components/today/SettingsFrame";
 import type { SellablePlan } from "@/lib/billing-catalog";
+import type { PlanUsage } from "@/lib/billing/usage";
 import type { LedgerEntry } from "@/lib/types";
 
 type Pack = { slug: string; credits: number; price_cents: number };
 
+/** "18 Dec": the reset date the way the pause message says it. */
+function day(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+}
+
 /**
- * Billing (Settings.dc.html › Billing). The same data and rules as the classic page: prices only from the catalogue rows
- * (no row, no number), packs only for paid plans, checkout and the portal through Creem, the usage rows and the
- * watermark note. Only the layout is the artboard's.
+ * Billing (Settings.dc.html › Billing). Prices only from the catalogue rows (no row, no number), packs only for paid
+ * plans, checkout and the portal through Creem. A paid plan shows one fair-use bar (wave 2) instead of a balance: what the
+ * founder reads is how much of this month is used and when it resets, not credits per click.
  */
 export function BillingV2({
   planId,
@@ -22,6 +24,7 @@ export function BillingV2({
   packs,
   planCredit,
   ledger,
+  usage,
   hasPortal,
   justPaid,
   start,
@@ -33,6 +36,7 @@ export function BillingV2({
   packs: Pack[];
   planCredit: SellablePlan | undefined;
   ledger: LedgerEntry[];
+  usage: PlanUsage;
   hasPortal: boolean;
   justPaid: boolean;
   start: boolean;
@@ -40,7 +44,6 @@ export function BillingV2({
 }) {
   const current = plans.find((plan) => plan.id === planId);
   const shown = plans.filter((plan) => plan.id === "free" || plan.slug || plan.id === planId);
-  const spentThisMonth = ledger.filter((r) => r.delta < 0 && new Date(r.created_at).getMonth() === new Date().getMonth()).reduce((sum, r) => sum - r.delta, 0);
   return (
     <SettingsFrame current="billing">
       <div data-testid="v2-billing" style={{ display: "contents" }}>
@@ -56,61 +59,67 @@ export function BillingV2({
           </p>
         ) : null}
 
-        <section className="card">
+        <section className="card" data-testid="billing-plan">
           <div className="bd" style={{ display: "flex", gap: "24px", flexWrap: "wrap", alignItems: "flex-start" }}>
             <div style={{ flex: "1 1 260px" }}>
               <div className="meta" style={{ marginBottom: "6px" }}>
                 Your plan
               </div>
               <div style={{ display: "flex", alignItems: "baseline", gap: "8px" }}>
-                <span style={{ fontSize: "20px", fontWeight: "600" }}>{current?.name ?? planId}</span>
+                <span style={{ fontSize: "20px", fontWeight: "600" }}>{paid ? "Pro" : "Free"}</span>
                 {paid ? <span className="badge">Active</span> : null}
               </div>
-              {current && (current.id === "free" || current.slug) ? (
+              {paid && current?.slug ? (
                 <div style={{ marginTop: "6px", color: "var(--muted)" }}>
-                  ${current.price} a month
-                  {current.watermark ? " · free clips carry a watermark" : ""}
+                  {current.interval === "year" ? `$${current.billedPrice} a year` : `$${current.price} a month`}
+                  {usage.interval === "month" && usage.resetsAt ? ` · renews on ${day(usage.resetsAt)}` : ""}
                 </div>
               ) : null}
+              {!paid ? (
+                <div style={{ marginTop: "6px", color: "var(--muted)" }}>Your first scan is free. A plan writes the replies and the week of posts.</div>
+              ) : null}
               <div style={{ display: "flex", gap: "8px", marginTop: "14px", flexWrap: "wrap" }}>
-                <a href="#billing-plans" className="ghost" style={{ textDecoration: "none" }}>
-                  Change plan
-                </a>
+                {!paid ? (
+                  <a href="#billing-plans" className="ghost" style={{ textDecoration: "none" }}>
+                    See plans
+                  </a>
+                ) : null}
                 {hasPortal ? <BillingButton path="/api/v1/billing/portal" label="Invoices and payment method" className="ghost" /> : null}
+                {paid && hasPortal ? <BillingButton path="/api/v1/billing/portal" label="Cancel plan" className="ghost" /> : null}
               </div>
               <div className="meta" style={{ marginTop: "8px" }}>
                 Payments, invoices and cancelling are handled by Creem, our merchant of record.
               </div>
             </div>
-            <div style={{ flex: "0 1 220px", borderLeft: "1px solid var(--line)", paddingLeft: "24px" }}>
-              <div className="meta" style={{ marginBottom: "6px" }}>
-                Credits left
+            {paid ? (
+              <div className="td-usage-panel" data-testid="billing-usage">
+                <div className="meta" style={{ marginBottom: "6px" }}>
+                  {usage.interval === "year" ? "This month of your year" : "This month"}
+                </div>
+                <div style={{ display: "flex", alignItems: "baseline", gap: "8px", flexWrap: "wrap" }}>
+                  <span style={{ fontSize: "32px", fontWeight: "600", letterSpacing: "-0.8px", lineHeight: "1" }}>{usage.percent}%</span>
+                  <span className="meta">of the fair-use allowance used</span>
+                </div>
+                <div
+                  className="td-usage-bar"
+                  role="meter"
+                  aria-label="Fair-use allowance used"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={usage.percent}
+                  data-paused={usage.paused ? "" : undefined}
+                >
+                  <span style={{ width: `${usage.percent}%` }} />
+                </div>
+                <div className="meta" style={{ marginTop: "8px" }}>
+                  {usage.paused
+                    ? `New scans pause until ${usage.resetsAt ? day(usage.resetsAt) : "the allowance resets"}. Your drafts and posts keep working.`
+                    : usage.resetsAt
+                      ? `Resets on ${day(usage.resetsAt)}.`
+                      : "Resets each month."}
+                </div>
               </div>
-              <div style={{ fontSize: "32px", fontWeight: "600", letterSpacing: "-0.8px", lineHeight: "1" }}>
-                <BalanceV2 />
-              </div>
-              {paid && packs.length ? (
-                <a href="#billing-packs" className="ghost" style={{ marginTop: "12px", textDecoration: "none" }}>
-                  Buy credits
-                </a>
-              ) : null}
-            </div>
-          </div>
-        </section>
-
-        <section className="card">
-          <div className="hd">
-            <h2>Spent this month</h2>
-            <span className="meta">{spentThisMonth} credits</span>
-            <div style={{ flex: "1 1 auto" }}></div>
-            <Link href="/app?logs=1" style={{ fontSize: "13px", textDecoration: "none" }}>
-              Open Logs
-            </Link>
-          </div>
-          <div className="bd td-v2host">
-            {/* The classic page's usage rows (held per video, exports left today, when quotas reset). The balance is the
-                "Credits left" above: shown again here, unlabelled under "Spent this month", it read as what was spent. */}
-            <AccountUsageLoader hideCredits />
+            ) : null}
           </div>
         </section>
 

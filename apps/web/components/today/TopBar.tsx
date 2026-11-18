@@ -7,6 +7,7 @@ import type { ReactNode } from "react";
 import { ApiError, api, jsonBody } from "@/components/clipping/api";
 import { prefetchScreen, useScreen } from "@/components/screens/useScreen";
 import { useOptionalShellState } from "@/components/shell-v2/ShellState";
+import type { PlanUsage } from "@/lib/billing/usage";
 import type { ScreenName } from "@/lib/screens/registry";
 import type { Autopilot } from "@/lib/screens/settings";
 
@@ -114,14 +115,38 @@ const LogsIcon = () => (
   </svg>
 );
 
-/** The business switcher: the product's initial and name, a menu with what has no other place in the frame. */
-const CoinIcon = () => (
-  <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
-    <circle cx="12" cy="12" r="9" />
-    <path d="M12 7v10M9 9.5h4.5a2 2 0 0 1 0 4H10a2 2 0 0 0 0 4h5" />
-  </svg>
-);
+/**
+ * The fair-use chip (wave 2): the plan and how much of this period's allowance is used, never a credit balance. Free
+ * accounts get the way to the plans. On a phone the plan's name goes; the link keeps the whole sentence for readers.
+ */
+function UsageChip({ usage }: { usage: PlanUsage }) {
+  if (usage.plan !== "pro") {
+    return (
+      <Link href="/app/billing" className="pill td-usage" aria-label="Free plan: see plans" data-testid="usage-chip" style={{ textDecoration: "none" }}>
+        <span className="td-pill-more">Free · </span>
+        <span>See plans</span>
+      </Link>
+    );
+  }
+  return (
+    <Link
+      href="/app/billing"
+      className="pill td-usage"
+      aria-label={`Pro plan: ${usage.percent}% of this month's allowance used`}
+      data-testid="usage-chip"
+      data-paused={usage.paused ? "" : undefined}
+      style={{ textDecoration: "none" }}
+    >
+      <span className="td-usage-meter" aria-hidden="true">
+        <span style={{ width: `${usage.percent}%` }} />
+      </span>
+      <span className="td-pill-more">Pro · </span>
+      <span>{usage.percent}% used</span>
+    </Link>
+  );
+}
 
+/** The business switcher: the product's initial and name, a menu with what has no other place in the frame. */
 function Project({ menu }: { menu: ReactNode }) {
   const ws = useWorkspace();
   const name = ws.name ?? siteLabel(ws.site) ?? "Your business";
@@ -176,27 +201,19 @@ const MORE = (
 
 export function TopBar({
   variant,
-  credits,
+  usage,
   email,
   logsOpen,
   onLogs,
   onChat,
 }: {
   variant: TopVariant;
-  credits: number | null;
+  usage: PlanUsage;
   email: string | null;
   logsOpen: boolean;
   onLogs: () => void;
   onChat: () => void;
 }) {
-  // On a phone the word goes (the coin and the number stay; the link keeps "credits" for screen readers).
-  const creditsLabel = (
-    <span>
-      {credits ?? "–"}
-      <span className="td-pill-more"> credits</span>
-    </span>
-  );
-
   // Feed, Calendar and Analytics share one bar (owner, 2026-11-10): the business and its accounts on the left, the three
   // views in the middle as links (prefetched, so a switch is instant), credits, Logs and the chat on the right. On the
   // feed the chat is a column, so its button is not needed there.
@@ -266,10 +283,7 @@ export function TopBar({
         </nav>
         <div style={{ flex: "1 1 auto" }}></div>
         <AutopilotSwitch />
-        <Link href="/app/billing" className="pill" style={{ textDecoration: "none" }}>
-          <CoinIcon />
-          {creditsLabel}
-        </Link>
+        <UsageChip usage={usage} />
         <button type="button" className="pill" aria-pressed={logsOpen} onClick={onLogs}>
           <LogsIcon />
           <span className="td-pill-label">Logs</span>
@@ -295,12 +309,7 @@ export function TopBar({
         </span>
       ))}
       <div style={{ flex: "1 1 auto" }}></div>
-      {variant.credits ? (
-        <Link href="/app/billing" className="pill" style={{ textDecoration: "none" }}>
-          <CoinIcon />
-          {creditsLabel}
-        </Link>
-      ) : null}
+      {variant.credits ? <UsageChip usage={usage} /> : null}
       {variant.logs ? (
         <button type="button" className="pill" aria-pressed={logsOpen} onClick={onLogs}>
           <LogsIcon />

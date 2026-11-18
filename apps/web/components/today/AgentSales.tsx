@@ -8,6 +8,7 @@ import { api, jsonBody } from "@/components/clipping/api";
 import { useLive } from "@/components/clipping/useLive";
 import { SalesSettings } from "@/components/screens/sales/SalesSettings";
 import { useScreen } from "@/components/screens/useScreen";
+import { useOptionalShellState } from "@/components/shell-v2/ShellState";
 import { salesScanCard } from "@/lib/cmo/jobs/price-card";
 import { PLATFORM_LABEL, SALES_PLATFORMS, type SalesPlatform } from "@/lib/cmo/social/conversations";
 import type { SalesScreen } from "@/lib/screens/sales";
@@ -575,6 +576,9 @@ export function AgentSales() {
   // The free scan is used once a scan finished (or one is under way); a failed one is given back by SQL.
   const freeLeft = free && !data?.lastScan && !scanActive(scan);
   const name = ws.name ?? "your product";
+  // Fair use (wave 2): at 100% new scans wait for the reset; `cmo_enqueue` refuses them on its own as well.
+  const usage = useOptionalShellState()?.usage;
+  const paused = usage?.paused ? (usage.resetsAt ? new Date(usage.resetsAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "the next reset") : null;
 
   // The banner's way to the settings: the tab, then the cursor on its heading, so the founder lands where to act.
   const openSettings = () => {
@@ -613,6 +617,19 @@ export function AgentSales() {
           <ScanNow scanning={scanActive(scan) && scan.kind === "sales_scan"} platforms={data?.settings.platforms} free={free} freeLeft={freeLeft} onPlan={setPlanFor} onStarted={startedScan} />
         </div>
         {scan ? <ScanProgress scan={scan} onClose={() => setScan(null)} /> : null}
+        {paused ? (
+          <div className="card" role="status" data-testid="sales-paused" style={{ marginTop: "14px", display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+            <div style={{ flex: "1 1 260px", minWidth: "0" }}>
+              <b>You used this month&apos;s allowance</b>
+              <div className="meta">
+                New scans start again on {paused}. The people already found, your drafts and your posts keep working.
+              </div>
+            </div>
+            <a href="/app/billing" className="ghost" style={{ textDecoration: "none" }}>
+              Plan and billing
+            </a>
+          </div>
+        ) : null}
 
         <div className="tabs" role="tablist" aria-label="Sales">
           {(
