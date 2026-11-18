@@ -36,7 +36,7 @@ Commit `Wave 2 A2: plan usage and the pause` and push.
 - RPC `my_email_log(p_limit int)` for Settings (RLS, newest first, 14 days).
 - pgTAP. Dump schema. Commit `Wave 2 A4: email schedule and log` and push. Tell B in its Requests when done.
 
-### - [ ] A5. Annual plan row
+### - [x] A5. Annual plan row
 Add the `$690 / year` row to `billing_catalog` behind a Creem product id read from an env or a seed the owner fills;
 `check:pricing` passes. If the owner has not created the Creem product yet, leave the migration ready and say so in
 the PR. Commit `Wave 2 A5: annual plan` and push.
@@ -61,3 +61,7 @@ the PR. Commit `Wave 2 A5: annual plan` and push.
   `save_cmo_settings` takes `p_digest_days` (`weekdays | daily | monday | off`; null keeps it) and returns
   `digest_days`; `profiles.digest_days` is readable by the founder. `app/api/v1/cmo/settings/route.ts` does not pass
   it yet.
+- **To the owner (A5 done, needs you):** create the live Creem product "Ferreto Annual", $690, recurring every year,
+  then run `select public.billing_catalog_put_annual('prod_…');` in the production SQL editor. It lists the row as slug
+  `annual` (plan `creator`, the monthly plan's credits each month) and takes any older annual product off sale without
+  deleting it. Until then the annual plan shows no price and cannot be bought, as before.

@@ -2745,6 +2745,77 @@ CREATE FUNCTION public.best_time_rules() RETURNS jsonb
 
 
 --
+-- Name: billing_catalog; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.billing_catalog (
+    creem_product_id text NOT NULL,
+    slug text NOT NULL,
+    kind text NOT NULL,
+    plan_id text,
+    credits integer NOT NULL,
+    price_cents integer NOT NULL,
+    "interval" text,
+    on_sale boolean DEFAULT true NOT NULL,
+    sort integer DEFAULT 0 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT billing_catalog_credits_check CHECK ((credits > 0)),
+    CONSTRAINT billing_catalog_interval_check CHECK (("interval" = ANY (ARRAY['month'::text, 'year'::text]))),
+    CONSTRAINT billing_catalog_kind_check CHECK ((kind = ANY (ARRAY['plan'::text, 'pack'::text]))),
+    CONSTRAINT billing_catalog_kind_shape CHECK ((((kind = 'plan'::text) AND (plan_id IS NOT NULL) AND ("interval" IS NOT NULL)) OR ((kind = 'pack'::text) AND (plan_id IS NULL) AND ("interval" IS NULL)))),
+    CONSTRAINT billing_catalog_plan_id_check CHECK ((plan_id = ANY (ARRAY['starter'::text, 'creator'::text]))),
+    CONSTRAINT billing_catalog_price_cents_check CHECK ((price_cents > 0))
+);
+
+
+--
+-- Name: billing_catalog_put_annual(text, integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.billing_catalog_put_annual(p_product_id text, p_price_cents integer DEFAULT 69000) RETURNS public.billing_catalog
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $_$
+declare
+  v_row public.billing_catalog;
+  v_credits integer;
+begin
+  if p_product_id is null or p_product_id !~ '^prod_[A-Za-z0-9]{4,64}$' then
+    raise exception 'Give the Creem product id (prod_…).' using errcode = '22023';
+  end if;
+  if p_price_cents is null or p_price_cents < 100 or p_price_cents > 1000000 then
+    raise exception 'The price is in cents, between 100 and 1,000,000.' using errcode = '22023';
+  end if;
+  select * into v_row from public.billing_catalog where creem_product_id = p_product_id;
+  if found then
+    if v_row.kind <> 'plan' or v_row."interval" <> 'year' or v_row.price_cents <> p_price_cents then
+      raise exception 'That product is already listed as something else. A price change needs a new Creem product.'
+        using errcode = '22023';
+    end if;
+    update public.billing_catalog set on_sale = true where creem_product_id = p_product_id returning * into v_row;
+    return v_row;
+  end if;
+
+  select c.credits into v_credits from public.billing_catalog c
+  where c.kind = 'plan' and c."interval" = 'month' and c.on_sale
+  order by c.sort limit 1;
+  if v_credits is null then
+    raise exception 'List the monthly plan first: the annual plan grants the same credits each month.' using errcode = '55000';
+  end if;
+
+  update public.billing_catalog
+  set on_sale = false, slug = left('annual-' || creem_product_id, 100)
+  where kind = 'plan' and "interval" = 'year' and slug = 'annual';
+
+  insert into public.billing_catalog (creem_product_id, slug, kind, plan_id, credits, price_cents, "interval", on_sale, sort)
+  values (p_product_id, 'annual', 'plan', 'creator', v_credits, p_price_cents, 'year', true, 20)
+  returning * into v_row;
+  return v_row;
+end;
+$_$;
+
+
+--
 -- Name: billing_catalog_refuse_delete(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -18619,30 +18690,6 @@ CREATE TABLE public.best_slots (
     CONSTRAINT best_slots_median_views_per_hour_check CHECK ((median_views_per_hour >= (0)::double precision)),
     CONSTRAINT best_slots_platform_check CHECK ((platform = ANY (ARRAY['x'::text, 'threads'::text, 'linkedin'::text, 'facebook'::text, 'tiktok'::text, 'youtube'::text, 'instagram'::text]))),
     CONSTRAINT best_slots_posts_check CHECK ((posts >= 1))
-);
-
-
---
--- Name: billing_catalog; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.billing_catalog (
-    creem_product_id text NOT NULL,
-    slug text NOT NULL,
-    kind text NOT NULL,
-    plan_id text,
-    credits integer NOT NULL,
-    price_cents integer NOT NULL,
-    "interval" text,
-    on_sale boolean DEFAULT true NOT NULL,
-    sort integer DEFAULT 0 NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT billing_catalog_credits_check CHECK ((credits > 0)),
-    CONSTRAINT billing_catalog_interval_check CHECK (("interval" = ANY (ARRAY['month'::text, 'year'::text]))),
-    CONSTRAINT billing_catalog_kind_check CHECK ((kind = ANY (ARRAY['plan'::text, 'pack'::text]))),
-    CONSTRAINT billing_catalog_kind_shape CHECK ((((kind = 'plan'::text) AND (plan_id IS NOT NULL) AND ("interval" IS NOT NULL)) OR ((kind = 'pack'::text) AND (plan_id IS NULL) AND ("interval" IS NULL)))),
-    CONSTRAINT billing_catalog_plan_id_check CHECK ((plan_id = ANY (ARRAY['starter'::text, 'creator'::text]))),
-    CONSTRAINT billing_catalog_price_cents_check CHECK ((price_cents > 0))
 );
 
 
