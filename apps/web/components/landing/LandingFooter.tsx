@@ -46,7 +46,7 @@ export function LandingFooter({ action }: { action: string }) {
           <div className="lv-foot-top">
             <div className="lv-foot-brand">
               <span><LogoMark size={30} /><span>{BRAND}</span></span>
-              <p>Your AI marketing team. It plans your week, writes the posts and finds the conversations. You approve.</p>
+              <p>Finds the people already asking for what you built. You reply as yourself.</p>
             </div>
             <p className="lv-foot-support">
               <span className="lv-mono-eyebrow">Questions or billing</span>
@@ -77,7 +77,7 @@ export function LandingFooter({ action }: { action: string }) {
             ))}
           </nav>
           <div className="lv-foot-bottom">
-            <p>{BRAND} is independent software and is not affiliated with TikTok, YouTube, Meta, X or Reddit. Use {BRAND} only with content you own or have the rights to use.</p>
+            <p>{BRAND} is independent software and is not affiliated with or endorsed by any social network it works with.</p>
             <div className="lv-foot-legal">
               <Link href="/privacy">Privacy</Link>
               <Link href="/terms">Terms</Link>
