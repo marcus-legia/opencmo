@@ -34,7 +34,7 @@ Commit `Wave 2 C2: no per-click prices on included work` and push.
 Settings › Notifications: morning email schedule select, the strong-match push toggle as today, and the log table
 (when, what, subject, Sent / Skipped / Failed) with a preview of the summary. Commit and push.
 
-### - [ ] C6. e2e, look, review
+### - [x] C6. e2e, look, review
 Run the e2e specs touched by the branch (shell, dashboard, activation, context, post-photos, settings, billing, free
 scan). Screenshots at 1440 and 390 into the PR. Review the whole branch against the plan. Do not merge.
 
