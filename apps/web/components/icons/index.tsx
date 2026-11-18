@@ -1,6 +1,6 @@
 /*
  * Bộ icon Lucide (ISC — xem LICENSE-lucide.txt cạnh file này), lấy từ
- * `docs/OpenCMO Design System/assets/icons/`.
+ * `docs/Ferreto Design System/assets/icons/`.
  *
  * Inline chứ không nạp qua CDN: CSP production không có `unsafe-eval` và không
  * cho script ngoài. Thân icon giữ nguyên `stroke="currentColor"` nên icon luôn

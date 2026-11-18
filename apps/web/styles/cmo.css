@@ -542,7 +542,7 @@ button.cmo-chip { font: inherit; font-size: 12.5px; cursor: pointer; }
 .cmo-insight small { color: var(--ds-fg-5); overflow-wrap: anywhere; }
 .cmo-insight a { color: var(--ds-lapis-700); }
 
-/* ── Dashboard theo design 06/10/2026 (OpenCMO Workspace v2.dc.html) ───────────
+/* ── Dashboard theo design 06/10/2026 (Ferreto Workspace v2.dc.html) ───────────
    Áp dưới html[data-theme] (phần đăng nhập). Bỏ dải lapis + vạch vàng: thanh
    trên là kính mờ cùng màu nền, cột là panel trong suốt, thẻ duyệt bo 16px có
    chip department theo màu (Post = sky, Video = terra, Sales = cypress). */

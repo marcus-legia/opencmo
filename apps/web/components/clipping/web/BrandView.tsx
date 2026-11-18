@@ -300,7 +300,7 @@ export function BrandView() {
       } catch {
         throw new Error("That file is not a brand kit.");
       }
-      if (parsed.format !== EXPORT_FORMAT) throw new Error("That file is not an OpenCMO brand kit.");
+      if (parsed.format !== EXPORT_FORMAT) throw new Error("That file is not an Ferreto brand kit.");
       const raw = { ...(parsed.kit as Record<string, unknown>) };
       // Logo nhúng: upload lại vào thư mục của người nhập (đường dẫn cũ là của người khác).
       if (typeof parsed.logoData === "string" && parsed.logoData.startsWith("data:image/png;base64,") && raw.logo && userId) {
@@ -312,7 +312,7 @@ export function BrandView() {
         raw.logo = null;
       }
       const kit = BrandKitSchema.safeParse(raw);
-      if (!kit.success) throw new Error("This brand kit uses settings OpenCMO does not support.");
+      if (!kit.success) throw new Error("This brand kit uses settings Ferreto does not support.");
       const name = typeof parsed.name === "string" && parsed.name.trim() ? parsed.name.trim().slice(0, 50) : "Imported brand";
       const taken = new Set((kits ?? []).map((row) => row.name.toLowerCase()));
       setDraft({ id: null, name: taken.has(name.toLowerCase()) ? `${name} (imported)` : name, kit: kit.data });

@@ -1,6 +1,6 @@
 /**
  * Guide cho agent (spec agent-editor §4, AE4): thứ DS đưa qua `docs/skills` +
- * `reference/`, ở đây viết mới cho document của OpenCMO. Tool `read_guide` trả
+ * `reference/`, ở đây viết mới cho document của Ferreto. Tool `read_guide` trả
  * nguyên văn; không nằm trong system prompt để prompt ngắn và cache ổn định.
  *
  * Tiếng Anh vì model đọc. Guide `document` sinh từ chính schema zod của

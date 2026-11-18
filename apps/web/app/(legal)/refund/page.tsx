@@ -9,7 +9,7 @@ export default function RefundPage() {
   return (
     <LegalPage
       title="Refund Policy"
-      intro={<p>We want you to be happy with OpenCMO. If something is wrong, write to us first — most problems can be fixed quickly.</p>}
+      intro={<p>We want you to be happy with Ferreto. If something is wrong, write to us first — most problems can be fixed quickly.</p>}
       sections={[
         {
           heading: "Cancelling",
@@ -19,7 +19,7 @@ export default function RefundPage() {
           heading: "Refunds",
           body: (
             <>
-              <p>If you are charged and have not used any credits from that billing period, you can request a full refund within 14 days of the charge. If OpenCMO did not work as described, we will refund the affected credits or the charge.</p>
+              <p>If you are charged and have not used any credits from that billing period, you can request a full refund within 14 days of the charge. If Ferreto did not work as described, we will refund the affected credits or the charge.</p>
               <p>Customers in the EU and UK keep their statutory right of withdrawal where it applies.</p>
             </>
           ),

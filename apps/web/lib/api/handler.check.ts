@@ -60,7 +60,7 @@ function request(
   const text = body === undefined ? "" : JSON.stringify(body);
   return {
     method,
-    headers: new Headers({ host: "app.opencmo.io", ...headers }),
+    headers: new Headers({ host: "app.ferreto.io", ...headers }),
     text: async () => text,
   } as unknown as Parameters<typeof handleApi>[2];
 }
@@ -183,7 +183,7 @@ async function main(): Promise<void> {
         controller.close();
       },
     });
-    return { method: "POST", headers: new Headers({ host: "app.opencmo.io" }), body, text: async () => text } as unknown as Parameters<typeof handleApi>[2];
+    return { method: "POST", headers: new Headers({ host: "app.ferreto.io" }), body, text: async () => text } as unknown as Parameters<typeof handleApi>[2];
   };
   await check("a streamed body over the cap is refused while it is read", async () => {
     const big = JSON.stringify({ big: "x".repeat(MAX_BODY_BYTES) });

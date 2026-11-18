@@ -1,5 +1,5 @@
 /*
- * Token của OpenCMO. Nguồn: docs/OpenCMO Design System/tokens/.
+ * Token của Ferreto. Nguồn: docs/Ferreto Design System/tokens/.
  *
  * Đây là NƠI DUY NHẤT khai báo màu, thang chữ, khoảng cách và bo góc. Mọi file
  * CSS khác phải dùng var(--ds-*); không viết hex trực tiếp. Lý do: đợt 18/09 có
@@ -15,7 +15,7 @@
    * khảm lapis, hoa văn vàng, đá cẩm thạch, travertine, một điểm hổ phách.
    * Tên token giữ nguyên để ~4.5k dòng globals.css đi theo mà không phải sửa;
    * "ink" giờ là NỀN (sáng ở app, tối trong editor), không còn nghĩa "màu tối".
-   * Nguồn và quy tắc dùng: artifact Design System "OpenCMO — Lapis & Marble".
+   * Nguồn và quy tắc dùng: artifact Design System "Ferreto — Lapis & Marble".
    */
 
   /* bảng gốc — chỉ khai báo ở đây, mọi chỗ khác dùng alias bên dưới */

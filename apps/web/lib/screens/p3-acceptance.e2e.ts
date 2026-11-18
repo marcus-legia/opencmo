@@ -85,7 +85,7 @@ export async function run(): Promise<void> {
   };
 
   for (const [kind, body] of Object.entries({
-    product: { name: "OpenCMO", one_liner: "An AI CMO for solo founders: an editor, post drafts and Reddit leads you approve." },
+    product: { name: "Ferreto", one_liner: "An AI CMO for solo founders: an editor, post drafts and Reddit leads you approve." },
     strategy: { icp: "Solo founders who ship software", pains: ["editing product demos takes longer than building them"], voice: "Plain and direct" },
     content_strategy: {
       pillars: [{ name: "Editing by words", ideas: ["Cut a video by deleting words"] }],
@@ -140,7 +140,7 @@ export async function run(): Promise<void> {
   // Approve X as written, edit LinkedIn, skip Threads with a reason.
   await decide(byPlatform.get("x")!, "approve");
   const linkedin = byPlatform.get("linkedin")!;
-  await decide(linkedin, "approve", { text: "Week one of building OpenCMO in public. One lesson: cut the demo by words." });
+  await decide(linkedin, "approve", { text: "Week one of building Ferreto in public. One lesson: cut the demo by words." });
   await decide(byPlatform.get("threads")!, "skip", { reason: "Too salesy for Threads" });
   const { data: outcome } = await admin.from("cmo_draft_outcomes").select("id, platform").eq("item_id", (dueToday ?? []).find((i) => i.platform === "LinkedIn")!.id).single();
   assert.equal(outcome?.platform, "linkedin", "the outcome is LinkedIn's");
@@ -150,7 +150,7 @@ export async function run(): Promise<void> {
   const library = await screen("library", userId);
   assert.ok(library.live.voice, "Library → Voice is live");
   assert.deepEqual(library.data.voice.notes.map((n) => n.source).sort(), ["Approved as written", "From a skip reason", "From your edit: shorter"], "three voice notes");
-  assert.ok(library.data.voice.notes.some((n) => n.platform === "linkedin" && n.text.includes("Week one of building OpenCMO")), "the edit's note holds the founder's words");
+  assert.ok(library.data.voice.notes.some((n) => n.platform === "linkedin" && n.text.includes("Week one of building Ferreto")), "the edit's note holds the founder's words");
   const writer = await screen("writer", userId);
   assert.ok(writer.live.voice && writer.data.voice.lines.length >= 4, "Writer's voice reads the notes");
   assert.deepEqual(new Set(writer.data.drafts.filter((d) => d.kind === "post").map((d) => d.platform)), new Set(["x", "threads", "linkedin"]), "Writer's drafts per platform");

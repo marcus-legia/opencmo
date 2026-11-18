@@ -14,7 +14,7 @@ export async function BlogCta({ variant = "end" }: { variant?: "inline" | "end" 
       <aside className="blog-cta-inline" aria-labelledby={`${id}-title`}>
         <div>
           <p id={`${id}-title`} className="blog-cta-inline-title">Rather have this done for you each week?</p>
-          <p>OpenCMO is an AI CMO. It reads your website, plans your week, writes the posts and finds the conversations. You approve.</p>
+          <p>Ferreto is an AI CMO. It reads your website, plans your week, writes the posts and finds the conversations. You approve.</p>
         </div>
         <a href="/login" className="blog-cta-inline-link">Start with your website <span aria-hidden="true">→</span></a>
       </aside>
@@ -22,7 +22,7 @@ export async function BlogCta({ variant = "end" }: { variant?: "inline" | "end" 
   }
   return (
     <aside className="blog-cta" aria-labelledby={`${id}-title`}>
-      <p className="blog-cta-kicker">OpenCMO · AI CMO for founders</p>
+      <p className="blog-cta-kicker">Ferreto · AI CMO for founders</p>
       <h2 id={`${id}-title`}>Your AI marketing team.</h2>
       <p>It plans your week, writes the posts and finds the conversations. Nothing goes out until you approve it.</p>
       <form action="/login" className="blog-cta-form">

@@ -3,7 +3,7 @@
 /**
  * Màn chính sau đăng nhập: AI CMO (docs/cmo/san-pham.md §3.2), style Lapis & Marble.
  * Dải lapis trên cùng; bốn cột Brief · Results · Approvals · Your CMO. Tên và
- * style là của OpenCMO, cố ý không theo Okara. Brief và Results thu được
+ * style là của Ferreto, cố ý không theo Okara. Brief và Results thu được
  * thành dải hẹp (nhớ trong localStorage). Màn hẹp:
  * một cột + tab, mặc định là Approvals.
  *

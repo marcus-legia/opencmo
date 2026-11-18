@@ -188,7 +188,7 @@ function DocSheetBody({
       <div className="cmo-sheet-body">
         <p className="cmo-sheet-meta">
           {doc.summary} <span>Used by {USED_BY[kind].join(" · ")}</span>
-          {row ? <span>{row.createdBy === "agent" ? "Drafted by OpenCMO" : "Edited by you"} · version {row.version}</span> : null}
+          {row ? <span>{row.createdBy === "agent" ? "Drafted by Ferreto" : "Edited by you"} · version {row.version}</span> : null}
         </p>
         {!row ? (
           <p className="cmo-muted">This document is written when you build your marketing plan.</p>

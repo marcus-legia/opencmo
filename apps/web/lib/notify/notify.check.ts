@@ -26,8 +26,8 @@ async function main() {
     return new Response(JSON.stringify({ id: "email_123" }), { status: 200 });
   }) as typeof fetch;
   const resend = emailSender({ RESEND_API_KEY: "re_secret", OPENCMO_EMAIL_LIVE: "1" }, fake)!;
-  const url = unsubscribeUrl("https://opencmo.io/", "6f1c2c4e-3b0a-4c8e-9d7e-0a1b2c3d4e5f");
-  assert.equal(url, "https://opencmo.io/unsubscribe?token=6f1c2c4e-3b0a-4c8e-9d7e-0a1b2c3d4e5f");
+  const url = unsubscribeUrl("https://ferreto.io/", "6f1c2c4e-3b0a-4c8e-9d7e-0a1b2c3d4e5f");
+  assert.equal(url, "https://ferreto.io/unsubscribe?token=6f1c2c4e-3b0a-4c8e-9d7e-0a1b2c3d4e5f");
   assert.deepEqual(await resend.send({ to: "f@example.com", subject: "S", text: "T", html: "<p>H</p>", unsubscribeUrl: url }), { id: "email_123" });
   assert.equal(seen[0]!.url, "https://api.resend.com/emails");
   assert.equal((seen[0]!.init.headers as Record<string, string>).Authorization, "Bearer re_secret");
@@ -41,7 +41,7 @@ async function main() {
 
   // The expiring email: opens the card, never approves; times in the founder's zone; the footer.
   const m = expiringEmail({
-    appUrl: "https://opencmo.io",
+    appUrl: "https://ferreto.io",
     cardId: "c-1",
     title: "Most AI video tools stop at the first draft <script> on X",
     expiresAt: "2026-11-02T02:00:00Z",
@@ -49,7 +49,7 @@ async function main() {
     unsubscribeUrl: url,
   });
   assert.match(m.subject, /^Approve by Mon 09:00: /);
-  assert.ok(m.html.includes('href="https://opencmo.io/app/inbox/c-1"'), "the link opens the card");
+  assert.ok(m.html.includes('href="https://ferreto.io/app/inbox/c-1"'), "the link opens the card");
   assert.ok(!/approve\?|action=approve|decide/i.test(m.html + m.text), "no link decides anything");
   assert.ok(!m.html.includes("<script>"), "outside text is escaped");
   assert.ok(m.text.includes(SUPPORT_EMAIL) && m.html.includes(url.replace(/&/g, "&amp;")), "support and unsubscribe in the footer");
@@ -86,7 +86,7 @@ async function main() {
   };
   let sends = 0;
   const never: EmailSender = { name: "local", send: async () => ((sends += 1), { id: "x" }) };
-  assert.equal(await sendExpiringEmails(admin as never, never, { appUrl: "https://opencmo.io", now: new Date("2026-11-02T08:00:00Z") }), 0);
+  assert.equal(await sendExpiringEmails(admin as never, never, { appUrl: "https://ferreto.io", now: new Date("2026-11-02T08:00:00Z") }), 0);
   const done = calls.find(([n]) => n === "email_log_done");
   assert.ok(done && done[1].p_log === "log-1" && done[1].p_error === "bad snapshot", "the claim is recorded as failed");
   assert.equal(sends, 0);

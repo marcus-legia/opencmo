@@ -30,7 +30,7 @@ const todayInput = (extra: Partial<TodayInput>): TodayInput => ({
   firstRun: { readStrategy: false, rateDrafts: false },
   ...extra,
 });
-const base: DigestInput = { appUrl: "https://opencmo.io/", dateLabel: "Tuesday 10 Nov", waiting: [], wentOut: [], stuck: [] };
+const base: DigestInput = { appUrl: "https://ferreto.io/", dateLabel: "Tuesday 10 Nov", waiting: [], wentOut: [], stuck: [] };
 
 const cards = Array.from({ length: 6 }, (_, i) => ({
   id: `c${i}`,
@@ -55,14 +55,14 @@ check("the top three rows in Today's order, then N more waiting", () => {
   assert.equal(lines[start + 1], "- X: nothing posted for 9 days");
   assert.equal(lines[start + 3], "- Card number 0");
   assert.equal(lines[start + 5], "- Card number 1");
-  assert.ok(digest.text.includes("4 more waiting: https://opencmo.io/app"), digest.text);
+  assert.ok(digest.text.includes("4 more waiting: https://ferreto.io/app"), digest.text);
   assert.ok(!digest.text.includes("Waiting on you:"), "the full list is replaced by Today");
   assert.ok(digest.html.indexOf("Today") < digest.html.indexOf("4 more waiting"));
   assert.ok(
-    digest.html.includes('href="https://opencmo.io/app?ask=1&amp;prompt=Write%20me%20a%20post%20for%20X%20for%20today."'),
+    digest.html.includes('href="https://ferreto.io/app?ask=1&amp;prompt=Write%20me%20a%20post%20for%20X%20for%20today."'),
     "a chat row opens the chat with the request in its box; it sends nothing",
   );
-  assert.ok(digest.html.includes('href="https://opencmo.io/app/inbox/c0"'), "a card row opens the card");
+  assert.ok(digest.html.includes('href="https://ferreto.io/app/inbox/c0"'), "a card row opens the card");
   assert.ok(![...digest.html.matchAll(/href="([^"]*)"/g)].some(([, href]) => /approve|decide/i.test(href!)), "no link decides anything");
   assert.equal(digest.subject, "6 things wait on you · Tuesday 10 Nov");
 });

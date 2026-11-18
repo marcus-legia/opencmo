@@ -1,5 +1,5 @@
 Các font dưới đây phát hành theo SIL Open Font License 1.1, tải từ Google Fonts
-(bản subset latin), tự host cho clip của OpenCMO.
+(bản subset latin), tự host cho clip của Ferreto.
 
 ===== Anton (anton.woff2) =====
 

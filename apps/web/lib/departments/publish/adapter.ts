@@ -18,5 +18,5 @@ export function publishAdapter(env: Record<string, string | undefined> = process
   }
   const apiKey = env.ZERNIO_API_KEY?.trim();
   if (apiKey && env.OPENCMO_PUBLISH_LIVE === "1") return createZernioAdapter({ apiKey });
-  throw new PublishError("not_configured", "Posting from OpenCMO is not set up yet. Use copy and open for now.", false);
+  throw new PublishError("not_configured", "Posting from Ferreto is not set up yet. Use copy and open for now.", false);
 }

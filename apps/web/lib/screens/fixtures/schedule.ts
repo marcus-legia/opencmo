@@ -15,7 +15,7 @@ export const scheduleFixture: ScheduleScreen = {
     { id: "sl-7", at: at("2026-10-29", "14:30"), where: { platform: "linkedin", handle: "Marcus" }, title: "What a week of approving cards taught me", status: "scheduled", note: null, approvalId: null },
     { id: "sl-8", at: at("2026-10-29", "18:00"), where: { platform: "tiktok", handle: "@opencmo" }, title: "Short 1 · Edit by asking", status: "waiting_founder", note: null, approvalId: "card-time" },
     { id: "sl-9", at: at("2026-10-30", "09:10"), where: { platform: "x", handle: "@opencmo" }, title: "Thread: building an editor as a marketing team of one", status: "scheduled", note: null, approvalId: null },
-    { id: "sl-10", at: at("2026-10-30", "18:00"), where: { platform: "youtube", handle: "OpenCMO" }, title: "Short 2 · B-roll on the line", status: "proposed", note: null, approvalId: null },
+    { id: "sl-10", at: at("2026-10-30", "18:00"), where: { platform: "youtube", handle: "Ferreto" }, title: "Short 2 · B-roll on the line", status: "proposed", note: null, approvalId: null },
     { id: "sl-11", at: at("2026-10-31", "11:00"), where: { platform: "instagram", handle: "@opencmo" }, title: "Short 3 · Cut by words", status: "proposed", note: null, approvalId: null },
   ],
   accounts: [

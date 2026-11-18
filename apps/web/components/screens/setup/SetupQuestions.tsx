@@ -10,7 +10,7 @@ import { ErrorNote } from "../parts";
 
 /**
  * Three optional questions while onboarding runs (CMO review 3, 3.2): the X handle, the platforms the founder posts
- * on, how they heard of OpenCMO. Skip hides them; nothing waits on them. Saved through `cmo_onboarding_answers`, which
+ * on, how they heard of Ferreto. Skip hides them; nothing waits on them. Saved through `cmo_onboarding_answers`, which
  * puts the handle and the platforms into the documents the CMO reads (the plan reads them if it has not started yet,
  * the next one otherwise).
  */
@@ -105,7 +105,7 @@ export function SetupQuestions({ status }: { status: OnboardingStatus }) {
           ))}
         </fieldset>
         <label className="v2-field" htmlFor="setup-heard">
-          How did you hear about OpenCMO?
+          How did you hear about Ferreto?
           <select id="setup-heard" className="v2-input" value={heard} onChange={(event) => setHeard(event.target.value)}>
             <option value="">Pick one</option>
             {HEARD_FROM.map((option) => (

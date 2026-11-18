@@ -88,7 +88,7 @@ const tables: Record<string, Row[]> = {
     { kind: "strategy", body: { avoid: ["game-changer", "unlock", "a phrase far too long to be a single word anyone would cut from a post"] }, created_by: "user", created_at: now },
   ],
   editor_skills: [{ id: "sk-1", name: "demo-cut", description: "How I cut a product demo", created_at: now }],
-  cmo_runs: [{ kind: "onboard", input: { site: "https://opencmo.io/" }, created_at: now }],
+  cmo_runs: [{ kind: "onboard", input: { site: "https://ferreto.io/" }, created_at: now }],
   brand_kits: [],
   profiles: [{ id: "u", timezone: "Asia/Ho_Chi_Minh", weekly_credit_budget: 50, digest_hour: null, cmo_paused_at: null, plan: "free" }],
   social_accounts: [
@@ -157,7 +157,7 @@ async function main(): Promise<void> {
   ]);
   assert.ok(library.data.skills.video.some((s) => s.origin === "built_in"), "the style skills we ship");
   assert.deepEqual(library.data.skills.video.filter((s) => s.origin === "yours").map((s) => s.name), ["demo-cut"], "and the founder's own");
-  assert.equal(library.data.site, "opencmo.io");
+  assert.equal(library.data.site, "ferreto.io");
 
   // P4 A3: Schedule reads this week's slots in the founder's time; Settings lists every platform to connect.
   const week = new URLSearchParams({ from: today });
@@ -185,7 +185,7 @@ async function main(): Promise<void> {
   assert.deepEqual(
     settings.data.accounts.map((a) => [a.platform, a.status, a.avatarUrl ?? null]),
     [["x", "connected", "https://pbs.example/x.png"], ["threads", "not_connected", null], ["linkedin", "not_connected", null], ["facebook", "not_connected", null], ["tiktok", "reconnect", null], ["youtube", "not_connected", null], ["instagram", "not_connected", null]],
-    "every platform OpenCMO posts to, in one order",
+    "every platform Ferreto posts to, in one order",
   );
 
   console.log("load.check: Writer, Library, Schedule and Settings loaders ok");

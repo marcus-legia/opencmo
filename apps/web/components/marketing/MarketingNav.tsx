@@ -13,7 +13,7 @@ export function MarketingNav({ user, onLanding = false, section }: { user?: bool
   const base = onLanding ? "" : "/";
   return (
     <nav className="marketing-nav" aria-label="Main">
-      <Link href="/" aria-label="OpenCMO home"><Brand /></Link>
+      <Link href="/" aria-label="Ferreto home"><Brand /></Link>
       <div>
         <a href={`${base}#how-it-works`}>How it works</a>
         <a href={`${base}#departments`}>Departments</a>

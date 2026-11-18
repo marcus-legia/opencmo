@@ -3,7 +3,7 @@ import { at } from "./shared";
 
 /** `Setup.dc.html`, step 2 of 5. */
 export const setupFixture: SetupScreen = {
-  site: "opencmo.io",
+  site: "ferreto.io",
   step: "documents",
   done: ["website"],
   documents: [

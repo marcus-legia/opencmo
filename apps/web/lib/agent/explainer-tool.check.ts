@@ -247,7 +247,7 @@ async function main() {
   // B3: silent motion clips. Timed beats, kind "clip", no voice, model motion-clip, a card without narration.
   const silentBeats = [
     { say: "The mark lands.", visual: "the tile settles", seconds: 2 },
-    { say: "The name rises.", label: "OpenCMO", visual: "the name rises letter by letter", seconds: 2.5 },
+    { say: "The name rises.", label: "Ferreto", visual: "the name rises letter by letter", seconds: 2.5 },
   ];
   const silentInput = { ...input, silent: true, beats: silentBeats };
   let silentJob: MotionJob | null = null;
@@ -272,7 +272,7 @@ async function main() {
   assert.equal(silentPrepared.model.id, "motion-clip");
   assert.equal(silentPrepared.spec.duration, 5);
   assert.ok(!("voice" in silentPrepared.spec), "a silent clip's spec has no voice");
-  assert.deepEqual((silentPrepared.spec.scene as { template: string; beats: unknown[] }).beats, [{ say: "The mark lands.", seconds: 2 }, { say: "The name rises.", label: "OpenCMO", seconds: 2.5 }]);
+  assert.deepEqual((silentPrepared.spec.scene as { template: string; beats: unknown[] }).beats, [{ say: "The mark lands.", seconds: 2 }, { say: "The name rises.", label: "Ferreto", seconds: 2.5 }]);
   assert.equal((silentPrepared.spec.scene as { template: string }).template, "clip");
   const silentCard = explainerCard(silentPrepared, "clip");
   assert.match(silentCard.changes[0]!, /^Motion clip “.*” · 5s · 16:9 .*· No narration · 1 credit$/);

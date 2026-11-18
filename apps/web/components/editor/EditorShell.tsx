@@ -991,7 +991,7 @@ function Workspace({
   const activeId = (activeScene(state.document) as unknown as { id?: string }).id;
   // Đúng các mục DS gắn vào menu (checklist §4): File, Edit, View, Tool,
   // Credits, Help, Account; thêm Version history, Apply caption style của
-  // OpenCMO. Object/Text/Timeline/Preferences của DS không được mount ở đâu.
+  // Ferreto. Object/Text/Timeline/Preferences của DS không được mount ở đâu.
   const projectMenu: MenuItem[] = [
     item("Back", "back", "menu-back"),
     { kind: "separator" },

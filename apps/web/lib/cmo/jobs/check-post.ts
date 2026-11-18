@@ -23,7 +23,7 @@ export const X_LIMIT = 280;
  */
 export type CheckRules = { avoid: string[]; known: Set<string>; names?: string[]; allowSlop?: ReadonlySet<string>; noProduct?: boolean };
 
-/** A brief that asks for no product pitch ("No product pitch", "don't mention OpenCMO", "no promo"). */
+/** A brief that asks for no product pitch ("No product pitch", "don't mention Ferreto", "no promo"). */
 const NO_PITCH = /\bno (?:product )?(?:pitch|plug|promo(?:tion)?|product mention)s?\b|\b(?:don['’]t|do not|never) (?:pitch|plug|promote|mention|name)\b/i;
 
 export function asksNoPitch(brief: string): boolean {
@@ -45,7 +45,7 @@ export function briefRules(rules: CheckRules, brief: string, fromFounder: boolea
 }
 
 /**
- * Always a link: a URL, a `www.` address, or a domain with a path ("opencmo.io/pricing"), but not a code file name
+ * Always a link: a URL, a `www.` address, or a domain with a path ("ferreto.io/pricing"), but not a code file name
  * with a slash after it ("Next.js/React"). SQL's `caption_check` holds the same; the cases are
  * `packages/contracts/link-cases.json`.
  */

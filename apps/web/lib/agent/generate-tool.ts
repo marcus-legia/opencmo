@@ -186,7 +186,7 @@ export async function prepareGeneration(
   }
 
   // The clip's own frame by default: a 9:16 shot on a 16:9 clip is a narrow strip over the speaker.
-  // Vertical when the frame is unknown or the model cannot make it (OpenCMO clips are 9:16).
+  // Vertical when the frame is unknown or the model cannot make it (Ferreto clips are 9:16).
   const ratios = model.limits.aspectRatios ?? [];
   const aspectRatio =
     request.aspect_ratio ?? (target.aspect && ratios.includes(target.aspect) ? target.aspect : ratios.includes("9:16") ? "9:16" : ratios[0]);

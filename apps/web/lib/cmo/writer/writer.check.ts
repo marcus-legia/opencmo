@@ -42,7 +42,7 @@ assert.match(briefRequest(withCta).prompt, /End with this call to action: Try \/
 
 // W0: no links and no hashtags in a post; tech names, "#1" and "C#" are neither.
 const rules = { avoid: [], known: new Set<string>() };
-for (const text of ["Read more at https://example.com", "Details on www.example.com", "Try opencmo.io/pricing today", "Our docs live at Paylane.app"]) {
+for (const text of ["Read more at https://example.com", "Details on www.example.com", "Try ferreto.io/pricing today", "Our docs live at Paylane.app"]) {
   assert.ok(checkPost(text, rules).some((issue) => issue.includes("link")), `a link is refused: ${text}`);
 }
 for (const text of ["Shipping this week #buildinpublic", "#saas tip of the day", "We ship.\n#indiehackers"]) {

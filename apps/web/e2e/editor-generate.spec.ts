@@ -405,6 +405,6 @@ test("library image as first frame, B-roll in one approval card, save_frame", as
   await expect(page.getByTestId("frame-9:16")).toHaveAttribute("aria-pressed", "true", { timeout: 30_000 });
   await page.getByLabel("Message the assistant").fill("I want a ProRes file, send feedback");
   await page.getByTestId("assistant-send").click();
-  await expect(page.getByTestId("assistant-reply").last()).toContainText(/sent that to the OpenCMO team/, { timeout: 120_000 });
+  await expect(page.getByTestId("assistant-reply").last()).toContainText(/sent that to the Ferreto team/, { timeout: 120_000 });
   await page.screenshot({ path: testInfo.outputPath("14-undo-feedback.png") });
 });

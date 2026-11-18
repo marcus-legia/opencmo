@@ -22,7 +22,7 @@ export async function generateMetadata({ params }: { params: Promise<{ category:
     title: `${category.name} — guides and playbooks`,
     description: category.description,
     alternates: { canonical: `/blog/category/${category.slug}` },
-    openGraph: { ...OG_DEFAULTS, type: "website", title: `${category.name} · OpenCMO Blog`, description: category.description, url: `/blog/category/${category.slug}` },
+    openGraph: { ...OG_DEFAULTS, type: "website", title: `${category.name} · Ferreto Blog`, description: category.description, url: `/blog/category/${category.slug}` },
     // Category rỗng là trang mỏng: không cho index tới khi có bài.
     robots: posts.length === 0 ? { index: false, follow: true } : undefined,
   };
@@ -40,7 +40,7 @@ export default async function CategoryPage({ params }: { params: Promise<{ categ
           {
             "@context": "https://schema.org",
             "@type": "CollectionPage",
-            name: `${category.name} · OpenCMO Blog`,
+            name: `${category.name} · Ferreto Blog`,
             description: category.description,
             url,
           },

@@ -55,7 +55,7 @@ for (const width of [1280, 390]) {
     await questions.getByLabel("Your X handle").fill("@paylane_hq");
     await questions.getByRole("checkbox", { name: "X", exact: true }).check();
     await questions.getByRole("checkbox", { name: "LinkedIn" }).check();
-    await questions.getByLabel("How did you hear about OpenCMO?").selectOption("reddit");
+    await questions.getByLabel("How did you hear about Ferreto?").selectOption("reddit");
     await questions.getByRole("button", { name: "Save" }).click();
     await expect(page.getByTestId("setup-questions-saved")).toBeVisible();
     const { data: profile } = await admin().from("profiles").select("x_handle, post_platforms, heard_from").eq("id", user.id).single();

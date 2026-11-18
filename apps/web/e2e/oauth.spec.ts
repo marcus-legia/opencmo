@@ -7,7 +7,7 @@ import type { E2EUser } from "./global-setup";
 import { signIn, state } from "./helpers";
 
 /**
- * Connecting apps to OpenCMO (security fixes plan, fixes 5 and 6): only paid accounts may
+ * Connecting apps to Ferreto (security fixes plan, fixes 5 and 6): only paid accounts may
  * connect. A real authorization comes from local Supabase's OAuth server, registered the way
  * claude.ai registers itself (dynamic client registration).
  */
@@ -90,13 +90,13 @@ test.describe("paid account", () => {
     await signIn(page, paid);
     const { id, clientId } = await authorize(page, "https://evil.example/callback");
     await page.goto(`/oauth/consent?authorization_id=${id}`);
-    await expect(page.getByTestId("oauth-consent").locator("h1")).toHaveText("This app can't connect to OpenCMO.");
+    await expect(page.getByTestId("oauth-consent").locator("h1")).toHaveText("This app can't connect to Ferreto.");
     await expect(page.getByTestId("oauth-consent")).toContainText("evil.example");
     await expect(page.getByTestId("oauth-approve")).toHaveCount(0);
 
     const refused = await decide(page, id, "approve");
     expect(refused.status()).toBe(403);
-    expect(await refused.text()).toContain("This app can't connect to OpenCMO.");
+    expect(await refused.text()).toContain("This app can't connect to Ferreto.");
     const { data } = await admin().from("mcp_grants").select("client_id").eq("client_id", clientId);
     expect(data).toEqual([]);
     // Review R3: Deny does not send the founder on to the unsupported app's own URL (no open redirect).

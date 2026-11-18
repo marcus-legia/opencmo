@@ -14,7 +14,7 @@ export function MarketingFooter({ user }: { user?: boolean }) {
   return (
     <footer className="marketing-footer">
       <div className="marketing-footer-main">
-        <Link href="/" aria-label="OpenCMO home"><Brand /></Link>
+        <Link href="/" aria-label="Ferreto home"><Brand /></Link>
         <nav className="marketing-footer-links" aria-label="Footer">
           <Link href="/terms">Terms</Link>
           <Link href="/privacy">Privacy</Link>
@@ -26,8 +26,8 @@ export function MarketingFooter({ user }: { user?: boolean }) {
         <Link href={user ? "/app" : "/login"}>{user ? "Open app" : "Get started"} →</Link>
       </div>
       <p>
-        OpenCMO is independent software and is not affiliated with TikTok, YouTube, Meta, X or Reddit.
-        <br />Use OpenCMO only with content you own or have the rights to use.
+        Ferreto is independent software and is not affiliated with TikTok, YouTube, Meta, X or Reddit.
+        <br />Use Ferreto only with content you own or have the rights to use.
       </p>
     </footer>
   );

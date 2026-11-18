@@ -42,7 +42,7 @@ async function founder(db: SupabaseClient): Promise<{ user: E2EUser; me: Supabas
   await db.from("profiles").update({ credit_balance: 500, plan: "creator" }).eq("id", user.id);
   const doc = await db
     .from("marketing_documents")
-    .insert({ user_id: user.id, kind: "product", version: 1, created_by: "user", body: { name: "OpenCMO", one_liner: "An AI CMO for solo founders." } });
+    .insert({ user_id: user.id, kind: "product", version: 1, created_by: "user", body: { name: "Ferreto", one_liner: "An AI CMO for solo founders." } });
   expect(doc.error).toBeNull();
   const me = createClient(url, anon, { auth: { persistSession: false } });
   expect((await me.auth.signInWithPassword({ email: user.email, password: user.password })).error).toBeNull();

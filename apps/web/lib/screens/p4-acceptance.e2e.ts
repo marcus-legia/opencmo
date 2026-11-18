@@ -92,7 +92,7 @@ async function main() {
   assert.equal(created.error, null);
   const userId = created.data.user!.id;
   await admin.from("profiles").update({ timezone: "UTC" }).eq("id", userId);
-  await admin.from("marketing_documents").insert({ user_id: userId, kind: "product", version: 1, created_by: "user", body: { name: "OpenCMO", one_liner: "An AI CMO for solo founders." } });
+  await admin.from("marketing_documents").insert({ user_id: userId, kind: "product", version: 1, created_by: "user", body: { name: "Ferreto", one_liner: "An AI CMO for solo founders." } });
   const week = new Date();
   week.setUTCDate(week.getUTCDate() - ((week.getUTCDay() + 6) % 7));
   const { data: order } = await admin.from("work_orders").insert({ user_id: userId, week: week.toISOString().slice(0, 10), kind: "post_draft", title: "Posts", brief: {}, department: "writer", status: "waiting_founder" }).select("id").single();

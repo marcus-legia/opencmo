@@ -77,7 +77,7 @@ export const LibrarySkillSchema = z.object({
 });
 
 export const LibraryScreenSchema = z.object({
-  /** The site Research read: "Research drafted these from opencmo.io". */
+  /** The site Research read: "Research drafted these from ferreto.io". */
   site: z.string().max(200).nullable(),
   documents: z.array(LibraryDocumentSchema).max(4),
   brandKits: z.array(LibraryBrandKitSchema),

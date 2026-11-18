@@ -15,12 +15,12 @@ import { SITE_DESCRIPTION, SITE_NAME, SITE_URL } from "@/lib/site";
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   icons: { icon: "/icon.svg" },
-  title: { default: "OpenCMO — the AI video editor you edit by asking", template: "%s · OpenCMO" },
+  title: { default: "Ferreto — the AI video editor you edit by asking", template: "%s · Ferreto" },
   description: SITE_DESCRIPTION,
   applicationName: SITE_NAME,
   openGraph: { type: "website", siteName: SITE_NAME, locale: "en_US", url: "/" },
   twitter: { card: "summary_large_image" },
-  alternates: { types: { "application/rss+xml": [{ url: "/blog/rss.xml", title: "OpenCMO Blog" }] } },
+  alternates: { types: { "application/rss+xml": [{ url: "/blog/rss.xml", title: "Ferreto Blog" }] } },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

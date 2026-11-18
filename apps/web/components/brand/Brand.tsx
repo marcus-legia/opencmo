@@ -1,12 +1,12 @@
 import Image from "next/image";
 
-/** Uses OpenCMO's real assets instead of redrawing the logo in text. */
+/** Uses Ferreto's real assets instead of redrawing the logo in text. */
 export function Brand() {
   return (
     <span className="brand-lockup">
       {/* SVG gains nothing from the image optimizer, so it stays a plain <img>. */}
       <img src="/icon.svg" width="32" height="32" alt="" />
-      <span>OpenCMO</span>
+      <span>Ferreto</span>
     </span>
   );
 }

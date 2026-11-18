@@ -18,7 +18,7 @@ const QUICK = [
   { label: "16:9", hint: "YouTube, landscape", width: 1920, height: 1080 },
 ] as const;
 
-/** Các khung ít dùng hơn, gom theo hướng. Danh sách của OpenCMO, không theo preset của DS. */
+/** Các khung ít dùng hơn, gom theo hướng. Danh sách của Ferreto, không theo preset của DS. */
 const MORE = [
   {
     label: "Portrait",
