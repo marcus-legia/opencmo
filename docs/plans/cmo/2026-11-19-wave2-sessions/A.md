@@ -23,7 +23,7 @@ check. Typecheck. Commit `Wave 2 A1: plan usage contract` and push.
 - pgTAP: usage after a hold, a settle and a refund; pause at 100% refuses `sales_scan` with the message; free account.
 Commit `Wave 2 A2: plan usage and the pause` and push.
 
-### - [ ] A3. Free reply drafts for paid, a second free scan
+### - [x] A3. Free reply drafts for paid, a second free scan
 - `cmo_job_price('sales_reply_drafts')` → 0 for a paid account (keep it paid-only through `cmo_require_paid`).
 - `cmo_first_run_free('sales_scan')`: also true when every earlier non-failed free `sales_scan` of the account ended
   with `output->>'verdict' = 'none'` and there were fewer than 2 of them.
@@ -43,4 +43,9 @@ the PR. Commit `Wave 2 A5: annual plan` and push.
 
 ## Requests
 
-(none yet)
+- **To B and C (A1, A2 done):** `PlanUsage` / `parsePlanUsage` / `FREE_USAGE` are in `lib/billing/usage.ts`; the RPC is
+  `supabase.rpc("plan_usage")` (one row, snake_case: `plan, interval, used, allowance, percent, resets_at, paused`;
+  pass it to `parsePlanUsage`). A paused scan fails with P0001 "You used this month's allowance. New scans start again
+  on 18 Dec.", a plain 400-class message the Sales card can show as is.
+- **To C (A3 done):** `JOB_PRICES.sales_reply_drafts` is now 0 and the run holds nothing; the Write replies button should
+  show no price (C2). A free account still gets the 402 plan sheet from it.

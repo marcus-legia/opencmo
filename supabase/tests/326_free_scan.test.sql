@@ -1,6 +1,6 @@
 -- Free scan A2 (20270131010000): an unpaid account's first Sales scan is free once its product document exists, the
 -- second is the 402, a failed one gives the free scan back at most twice; a paid account pays 5 as before; the
--- `sales_reply_drafts` kind exists, costs 1, runs 5 a day and is paid work.
+-- `sales_reply_drafts` kind exists, runs 5 a day and is paid work (included at 0 since wave 2 A3, 330).
 create extension if not exists pgtap with schema extensions;
 
 begin;
@@ -75,11 +75,11 @@ reset role;
 select is((select credit_balance from public.profiles where id = 'e3260000-0000-4000-8000-00000000000b'), 5, 'and 5 are held');
 set local role authenticated;
 set local request.jwt.claims = '{"sub":"e3260000-0000-4000-8000-00000000000b","role":"authenticated"}';
-select is((select credits from public.enqueue_cmo_run('sales_reply_drafts', '{}')), 1, 'writing the replies costs 1');
+select is((select credits from public.enqueue_cmo_run('sales_reply_drafts', '{}')), 0, 'writing the replies is included (wave 2 A3)');
 reset role;
 
 -- The new kind.
-select is(public.cmo_job_price('sales_reply_drafts'), 1, 'price 1');
+select is(public.cmo_job_price('sales_reply_drafts'), 0, 'included: price 0 (wave 2 A3)');
 select is(public.cmo_job_daily_limit('sales_reply_drafts'), 5, 'five a day');
 update public.cmo_runs set status = 'done' where user_id = 'e3260000-0000-4000-8000-00000000000b' and kind = 'sales_reply_drafts';
 insert into public.cmo_runs (user_id, kind, status, input, credits)

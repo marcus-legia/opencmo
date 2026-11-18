@@ -4437,6 +4437,11 @@ begin
     return v_row;
   end if;
 
+  -- Included in the plan but not free: reply drafts are paid work at no extra cost (wave 2).
+  if p_kind = 'sales_reply_drafts' and not public.cmo_paid(p_user) then
+    perform public.cmo_plan_required();
+  end if;
+
   -- Read under the lock above, so two requests at once cannot both be the free one.
   if v_price > 0 and public.cmo_first_run_free(p_user, p_kind) then
     v_price := 0;
@@ -4574,9 +4579,21 @@ CREATE FUNCTION public.cmo_first_run_free(p_user uuid, p_kind text) RETURNS bool
     and (p_kind <> 'sales_scan' or exists (
       select 1 from public.marketing_documents d where d.user_id = p_user and d.kind = 'product'
     ))
-    and not exists (
-      select 1 from public.cmo_runs r
-      where r.user_id = p_user and r.kind = p_kind and r.status in ('queued', 'running', 'done')
+    and (
+      not exists (
+        select 1 from public.cmo_runs r
+        where r.user_id = p_user and r.kind = p_kind and r.status in ('queued', 'running', 'done')
+      )
+      -- One more free scan after one that found no one (wave 2): the founder edits Strategy and tries again.
+      or (p_kind = 'sales_scan'
+        and not exists (
+          select 1 from public.cmo_runs r
+          where r.user_id = p_user and r.kind = 'sales_scan' and r.status in ('queued', 'running', 'done')
+            -- coalesce: a done scan with no verdict (an older run) is not one that found no one.
+            and not coalesce(r.status = 'done' and r.credits = 0 and r.output->>'verdict' = 'none', false)
+        )
+        and (select count(*) from public.cmo_runs r
+             where r.user_id = p_user and r.kind = 'sales_scan' and r.status = 'done') < 2)
     )
     -- A failed run gives the free run back, at most twice: runs made to fail cannot become free work every day.
     and (select count(*) from public.cmo_runs r where r.user_id = p_user and r.kind = p_kind and r.status = 'failed') < 3;
@@ -4704,7 +4721,8 @@ CREATE FUNCTION public.cmo_job_price(p_kind text) RETURNS integer
     when 'write_caption' then 1 when 'write_video_brief' then 1 when 'publish_post' then 0 when 'niche_video_research' then 2
     when 'repurpose_post' then 1
     when 'photo_caption' then 1
-    when 'sales_reply_drafts' then 1
+    -- Included in the plan (wave 2); `cmo_enqueue` keeps it paid-only.
+    when 'sales_reply_drafts' then 0
     else 0 end
 $$;
 
