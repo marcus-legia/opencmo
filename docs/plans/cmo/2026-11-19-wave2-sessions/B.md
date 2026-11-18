@@ -27,7 +27,7 @@ to remove.
 - Settings loader exposes `digestDays` and the log via `my_email_log`. Checks updated.
 - Commit `Wave 2 B2: weekday schedule, skipped days in the log` and push. Tell C in its Requests.
 
-### - [ ] B3. No expiring emails; a push before an autopilot post
+### - [x] B3. No expiring emails; a push before an autopilot post
 - Stop `sendExpiringEmails` from the cron (delete the function and its check cases).
 - For a founder with autopilot on: a web push 2 hours before an autopilot post goes out ("X post goes out at 14:00.
   Edit or skip it before then."), once per post, logged as `push`.
@@ -53,4 +53,9 @@ to remove.
 - **To C (your e2e request, done in B2):** `e2e/ui-v2-reach.spec.ts` now asserts the `skipped` row first, then marks
   the seeded post due today (`approvals.post_at = now()`); the cron answers `skipped` too. `lib/screens/p6-acceptance.e2e.ts`
   does the same and reads `sendDigestEmail`'s new outcome (`"sent" | "skipped" | "none"`). Not run here (no Docker).
+- **To C (B3 done):** the expiring-card email is gone (`sendExpiringEmails`, `expiringEmail`, `emailFooter` deleted);
+  the cron answers `{ due, sent, skipped, pushed, autopilot, released, sender }` (no `expiring`). Autopilot posts get a
+  push two hours before `auto_at` (`lib/notify/autopilot.ts`), once per card, logged as kind `push` with the line as
+  `subject`, so the Notifications log may show push rows. The service worker reads the line from the new
+  `GET /api/v1/notify/next` (`{ autopilot: { approvalId, line } | null }`) and opens the card on a tap.
 

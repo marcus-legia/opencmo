@@ -11,13 +11,13 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { DIGEST_SKIPPED_NOTE, buildDigest, cardTitle, digestDayAllowed, digestScheduleLabel, loadDigestInput, localClock, type DigestDays } from "@/lib/cmo/digest";
+import { DIGEST_SKIPPED_NOTE, buildDigest, digestDayAllowed, digestScheduleLabel, loadDigestInput, localClock, type DigestDays } from "@/lib/cmo/digest";
 
-import { emailFooter, expiringEmail, unsubscribeUrl, type EmailSender } from "./email";
+import { unsubscribeUrl, type EmailSender } from "./email";
 
 type Claim = { log_id: string; approval_ids: string[] };
 
-async function claim(admin: SupabaseClient, userId: string, kind: "digest" | "expiring", ids: string[], log?: { subject: string; summary: Record<string, unknown> }): Promise<Claim | null> {
+async function claim(admin: SupabaseClient, userId: string, kind: "digest", ids: string[], log?: { subject: string; summary: Record<string, unknown> }): Promise<Claim | null> {
   const { data, error } = await admin.rpc("email_log_claim", {
     p_user: userId,
     p_kind: kind,
@@ -34,10 +34,6 @@ async function settingsFor(admin: SupabaseClient, userId: string): Promise<Notif
   const { data, error } = await admin.rpc("notify_settings_for", { p_user: userId });
   if (error || !data) throw new Error(`notify_settings_for: ${error?.message ?? "missing"}`);
   return data as NotifySettings;
-}
-
-async function token(admin: SupabaseClient, userId: string): Promise<string> {
-  return (await settingsFor(admin, userId)).unsubscribe_token;
 }
 
 /** How many hours after a founder's digest hour the cron still sends a digest not yet sent today (a failed send). */
@@ -119,49 +115,4 @@ export async function sendDigestEmail(admin: SupabaseClient, sender: EmailSender
     return sender.send({ to: founder.email!, subject: digest.subject, text: digest.text, html: digest.html, unsubscribeUrl: url });
   });
   return ok ? "sent" : "none";
-}
-
-/** Time-bound cards (schedule cards) expiring in the next two hours get one email each. */
-/**
- * `deadline` (ms since epoch): no new card is claimed after it, so a slow provider cannot run the cron past its limit
- * with a claim left open (an open claim reads as sent, and that card would never get its email).
- */
-export async function sendExpiringEmails(admin: SupabaseClient, sender: EmailSender, opts: { appUrl: string; now: Date; deadline?: number }): Promise<number> {
-  const from = new Date(opts.now.getTime() + 15 * 60_000).toISOString();
-  const to = new Date(opts.now.getTime() + 2 * 3_600_000).toISOString();
-  const { data, error } = await admin
-    .from("approvals")
-    .select("id, user_id, kind, snapshot, expires_at")
-    .eq("status", "waiting")
-    .gte("expires_at", from)
-    .lte("expires_at", to)
-    .order("expires_at")
-    .limit(200);
-  if (error) throw new Error(`approvals: ${error.message}`);
-  const cards = (data ?? []) as { id: string; user_id: string; kind: string; snapshot: Record<string, unknown>; expires_at: string }[];
-  if (!cards.length) return 0;
-  const { data: founders, error: fErr } = await admin.from("profiles").select("id, email, timezone").in("id", [...new Set(cards.map((c) => c.user_id))]);
-  if (fErr) throw new Error(`profiles: ${fErr.message}`);
-  const byId = new Map(((founders ?? []) as { id: string; email: string | null; timezone: string }[]).map((f) => [f.id, f]));
-  let sent = 0;
-  const tokens = new Map<string, string>();
-  for (const card of cards) {
-    if (opts.deadline !== undefined && Date.now() >= opts.deadline) break;
-    const founder = byId.get(card.user_id);
-    if (!founder?.email) continue;
-    try {
-      if (!tokens.has(founder.id)) tokens.set(founder.id, await token(admin, founder.id));
-      const url = unsubscribeUrl(opts.appUrl, tokens.get(founder.id)!);
-      const c = await claim(admin, founder.id, "expiring", [card.id]);
-      if (!c) continue;
-      const ok = await sendClaimed(admin, sender, c, async () => {
-        const message = expiringEmail({ appUrl: opts.appUrl, cardId: card.id, title: cardTitle(card.snapshot), expiresAt: card.expires_at, timezone: founder.timezone, unsubscribeUrl: url });
-        return sender.send({ to: founder.email!, ...message });
-      });
-      if (ok) sent += 1;
-    } catch (err) {
-      console.warn("[notify] expiring email", card.id, err instanceof Error ? err.message : err);
-    }
-  }
-  return sent;
 }

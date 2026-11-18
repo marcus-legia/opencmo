@@ -1,16 +1,15 @@
 /**
  * Email (P6 C0) without network: which sender runs (the key alone never sends), what Resend is sent (only to its own
- * host, the one-click unsubscribe headers), and the two emails: links open the card, nothing approves, the footer
- * names support and the unsubscribe page.
+ * host, the one-click unsubscribe headers), when the morning email is due, and what the morning run logs.
  *
  *     cd apps/web && npx tsx lib/notify/notify.check.ts
  */
 import assert from "node:assert/strict";
 
-import { emailFooter, emailSender, expiringEmail, SUPPORT_EMAIL, unsubscribeUrl, type EmailSender } from "./email";
+import { emailSender, SUPPORT_EMAIL, unsubscribeUrl, type EmailSender } from "./email";
 import { cardTitle } from "@/lib/cmo/digest";
 
-import { digestDue, sendExpiringEmails } from "./send";
+import { digestDue, sendDigestEmail } from "./send";
 
 async function main() {
   // Selection.
@@ -39,23 +38,6 @@ async function main() {
   const refusing = emailSender({ RESEND_API_KEY: "re_x", OPENCMO_EMAIL_LIVE: "1" }, (async () => new Response("{}", { status: 422 })) as typeof fetch)!;
   await assert.rejects(refusing.send({ to: "f@example.com", subject: "S", text: "T", html: "H", unsubscribeUrl: url }), /refused it \(422\)/);
 
-  // The expiring email: opens the card, never approves; times in the founder's zone; the footer.
-  const m = expiringEmail({
-    appUrl: "https://ferreto.io",
-    cardId: "c-1",
-    title: "Most AI video tools stop at the first draft <script> on X",
-    expiresAt: "2026-11-02T02:00:00Z",
-    timezone: "Asia/Ho_Chi_Minh",
-    unsubscribeUrl: url,
-  });
-  assert.match(m.subject, /^Approve by Mon 09:00: /);
-  assert.ok(m.html.includes('href="https://ferreto.io/app/inbox/c-1"'), "the link opens the card");
-  assert.ok(!/approve\?|action=approve|decide/i.test(m.html + m.text), "no link decides anything");
-  assert.ok(!m.html.includes("<script>"), "outside text is escaped");
-  assert.ok(m.text.includes(SUPPORT_EMAIL) && m.html.includes(url.replace(/&/g, "&amp;")), "support and unsubscribe in the footer");
-  const footer = emailFooter(url);
-  assert.ok(footer.text.includes(url) && footer.html.includes("Stop these emails"));
-
   // The digest goes out at its hour, or up to two hours later when today's has not (a failed send is retried then).
   const due = (hour: number, digest_hour: number | null, digest_days: "weekdays" | "daily" | "monday" | "off" = "daily", weekday = 3) =>
     digestDue({ hour, weekday }, { digest_hour, digest_days });
@@ -68,41 +50,57 @@ async function main() {
   assert.ok(due(8, 8, "monday", 1) && !due(8, 8, "monday", 2), "Mondays only");
   assert.ok(due(8, 8, "daily", 0) && !due(8, 8, "off", 1), "every day, or never");
 
-  // A failure after the claim (here while building the email) records the claim as failed, so it never stays
-  // `claimed` and blocks that card's email for good.
-  const calls: [string, Record<string, unknown>][] = [];
-  const table = (rows: unknown[]) => {
-    const q: Record<string, unknown> = {};
-    for (const m of ["select", "eq", "gte", "lte", "order", "limit", "in"]) q[m] = () => q;
-    q.then = (resolve: (v: unknown) => void) => resolve({ data: rows, error: null });
-    return q;
-  };
-  const broken = Object.defineProperty({}, "text", { get: () => { throw new Error("bad snapshot"); } });
-  const admin = {
-    from: (name: string) =>
-      name === "approvals"
-        ? table([{ id: "c-1", user_id: "u-1", kind: "schedule", snapshot: broken, expires_at: "2026-11-02T09:00:00Z" }])
-        : table([{ id: "u-1", email: "f@example.com", timezone: "UTC" }]),
-    rpc: async (name: string, args: Record<string, unknown>) => {
-      calls.push([name, args]);
-      if (name === "notify_settings_for") return { data: { unsubscribe_token: "tok" }, error: null };
-      if (name === "email_log_claim") return { data: [{ log_id: "log-1", approval_ids: ["c-1"] }], error: null };
-      return { data: null, error: null };
-    },
+  // Wave 2 B2: a morning with nothing new is logged as skipped and not sent; a send that fails after the claim is
+  // recorded as failed, so the claim never stays `claimed` and blocks the day.
+  const run = async (cards: unknown[], sender: EmailSender) => {
+    const calls: [string, Record<string, unknown>][] = [];
+    const table = (rows: unknown[]) => {
+      const q: Record<string, unknown> = {};
+      for (const m of ["select", "eq", "gte", "gt", "lte", "neq", "order", "limit", "in"]) q[m] = () => q;
+      q.maybeSingle = async () => ({ data: rows[0] ?? null, error: null });
+      q.then = (resolve: (v: unknown) => void) => resolve({ data: rows, error: null });
+      return q;
+    };
+    const admin = {
+      from: (name: string) => table(name === "approvals" ? cards : []),
+      rpc: async (name: string, args: Record<string, unknown>) => {
+        calls.push([name, args]);
+        if (name === "notify_settings_for") return { data: { unsubscribe_token: "tok", email_digest: true }, error: null };
+        if (name === "email_log_claim") return { data: [{ log_id: "log-1", approval_ids: ["c-1"] }], error: null };
+        if (name === "email_log_skip") return { data: "log-skip", error: null };
+        return { data: null, error: null };
+      },
+    };
+    const founder = { id: "u-1", email: "f@example.com", timezone: "UTC", digest_hour: 8, digest_days: "weekdays" as const };
+    const outcome = await sendDigestEmail(admin as never, sender, founder, { appUrl: "https://ferreto.io", now: new Date("2026-11-02T08:00:00Z") });
+    return { outcome, calls };
   };
   let sends = 0;
-  const never: EmailSender = { name: "local", send: async () => ((sends += 1), { id: "x" }) };
-  assert.equal(await sendExpiringEmails(admin as never, never, { appUrl: "https://ferreto.io", now: new Date("2026-11-02T08:00:00Z") }), 0);
-  const done = calls.find(([n]) => n === "email_log_done");
-  assert.ok(done && done[1].p_log === "log-1" && done[1].p_error === "bad snapshot", "the claim is recorded as failed");
-  assert.equal(sends, 0);
-  assert.ok(calls.findIndex(([n]) => n === "notify_settings_for") < calls.findIndex(([n]) => n === "email_log_claim"), "the token is read before the claim");
+  const counting: EmailSender = { name: "local", send: async () => ((sends += 1), { id: "x" }) };
+  const quiet = await run([], counting);
+  assert.equal(quiet.outcome, "skipped");
+  const skip = quiet.calls.find(([n]) => n === "email_log_skip");
+  assert.ok(skip && (skip[1].p_summary as { note: string }).note.startsWith("Nothing new"), "the skipped row says why");
+  assert.ok(!quiet.calls.some(([n]) => n === "email_log_claim") && sends === 0, "nothing claimed, nothing sent");
 
-  // One card title for the digest and the expiring email (review follow-up S3): one line, where it goes.
+  const dueToday = [{ id: "c-1", kind: "post", department: "writer", ref_kind: "content_item", ref_id: "i-1", snapshot: { kind: "post", text: "A post" }, expires_at: null, auto_at: null, post_at: "2026-11-02T15:00:00Z" }];
+  const ok = await run(dueToday, counting);
+  assert.equal(ok.outcome, "sent");
+  const claimArgs = ok.calls.find(([n]) => n === "email_log_claim")![1];
+  assert.equal(claimArgs.p_subject, "1 post waits for you");
+  assert.deepEqual(claimArgs.p_summary, { people: 0, followUps: 0, posts: 1 }, "the log keeps subject and summary");
+
+  const failing: EmailSender = { name: "local", send: async () => { throw new Error("mail down"); } };
+  const failed = await run(dueToday, failing);
+  assert.equal(failed.outcome, "none");
+  const done = failed.calls.find(([n]) => n === "email_log_done");
+  assert.ok(done && done[1].p_log === "log-1" && done[1].p_error === "mail down", "the claim is recorded as failed");
+
+  // One card title for the digest and Today (review follow-up S3): one line, where it goes.
   assert.equal(cardTitle({ kind: "schedule", text: "Launch day\nthread", platform: "x" }), "Launch day thread · X");
   assert.equal(cardTitle({}), "A card waits for you");
 
-  console.log("notify: sender selection, Resend request, the expiring email, the footer, the digest hour and failed claims");
+  console.log("notify: sender selection, Resend request, the digest days and hour, skipped mornings and failed claims");
 }
 
 main().catch((e) => {

@@ -1,5 +1,6 @@
 /**
- * Email (P6 C0, F1; `approval.md` §7, §12 2): the morning digest and one email before a time-bound card expires.
+ * Email (P6 C0, F1; `approval.md` §7, §12 2): the morning digest. The email before a card expired is gone (wave 2):
+ * the morning email names the next deadline, and autopilot posts get a push (`autopilot.ts`).
  * An email only opens a card behind login; nothing in it decides (mail scanners open links), so there is no approve
  * link, and the unsubscribe link asks before it acts.
  *
@@ -9,7 +10,6 @@
  * Resend's own host.
  */
 
-import { escapeHtml } from "@/lib/cmo/digest";
 import { isProduction } from "@/lib/production";
 
 export type EmailMessage = {
@@ -90,42 +90,6 @@ function localSender(base: string, doFetch: typeof fetch): EmailSender {
       const body = (await res.json().catch(() => null)) as { ID?: unknown } | null;
       return { id: typeof body?.ID === "string" ? body.ID.slice(0, 100) : "local" };
     },
-  };
-}
-
-/** The footer every email carries: why it came, how to stop it, where to write. */
-export function emailFooter(unsubscribeUrl: string): { text: string; html: string } {
-  return {
-    text: `\n\n--\nYou get this because cards wait on you in Ferreto.\nStop these emails: ${unsubscribeUrl}\nQuestions: ${SUPPORT_EMAIL}`,
-    html:
-      `<p style="font:12px/1.5 Inter,sans-serif;color:#69695d;margin-top:28px;border-top:1px solid #e3e1da;padding-top:12px">` +
-      `You get this because cards wait on you in Ferreto. <a href="${escapeHtml(unsubscribeUrl)}" style="color:#69695d">Stop these emails</a>. ` +
-      `Questions: <a href="mailto:${SUPPORT_EMAIL}" style="color:#69695d">${SUPPORT_EMAIL}</a></p>`,
-  };
-}
-
-/** One card about to expire: what it is, when it expires, the link that opens it. */
-export function expiringEmail(input: { appUrl: string; cardId: string; title: string; expiresAt: string; timezone: string; unsubscribeUrl: string }): Omit<EmailMessage, "to"> {
-  const link = `${input.appUrl.replace(/\/$/, "")}/app/inbox/${encodeURIComponent(input.cardId)}`;
-  let when: string;
-  try {
-    when = new Intl.DateTimeFormat("en-GB", { timeZone: input.timezone, weekday: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(input.expiresAt));
-  } catch {
-    when = new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", weekday: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(input.expiresAt));
-  }
-  const title = input.title.slice(0, 120);
-  const subject = `Approve by ${when}: ${title}`.slice(0, 150);
-  const footer = emailFooter(input.unsubscribeUrl);
-  return {
-    subject,
-    text: `${subject}\n\nThis card expires at ${when}. After that it does not go out, and you get a new time to approve.\n\nOpen it: ${link}${footer.text}`,
-    html:
-      `<div style="font:14px/1.5 Inter,sans-serif;color:#2b2723;max-width:560px">` +
-      `<h1 style="font:600 18px Inter,sans-serif;margin:0 0 8px">Approve by ${escapeHtml(when)}</h1>` +
-      `<p><a href="${escapeHtml(link)}" style="color:#c93a0f">${escapeHtml(title)}</a></p>` +
-      `<p>This card expires at ${escapeHtml(when)}. After that it does not go out, and you get a new time to approve.</p>` +
-      `${footer.html}</div>`,
-    unsubscribeUrl: input.unsubscribeUrl,
   };
 }
 
