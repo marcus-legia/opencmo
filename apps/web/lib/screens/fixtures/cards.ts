@@ -89,7 +89,7 @@ export const LINKEDIN_POST_CARD: ApprovalCard = {
       {
         platform: "linkedin",
         versions: [
-          "Why we built the editor before anything else.\n\nEvery launch video I made took longer to cut than the feature took to build. Scrubbing a timeline for one bad sentence is not a good use of a founder's evening.\n\nSo the first thing OpenCMO does is let you cut by deleting words. The transcript is the timeline. Ask for B-roll on the line you mean and it lands there.\n\nThe marketing team of one needs fewer tools, not more.",
+          "Why we built the editor before anything else.\n\nEvery launch video I made took longer to cut than the feature took to build. Scrubbing a timeline for one bad sentence is not a good use of a founder's evening.\n\nSo the first thing Ferreto does is let you cut by deleting words. The transcript is the timeline. Ask for B-roll on the line you mean and it lands there.\n\nThe marketing team of one needs fewer tools, not more.",
         ],
         limit: 3000,
         visibleBeforeMore: 140,
@@ -343,7 +343,7 @@ export const FINISHED_CARD: ApprovalCard = {
         id: "caption-youtube",
         profile: "youtube",
         title: "Cut a product demo by deleting words",
-        text: "A one-minute look at the OpenCMO editor: cut by words, B-roll on the line you mean, and edits by asking. #videoediting #saas",
+        text: "A one-minute look at the Ferreto editor: cut by words, B-roll on the line you mean, and edits by asking. #videoediting #saas",
       },
     ],
   },

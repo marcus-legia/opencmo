@@ -69,7 +69,7 @@ const text = (nodes: Inline[]): string =>
 
 // An toàn: chỉ link http(s); HTML là chữ thường (React thoát ký tự khi vẽ).
 {
-  const ok = parseInline("[docs](https://opencmo.io/help)");
+  const ok = parseInline("[docs](https://ferreto.io/help)");
   assert.equal(ok[0]!.type, "link");
   for (const bad of ["[x](javascript:alert(1))", "[x](data:text/html,hi)", "[x](//evil.example)"]) {
     assert.ok(parseInline(bad).every((node) => node.type !== "link"), bad);

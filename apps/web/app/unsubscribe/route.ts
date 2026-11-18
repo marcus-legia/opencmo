@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 const TOKEN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function page(title: string, body: string, status = 200): NextResponse {
-  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><title>${title} · OpenCMO</title></head>
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><title>${title} · Ferreto</title></head>
 <body style="margin:0;background:#f6f5f1;color:#2b2723;font:16px/1.5 Inter,system-ui,sans-serif">
 <main style="max-width:520px;margin:12vh auto;padding:0 20px"><h1 style="font-size:24px;margin:0 0 12px">${title}</h1>${body}
 <p style="color:#69695d;font-size:14px;margin-top:32px">Questions: <a href="mailto:${SUPPORT_EMAIL}" style="color:#69695d">${SUPPORT_EMAIL}</a></p></main></body></html>`;
@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
   const token = request.nextUrl.searchParams.get("token") ?? "";
   if (!TOKEN.test(token)) return page("This link is not complete", "<p>Open the link from the email again, or turn emails off in Settings.</p>", 400);
   return page(
-    "Stop OpenCMO emails?",
+    "Stop Ferreto emails?",
     `<p>You will stop getting the morning digest and the emails before a card expires. Cards still wait for you in the app.</p>
 <form method="post"><input type="hidden" name="token" value="${token}"><button type="submit" style="font:inherit;padding:10px 18px;border:1px solid #2b2723;background:#2b2723;color:#f6f5f1;border-radius:4px;cursor:pointer">Stop emails</button></form>`,
   );

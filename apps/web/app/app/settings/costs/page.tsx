@@ -9,7 +9,7 @@ import { createServerClient } from "@/lib/supabase/server";
 export const dynamic = "force-dynamic";
 
 /**
- * What OpenCMO pays its providers (docs/plans/cmo/2026-11-02-provider-spend-ledger-plan.md), for the owner only. The
+ * What Ferreto pays its providers (docs/plans/cmo/2026-11-02-provider-spend-ledger-plan.md), for the owner only. The
  * report is read under the owner's own session: `provider_spend_report` refuses anyone not in `app_owners`, so this
  * page needs no service role and shows nothing to anyone else. It also lists the CMO's live switches (env only, never a
  * secret value), so an unset key shows here instead of silently doing nothing, and checks each provider's key live

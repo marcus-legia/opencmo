@@ -109,7 +109,7 @@ async function founder(db: SupabaseClient): Promise<E2EUser> {
   expect((await db.from("profiles").update({ plan: "starter" }).eq("id", user.id)).error).toBeNull();
   const doc = await db
     .from("marketing_documents")
-    .insert({ user_id: user.id, kind: "product", version: 1, created_by: "user", body: { name: "OpenCMO", one_liner: "An AI CMO for solo founders." } });
+    .insert({ user_id: user.id, kind: "product", version: 1, created_by: "user", body: { name: "Ferreto", one_liner: "An AI CMO for solo founders." } });
   expect(doc.error).toBeNull();
   return user;
 }

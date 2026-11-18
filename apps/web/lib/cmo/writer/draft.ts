@@ -3,7 +3,7 @@
  * provider) → one fix round with what both found → code checks again. A post keeps the versions that pass
  * the code; any other kind must pass or the run fails with the reasons, so nothing broken reaches a card.
  *
- * The model call is the job's `think` (OpenCMO's model, or the fake in CI), so a writer kind runs the same way in
+ * The model call is the job's `think` (Ferreto's model, or the fake in CI), so a writer kind runs the same way in
  * every job that orders it.
  */
 

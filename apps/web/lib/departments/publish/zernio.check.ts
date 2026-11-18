@@ -75,10 +75,10 @@ async function main() {
   {
     const { f, seen } = fakeFetch([{ status: 200, body: { authUrl: "https://x.com/i/oauth2/authorize?state=s" } }]);
     const z = createZernioAdapter({ apiKey: "k", fetch: f });
-    assert.equal((await z.connectLink("prof_1", "x", "https://opencmo.io/api/v1/accounts/callback")).url, "https://x.com/i/oauth2/authorize?state=s");
+    assert.equal((await z.connectLink("prof_1", "x", "https://ferreto.io/api/v1/accounts/callback")).url, "https://x.com/i/oauth2/authorize?state=s");
     const u = new URL(seen[0]!.url);
     assert.equal(u.pathname, "/api/v1/connect/twitter");
-    assert.equal(u.searchParams.get("redirect_url"), "https://opencmo.io/api/v1/accounts/callback");
+    assert.equal(u.searchParams.get("redirect_url"), "https://ferreto.io/api/v1/accounts/callback");
     const bad = fakeFetch([{ status: 200, body: { authUrl: "javascript:alert(1)" } }]);
     await assert.rejects(createZernioAdapter({ apiKey: "k", fetch: bad.f }).connectLink("prof_1", "x", "https://a.b/c"));
   }

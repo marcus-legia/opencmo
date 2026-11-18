@@ -49,8 +49,8 @@ export function protectedResourceMetadata(request: Request) {
     resource: resourceUrl(request),
     authorization_servers: [authorizationServer()],
     bearer_methods_supported: ["header"],
-    resource_name: "OpenCMO",
-    resource_documentation: `${(process.env.OPENCMO_WEB_URL ?? "https://opencmo.io").replace(/\/+$/, "")}/app/settings`,
+    resource_name: "Ferreto",
+    resource_documentation: `${(process.env.OPENCMO_WEB_URL ?? "https://ferreto.io").replace(/\/+$/, "")}/app/settings`,
   };
 }
 

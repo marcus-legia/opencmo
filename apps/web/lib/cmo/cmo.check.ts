@@ -98,7 +98,7 @@ async function main(): Promise<void> {
   assert.equal(wasCut(long.cadence, clampDocument("content_strategy", long).cadence), true, "text over the limit is a cut");
   const many = { features: Array.from({ length: 20 }, (_, i) => `f${i}`) };
   assert.equal(wasCut(many.features, clampDocument("product", many).features), true, "dropped list items are a cut");
-  const cadence = "Spend 10 minutes every morning in Approvals. Approve or edit the X post, approve the clips, and send one helpful Reddit reply. Let OpenCMO draft; you decide what goes out.";
+  const cadence = "Spend 10 minutes every morning in Approvals. Approve or edit the X post, approve the clips, and send one helpful Reddit reply. Let Ferreto draft; you decide what goes out.";
   assert.equal(clampDocument("content_strategy", { cadence }).cadence, cadence, "a full weekly rhythm is not cut mid-sentence");
 }
 

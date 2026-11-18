@@ -57,7 +57,7 @@ export async function run(): Promise<void> {
 
   // Onboard: the founder's documents, a paid plan with credits.
   for (const [kind, body] of Object.entries({
-    product: { name: "OpenCMO", one_liner: "An AI CMO for solo founders: an editor, post drafts and Reddit leads you approve." },
+    product: { name: "Ferreto", one_liner: "An AI CMO for solo founders: an editor, post drafts and Reddit leads you approve." },
     strategy: { icp: "Solo founders who ship software", pains: ["editing product demos takes longer than building them"], avoid: ["game-changer"] },
     content_strategy: { pillars: [{ name: "Editing by words", ideas: ["Cut a video by deleting words", "Ask for B-roll on the line"] }] },
   })) {

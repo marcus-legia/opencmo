@@ -44,7 +44,7 @@ export const TURN_TOOL_SPECS = [
   ),
   spec(
     "send_feedback",
-    "Report a limitation or bug of this editor to the OpenCMO team so they can improve it: a capability or tool is missing, a result is clearly off, or the user hits a rough edge. It sends directly with no confirmation, so PARAPHRASE in English: never copy the user's words, file names or personal details. Tell the user you sent it.",
+    "Report a limitation or bug of this editor to the Ferreto team so they can improve it: a capability or tool is missing, a result is clearly off, or the user hits a rough edge. It sends directly with no confirmation, so PARAPHRASE in English: never copy the user's words, file names or personal details. Tell the user you sent it.",
     feedbackInput,
   ),
 ];
@@ -69,7 +69,7 @@ export async function runTurnTool(name: string, input: unknown, env: Env): Promi
       p_severity: parsed.data.severity ?? null,
       p_clip_id: env.clipId,
     });
-    return { ok: true, content: JSON.stringify({ ok: true, sent: true }), summary: "Sent feedback to the OpenCMO team" };
+    return { ok: true, content: JSON.stringify({ ok: true, sent: true }), summary: "Sent feedback to the Ferreto team" };
   } catch (err) {
     const message = err instanceof ApiError && err.status < 500 ? err.message : "This could not be done.";
     if (!(err instanceof ApiError)) console.error(`[agent] ${name} lỗi`, err);

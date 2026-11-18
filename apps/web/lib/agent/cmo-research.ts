@@ -168,7 +168,7 @@ export async function runResearchTool(name: string, raw: unknown, budget: ScBudg
         return { ok: true, content: data(out), summary: "Read a video transcript" };
       }
       default: {
-        // Only whether research works: the balance is OpenCMO's own ScrapeCreators account, not the
+        // Only whether research works: the balance is Ferreto's own ScrapeCreators account, not the
         // founder's, so its number would hand the caller our spend (security fixes plan, fix 5).
         const available = (await creditBalance()) > 0;
         return { ok: true, content: JSON.stringify({ available }), summary: available ? "Research available" : "Research unavailable" };

@@ -9,7 +9,7 @@ export default function AcceptableUsePage() {
   return (
     <LegalPage
       title="Acceptable Use Policy"
-      intro={<p>OpenCMO helps you market your own business with your own content. To keep it safe for everyone, you may not use OpenCMO for the things below. Breaking this policy can lead to removed content or a suspended account.</p>}
+      intro={<p>Ferreto helps you market your own business with your own content. To keep it safe for everyone, you may not use Ferreto for the things below. Breaking this policy can lead to removed content or a suspended account.</p>}
       sections={[
         {
           heading: "Content you may not create or publish",
@@ -24,7 +24,7 @@ export default function AcceptableUsePage() {
           ),
         },
         {
-          heading: "Ways you may not use OpenCMO",
+          heading: "Ways you may not use Ferreto",
           body: (
             <ul>
               <li>Spam, bulk messaging or unsolicited outreach.</li>

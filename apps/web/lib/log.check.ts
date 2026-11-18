@@ -14,7 +14,7 @@ console.warn = (line: string) => lines.push(`warn ${line}`);
 logEvent("error", "forged", { message: 'one\n{"tag":"opencmo_log","event":"fake"}', long: "x".repeat(10_000), gone: undefined });
 logEvent("warn", "urls", {
   signed: "failed https://x.supabase.co/object/a.mp4?token=SECRET#frag at line",
-  callback: "https://opencmo.io/auth/callback#access_token=SECRET",
+  callback: "https://ferreto.io/auth/callback#access_token=SECRET", // gitleaks:allow (fake token in a log test)
   question: "are you sure? yes",
   status: 500,
 });
@@ -44,7 +44,7 @@ assert.equal(errorFields("text").error, "text");
 assert.ok(isNoise({ name: "AbortError", message: "aborted" }));
 assert.ok(isNoise({ message: "ResizeObserver loop completed with undelivered notifications." }));
 assert.ok(isNoise({ message: "x", stack: "at chrome-extension://abc/content.js:1:1" }));
-assert.ok(!isNoise({ name: "TypeError", message: "x is not a function", stack: "at https://opencmo.io/_next/a.js:1:1" }));
+assert.ok(!isNoise({ name: "TypeError", message: "x is not a function", stack: "at https://ferreto.io/_next/a.js:1:1" }));
 
 const over = createIpLimiter(2, 1000);
 assert.equal(over("a", 0), false);

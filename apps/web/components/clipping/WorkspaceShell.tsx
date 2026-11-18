@@ -262,7 +262,7 @@ export function WorkspaceShell({
         <div className="rail-top">
           <Link className="rail-mark" href={hrefFor("home")}>
             <img src="/icon.svg" alt="" width={24} height={24} />
-            <span className="rail-label">OpenCMO</span>
+            <span className="rail-label">Ferreto</span>
           </Link>
           <button
             type="button"

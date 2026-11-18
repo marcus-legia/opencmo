@@ -44,7 +44,7 @@ export const analyticsFixture: AnalyticsScreen = {
     { where: { platform: "tiktok", handle: "@opencmo" }, followers: 880, change: 121, posts: 5, medianImpressions: 3400, engagementRate: 6.1, worksBest: "Short under 25 s, 18:00", noDataSince: null },
     { where: { platform: "linkedin", handle: "Marcus" }, followers: 1105, change: 43, posts: 3, medianImpressions: 640, engagementRate: 5.2, worksBest: "Not enough posts yet", noDataSince: null },
     { where: { platform: "threads", handle: "@opencmo" }, followers: 530, change: null, posts: 4, medianImpressions: null, engagementRate: null, worksBest: null, noDataSince: at("2026-10-27", "08:00") },
-    { where: { platform: "youtube", handle: "OpenCMO" }, followers: 96, change: 22, posts: 2, medianImpressions: 1150, engagementRate: 4.0, worksBest: "Not enough posts yet", noDataSince: null },
+    { where: { platform: "youtube", handle: "Ferreto" }, followers: 96, change: 22, posts: 2, medianImpressions: 1150, engagementRate: 4.0, worksBest: "Not enough posts yet", noDataSince: null },
   ],
   posts: [
     { id: "p-1", title: "Short · “Cut by words”", platform: "tiktok", impressions: 9820, engagementRate: 7.4, vsMedian: 2.9, read: "Before/after in the first 2 s", url: null },

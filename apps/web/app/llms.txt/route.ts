@@ -8,18 +8,18 @@ export const dynamic = "force-dynamic";
 
 /**
  * `/llms.txt` (llmstxt.org): bản tóm tắt bằng Markdown cho mô hình ngôn ngữ —
- * What OpenCMO is, its prices and the post index. Prices come from the catalogue, so they match the pricing page.
+ * What Ferreto is, its prices and the post index. Prices come from the catalogue, so they match the pricing page.
  */
 export async function GET() {
   const posts = getAllPosts();
   // Only plans with a catalogue row have a price; none listed when the catalogue cannot be read.
   const paid = (await plansOnSale()).filter((plan) => plan.slug);
   const lines = [
-    "# OpenCMO",
+    "# Ferreto",
     "",
     `> ${SITE_DESCRIPTION}`,
     "",
-    "OpenCMO is software for founders. You enter your website; an AI CMO reads it, writes a strategy and plans your week, and three departments draft the work: Post (posts for X, Threads and LinkedIn in your voice, plus slides and video scripts), Video (slideshows and post images from the approved words, short clips cut from videos you recorded and finished in the editor, where you cut by words and add captions and a voice-over) and Sales (public conversations where people describe the problem you solve, with a reply drafted for you to post yourself). Nothing is published without your approval, and only to accounts you connect. Your first plan and drafts are free. Pick a plan to approve and post them.",
+    "Ferreto is software for founders. You enter your website; an AI CMO reads it, writes a strategy and plans your week, and three departments draft the work: Post (posts for X, Threads and LinkedIn in your voice, plus slides and video scripts), Video (slideshows and post images from the approved words, short clips cut from videos you recorded and finished in the editor, where you cut by words and add captions and a voice-over) and Sales (public conversations where people describe the problem you solve, with a reply drafted for you to post yourself). Nothing is published without your approval, and only to accounts you connect. Your first plan and drafts are free. Pick a plan to approve and post them.",
     "",
     "## Pricing",
     "",

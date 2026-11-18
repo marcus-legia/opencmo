@@ -27,11 +27,11 @@ export class EmailError extends Error {}
 
 const RESEND_URL = "https://api.resend.com/emails";
 const TIMEOUT_MS = 15_000;
-export const SUPPORT_EMAIL = "support@opencmo.io";
+export const SUPPORT_EMAIL = "support@ferreto.io";
 
 export function emailSender(env: Record<string, string | undefined> = process.env, doFetch: typeof fetch = fetch): EmailSender | null {
   const key = env.RESEND_API_KEY?.trim();
-  if (key && env.OPENCMO_EMAIL_LIVE === "1") return resendSender(key, env.OPENCMO_EMAIL_FROM?.trim() || "OpenCMO <cmo@opencmo.io>", doFetch);
+  if (key && env.OPENCMO_EMAIL_LIVE === "1") return resendSender(key, env.OPENCMO_EMAIL_FROM?.trim() || "Ferreto <hello@ferreto.io>", doFetch);
   if (env.OPENCMO_DIGEST_LOCAL_MAIL === "1" && !isProduction()) return localSender((env.OPENCMO_LOCAL_MAIL_URL ?? "http://127.0.0.1:54324").replace(/\/$/, ""), doFetch);
   return null;
 }
@@ -96,10 +96,10 @@ function localSender(base: string, doFetch: typeof fetch): EmailSender {
 /** The footer every email carries: why it came, how to stop it, where to write. */
 export function emailFooter(unsubscribeUrl: string): { text: string; html: string } {
   return {
-    text: `\n\n--\nYou get this because cards wait on you in OpenCMO.\nStop these emails: ${unsubscribeUrl}\nQuestions: ${SUPPORT_EMAIL}`,
+    text: `\n\n--\nYou get this because cards wait on you in Ferreto.\nStop these emails: ${unsubscribeUrl}\nQuestions: ${SUPPORT_EMAIL}`,
     html:
       `<p style="font:12px/1.5 Inter,sans-serif;color:#69695d;margin-top:28px;border-top:1px solid #e3e1da;padding-top:12px">` +
-      `You get this because cards wait on you in OpenCMO. <a href="${escapeHtml(unsubscribeUrl)}" style="color:#69695d">Stop these emails</a>. ` +
+      `You get this because cards wait on you in Ferreto. <a href="${escapeHtml(unsubscribeUrl)}" style="color:#69695d">Stop these emails</a>. ` +
       `Questions: <a href="mailto:${SUPPORT_EMAIL}" style="color:#69695d">${SUPPORT_EMAIL}</a></p>`,
   };
 }

@@ -611,7 +611,7 @@ export async function salesScan(ctx: JobContext): Promise<JobOutput> {
         const count = (n: number | null | undefined, max: number) => (typeof n === "number" && Number.isInteger(n) && n > 0 && n <= max ? n : null);
         const minKarma = count(r?.minKarma, 1_000_000);
         const minAccountAgeDays = count(r?.minAccountAgeDays, 3650);
-        // The cache is shared by every founder: only OpenCMO's own model writes it.
+        // The cache is shared by every founder: only Ferreto's own model writes it.
         await store.saveSubredditRule({ subreddit: u.name, verdict, summary, min_karma: minKarma, min_account_age_days: minAccountAgeDays, megathread });
         out.set(u.name, { verdict, summary, minKarma, minAccountAgeDays, megathread });
       }

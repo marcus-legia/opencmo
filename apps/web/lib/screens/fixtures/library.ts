@@ -3,7 +3,7 @@ import { at } from "./shared";
 
 /** `Library.dc.html`, all four tabs. */
 export const libraryFixture: LibraryScreen = {
-  site: "opencmo.io",
+  site: "ferreto.io",
   documents: [
     { kind: "product", title: "Product Information", summary: "An AI CMO for solo founders: a video editor, post drafts and Reddit leads you approve.", fields: 9, editedBy: "user", editedAt: at("2026-10-14", "10:00"), note: null },
     { kind: "strategy", title: "Marketing Strategy", summary: "Ideal customer, their pains, positioning, why choose you, words and claims to avoid.", fields: 7, editedBy: "user", editedAt: at("2026-10-20", "10:00"), note: null },
@@ -13,7 +13,7 @@ export const libraryFixture: LibraryScreen = {
   brandKits: [
     {
       id: "kit-sample",
-      name: "OpenCMO · default kit",
+      name: "Ferreto · default kit",
       colors: { primary: "#ef4a1a", secondary: "#2b2723", accent: "#ffd8c6", text: "#ffffff", background: "#26282c" },
       fonts: { heading: "Inter", body: "Inter" },
       captionStyle: "spotlight",
@@ -38,7 +38,7 @@ export const libraryFixture: LibraryScreen = {
     ],
     video: [
       { id: "s-listicle", name: "Senior dev listicle", origin: "built_in", note: "A style skill for list videos", readBy: ["Studio", "Editor Assistant"] },
-      { id: "s-demo", name: "OpenCMO demo cut", origin: "yours", note: "Saved from the editor Assistant", readBy: ["Editor Assistant"] },
+      { id: "s-demo", name: "Ferreto demo cut", origin: "yours", note: "Saved from the editor Assistant", readBy: ["Editor Assistant"] },
     ],
   },
 };

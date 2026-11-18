@@ -33,7 +33,7 @@ async function main() {
   assert.equal(m[4], pub);
   const claims = JSON.parse(fromB64url(m[2]!).toString()) as { aud: string; exp: number; sub: string };
   assert.equal(claims.aud, "https://fcm.googleapis.com");
-  assert.equal(claims.sub, "mailto:support@opencmo.io");
+  assert.equal(claims.sub, "mailto:support@ferreto.io");
   assert.ok(verify("sha256", Buffer.from(`${m[1]}.${m[2]}`), { key: createPublicKey(publicKey.export({ format: "pem", type: "spki" })), dsaEncoding: "ieee-p1363" }, fromB64url(m[3]!)), "the signature verifies");
 
   // Only the allowed push services; the same list as SQL's push_endpoint_allowed.

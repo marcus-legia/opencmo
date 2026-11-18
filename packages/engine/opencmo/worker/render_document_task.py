@@ -37,7 +37,7 @@ from opencmo.worker.task_run import TaskContext, TaskError, run_task
 log = logging.getLogger(__name__)
 
 EXPORTS_BUCKET = "exports"
-WATERMARK = os.environ.get("OPENCMO_WATERMARK", "opencmo.io")
+WATERMARK = os.environ.get("OPENCMO_WATERMARK", "ferreto.io")
 
 RENDER_FAILED = "Exporting failed. Please try again."
 MAX_SOURCE_BYTES = 2 * 1024**3

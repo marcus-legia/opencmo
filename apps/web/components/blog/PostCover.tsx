@@ -11,7 +11,7 @@ export function PostCover({ title, category, size = "card" }: { title: string; c
     <div className={`post-cover is-${category} is-${size}`} aria-hidden="true">
       <span className="post-cover-label">{name}</span>
       <span className="post-cover-title">{title}</span>
-      <span className="post-cover-mark">OpenCMO</span>
+      <span className="post-cover-mark">Ferreto</span>
     </div>
   );
 }

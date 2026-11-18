@@ -29,13 +29,13 @@ export default async function LoginPage({
 
   return (
     <main className="auth-page">
-      <Link href="/" aria-label="OpenCMO home"><Brand /></Link>
+      <Link href="/" aria-label="Ferreto home"><Brand /></Link>
       <div className="auth-content">
         <aside className="auth-art">
           <div className="auth-visual" aria-hidden="true">
             <Arabesque id="auth-pattern" />
           </div>
-          <h2>Your marketing team is ready.</h2><p>Tell OpenCMO about your business. It plans the week and drafts the work; you approve what goes out.</p></aside>
+          <h2>Your marketing team is ready.</h2><p>Tell Ferreto about your business. It plans the week and drafts the work; you approve what goes out.</p></aside>
         <section className="auth-form">
       <h1>Sign in</h1>
       <p>Use your Google account. No password needed.</p>
@@ -49,7 +49,7 @@ export default async function LoginPage({
       <LoginForm nextUrl={params.next} siteUrl={params.site} />
         </section>
       </div>
-      <p className="auth-footer">OpenCMO · The AI CMO for founders.</p>
+      <p className="auth-footer">Ferreto · The AI CMO for founders.</p>
     </main>
   );
 }

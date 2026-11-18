@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Settings → Accounts (P4 C1): one row per platform OpenCMO posts to. Connect opens Zernio's link for that platform
+ * Settings → Accounts (P4 C1): one row per platform Ferreto posts to. Connect opens Zernio's link for that platform
  * (B2 `POST /accounts/connect`); Zernio sends the founder back through `/accounts/callback`, which lands here with
  * `?connected=<platform>` or `?connect_error=<sentence>`. Disconnect asks first, then removes it at Zernio and here.
  */
@@ -166,7 +166,7 @@ export function AccountsPanel({ accounts: given, live }: { accounts: Account[]; 
         </div>
       )}
       {confirming ? (
-        <p className="v2-panel-body scr-small scr-muted">Disconnecting removes OpenCMO's access to the account. Nothing is posted to it after that.</p>
+        <p className="v2-panel-body scr-small scr-muted">Disconnecting removes Ferreto's access to the account. Nothing is posted to it after that.</p>
       ) : null}
     </Panel>
   );

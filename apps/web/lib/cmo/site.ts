@@ -103,7 +103,7 @@ function get(url: URL, addresses: Resolved[]): Promise<Answer> {
       // A pinned lookup is per request; a pooled socket could belong to another host's answer.
       agent: false,
       signal: AbortSignal.timeout(TIMEOUT_MS),
-      headers: { "user-agent": "OpenCMOBot/1.0 (+https://opencmo.io)", accept: "text/html,application/xhtml+xml" },
+      headers: { "user-agent": "FerretoBot/1.0 (+https://ferreto.io)", accept: "text/html,application/xhtml+xml" },
     });
     request.on("response", (response) => resolve({ status: response.statusCode ?? 0, headers: response.headers, body: response }));
     request.on("error", reject);

@@ -153,8 +153,8 @@ export function DesignSheet() {
         </Panel>
 
         <section aria-label="Fields" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <Field label="Input" defaultValue="opencmo.io" />
-          <Field label="With an error" defaultValue="not a url" error="Enter a website, like opencmo.io." />
+          <Field label="Input" defaultValue="ferreto.io" />
+          <Field label="With an error" defaultValue="not a url" error="Enter a website, like ferreto.io." />
           <SelectField label="Time zone" defaultValue="Asia/Ho_Chi_Minh">
             <option>Asia/Ho_Chi_Minh</option>
             <option>Europe/London</option>

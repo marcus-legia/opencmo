@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Hộp thoại của menu dự án: hai cái OpenCMO thêm vào fork (checklist MNU-08)
+ * Hộp thoại của menu dự án: hai cái Ferreto thêm vào fork (checklist MNU-08)
  * và bảng tra phím của Help (MNU-09, cuối file):
  *
  * - Version history: quay về bản gốc (như bộ sinh tạo ra), một bản đã export,

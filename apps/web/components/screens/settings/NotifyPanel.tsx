@@ -147,13 +147,13 @@ export function NotifyPanel() {
               ) : push === "busy" ? (
                 <span className="scr-small scr-muted">Checking…</span>
               ) : push === "denied" ? (
-                <span className="scr-small">This browser blocks notifications from OpenCMO. Allow them in the browser&apos;s site settings, then come back.</span>
+                <span className="scr-small">This browser blocks notifications from Ferreto. Allow them in the browser&apos;s site settings, then come back.</span>
               ) : push === "needs_home_screen" ? (
                 <span className="scr-small">
-                  On iPhone and iPad, add OpenCMO to your Home Screen first (Share, then Add to Home Screen), open it from there, and turn push on in Settings. Email works everywhere.
+                  On iPhone and iPad, add Ferreto to your Home Screen first (Share, then Add to Home Screen), open it from there, and turn push on in Settings. Email works everywhere.
                 </span>
               ) : (
-                <span className="scr-small">This browser cannot get push from OpenCMO. Email works everywhere.</span>
+                <span className="scr-small">This browser cannot get push from Ferreto. Email works everywhere.</span>
               )}
             </div>
           </>

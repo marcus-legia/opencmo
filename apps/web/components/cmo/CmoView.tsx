@@ -47,7 +47,7 @@ export function CmoView({ initial, site }: { initial: CmoState; site: string }) 
       <section className="settings-view cmo-view" data-testid="cmo-onboarding">
         <h1 className="page-title">{hasDocs ? "Rebuild your marketing plan" : "Meet your AI CMO"}</h1>
         <p className="cmo-lead">
-          Enter your website. OpenCMO reads it and writes the four documents your marketing is built on: what you sell,
+          Enter your website. Ferreto reads it and writes the four documents your marketing is built on: what you sell,
           who it is for, who you compete with and what to post. You can edit every word.
         </p>
         <SiteForm initial={site || lastSite} busy={busy} onSubmit={build} />
@@ -174,7 +174,7 @@ function DocumentCard({ kind, row, onSaved }: { kind: DocumentKind; row: Documen
           <h2>{doc.title}</h2>
           <p className="cmo-doc-summary">{doc.summary}</p>
         </div>
-        <span className={`cmo-badge is-${row.created_by}`}>{row.created_by === "agent" ? "Drafted by OpenCMO" : "Edited by you"}</span>
+        <span className={`cmo-badge is-${row.created_by}`}>{row.created_by === "agent" ? "Drafted by Ferreto" : "Edited by you"}</span>
       </header>
       {draft ? (
         <div className="cmo-form">

@@ -92,6 +92,6 @@ await browser.close();
 
 writeFileSync(
 	join(OUT, 'LICENSE-OFL.txt'),
-	`Các font dưới đây phát hành theo SIL Open Font License 1.1, tải từ Google Fonts\n(bản subset latin), tự host cho clip của OpenCMO.\n\n${licenses.join('\n')}`,
+	`Các font dưới đây phát hành theo SIL Open Font License 1.1, tải từ Google Fonts\n(bản subset latin), tự host cho clip của Ferreto.\n\n${licenses.join('\n')}`,
 );
 console.log(entries.join('\n'));

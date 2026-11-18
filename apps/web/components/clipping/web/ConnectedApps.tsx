@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Apps connected through OpenCMO's OAuth server (claude.ai's connector, other MCP clients): the
+ * Apps connected through Ferreto's OAuth server (claude.ai's connector, other MCP clients): the
  * consent screen (`/oauth/consent`) promises they can be disconnected here. Disconnecting revokes
  * both Supabase's grant and ours (`mcp_grants`, which the MCP server checks on every request), so
  * the app's token stops working on its next request. A connection with no grant of ours (made
@@ -58,7 +58,7 @@ export function ConnectedApps({ paid = false }: { paid?: boolean } = {}) {
   return (
     <div className="settings-card" data-testid="connected-apps">
       <h2>Connected apps</h2>
-      <p>Apps you allowed to use OpenCMO as you, such as Claude. Disconnect one to stop it at once.</p>
+      <p>Apps you allowed to use Ferreto as you, such as Claude. Disconnect one to stop it at once.</p>
       {paid ? null : <PaidPlanNote />}
       {error ? (
         <p className="field-error" role="alert">

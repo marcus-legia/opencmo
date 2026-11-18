@@ -18,7 +18,7 @@ import { safeZone, todayPlatform, type TodayCard, type TodayFailedSlot, type Tod
 /** How far back "the last post per platform" looks: a platform quiet for longer than this is not nagged about. */
 const SILENCE_LOOKBACK_DAYS = 60;
 
-/** Whether posting from OpenCMO is set up on this server; without it, posting by intent needs no account. */
+/** Whether posting from Ferreto is set up on this server; without it, posting by intent needs no account. */
 export function publishConfigured(env: Record<string, string | undefined> = process.env): boolean {
   try {
     publishAdapter(env);

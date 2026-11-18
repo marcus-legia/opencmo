@@ -119,7 +119,7 @@ export function SetupScreen() {
     <>
       <header style={{ height: "56px", display: "flex", alignItems: "center", gap: "10px", padding: "0 24px", borderBottom: "1px solid var(--line)" }}>
         <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: "24px", height: "24px", borderRadius: "6px", background: "var(--text)", color: "var(--bg)", fontWeight: "700", fontSize: "13px" }}>O</span>
-        <span style={{ fontWeight: "600" }}>OpenCMO</span>
+        <span style={{ fontWeight: "600" }}>Ferreto</span>
         <div style={{ flex: "1 1 auto" }}></div>
         <nav className="stepper" aria-label="Setup steps">
           {stepper.map((x) => (

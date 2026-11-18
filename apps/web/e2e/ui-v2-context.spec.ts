@@ -35,9 +35,9 @@ test("a document is edited in the drawer over the feed and saved as a new versio
   await expect(drawer).toBeVisible();
 
   await drawer.getByRole("button", { name: "Edit" }).click();
-  await drawer.getByLabel("Name").fill("OpenCMO, edited in place");
+  await drawer.getByLabel("Name").fill("Ferreto, edited in place");
   await drawer.getByRole("button", { name: "Save" }).click();
-  await expect(drawer).toContainText("OpenCMO, edited in place");
+  await expect(drawer).toContainText("Ferreto, edited in place");
   await expect(page).toHaveURL(/\/app\?doc=product$/);
   await expect.poll(version).toBe(before + 1);
 

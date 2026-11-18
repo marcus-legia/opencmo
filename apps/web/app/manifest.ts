@@ -6,8 +6,8 @@ import type { MetadataRoute } from "next";
  */
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "OpenCMO",
-    short_name: "OpenCMO",
+    name: "Ferreto",
+    short_name: "Ferreto",
     start_url: "/app",
     scope: "/",
     display: "standalone",

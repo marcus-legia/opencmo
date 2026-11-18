@@ -595,7 +595,7 @@ export async function cmoContext(supabase: SupabaseClient): Promise<string> {
   return `<documents>\n${docs.join("\n") || "(none yet)"}\n</documents>${works ? `\n${works}` : ""}`;
 }
 
-/** Merges the changed fields into the latest version and saves it as a new, OpenCMO-badged version. */
+/** Merges the changed fields into the latest version and saves it as a new, Ferreto-badged version. */
 async function updateDocument(supabase: SupabaseClient, kind: DocumentKind, fieldsJson: string): Promise<ToolOutcome> {
   let fields: unknown;
   try {

@@ -146,7 +146,7 @@ function script(history: StoredMessage[], offered: ReadonlySet<string> = new Set
       ?.toLowerCase() ?? "";
     if (previous.includes("set_frame") && /then undo/.test(asked)) return [text("On second thought, undoing that."), use("undo", {})];
     if (previous.includes("undo")) return [text(raw0.includes('"changed":true') ? "Undone: the clip is back to how it was." : "There was nothing to undo.")];
-    if (previous.includes("send_feedback")) return [text("I sent that to the OpenCMO team.")];
+    if (previous.includes("send_feedback")) return [text("I sent that to the Ferreto team.")];
     if (previous.includes("apply_style")) {
       const parsed = JSON.parse(raw0) as { receipt?: { applied: string[]; skipped: { item: string; reason: string }[]; unavailable: string[] }; INVALID_INPUT?: string; error?: string };
       if (!parsed.receipt) return [text(`The style could not be applied: ${parsed.INVALID_INPUT ?? parsed.error ?? "unknown error"}`)];

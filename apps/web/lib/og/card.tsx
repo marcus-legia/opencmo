@@ -47,7 +47,7 @@ export async function ogCard({ kicker, title, footer }: { kicker: string; title:
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 26, color: "#55586b" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
               <div style={{ width: 44, height: 44, borderRadius: 8, background: LAPIS, display: "flex", alignItems: "center", justifyContent: "center", color: GOLD, fontFamily: "Fraunces", fontSize: 30 }}>O</div>
-              <span style={{ fontFamily: "Fraunces", fontSize: 32, color: INK }}>OpenCMO</span>
+              <span style={{ fontFamily: "Fraunces", fontSize: 32, color: INK }}>Ferreto</span>
             </div>
             <span>{footer}</span>
           </div>

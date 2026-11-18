@@ -1,5 +1,5 @@
 /*
- * OpenCMO's service worker (P6 C1): web push only. A push carries no payload, so it says nothing by itself: the worker
+ * Ferreto's service worker (P6 C1): web push only. A push carries no payload, so it says nothing by itself: the worker
  * asks the app how many cards wait (same origin, the founder's own session) and shows that. A tap opens the queue;
  * nothing is ever decided from a notification. No caching, no offline: the app stays exactly as it is without it.
  */

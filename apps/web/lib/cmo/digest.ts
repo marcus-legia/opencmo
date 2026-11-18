@@ -14,7 +14,7 @@ import { buildToday, type TodayRow } from "./today";
 export const DIGEST_TODAY_ROWS = 3;
 
 export type DigestInput = {
-  /** Absolute origin of the app, for links in the email (`https://opencmo.io`). */
+  /** Absolute origin of the app, for links in the email (`https://ferreto.io`). */
   appUrl: string;
   /** The founder's local date, already formatted ("Thursday 29 Oct"). */
   dateLabel: string;
