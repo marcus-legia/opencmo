@@ -48,6 +48,19 @@ content.md`); the gap between that and the code is `opencmo-internal/docs/cmo/20
 - **Copy:** no "in your voice" (say "built from your business plan" or "using what it knows about your product");
   never "every day" for scans (they run when the week plan asks or on request); name only the platforms the scan
   really reads.
+- **B2B channels only** (owner, 2026-11-18): posts go to X, LinkedIn and Threads. TikTok and Instagram, slideshows
+  and carousels, the photo-post page (`/app/photos`) and the CMO's video scripts (`write_video_brief`, the script item,
+  `/app/script`) are for a different customer and are being removed: do not build on them. The editor stays, opened
+  from the top bar, for videos the founder makes on their own. Photos attach to a post on the Post tab.
+- **App layout** (owner, 2026-11-18; design: https://claude.ai/artifact/H7VT5UZAqnxDbVSrqEBFHZ): top tabs Feed · Sales ·
+  Post · Calendar · Analytics · Editor ↗. No Agents block (Planner lives in the documents, Publisher in Calendar,
+  Studio becomes "make an image" in Post, low priority because it costs credits). Every Sales scan saves what people
+  said to the Library; Post writes only from it, citing a summary of each source conversation. Research only shows
+  competitors; finding new ones happens when the founder asks in Research's chat (Lurk, like Sales).
+- **Subdomains** (owner, 2026-11-18): the app lives at `ferreto.io/app`; tools that open on their own go on a
+  subdomain of ferreto.io: the editor at `editor.ferreto.io` (opened in a new tab from the app's top bar), the blog
+  at `blog.ferreto.io`. A new standalone surface gets `<name>.ferreto.io`, not a path. Moving one needs the Supabase
+  session cookie shared across subdomains (cookie domain `.ferreto.io`) and the subdomain in Supabase's redirect URLs.
 - **Next, from the review:** free scan (group A, in progress) → the week plan and Today around Sales, a scan cadence
   of its own → the digest email leads with people asking → clean what Creem's reviewer clicks (landing links that
   404, "not available yet") → measure scan quality on real products before marketing.
