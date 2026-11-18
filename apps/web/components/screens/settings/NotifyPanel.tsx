@@ -265,34 +265,23 @@ export function NotifyPanel({ digestDays, digestHour, emailLog, timezone, live }
           {emailLog.length === 0 ? (
             <span className="scr-small scr-muted">Nothing yet. The first morning email shows here, and so does a morning with nothing new.</span>
           ) : (
-            <div style={{ overflowX: "auto", maxWidth: "100%" }}>
-              <table className="v2-table scr-table-compact">
-                <thead>
-                  <tr>
-                    <th scope="col">When</th>
-                    <th scope="col">What</th>
-                    <th scope="col">Subject</th>
-                    <th scope="col">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {emailLog.map((entry) => {
-                    const line = summaryLine(entry);
-                    return (
-                      <tr key={entry.id} data-status={entry.status}>
-                        <td className="scr-num" style={{ whiteSpace: "nowrap" }}>{when(entry.at, timezone)}</td>
-                        <td style={{ whiteSpace: "nowrap" }}>{KIND[entry.kind]}</td>
-                        <td>
-                          {entry.subject ?? <span className="scr-muted">No email</span>}
-                          {line ? <div className="scr-tiny scr-muted">{line}</div> : null}
-                        </td>
-                        <td>{entry.status === "sent" ? "Sent" : "Skipped"}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+            // A list, not a table: at phone width four columns squeeze the subject into one word a line.
+            <ul className="td-emaillog">
+              {emailLog.map((entry) => {
+                const line = summaryLine(entry);
+                return (
+                  <li key={entry.id} data-status={entry.status}>
+                    <span className="td-emaillog-head">
+                      <span className="scr-num">{when(entry.at, timezone)}</span>
+                      <span>{KIND[entry.kind]}</span>
+                      <span className="td-emaillog-status">{entry.status === "sent" ? "Sent" : "Skipped"}</span>
+                    </span>
+                    <span>{entry.subject ?? <span className="scr-muted">No email</span>}</span>
+                    {line ? <span className="scr-tiny scr-muted">{line}</span> : null}
+                  </li>
+                );
+              })}
+            </ul>
           )}
         </div>
       </div>

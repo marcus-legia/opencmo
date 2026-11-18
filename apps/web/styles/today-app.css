@@ -439,3 +439,10 @@ html:not([data-theme="dark"]) .k { --ok: #16744c; --warn: #8f5a0e; }
 .td-usage-bar { margin-top: 12px; height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
 .td-usage-bar > span { display: block; height: 100%; background: var(--accent); }
 .td-usage-bar[data-paused] > span { background: var(--bad, #b4402f); }
+
+/* Settings › Notifications: the email log as rows that wrap on a phone (wave 2 C3). */
+.td-emaillog { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; border-top: 1px solid var(--line); }
+.td-emaillog > li { display: flex; flex-direction: column; gap: 2px; padding: 10px 0; border-bottom: 1px solid var(--line); min-width: 0; overflow-wrap: anywhere; }
+.td-emaillog-head { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 13px; color: var(--muted); }
+.td-emaillog-status { margin-left: auto; }
+.td-emaillog > li[data-status="sent"] .td-emaillog-status { color: var(--ok, inherit); }

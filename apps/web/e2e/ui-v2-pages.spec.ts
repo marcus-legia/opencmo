@@ -12,7 +12,8 @@ test.skip(process.env.NEXT_PUBLIC_OPENCMO_UI !== "v2", "v2 pages are built only 
 const PAGES: [string, string][] = [
   ["/app/analytics", "This week"],
   ["/app/research", "What works, with the link."],
-  ["/app/writer", "Writer"],
+  // Post's list view (four tabs, 2026-11-19).
+  ["/app/writer", "Posts"],
   ["/app/studio", "Videos"],
   ["/app/sales", "Sales"],
   ["/app/settings", "Settings"],

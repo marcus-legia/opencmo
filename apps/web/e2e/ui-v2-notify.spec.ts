@@ -78,7 +78,8 @@ test("Notifications shows the morning email's schedule and the log, and saves a 
   const schedule = page.getByTestId("digest-schedule");
   await expect(schedule.getByLabel("When", { exact: true })).toHaveValue("weekdays");
   await expect(schedule.getByLabel("at", { exact: true })).toHaveValue("8");
-  await page.locator("#settings-notify").screenshot({ path: join(OUT, "notifications-1440.png") });
+  await log.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: join(OUT, "notifications-1440.png") });
 
   await schedule.getByLabel("When", { exact: true }).selectOption("monday");
   await schedule.getByLabel("at", { exact: true }).selectOption("9");
