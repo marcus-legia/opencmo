@@ -27,7 +27,7 @@ async function main() {
   }) as typeof fetch;
   const resend = emailSender({ RESEND_API_KEY: "re_secret", OPENCMO_EMAIL_LIVE: "1" }, fake)!;
   const url = unsubscribeUrl("https://ferreto.io/", "6f1c2c4e-3b0a-4c8e-9d7e-0a1b2c3d4e5f");
-  assert.equal(url, "https://ferreto.io/unsubscribe?token=6f1c2c4e-3b0a-4c8e-9d7e-0a1b2c3d4e5f");
+  assert.equal(url, "https://ferreto.io/unsubscribe?token=6f1c2c4e-3b0a-4c8e-9d7e-0a1b2c3d4e5f"); // gitleaks:allow (made-up unsubscribe token)
   assert.deepEqual(await resend.send({ to: "f@example.com", subject: "S", text: "T", html: "<p>H</p>", unsubscribeUrl: url }), { id: "email_123" });
   assert.equal(seen[0]!.url, "https://api.resend.com/emails");
   assert.equal((seen[0]!.init.headers as Record<string, string>).Authorization, "Bearer re_secret");

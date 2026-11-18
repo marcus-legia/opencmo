@@ -14,7 +14,7 @@ console.warn = (line: string) => lines.push(`warn ${line}`);
 logEvent("error", "forged", { message: 'one\n{"tag":"opencmo_log","event":"fake"}', long: "x".repeat(10_000), gone: undefined });
 logEvent("warn", "urls", {
   signed: "failed https://x.supabase.co/object/a.mp4?token=SECRET#frag at line",
-  callback: "https://ferreto.io/auth/callback#access_token=SECRET",
+  callback: "https://ferreto.io/auth/callback#access_token=SECRET", // gitleaks:allow (fake token in a log test)
   question: "are you sure? yes",
   status: 500,
 });
