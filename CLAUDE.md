@@ -48,6 +48,10 @@ content.md`); the gap between that and the code is `opencmo-internal/docs/cmo/20
 - **Copy:** no "in your voice" (say "built from your business plan" or "using what it knows about your product");
   never "every day" for scans (they run when the week plan asks or on request); name only the platforms the scan
   really reads.
+- **Subdomains** (owner, 2026-11-18): the app lives at `ferreto.io/app`; tools that open on their own go on a
+  subdomain of ferreto.io: the editor at `editor.ferreto.io` (opened in a new tab from the app's top bar), the blog
+  at `blog.ferreto.io`. A new standalone surface gets `<name>.ferreto.io`, not a path. Moving one needs the Supabase
+  session cookie shared across subdomains (cookie domain `.ferreto.io`) and the subdomain in Supabase's redirect URLs.
 - **Next, from the review:** free scan (group A, in progress) → the week plan and Today around Sales, a scan cadence
   of its own → the digest email leads with people asking → clean what Creem's reviewer clicks (landing links that
   404, "not available yet") → measure scan quality on real products before marketing.
