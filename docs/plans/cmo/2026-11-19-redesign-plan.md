@@ -109,8 +109,8 @@ Every person in Sales gets three tabs: **Public reply** (the first step), **DM**
   (Gmail connect, drafts scope only), never sent by Ferreto; one email per person, an opt-out line, no lists.
 - "I sent it" moves the person to Following up; after 4 days without an answer a nudge is drafted.
 - Daily caps keep it personal; the Acceptable Use Policy already forbids bulk and unsolicited messaging.
-- Wave: owner to decide whether DM drafts join wave 3 (before 30/11) and email drafts wait for wave 4 (Google's
-  review of the Gmail scope takes time).
+- Waves (owner, 2026-11-19): **DM drafts in wave 3, before 30/11.** **Email drafts into Gmail in wave 4**, after
+  launch, because Google reviews the Gmail scope; until then the Email tab offers Copy only.
 
 ### Who is ready for a DM or an email (owner agreed 2026-11-19)
 
