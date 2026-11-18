@@ -115,12 +115,11 @@ test("on live rows, cards decide through approval_decide, a changed card is refu
   }
 });
 
-test("the phone shows the feed and the agents without sideways scroll, and one card per page", async ({ page }) => {
+test("the phone shows the feed without sideways scroll, and one card per page", async ({ page }) => {
   await signIn(page, state().users.a);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/app?sample=1");
 
-  await expect(page.getByRole("region", { name: "Your team" })).toBeVisible();
   await expect(cardRows(page)).toHaveCount(5);
   await expect(page.getByTestId("flow-waiting")).toContainText("5");
   const overflow = await sidewaysOverflow(page);

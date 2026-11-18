@@ -20,8 +20,8 @@ type Tab = "threads" | "runs" | "settings";
 
 const DISMISS_REASONS = ["Not our customer", "Already solved", "Too old", "Wrong community"] as const;
 
-/** The artboard scores out of ten (8.4); Sales scores out of a hundred. */
-const tenth = (score: number) => (score / 10).toFixed(1);
+/** A word reads faster than a number (owner, 2026-11-19); the number stays in "how it was counted". */
+const matchLabel = (score: number) => (score >= 75 ? "Strong match" : "Good match");
 const tone = (score: number) => (score >= 75 ? "score hi" : score >= 60 ? "score mid" : "score lo");
 
 function ago(iso: string | null): string {
@@ -365,7 +365,7 @@ function ThreadRow({ t, free, open, onToggle, onPlan, onDecide }: { t: Thread; f
   return (
     <div className="th" data-open={open} role="listitem">
       <button type="button" className="row" onClick={onToggle} aria-expanded={open}>
-        <span className={tone(t.score)}>{tenth(t.score)}</span>
+        <span className={tone(t.score)}>{matchLabel(t.score)}</span>
         <span style={{ flex: "1 1 auto", minWidth: "0" }}>
           <span style={{ display: "block", fontSize: "14.5px", fontWeight: "500", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: done ? "var(--muted)" : undefined }}>{t.title}</span>
           <span className="meta">
@@ -386,7 +386,7 @@ function ThreadRow({ t, free, open, onToggle, onPlan, onDecide }: { t: Thread; f
           {t.quotes.length ? (
             <div>
               <div className="meta" style={{ marginBottom: "6px" }}>
-                Why it scored {tenth(t.score)}
+                {matchLabel(t.score)} ({t.score}/100): how it was counted
               </div>
               {t.quotes.map((q) => (
                 <p key={q.text} className="quote" style={{ marginBottom: "6px" }}>

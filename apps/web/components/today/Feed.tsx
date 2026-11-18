@@ -22,13 +22,12 @@ import { useDashboard } from "@/components/dashboard/useDashboard";
 import { useLive } from "@/components/clipping/useLive";
 import { useShellAccount } from "@/components/clipping/web/WebShell";
 import { useShellState } from "@/components/shell-v2/ShellState";
-import { prefetchScreen, useScreen } from "@/components/screens/useScreen";
+import { useScreen } from "@/components/screens/useScreen";
 import { isTodayPrompt } from "@/lib/cmo/today";
 import type { ApprovalCard as Card } from "@/lib/screens/approval-card";
 import { PLATFORM_LABEL } from "@/lib/screens/common";
 import type { WriterScreen } from "@/lib/screens/writer";
-import type { DashboardScreen, TodayRowData } from "@/lib/screens/dashboard";
-import type { ScreenName } from "@/lib/screens/registry";
+import type { TodayRowData } from "@/lib/screens/dashboard";
 
 import { KIND_ICON, PLATFORM_ICON, cardIcon, kindLabel, whenLabel } from "./cards";
 import { dayLabel, draftsLeftOver, draftsThisWeek } from "./week";
@@ -226,99 +225,6 @@ const ICON_SPARK = (
     <path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1" />
   </svg>
 );
-
-const AGENT_ROWS: { key: "brain" | "writer" | "studio" | "schedule" | "sales" | "research"; label: string; href: string; icon: ReactNode }[] = [
-  {
-    key: "brain",
-    label: "Planner",
-    href: "/app?doc=plan",
-    icon: (
-      <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
-        <rect width="18" height="18" x="3" y="4" rx="2" />
-        <path d="M16 2v4" />
-        <path d="M8 2v4" />
-        <path d="M3 10h18" />
-      </svg>
-    ),
-  },
-  {
-    key: "writer",
-    label: "Writer",
-    href: "/app/writer",
-    icon: (
-      <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z" />
-      </svg>
-    ),
-  },
-  {
-    key: "studio",
-    label: "Studio",
-    href: "/app/studio",
-    icon: (
-      <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
-        <rect width="20" height="14" x="2" y="3" rx="2" />
-        <path d="M8 21h8" />
-        <path d="M12 17v4" />
-        <path d="m10 8 4 2-4 2z" />
-      </svg>
-    ),
-  },
-  {
-    key: "schedule",
-    label: "Publisher",
-    href: "/app/schedule",
-    icon: (
-      <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
-        <path d="m3 11 18-5v12L3 14v-3z" />
-        <path d="M11.6 16.8a3 3 0 1 1-5.8-1.6" />
-      </svg>
-    ),
-  },
-  {
-    key: "sales",
-    label: "Sales",
-    href: "/app/sales",
-    icon: (
-      <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
-      </svg>
-    ),
-  },
-  {
-    key: "research",
-    label: "Research",
-    href: "/app/research",
-    icon: (
-      <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
-        <circle cx="11" cy="11" r="8" />
-        <path d="m21 21-4.3-4.3" />
-      </svg>
-    ),
-  },
-];
-
-/** What each agent's page reads first: its link reads it ahead on hover or focus. */
-const AGENT_SCREEN: Record<(typeof AGENT_ROWS)[number]["key"], ScreenName> = {
-  brain: "brain",
-  writer: "writer",
-  studio: "studio",
-  schedule: "schedule",
-  sales: "sales",
-  research: "research",
-};
-
-function agentLine(data: DashboardScreen, key: (typeof AGENT_ROWS)[number]["key"]): { line: string; live: boolean } {
-  if (key === "brain") {
-    const next = data.team.brain.nextCheckAt;
-    const when = next ? new Intl.DateTimeFormat("en-GB", { weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(next)) : null;
-    if (data.team.brain.state === "paused") return { line: "Paused", live: false };
-    return { line: when ? `Next check ${when}` : `Watching ${data.team.brain.watching} orders`, live: false };
-  }
-  const node = data.team.nodes.find((n) => n.department === key);
-  if (!node) return { line: "", live: false };
-  return { line: node.line, live: node.state === "working" };
-}
 
 /** Rows a section shows before "Show more": the feed stays one screen tall. */
 const BOX_ROWS = 5;
@@ -735,35 +641,6 @@ export function Feed({ email }: { email?: string | null }) {
             </>
           ) : null}
 
-          <div className="sec">
-            <h2>Agents</h2>
-            <span className="meta">{data ? `${data.team.nodes.filter((n) => n.state === "working").length} working for you` : ""}</span>
-          </div>
-          <section className="agents" aria-label="Your team">
-            {AGENT_ROWS.map((a) => {
-              const status = data ? agentLine(data, a.key) : { line: "", live: false };
-              return (
-                <Link
-                  key={a.key}
-                  href={a.href}
-                  className="agent"
-                  style={{ textDecoration: "none", color: "inherit" }}
-                  aria-label={`${a.label}: ${status.line}`}
-                  onMouseEnter={() => prefetchScreen(AGENT_SCREEN[a.key])}
-                  onFocus={() => prefetchScreen(AGENT_SCREEN[a.key])}
-                >
-                  <span className="tile">{a.icon}</span>
-                  <span style={{ minWidth: "0", flex: "1" }}>
-                    <span style={{ display: "block", fontWeight: "500" }}>{a.label}</span>
-                    <span className="meta" style={{ display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                      {status.line}
-                    </span>
-                  </span>
-                  {status.live ? <span className="live"></span> : null}
-                </Link>
-              );
-            })}
-          </section>
         </div>
       </main>
     </>

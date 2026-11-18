@@ -62,18 +62,19 @@ function screenFor(segment: string | null): Screen {
   switch (segment) {
     case null:
       return { page: "main", top: { kind: "home" }, chat: "column" };
+    // Post's week view (the old Calendar tab, owner 2026-11-19: four tabs).
     case "schedule":
-      return { page: "main", view: "calendar", top: { kind: "views", current: "calendar" }, chat: "column" };
-    // Slideshows and carousels (D7, owner 2026-11-13): the founder's photos and a caption, on a page of their own.
+      return { page: "main", view: "calendar", top: { kind: "views", current: "post" }, chat: "column" };
+    // The photo-post page is gone from the bar (B2B channels only, 2026-11-18); its route stays until wave 4 deletes it.
     case "photos":
-      return { page: "main", view: "calendar", top: { kind: "views", current: "photos" }, chat: "column" };
+      return { page: "main", view: "calendar", top: { kind: "views", current: "post" }, chat: "column" };
     case "analytics":
       return { page: "main", view: "analytics", top: { kind: "views", current: "analytics" }, chat: "column" };
     case "sales":
       return { page: "main", view: "agentsales", top: { kind: "views", current: "sales" }, chat: "column" };
-    // Reached from the feed and the business menu, not from a tab: still the same screen, with the centre changed.
+    // Post's list view: the drafts and posts, with a List / Week switch.
     case "writer":
-      return { page: "main", view: "agentwriter", top: { kind: "views", current: null }, chat: "column" };
+      return { page: "main", view: "agentwriter", top: { kind: "views", current: "post" }, chat: "column" };
     case "studio":
     case "projects":
     case "jobs":

@@ -1,5 +1,6 @@
 "use client";
 
+import { PostViewSwitch } from "./TopBar";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -159,6 +160,7 @@ export function CalendarView() {
               <path d="m9 18 6-6-6-6" />
             </svg>
           </button>
+          <PostViewSwitch current="week" />
           <button type="button" className="pill" onClick={() => setFrom(null)}>
             Today
           </button>
@@ -202,9 +204,6 @@ export function CalendarView() {
             onSaved={reload}
           />
         ) : null}
-        <p className="meta" data-testid="calendar-photos-link">
-          A slideshow or carousel of your own photos is made on <Link href="/app/photos">Photos</Link>; it lands here once scheduled.
-        </p>
 
         {state.status === "error" ? <div className="meta">{state.message}</div> : null}
         {state.status === "loading" ? <div className="meta">Loading the week…</div> : null}

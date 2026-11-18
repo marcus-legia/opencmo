@@ -101,12 +101,9 @@ test("the first week: website → plan card and a first draft, then I posted it 
   await page.getByRole("button", { name: "Read my website" }).click();
   await expect(page).toHaveURL(/\/app$/, { timeout: 60_000 });
 
-  // The agents follow the CMO loop: Planner, then Writer, Studio, Publisher (Main.dc.html's agent list).
-  const team = page.getByRole("region", { name: "Your team" });
-  await expect(team.getByRole("link", { name: /^Writer/ })).toBeVisible();
-  const labels = (await team.locator("a").allInnerTexts()).map((text) => text.split("\n")[0]!.trim()).filter(Boolean);
-  const order = ["Planner", "Writer", "Studio", "Publisher"].map((name) => labels.findIndex((label) => label.startsWith(name)));
-  expect(order.every((index, i) => index >= 0 && (i === 0 || index > order[i - 1]!)), labels.join(" | ")).toBe(true);
+  // No Agents block on the feed (owner, 2026-11-18): the views live in the bar.
+  await expect(page.getByRole("region", { name: "Your team" })).toHaveCount(0);
+  await expect(page.getByRole("banner").getByRole("navigation", { name: "View" }).getByRole("link", { name: "Sales" })).toBeVisible();
 
   // The plan and today's draft arrive without waiting for Monday.
   const db = admin();

@@ -17,7 +17,7 @@ import { siteLabel, useWorkspace } from "./workspace";
 /** What each view reads: hovering or focusing its link reads it ahead, so the click lands on data, not "Loading…". */
 const VIEW_SCREENS: Record<string, ScreenName[]> = {
   feed: ["schedule"],
-  calendar: ["schedule", "dashboard"],
+  post: ["writer", "schedule"],
   sales: ["sales"],
   analytics: ["analytics", "dashboard", "research", "sales"],
 };
@@ -92,7 +92,7 @@ function AutopilotSwitch() {
  */
 export type TopVariant =
   | { kind: "home" }
-  | { kind: "views"; current: "feed" | "calendar" | "photos" | "sales" | "analytics" | null }
+  | { kind: "views"; current: "feed" | "post" | "sales" | "analytics" | null }
   | { kind: "crumbs"; trail: { label: string; href?: string }[]; logs?: boolean; chat?: boolean; credits?: boolean; back?: boolean };
 
 const Chevron = () => (
@@ -152,6 +152,7 @@ function Avatar({ email }: { email: string | null }) {
       </summary>
       <div className="td-menu">
         <span className="td-menu-note">{email ?? "Signed in"}</span>
+        <a href="/app/studio" target="_blank" rel="noopener">Editor ↗</a>
         <Link href="/app/settings">Settings</Link>
         <Link href="/app/billing">Billing</Link>
         <form action="/auth/signout" method="post">
@@ -166,10 +167,9 @@ function Avatar({ email }: { email: string | null }) {
 const MORE = (
   <>
     <Link href="/app?doc=product">Documents and Brand Kit</Link>
-    <Link href="/app/research">Research</Link>
+    <Link href="/app/research">Research: competitors</Link>
     <Link href="/app?doc=plan">Plan and orders</Link>
     <Link href="/app?doc=voice">Voice and skills</Link>
-    <Link href="/app/studio">Projects</Link>
     <Link href="/app/settings">Settings</Link>
   </>
 );
@@ -215,37 +215,26 @@ export function TopBar({
         ),
       },
       {
-        id: "calendar",
-        label: "Calendar",
-        href: "/app/schedule",
-        icon: (
-          <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
-            <rect width="18" height="18" x="3" y="4" rx="2" />
-            <path d="M16 2v4" />
-            <path d="M8 2v4" />
-            <path d="M3 10h18" />
-          </svg>
-        ),
-      },
-      {
-        id: "photos",
-        label: "Photos",
-        href: "/app/photos",
-        icon: (
-          <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
-            <rect width="18" height="18" x="3" y="3" rx="2" />
-            <circle cx="9" cy="9" r="2" />
-            <path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21" />
-          </svg>
-        ),
-      },
-      {
         id: "sales",
         label: "Sales",
         href: "/app/sales",
         icon: (
           <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
             <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
+          </svg>
+        ),
+      },
+      {
+        id: "post",
+        label: "Post",
+        // The list of posts; its List / Week switch leads to the week view (the old Calendar).
+        href: "/app/writer",
+        icon: (
+          <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
+            <rect width="18" height="18" x="3" y="4" rx="2" />
+            <path d="M16 2v4" />
+            <path d="M8 2v4" />
+            <path d="M3 10h18" />
           </svg>
         ),
       },
@@ -285,14 +274,6 @@ export function TopBar({
           <LogsIcon />
           <span className="td-pill-label">Logs</span>
         </button>
-        <Link href="/app/studio" className="ib" aria-label="Open the editor">
-          <svg className="i" viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M20.2 6 3 11l-.9-2.4c-.3-1.1.3-2.2 1.3-2.5l13.5-4c1.1-.3 2.2.3 2.5 1.3Z" />
-            <path d="m6.2 5.3 3.1 3.9" />
-            <path d="m12.4 3.4 3.1 4" />
-            <path d="M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />
-          </svg>
-        </Link>
         <Avatar email={email} />
       </header>
     );
@@ -341,5 +322,25 @@ export function TopBar({
       ) : null}
       <Avatar email={email} />
     </header>
+  );
+}
+
+/** Post's two views (owner, 2026-11-19): the list of drafts and posts, and the week. */
+export function PostViewSwitch({ current }: { current: "list" | "week" }) {
+  const item = (id: "list" | "week", label: string, href: string) => (
+    <Link
+      href={href}
+      aria-current={current === id ? "page" : undefined}
+      className="pill"
+      style={{ textDecoration: "none", ...(current === id ? { background: "var(--line-2)", color: "var(--text)", fontWeight: "600" } : { color: "var(--muted)" }) }}
+    >
+      {label}
+    </Link>
+  );
+  return (
+    <nav aria-label="Post view" style={{ display: "inline-flex", gap: "4px" }} data-testid="post-view-switch">
+      {item("list", "List", "/app/writer")}
+      {item("week", "Week", "/app/schedule")}
+    </nav>
   );
 }

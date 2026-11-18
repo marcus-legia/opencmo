@@ -25,14 +25,17 @@ test("the top bars move between views and agent pages; the chat is a column on t
   await expect(page.getByTestId("v2-dashboard")).toBeVisible();
   await expect(chat.getByLabel("Ask your CMO")).toBeVisible();
 
-  // Feed → Calendar → Analytics through the one bar the three views share.
+  // Feed → Post (list, then week) → Analytics through the one bar the four views share.
   const views = page.getByRole("banner").getByRole("navigation", { name: "View" });
   await expect(views.getByRole("link", { name: "Feed" })).toHaveAttribute("aria-current", "page");
-  await views.getByRole("link", { name: "Calendar" }).click();
-  await expect(page).toHaveURL(/\/app\/schedule/);
+  await views.getByRole("link", { name: "Post" }).click();
+  await expect(page).toHaveURL(/\/app\/writer/);
   // One working screen: the chat stays a column beside every view.
   await expect(chat.getByLabel("Ask your CMO")).toBeVisible();
-  await expect(views.getByRole("link", { name: "Calendar" })).toHaveAttribute("aria-current", "page");
+  await expect(views.getByRole("link", { name: "Post" })).toHaveAttribute("aria-current", "page");
+  await page.getByTestId("post-view-switch").getByRole("link", { name: "Week" }).click();
+  await expect(page).toHaveURL(/\/app\/schedule/);
+  await expect(views.getByRole("link", { name: "Post" })).toHaveAttribute("aria-current", "page");
   await views.getByRole("link", { name: "Analytics" }).click();
   await expect(page).toHaveURL(/\/app\/analytics/);
 
@@ -107,7 +110,7 @@ test("the chat keeps its draft across screens, and ?ask=1 puts the cursor in it"
   const chat = page.locator("#v2-chat");
   const input = chat.getByLabel("Ask your CMO");
   await input.fill("Plan a launch week");
-  await page.getByRole("region", { name: "Your team" }).getByRole("link", { name: /^Writer/ }).click();
+  await page.getByRole("banner").getByRole("navigation", { name: "View" }).getByRole("link", { name: "Post" }).click();
   await expect(page).toHaveURL(/\/app\/writer/);
   await expect(input).toHaveValue("Plan a launch week");
 
