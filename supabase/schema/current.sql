@@ -2830,6 +2830,43 @@ $$;
 
 
 --
+-- Name: billing_switch_target(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.billing_switch_target(p_slug text) RETURNS TABLE(subscription_id text, product_id text)
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_target public.billing_catalog;
+  v_sub public.creem_subscriptions;
+begin
+  select * into v_target from public.billing_catalog c
+  where c.slug = p_slug and c.kind = 'plan' and c."interval" = 'year' and c.on_sale;
+  if not found then
+    raise exception 'The annual plan is not on sale right now.' using errcode = '22023';
+  end if;
+  select s.* into v_sub from public.creem_subscriptions s
+  where s.user_id = v_user and s.status in ('active', 'trialing', 'scheduled_cancel', 'past_due')
+  order by s.status_priority, s.provider_event_at desc
+  limit 1;
+  if not found then
+    raise exception 'You have no plan to switch. Pick a plan first.' using errcode = 'P0002';
+  end if;
+  if v_sub."interval" = 'year' or v_sub.product_id = v_target.creem_product_id then
+    raise exception 'You are already on the annual plan.' using errcode = '22023';
+  end if;
+  if v_sub.status <> 'active' then
+    -- A trial, a card that failed or a cancellation already scheduled: Creem would charge or revive it mid-state.
+    raise exception 'Your plan cannot be switched right now. Open Manage billing to sort it out first.' using errcode = 'P0001';
+  end if;
+  return query select v_sub.subscription_id, v_target.creem_product_id;
+end;
+$$;
+
+
+--
 -- Name: brand_check_kit(uuid, jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -10676,6 +10713,14 @@ begin
     v_start := date_trunc('month', now());
     v_reset := v_start + interval '1 month';
   end if;
+
+  -- A credit pack paid this period raises this period's allowance (owner, 2026-11-19): buying one lifts the pause.
+  -- Its credits net of any refund or dispute; a pack bought last month does not carry over.
+  v_allowance := coalesce(v_allowance, 0) + coalesce((
+    select sum(greatest(t.granted_credits - t.clawed_credits, 0))::integer
+    from public.creem_transactions t
+    join public.billing_catalog c on c.creem_product_id = t.product_id and c.kind = 'pack'
+    where t.user_id = p_user and t.paid_at >= v_start), 0);
 
   -- Debits of work only (`ref_kind` set); grants, packs and claw-backs carry no ref and are not usage.
   select greatest(coalesce(-sum(l.delta), 0), 0)::integer into v_used

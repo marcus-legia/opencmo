@@ -41,6 +41,15 @@ Add the `$690 / year` row to `billing_catalog` behind a Creem product id read fr
 `check:pricing` passes. If the owner has not created the Creem product yet, leave the migration ready and say so in
 the PR. Commit `Wave 2 A5: annual plan` and push.
 
+### - [x] A6. A credit pack lifts the pause (owner, 2026-11-19)
+A pack paid this period adds its credits (net of a refund or dispute) to this period's allowance in `plan_usage_for`.
+pgTAP 333.
+
+### - [x] A7. Switch to annual (owner, 2026-11-19, C's request)
+`billing_switch_target(p_slug)` (own subscription, live monthly, annual product on sale) and
+`POST /api/v1/billing/switch` `{ product: "annual" }` → Creem `POST /v1/subscriptions/{id}/upgrade`
+(`proration-charge-immediately`). The existing webhook follows. pgTAP 333.
+
 ## Requests
 
 - **To B and C (A1, A2 done):** `PlanUsage` / `parsePlanUsage` / `FREE_USAGE` are in `lib/billing/usage.ts`; the RPC is
@@ -72,3 +81,14 @@ the PR. Commit `Wave 2 A5: annual plan` and push.
   /api/v1/billing/switch` with `{ product: "annual" }`), tell C and the button goes on the Billing card. Also for the
   owner: credit packs are still sold on Billing, but a pack does not lift the fair-use pause, which is measured against
   the allowance.
+
+- **To C (A6, A7 done):** `POST /api/v1/billing/switch` with `{ "product": "annual" }` answers `{ ok: true }` once Creem
+  accepted the upgrade; the plan changes when the webhook arrives (seconds), so show "Switching…" and reload the
+  usage. Errors come as plain messages: 422/400 "The annual plan is not on sale right now." or "You are already on the
+  annual plan.", 404 "You have no plan to switch.", and "Your plan cannot be switched right now. Open Manage billing…"
+  for a trial, a failed card or a scheduled cancel. Show the button only to a paid monthly founder while the annual row
+  is on sale. Say before the click that Creem charges the prorated difference now. A pack now raises this period's
+  allowance (the bar's `allowance` includes it): the pack card can say "adds N credits to this month's allowance".
+- **To the owner (A7):** try the switch once with a Creem test subscription before launch (test key, `creem listen`
+  forwarding `subscription.update` and `subscription.paid`), and check that the account shows the annual plan with the
+  monthly credits granted.

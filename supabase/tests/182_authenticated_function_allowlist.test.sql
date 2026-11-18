@@ -72,6 +72,7 @@ insert into allowed values
   ('cmo_onboard_step(uuid,jsonb)'),
   ('cmo_onboarding_answers(jsonb)'),
   ('cmo_script_open(uuid)'),
+  ('billing_switch_target(text)'),  -- wave 2 A7: own subscription only, read-only; the route calls Creem
   ('my_email_log(integer)'),  -- wave 2 A4: the founder's own email log, read-only
   ('plan_usage()'),  -- wave 2 A2: the founder's own fair-use bar, read-only
   ('post_video_start(uuid,uuid)'),
