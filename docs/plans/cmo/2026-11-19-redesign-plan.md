@@ -99,3 +99,15 @@ removes entry points only, so a rollback is one revert.
 - Legal: Terms and Privacy still describe video and clips; Privacy must say the Library keeps public posts' quotes and
   summaries, and how a removed post is dropped. Reddit/ScrapeCreators/Lurk data terms (R0) still unchecked.
 - Creem: store description and screenshots must match the Sales-first product before review.
+
+## Reaching out: reply, DM, email (owner flagged 2026-11-19; note 12 P1)
+
+Every person in Sales gets three tabs: **Public reply** (the first step), **DM**, **Email**. The founder always sends.
+- DM: one message, after the public reply or when the post asks for tools; the community's DM rule is read like its
+  posting rules; "Copy and open" the platform's chat. No sequences.
+- Email: only to an address the person published (their site or profile). Drafted into the founder's own Gmail
+  (Gmail connect, drafts scope only), never sent by Ferreto; one email per person, an opt-out line, no lists.
+- "I sent it" moves the person to Following up; after 4 days without an answer a nudge is drafted.
+- Daily caps keep it personal; the Acceptable Use Policy already forbids bulk and unsolicited messaging.
+- Wave: owner to decide whether DM drafts join wave 3 (before 30/11) and email drafts wait for wave 4 (Google's
+  review of the Gmail scope takes time).
