@@ -154,7 +154,7 @@ function ScanProgress({ scan, onClose }: { scan: Scan; onClose: () => void }) {
  * unpaid account's first scan is free (`cmo_first_run_free`); after it, the button opens the plan sheet instead of
  * answering with the 402's text.
  */
-function ScanNow({ scanning, platforms, free, freeLeft, onPlan, onStarted }: { scanning: boolean; platforms?: SalesPlatform[]; free: boolean; freeLeft: boolean; onPlan: (action: string) => void; onStarted: (run: { id: string; status: string; created_at: string }) => void }) {
+function ScanNow({ scanning, paused, platforms, free, freeLeft, onPlan, onStarted }: { scanning: boolean; paused: boolean; platforms?: SalesPlatform[]; free: boolean; freeLeft: boolean; onPlan: (action: string) => void; onStarted: (run: { id: string; status: string; created_at: string }) => void }) {
   // The card names the places the founder's switches leave on: the scan searches those only.
   const card = salesScanCard(undefined, platforms);
   const [step, setStep] = useState<"idle" | "confirm" | "busy">("idle");
@@ -193,7 +193,7 @@ function ScanNow({ scanning, platforms, free, freeLeft, onPlan, onStarted }: { s
   if (step === "idle") {
     return (
       <span style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-end", gap: "6px" }}>
-        <button type="button" className="primary" onClick={open}>
+        <button type="button" className="primary" onClick={open} disabled={paused} title={paused ? "New scans wait for the allowance to reset" : undefined}>
           <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
             <circle cx="11" cy="11" r="8" />
             <path d="m21 21-4.3-4.3" />
@@ -613,7 +613,7 @@ export function AgentSales() {
               <span className="chip">Brand voice</span>
             </div>
           </div>
-          <ScanNow scanning={scanActive(scan) && scan.kind === "sales_scan"} platforms={data?.settings.platforms} free={free} freeLeft={freeLeft} onPlan={setPlanFor} onStarted={startedScan} />
+          <ScanNow scanning={scanActive(scan) && scan.kind === "sales_scan"} paused={paused !== null} platforms={data?.settings.platforms} free={free} freeLeft={freeLeft} onPlan={setPlanFor} onStarted={startedScan} />
         </div>
         {scan ? <ScanProgress scan={scan} onClose={() => setScan(null)} /> : null}
         {paused ? (

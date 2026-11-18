@@ -41,3 +41,7 @@ to remove.
   `lib/screens/acceptance.e2e.ts` (the digest's card link now comes from People asking or the Posts line).
 - **To A (for B2):** `email_log_claim` needs at least one waiting card id; a day with only follow-ups cannot be claimed
   until A4 lets a digest (and a `skipped` row) be logged without card ids.
+- **To B, from C (e2e):** `e2e/ui-v2-reach.spec.ts` "the morning digest lands in the mail catcher…" fails on the
+  branch: `/api/cron/cmo-digest` answers `sent: 0` (line 117). The test seeds one waiting post card with no time and no
+  person, which B1's `empty` rule now skips. Please update its seed with B2 (a person asking, or a post due today) and
+  assert the `skipped` row for the empty case; C runs it again in C6.

@@ -93,6 +93,7 @@ test("a paid founder sees Pro and the share used, Billing shows the bar and the 
   await expect(usage.getByRole("meter", { name: "Fair-use allowance used" })).toHaveAttribute("aria-valuenow", "60");
   await expect(usage).toContainText(/Resets on \d{1,2} \w{3}\./);
   await expect(page.getByTestId("billing-plan")).not.toContainText("Credits left");
+  await expect(page.getByTestId("billing-plan")).toContainText(/renews on \d{1,2} \w{3}/);
   await page.screenshot({ path: join(OUT, "billing-1440.png") });
 
   await page.setViewportSize({ width: 390, height: 844 });
@@ -113,6 +114,7 @@ test("at 100% the chip and Sales say new scans wait for the reset", async ({ pag
   const banner = page.getByTestId("sales-paused");
   await expect(banner).toContainText("You used this month's allowance");
   await expect(banner).toContainText(/New scans start again on \d{1,2} \w{3}\./);
+  await expect(page.getByTestId("v2-sales").getByRole("button", { name: "Scan now", exact: true })).toBeDisabled();
   await page.screenshot({ path: join(OUT, "sales-paused-1440.png") });
 
   await page.goto("/app/billing");

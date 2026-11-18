@@ -69,10 +69,15 @@ export function BillingV2({
                 <span style={{ fontSize: "20px", fontWeight: "600" }}>{paid ? "Pro" : "Free"}</span>
                 {paid ? <span className="badge">Active</span> : null}
               </div>
-              {paid && current?.slug ? (
+              {paid ? (
                 <div style={{ marginTop: "6px", color: "var(--muted)" }}>
-                  {current.interval === "year" ? `$${current.billedPrice} a year` : `$${current.price} a month`}
-                  {usage.interval === "month" && usage.resetsAt ? ` · renews on ${day(usage.resetsAt)}` : ""}
+                  {[
+                    // A price only from its catalogue row: no row, no number (cmo-review-2 S2.7).
+                    current?.slug ? (current.interval === "year" ? `$${current.billedPrice} a year` : `$${current.price} a month`) : null,
+                    usage.interval === "month" && usage.resetsAt ? `renews on ${day(usage.resetsAt)}` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
                 </div>
               ) : null}
               {!paid ? (
