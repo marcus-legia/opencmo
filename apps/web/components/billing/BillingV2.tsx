@@ -1,4 +1,5 @@
 import { BillingButton } from "@/components/billing/BillingButton";
+import { SwitchAnnual } from "@/components/billing/SwitchAnnual";
 import { LocalTime } from "@/components/LocalTime";
 import { SettingsFrame } from "@/components/today/SettingsFrame";
 import type { SellablePlan } from "@/lib/billing-catalog";
@@ -22,7 +23,6 @@ export function BillingV2({
   paid,
   plans,
   packs,
-  planCredit,
   ledger,
   usage,
   hasPortal,
@@ -43,6 +43,8 @@ export function BillingV2({
   site?: string;
 }) {
   const current = plans.find((plan) => plan.id === planId);
+  // Only a paid monthly founder, and only while the annual row is on sale (A7).
+  const annual = paid && usage.interval === "month" ? plans.find((plan) => plan.interval === "year" && plan.slug) : undefined;
   const shown = plans.filter((plan) => plan.id === "free" || plan.slug || plan.id === planId);
   return (
     <SettingsFrame current="billing">
@@ -89,6 +91,7 @@ export function BillingV2({
                     See plans
                   </a>
                 ) : null}
+                {annual ? <SwitchAnnual billed={annual.billedPrice} /> : null}
                 {hasPortal ? <BillingButton path="/api/v1/billing/portal" label="Invoices and payment method" className="ghost" /> : null}
                 {paid && hasPortal ? <BillingButton path="/api/v1/billing/portal" label="Cancel plan" className="ghost" /> : null}
               </div>
@@ -171,7 +174,7 @@ export function BillingV2({
         {paid && packs.length > 0 ? (
           <section className="card" id="billing-packs">
             <div className="hd">
-              <h2>Credit packs</h2>
+              <h2>More this month</h2>
               <span className="meta">one-time, for paid plans</span>
             </div>
             <div className="bd">
@@ -180,15 +183,14 @@ export function BillingV2({
                   <div key={pack.slug} className="pack">
                     <span style={{ fontWeight: "600" }}>{pack.credits} credits</span>
                     <span className="meta">
-                      ${pack.price_cents / 100} · ${(pack.price_cents / 100 / pack.credits).toFixed(3)} per credit
-                      {planCredit ? `. Your plan: $${(planCredit.billedPrice / planCredit.credits).toFixed(3)}` : ""}
+                      ${pack.price_cents / 100} · adds {pack.credits} credits to this month&apos;s allowance
                     </span>
                     <BillingButton path="/api/v1/billing/checkout" product={pack.slug} label="Buy" className="ghost" />
                   </div>
                 ))}
               </div>
               <div className="meta" style={{ marginTop: "10px" }}>
-                A pack credit costs more than a plan credit; upgrading is the cheaper way to get more each month.
+                For a month with more searches than usual. A pack costs more per credit than the plan.
               </div>
             </div>
           </section>
