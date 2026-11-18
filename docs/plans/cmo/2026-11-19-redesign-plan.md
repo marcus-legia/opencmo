@@ -25,6 +25,18 @@ feature review `opencmo-internal/docs/cmo/2026-11-18-ra-soat-tinh-nang.md`, and 
   wait until after launch.
 - **Subdomains:** editor at `editor.ferreto.io`, blog at `blog.ferreto.io` (after launch; needs the cookie on `.ferreto.io`).
 
+## Decisions of 2026-11-19
+
+- **Launch on 30/11**, so wave 3 (Library and Post from Sales) ships before it.
+- **A free account sees** its week plan, its first post drafts and its free Sales scan (replies locked).
+- **The free scan** runs right after onboarding: from the website Ferreto takes the problem, the words customers
+  use and the competitors, and searches the communities for people asking about them in the last 30 days.
+- Left to Claude by the owner, and taken: **four tabs; credits hidden behind one fair-use bar; chat folds away;
+  "Strong / Good match"; the funnel counts itself.** When the free scan finds no one, the founder may edit Strategy
+  and run it **once more** for free. **Annual plan: $690 a year** (two months free, about 17%), set in
+  `billing_catalog`, changeable as a new Creem product.
+- Legal pages and landing links rewritten (PR #236): no named data providers, a section on the public posts we keep.
+
 ## Proposed by Claude, waiting for the owner (the canvas draws them)
 
 1. **Four tabs:** Feed · Sales · Post · Analytics. Calendar becomes Post's week view; the Editor moves to the account menu.
