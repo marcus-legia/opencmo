@@ -49,4 +49,14 @@ group). `check:pricing` needs the Supabase CLI and was not run in the C1 contain
 
 ## Requests
 
-(none yet)
+- [ ] **From B (B4), for C2:** `e2e/ui-v2-setup.spec.ts` predates B4 and will fail as written:
+  - `/app/setup?site=paylane.test` now starts reading at once for an account that never onboarded, so the
+    "Start with your website." heading and the "Read my website" click no longer happen there. Open `/app/setup`
+    without `?site=` for the website-step shots and the click, or assert the autostart instead.
+  - The progress list has 8 steps when the free scan was queued (`Finding people who describe the problem` between
+    the Content plan and the plan); 7 when the social reader is not set up.
+  - Setup ends on `/app/sales` while the scan runs or when it found threads, on `/app` otherwise
+    (`setupDestination` in `lib/cmo/onboard-status.ts`). The `toHaveURL(/\/app$/)` checks need the fake social reader's
+    outcome in mind.
+  - Selectors B added for C2: `data-testid="sales-reply-locked"` (a free card's "Pick a plan" line),
+    `data-testid="sales-none"` (the "No one asked" verdict), the button `Write the replies · 1 credit`.
