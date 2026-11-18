@@ -8,7 +8,7 @@ Plan: [`../2026-11-19-wave2-plan.md`](../2026-11-19-wave2-plan.md). Branch `clau
 
 ## Tasks
 
-### - [ ] A1. Contract (push first)
+### - [x] A1. Contract (push first)
 Create `lib/billing/usage.ts` with `PlanUsage` exactly as in the plan and a `parsePlanUsage(row)` helper with its
 check. Typecheck. Commit `Wave 2 A1: plan usage contract` and push.
 
