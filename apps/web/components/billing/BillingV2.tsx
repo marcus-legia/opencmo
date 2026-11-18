@@ -52,7 +52,7 @@ export function BillingV2({
         ) : null}
         {start && !paid ? (
           <p className="meta" role="status" data-testid="billing-start">
-            Your first plan and drafts are free. Pick a plan to approve and post them.
+            Your first scan is free: the people asking, in their own words. Pick a plan to get the replies written and to approve and post your drafts.
           </p>
         ) : null}
 

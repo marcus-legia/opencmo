@@ -69,7 +69,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
       {justPaid === "1" && <p className="page-sub" role="status">Payment received. Credits arrive within a minute.</p>}
       {start === "1" && !paid && (
         <p className="page-sub" role="status" data-testid="billing-start">
-          Your first plan and drafts are free. Pick a plan to approve and post them.
+          Your first scan is free: the people asking, in their own words. Pick a plan to get the replies written and to approve and post your drafts.
         </p>
       )}
 

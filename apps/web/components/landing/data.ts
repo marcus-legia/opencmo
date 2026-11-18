@@ -108,7 +108,7 @@ export function faqs(p: Prices | null): { q: string; a: string }[] {
     { q: "What does it do with video?", a: "It builds slideshows and post images from the words you approved, and cuts short clips from videos you recorded and finished in the editor. In the editor you cut by editing the transcript and ask the agent for captions, B-roll or a voice-over." },
     { q: "Which platforms does Sales search?", a: "Reddit, Hacker News, Threads and Facebook groups. It drafts a reply; you post it yourself." },
     { q: "Will it like, follow or DM people for me?", a: `No. There are no automated likes, follows, DMs or replies. ${BRAND} drafts; you decide what to say and where.` },
-    { q: "Is there a free trial?", a: `Your first plan and drafts are free. Pick a plan to approve and post them. Give it your website, and your marketing strategy, your first week's plan and three X drafts arrive within minutes, with no card.${price}` },
+    { q: "Is there a free trial?", a: `Your first scan is free, with no card. Give it your website, and within minutes you see the people asking for what you built, each with the words they wrote. Pick a plan and it writes a reply to each one. You post each reply yourself; nothing is posted for you.${price}` },
     { q: "What does the plan include?", a: `Everything: the searches, the drafted replies, the weekly posts, and the editor with captions and voice-over.${price}` },
     { q: "Can I cancel?", a: "Yes, anytime. Annual plans are refunded for the unused months." },
   ];

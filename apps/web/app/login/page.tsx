@@ -5,6 +5,7 @@ import { Brand } from "@/components/brand/Brand";
 import { Arabesque } from "@/components/marketing/Ornament";
 
 import { LoginForm } from "@/components/LoginForm";
+import { SITE_NAME } from "@/lib/site";
 
 export const metadata: Metadata = { title: "Sign in", robots: { index: false, follow: true } };
 
@@ -29,13 +30,15 @@ export default async function LoginPage({
 
   return (
     <main className="auth-page">
-      <Link href="/" aria-label="OpenCMO home"><Brand /></Link>
+      <Link href="/" aria-label={`${SITE_NAME} home`}><Brand /></Link>
       <div className="auth-content">
         <aside className="auth-art">
           <div className="auth-visual" aria-hidden="true">
             <Arabesque id="auth-pattern" />
           </div>
-          <h2>Your marketing team is ready.</h2><p>Tell OpenCMO about your business. It plans the week and drafts the work; you approve what goes out.</p></aside>
+          <h2>See who is asking for what you built.</h2>
+          <p>Give {SITE_NAME} your website. It finds the people describing the problem you solve, in their own words. Nothing is posted for you.</p>
+        </aside>
         <section className="auth-form">
       <h1>Sign in</h1>
       <p>Use your Google account. No password needed.</p>
@@ -49,7 +52,7 @@ export default async function LoginPage({
       <LoginForm nextUrl={params.next} siteUrl={params.site} />
         </section>
       </div>
-      <p className="auth-footer">OpenCMO · The AI CMO for founders.</p>
+      <p className="auth-footer">{SITE_NAME} · A customer-finding tool for founders.</p>
     </main>
   );
 }
