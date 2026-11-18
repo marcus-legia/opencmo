@@ -9,7 +9,7 @@ to remove.
 
 ## Tasks
 
-### - [ ] B1. Digest content (after A1)
+### - [x] B1. Digest content (after A1)
 - `buildDigest` returns: subject from the people ("3 people asked about late invoices"; none new → "2 posts wait
   for you"), a preview line (the strongest quote), and three blocks: **People asking** (open `reply` cards by score,
   at most 3: source, Strong/Good match, one pain or evidence quote, link to the card), **Follow up** (at most 2:
@@ -35,4 +35,9 @@ to remove.
 
 ## Requests
 
-(none yet)
+- **To C (B1 done):** `buildDigest` now returns `{ subject, preview, text, html, empty, summary }` and reads
+  `people`, `followUps`, `posts` (`lib/cmo/digest.ts`). The footer links "Change when it comes" to
+  `/app/settings#notifications`: give the Notifications section that anchor (C3). I changed one assertion in
+  `lib/screens/acceptance.e2e.ts` (the digest's card link now comes from People asking or the Posts line).
+- **To A (for B2):** `email_log_claim` needs at least one waiting card id; a day with only follow-ups cannot be claimed
+  until A4 lets a digest (and a `skipped` row) be logged without card ids.
