@@ -173,7 +173,10 @@ export function CmoWorkspace({ initial }: { initial: Workspace }) {
 
   // Approving or posting without a plan (cmo-review-3 A3) answers with the plan sheet, as v2 does, not a toast.
   const [planSheet, setPlanSheet] = useState(false);
-  const fail = (error: unknown) => {
+  // What the founder tried, for the sheet's title; undefined keeps the sheet's own ("approve and post").
+  const [planAction, setPlanAction] = useState<string | undefined>(undefined);
+  const fail = (error: unknown, action?: string) => {
+    setPlanAction(action);
     if (isPlanRequired(error)) setPlanSheet(true);
     else setToast(error instanceof ApiError ? error.message : "Something went wrong. Please try again.");
   };
@@ -252,7 +255,7 @@ export function CmoWorkspace({ initial }: { initial: Workspace }) {
         );
         await refresh();
       } catch (error) {
-        fail(error);
+        fail(error, kind === "sales_scan" ? "scan for customers" : undefined);
       }
     },
     async calendar(id: string, act: CalendarAct) {
@@ -308,7 +311,7 @@ export function CmoWorkspace({ initial }: { initial: Workspace }) {
 
       <DocumentSheet view={doc} ws={ws} actions={actions} onOpen={openDoc} onClose={closeDoc} onSaved={docSaved} />
       <Toast message={toast} onDone={() => setToast(null)} />
-      <PlanSheet open={planSheet} onClose={() => setPlanSheet(false)} />
+      <PlanSheet open={planSheet} onClose={() => setPlanSheet(false)} action={planAction} />
     </div>
   );
 }

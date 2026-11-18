@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { Logs } from "@/app/api/v1/logs/route";
+import { PlanSheet, isPlanRequired } from "@/components/billing/PlanSheet";
 import { api, jsonBody } from "@/components/clipping/api";
 import { useLive } from "@/components/clipping/useLive";
 import { SalesSettings } from "@/components/screens/sales/SalesSettings";
@@ -36,9 +37,14 @@ const runTime = (iso: string) => {
 };
 
 type ScanStep = { label: string; status: "running" | "done" | "failed" };
-type Scan = { id: string; status: "queued" | "running" | "done" | "failed"; steps: ScanStep[]; error: string | null; cards: number | null; since: string };
+/** A run the page follows: a scan, or the replies written after paying (`sales_reply_drafts`). */
+type RunKind = "sales_scan" | "sales_reply_drafts";
+type Scan = { id: string; kind: RunKind; status: "queued" | "running" | "done" | "failed"; steps: ScanStep[]; error: string | null; cards: number | null; since: string };
 
-const SCAN_COLUMNS = "id, status, steps, error, output, created_at, started_at";
+const SCAN_COLUMNS = "id, kind, status, steps, error, output, created_at, started_at";
+const RUN_KINDS: RunKind[] = ["sales_scan", "sales_reply_drafts"];
+/** The price of writing the replies of a free scan (free-scan plan: 1 credit, paid accounts only). */
+const REPLIES_CREDITS = 1;
 const scanActive = (scan: Scan | null): scan is Scan => scan !== null && (scan.status === "queued" || scan.status === "running");
 
 /**
@@ -52,13 +58,16 @@ function toScan(row: Record<string, unknown>): Scan {
     if (typeof step.label !== "string") return [];
     return [{ label: step.label.slice(0, 160), status: step.status === "done" || step.status === "failed" ? step.status : "running" }];
   });
-  const output = row.output as { cards?: unknown } | null;
+  const output = row.output as { cards?: unknown; drafted?: unknown } | null;
+  const kind: RunKind = row.kind === "sales_reply_drafts" ? "sales_reply_drafts" : "sales_scan";
+  const count = kind === "sales_reply_drafts" ? output?.drafted : output?.cards;
   return {
     id: String(row.id),
+    kind,
     status,
     steps,
     error: typeof row.error === "string" ? row.error : null,
-    cards: typeof output?.cards === "number" ? output.cards : null,
+    cards: typeof count === "number" ? count : null,
     since: String(row.started_at ?? row.created_at ?? new Date().toISOString()),
   };
 }
@@ -78,16 +87,25 @@ function ScanProgress({ scan, onClose }: { scan: Scan; onClose: () => void }) {
     return () => clearInterval(timer);
   }, [active]);
 
+  const replies = scan.kind === "sales_reply_drafts";
   const title =
     scan.status === "queued"
-      ? "Scan starting…"
+      ? replies
+        ? "Starting on the replies…"
+        : "Scan starting…"
       : scan.status === "running"
-        ? `Scanning · ${clock(now - Date.parse(scan.since))}`
+        ? `${replies ? "Writing the replies" : "Scanning"} · ${clock(now - Date.parse(scan.since))}`
         : scan.status === "failed"
-          ? "The scan did not finish"
-          : scan.cards
-            ? `Scan finished · ${scan.cards} ${scan.cards === 1 ? "thread" : "threads"} to review`
-            : "Scan finished · nothing worth joining this time";
+          ? replies
+            ? "The replies did not finish"
+            : "The scan did not finish"
+          : replies
+            ? scan.cards
+              ? `Replies written · ${scan.cards} to read`
+              : "Replies written"
+            : scan.cards
+              ? `Scan finished · ${scan.cards} ${scan.cards === 1 ? "thread" : "threads"} to review`
+              : "Scan finished · nothing worth joining this time";
 
   return (
     <section className="card" role="status" aria-live="polite" style={{ marginTop: "14px" }}>
@@ -131,16 +149,22 @@ function ScanProgress({ scan, onClose }: { scan: Scan; onClose: () => void }) {
   );
 }
 
-/** Scan now: the same price card as a scan asked in the CMO chat; nothing is held until the founder approves it. */
-function ScanNow({ scanning, platforms, onStarted }: { scanning: boolean; platforms?: SalesPlatform[]; onStarted: (run: { id: string; status: string; created_at: string }) => void }) {
+/**
+ * Scan now: the same price card as a scan asked in the CMO chat; nothing is held until the founder approves it. An
+ * unpaid account's first scan is free (`cmo_first_run_free`); after it, the button opens the plan sheet instead of
+ * answering with the 402's text.
+ */
+function ScanNow({ scanning, platforms, free, freeLeft, onPlan, onStarted }: { scanning: boolean; platforms?: SalesPlatform[]; free: boolean; freeLeft: boolean; onPlan: (action: string) => void; onStarted: (run: { id: string; status: string; created_at: string }) => void }) {
   // The card names the places the founder's switches leave on: the scan searches those only.
   const card = salesScanCard(undefined, platforms);
+  const price = freeLeft ? "free" : `${card.credits} credits`;
   const [step, setStep] = useState<"idle" | "confirm" | "busy">("idle");
   const [error, setError] = useState<string | null>(null);
 
   function open() {
     setError(null);
-    setStep("confirm");
+    if (free && !freeLeft) onPlan("scan again");
+    else setStep("confirm");
   }
   async function start() {
     setStep("busy");
@@ -150,6 +174,11 @@ function ScanNow({ scanning, platforms, onStarted }: { scanning: boolean; platfo
       onStarted(await api<{ id: string; status: string; created_at: string }>("/cmo/runs", jsonBody({ kind: "sales_scan" })));
       setStep("idle");
     } catch (err) {
+      if (isPlanRequired(err)) {
+        setStep("idle");
+        onPlan("scan again");
+        return;
+      }
       setError(err instanceof Error ? err.message : "Could not start the scan. Please try again.");
       setStep("confirm");
     }
@@ -170,7 +199,7 @@ function ScanNow({ scanning, platforms, onStarted }: { scanning: boolean; platfo
             <circle cx="11" cy="11" r="8" />
             <path d="m21 21-4.3-4.3" />
           </svg>
-          Scan now · {card.credits} credits
+          {free && !freeLeft ? "Scan now" : `Scan now · ${price}`}
         </button>
         {error ? <span className="meta">{error}</span> : null}
       </span>
@@ -179,7 +208,7 @@ function ScanNow({ scanning, platforms, onStarted }: { scanning: boolean; platfo
   return (
     <div className="card" role="group" aria-labelledby="scan-now-title" style={{ maxWidth: "360px" }}>
       <h2 id="scan-now-title" style={{ margin: "0 0 6px", fontSize: "14px", fontWeight: "600" }}>
-        Scan now · {card.credits} credits
+        Scan now · {price}
       </h2>
       <ul style={{ margin: "0 0 10px", paddingLeft: "18px", fontSize: "13.5px", color: "var(--muted)" }}>
         {card.changes.map((line) => (
@@ -192,14 +221,74 @@ function ScanNow({ scanning, platforms, onStarted }: { scanning: boolean; platfo
           Cancel
         </button>
         <button type="button" className="primary" disabled={step === "busy"} onClick={() => void start()}>
-          {step === "busy" ? "Starting…" : `Approve and spend ${card.credits} credits`}
+          {step === "busy" ? "Starting…" : freeLeft ? "Start the free scan" : `Approve and spend ${card.credits} credits`}
         </button>
       </div>
     </div>
   );
 }
 
-function ThreadRow({ t, open, onToggle, onDecide }: { t: Thread; open: boolean; onToggle: () => void; onDecide: (t: Thread, action: "replied" | "dismissed", reason?: string, text?: string) => Promise<void> }) {
+/**
+ * Write the replies: after paying, one click drafts the threads the free scan found (`sales_reply_drafts`). The price
+ * is on the card and nothing is held until the founder approves it, as with a scan.
+ */
+function WriteReplies({ count, busy, onPlan, onStarted }: { count: number; busy: boolean; onPlan: (action: string) => void; onStarted: (run: { id: string; status: string; created_at: string }) => void }) {
+  const [step, setStep] = useState<"idle" | "confirm" | "busy">("idle");
+  const [error, setError] = useState<string | null>(null);
+
+  async function start() {
+    setStep("busy");
+    setError(null);
+    try {
+      onStarted(await api<{ id: string; status: string; created_at: string }>("/cmo/runs", jsonBody({ kind: "sales_reply_drafts" })));
+      setStep("idle");
+    } catch (err) {
+      if (isPlanRequired(err)) {
+        setStep("idle");
+        onPlan("reply to these people");
+        return;
+      }
+      setError(err instanceof Error ? err.message : "Could not start the replies. Please try again.");
+      setStep("confirm");
+    }
+  }
+
+  return (
+    <div className="card" role="group" aria-labelledby="write-replies-title" style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", marginBottom: "10px" }}>
+      <div style={{ flex: "1 1 260px", minWidth: "0" }}>
+        <b id="write-replies-title">
+          {count} {count === 1 ? "thread has" : "threads have"} no reply yet
+        </b>
+        <div className="meta">Sales writes a help-first reply for each, under each community&apos;s rules. You post them yourself.</div>
+        {error ? (
+          <div className="meta" role="alert" style={{ color: "var(--warn)", marginTop: "4px" }}>
+            {error}
+          </div>
+        ) : null}
+      </div>
+      {busy ? (
+        <span className="chip">
+          <span className="live"></span>Writing…
+        </span>
+      ) : step === "idle" ? (
+        <button type="button" className="primary" onClick={() => setStep("confirm")}>
+          Write the replies · {REPLIES_CREDITS} credit
+        </button>
+      ) : (
+        <span style={{ display: "inline-flex", gap: "8px" }}>
+          <button type="button" className="skip" disabled={step === "busy"} onClick={() => setStep("idle")}>
+            Cancel
+          </button>
+          <button type="button" className="primary" disabled={step === "busy"} onClick={() => void start()}>
+            {step === "busy" ? "Starting…" : `Approve and spend ${REPLIES_CREDITS} credit`}
+          </button>
+        </span>
+      )}
+    </div>
+  );
+}
+
+function ThreadRow({ t, free, open, onToggle, onPlan, onDecide }: { t: Thread; free: boolean; open: boolean; onToggle: () => void; onPlan: (action: string) => void; onDecide: (t: Thread, action: "replied" | "dismissed", reason?: string, text?: string) => Promise<void> }) {
   const [draft, setDraft] = useState(t.draft ?? "");
   const [copied, setCopied] = useState(false);
   const [dismissing, setDismissing] = useState(false);
@@ -207,6 +296,9 @@ function ThreadRow({ t, open, onToggle, onDecide }: { t: Thread; open: boolean; 
   const [busy, setBusy] = useState(false);
   const skipped = t.rule.kind === "skipped";
   const done = t.status !== "open";
+  // Free: the reply is written (or shown) once the founder picks a plan. Until then the thread is still worth reading.
+  const locked = free && !skipped && t.draft === null;
+  const lead = t.quotes[0] ?? null;
 
   async function copyAndOpen() {
     try {
@@ -235,6 +327,11 @@ function ThreadRow({ t, open, onToggle, onDecide }: { t: Thread; open: boolean; 
           <span className="meta">
             {[PLATFORM_LABEL[t.platform], t.community !== PLATFORM_LABEL[t.platform] ? t.community : null, t.postedAt ? ago(t.postedAt) : null, t.comments != null ? `${t.comments} comments` : null, done ? (t.status === "replied" ? "you replied" : "dismissed") : null].filter(Boolean).join(" · ")}
           </span>
+          {lead && !open && !done ? (
+            <span className="quote" style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", marginTop: "6px", fontSize: "13.5px" }}>
+              “{lead.text}”
+            </span>
+          ) : null}
         </span>
         <svg className="i s" viewBox="0 0 24 24" aria-hidden="true" style={{ color: "var(--subtle)" }}>
           <path d={open ? "m18 15-6-6-6 6" : "m6 9 6 6 6-6"} />
@@ -257,8 +354,17 @@ function ThreadRow({ t, open, onToggle, onDecide }: { t: Thread; open: boolean; 
           <div className="meta">{t.rule.text}</div>
           {skipped ? (
             <div className="meta">Sales did not draft a reply. The community&apos;s rules leave no room for one.</div>
+          ) : locked ? (
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }} data-testid="sales-reply-locked">
+              <span className="meta" style={{ flex: "1 1 220px" }}>
+                {t.drafted ? "Your reply is written. You see it once you pick a plan." : "Your reply is written once you pick a plan."}
+              </span>
+              <button type="button" className="primary" onClick={() => onPlan("reply to these people")}>
+                Pick a plan
+              </button>
+            </div>
           ) : t.draft === null ? (
-            <div className="meta">No draft yet. Sales drafts replies for the highest-scored threads first.</div>
+            <div className="meta">No reply yet. Write the replies above, or reply in your own words and mark it replied.</div>
           ) : (
             <div>
               <label className="meta" htmlFor={`reply-${t.id}`} style={{ display: "block", marginBottom: "6px" }}>
@@ -299,7 +405,11 @@ function ThreadRow({ t, open, onToggle, onDecide }: { t: Thread; open: boolean; 
                   Dismiss
                 </button>
               )}
-              {skipped ? null : (
+              {skipped ? null : locked ? (
+                <a href={t.url} target="_blank" rel="noopener noreferrer" className="ghost" style={{ textDecoration: "none" }}>
+                  Open thread
+                </a>
+              ) : (
                 <button type="button" className="ghost" disabled={busy} onClick={() => void run("replied")}>
                   Mark replied
                 </button>
@@ -337,6 +447,9 @@ export function AgentSales() {
   const [runs, setRuns] = useState<{ id: string; at: string; text: string }[]>([]);
   const data = state.status === "ready" ? state.data : null;
   const live = state.status === "ready" && Boolean(state.live.threads);
+  const free = data?.free ?? false;
+  // The plan sheet, titled with what the founder tried ("reply to these people", "scan again").
+  const [planFor, setPlanFor] = useState<string | null>(null);
 
   useEffect(() => {
     if (!data) return;
@@ -377,7 +490,7 @@ export function AgentSales() {
     void createClient()
       .from("cmo_runs")
       .select(SCAN_COLUMNS)
-      .eq("kind", "sales_scan")
+      .in("kind", RUN_KINDS)
       .in("status", ["queued", "running"])
       .order("created_at", { ascending: false })
       .limit(1)
@@ -413,6 +526,10 @@ export function AgentSales() {
   const worth = list.filter((t) => t.status === "open" && t.rule.kind !== "skipped");
   const below = list.length - worth.length;
   const lastScan = runs[0]?.at ?? null;
+  // Paid, and threads the free scan found without a reply: one click writes them.
+  const undrafted = free ? 0 : worth.filter((t) => !t.drafted).length;
+  // The free scan is used once a scan finished (or one is under way); a failed one is given back by SQL.
+  const freeLeft = free && !data?.lastScan && !scanActive(scan);
   const name = ws.name ?? "your product";
 
   // The banner's way to the settings: the tab, then the cursor on its heading, so the founder lands where to act.
@@ -449,7 +566,7 @@ export function AgentSales() {
               <span className="chip">Brand voice</span>
             </div>
           </div>
-          <ScanNow scanning={scanActive(scan)} platforms={data?.settings.platforms} onStarted={startedScan} />
+          <ScanNow scanning={scanActive(scan) && scan.kind === "sales_scan"} platforms={data?.settings.platforms} free={free} freeLeft={freeLeft} onPlan={setPlanFor} onStarted={startedScan} />
         </div>
         {scan ? <ScanProgress scan={scan} onClose={() => setScan(null)} /> : null}
 
@@ -492,10 +609,11 @@ export function AgentSales() {
               <span className="meta">Sort</span>
               <span className="pill">Score</span>
             </div>
+            {live && undrafted > 0 ? <WriteReplies count={undrafted} busy={scanActive(scan) && scan.kind === "sales_reply_drafts"} onPlan={setPlanFor} onStarted={startedScan} /> : null}
             {list.length === 0 ? <div className="meta">No threads yet. Sales scans the communities your customers use and scores what it finds.</div> : null}
             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }} role={list.length ? "list" : undefined} aria-label={list.length ? "Threads" : undefined}>
               {list.map((t) => (
-                <ThreadRow key={t.id} t={t} open={open === t.id} onToggle={() => setOpen(open === t.id ? null : t.id)} onDecide={decide} />
+                <ThreadRow key={t.id} t={t} free={free} open={open === t.id} onToggle={() => setOpen(open === t.id ? null : t.id)} onPlan={setPlanFor} onDecide={decide} />
               ))}
             </div>
           </>
@@ -578,6 +696,7 @@ export function AgentSales() {
           </div>
         </section>
       </aside>
+      <PlanSheet open={planFor !== null} onClose={() => setPlanFor(null)} action={planFor ?? undefined} />
     </div>
   );
 }

@@ -18,7 +18,7 @@ Read the plan's Global constraints and shared contract first. Production runs UI
   send `reply: null`: the screen never holds text the founder has not paid for.
 - Typecheck. Commit `Free scan B1: the Sales loader knows free accounts and the last scan` and push.
 
-### - [ ] B2. Cards without drafts
+### - [x] B2. Cards without drafts
 
 - A card always shows: source and community, title, age, score, and the pain and evidence quotes from `score_parts`
   (they are the proof; today they may sit behind a detail toggle: lead with them).
