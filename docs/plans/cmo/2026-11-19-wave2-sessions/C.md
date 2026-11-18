@@ -30,7 +30,7 @@ Commit `Wave 2 C1: one usage bar` and push.
 drops its credit line. "Make an image" keeps its price. Grep for other `credits` labels on included work.
 Commit `Wave 2 C2: no per-click prices on included work` and push.
 
-### - [ ] C3. Notifications settings and the log (after A4, B2)
+### - [x] C3. Notifications settings and the log (after A4, B2)
 Settings › Notifications: morning email schedule select, the strong-match push toggle as today, and the log table
 (when, what, subject, Sent / Skipped / Failed) with a preview of the summary. Commit and push.
 
