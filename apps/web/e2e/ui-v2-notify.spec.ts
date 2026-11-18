@@ -70,10 +70,10 @@ test("Notifications shows the morning email's schedule and the log, and saves a 
   await page.goto("/app/settings#notifications");
 
   const log = page.getByTestId("email-log");
-  await expect(log.locator('tr[data-status="sent"]')).toContainText("3 people asked about late invoices");
-  await expect(log.locator('tr[data-status="sent"]')).toContainText("3 people asking · 1 follow-up · 2 posts");
-  await expect(log.locator('tr[data-status="skipped"]')).toContainText("Nothing new: no person, follow-up or post due");
-  await expect(log.locator('tr[data-status="skipped"]')).toContainText("Skipped");
+  await expect(log.locator('li[data-status="sent"]')).toContainText("3 people asked about late invoices");
+  await expect(log.locator('li[data-status="sent"]')).toContainText("3 people asking · 1 follow-up · 2 posts");
+  await expect(log.locator('li[data-status="skipped"]')).toContainText("Nothing new: no person, follow-up or post due");
+  await expect(log.locator('li[data-status="skipped"]')).toContainText("Skipped");
 
   const schedule = page.getByTestId("digest-schedule");
   await expect(schedule.getByLabel("When", { exact: true })).toHaveValue("weekdays");
