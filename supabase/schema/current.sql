@@ -3473,7 +3473,7 @@ CREATE TABLE public.cmo_runs (
     CONSTRAINT cmo_runs_credits_check CHECK ((credits >= 0)),
     CONSTRAINT cmo_runs_error_check CHECK ((char_length(error) <= 500)),
     CONSTRAINT cmo_runs_input_check CHECK (((jsonb_typeof(input) = 'object'::text) AND (octet_length((input)::text) <= 4096))),
-    CONSTRAINT cmo_runs_kind_check CHECK ((kind = ANY (ARRAY['onboard'::text, 'plan_week'::text, 'post_draft'::text, 'sales_scan'::text, 'competitor_research'::text, 'pull_metrics'::text, 'summarize_memory'::text, 'review_week'::text, 'write_caption'::text, 'write_video_brief'::text, 'write_slides'::text, 'publish_post'::text, 'niche_video_research'::text, 'distill_ratings'::text, 'repurpose_post'::text, 'photo_caption'::text]))),
+    CONSTRAINT cmo_runs_kind_check CHECK ((kind = ANY (ARRAY['onboard'::text, 'plan_week'::text, 'post_draft'::text, 'sales_scan'::text, 'competitor_research'::text, 'pull_metrics'::text, 'summarize_memory'::text, 'review_week'::text, 'write_caption'::text, 'write_video_brief'::text, 'write_slides'::text, 'publish_post'::text, 'niche_video_research'::text, 'distill_ratings'::text, 'repurpose_post'::text, 'photo_caption'::text, 'sales_reply_drafts'::text]))),
     CONSTRAINT cmo_runs_output_check CHECK (((output IS NULL) OR ((jsonb_typeof(output) = 'object'::text) AND (octet_length((output)::text) <= 16384)))),
     CONSTRAINT cmo_runs_status_check CHECK ((status = ANY (ARRAY['queued'::text, 'running'::text, 'done'::text, 'failed'::text]))),
     CONSTRAINT cmo_runs_steps_check CHECK (((jsonb_typeof(steps) = 'array'::text) AND (octet_length((steps)::text) <= 16384)))
@@ -4563,8 +4563,12 @@ CREATE FUNCTION public.cmo_first_run_free(p_user uuid, p_kind text) RETURNS bool
     SET search_path TO ''
     AS $$
   select p_user is not null
-    and p_kind in ('plan_week', 'post_draft')
+    and p_kind in ('plan_week', 'post_draft', 'sales_scan')
     and not public.cmo_paid(p_user)
+    -- The free scan searches from the documents onboarding writes: none yet, no free scan.
+    and (p_kind <> 'sales_scan' or exists (
+      select 1 from public.marketing_documents d where d.user_id = p_user and d.kind = 'product'
+    ))
     and not exists (
       select 1 from public.cmo_runs r
       where r.user_id = p_user and r.kind = p_kind and r.status in ('queued', 'running', 'done')
@@ -4677,6 +4681,7 @@ CREATE FUNCTION public.cmo_job_daily_limit(p_kind text) RETURNS integer
     when 'distill_ratings' then 2
     when 'repurpose_post' then 20
     when 'photo_caption' then 20
+    when 'sales_reply_drafts' then 5
     else 0 end
 $$;
 
@@ -4694,6 +4699,7 @@ CREATE FUNCTION public.cmo_job_price(p_kind text) RETURNS integer
     when 'write_caption' then 1 when 'write_video_brief' then 1 when 'publish_post' then 0 when 'niche_video_research' then 2
     when 'repurpose_post' then 1
     when 'photo_caption' then 1
+    when 'sales_reply_drafts' then 1
     else 0 end
 $$;
 
