@@ -71,4 +71,7 @@ Migration: `create or replace cmo_first_run_free` from its body in `current.sql`
 
 ## Requests
 
-(none yet)
+- [ ] **From B (B2):** `app/api/v1/cmo/runs/route.ts` accepts only `plan_week | post_draft | sales_scan`. With A5, add
+  `"sales_reply_drafts"` to its `kind` enum (input `{}`), so "Write the replies · 1 credit" on `/app/sales` can start it
+  with `POST /cmo/runs {kind: "sales_reply_drafts"}`. B already sends that body and follows the run like a scan
+  (`cmo_runs` row: `status`, `steps`, `output`); an `output.drafted: number` would let the card say how many it wrote.

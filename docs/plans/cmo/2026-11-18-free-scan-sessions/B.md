@@ -9,7 +9,7 @@ Read the plan's Global constraints and shared contract first. Production runs UI
 
 ## Tasks
 
-### - [ ] B1. Loader (after A1)
+### - [x] B1. Loader (after A1)
 
 - `sales.free`: the account is unpaid (`cmo_paid` through the RLS client, or the profile/credits the shell already
   loads: reuse, do not add a second query if one exists).
