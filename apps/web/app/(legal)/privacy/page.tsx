@@ -28,7 +28,7 @@ export default function PrivacyPage() {
           heading: "Public conversations we read for you",
           body: (
             <>
-              <p>To find people who describe the problem your product solves, Ferreto searches publicly available posts on online communities and social networks. We keep what is needed to show them to you: the link, the community, the date, a short summary and short quotes. We do not collect private messages, and we do not build profiles of the people who wrote the posts.</p>
+              <p>To find people who describe the problem your product solves, Ferreto searches publicly available posts on online communities and social networks. We keep what is needed to show them to you: the link, the community, the date, a short summary and short quotes. We do not collect private messages, and we do not build profiles of the people who wrote the posts. When a post links to the author’s own business website, Ferreto may read that site’s public contact page so you can reach them; we keep only what you choose to use.</p>
               <p>When we learn that a post was removed by its author or its platform, or when someone asks us to, we delete what we kept from it. To ask, email <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> with the link.</p>
             </>
           ),
