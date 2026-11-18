@@ -44,8 +44,6 @@ type Scan = { id: string; kind: RunKind; status: "queued" | "running" | "done" |
 
 const SCAN_COLUMNS = "id, kind, status, steps, error, output, created_at, started_at";
 const RUN_KINDS: RunKind[] = ["sales_scan", "sales_reply_drafts"];
-/** The price of writing the replies of a free scan (free-scan plan: 1 credit, paid accounts only). */
-const REPLIES_CREDITS = 1;
 const scanActive = (scan: Scan | null): scan is Scan => scan !== null && (scan.status === "queued" || scan.status === "running");
 
 /**
@@ -151,14 +149,14 @@ function ScanProgress({ scan, onClose }: { scan: Scan; onClose: () => void }) {
 }
 
 /**
- * Scan now: the same price card as a scan asked in the CMO chat; nothing is held until the founder approves it. An
+ * Scan now: the same card as a scan asked in the CMO chat, with no price (included in the plan's fair use, wave 2);
+ * nothing runs until the founder approves it. An
  * unpaid account's first scan is free (`cmo_first_run_free`); after it, the button opens the plan sheet instead of
  * answering with the 402's text.
  */
 function ScanNow({ scanning, platforms, free, freeLeft, onPlan, onStarted }: { scanning: boolean; platforms?: SalesPlatform[]; free: boolean; freeLeft: boolean; onPlan: (action: string) => void; onStarted: (run: { id: string; status: string; created_at: string }) => void }) {
   // The card names the places the founder's switches leave on: the scan searches those only.
   const card = salesScanCard(undefined, platforms);
-  const price = freeLeft ? "free" : `${card.credits} credits`;
   const [step, setStep] = useState<"idle" | "confirm" | "busy">("idle");
   const [error, setError] = useState<string | null>(null);
 
@@ -200,7 +198,7 @@ function ScanNow({ scanning, platforms, free, freeLeft, onPlan, onStarted }: { s
             <circle cx="11" cy="11" r="8" />
             <path d="m21 21-4.3-4.3" />
           </svg>
-          {free && !freeLeft ? "Scan now" : `Scan now · ${price}`}
+          {freeLeft ? "Scan now · free" : "Scan now"}
         </button>
         {error ? <span className="meta">{error}</span> : null}
       </span>
@@ -209,7 +207,7 @@ function ScanNow({ scanning, platforms, free, freeLeft, onPlan, onStarted }: { s
   return (
     <div className="card" role="group" aria-labelledby="scan-now-title" style={{ maxWidth: "360px" }}>
       <h2 id="scan-now-title" style={{ margin: "0 0 6px", fontSize: "14px", fontWeight: "600" }}>
-        Scan now · {price}
+        {freeLeft ? "Your free scan" : "Scan now"}
       </h2>
       <ul style={{ margin: "0 0 10px", paddingLeft: "18px", fontSize: "13.5px", color: "var(--muted)" }}>
         {card.changes.map((line) => (
@@ -222,7 +220,7 @@ function ScanNow({ scanning, platforms, free, freeLeft, onPlan, onStarted }: { s
           Cancel
         </button>
         <button type="button" className="primary" disabled={step === "busy"} onClick={() => void start()}>
-          {step === "busy" ? "Starting…" : freeLeft ? "Start the free scan" : `Approve and spend ${card.credits} credits`}
+          {step === "busy" ? "Starting…" : freeLeft ? "Start the free scan" : "Start the scan"}
         </button>
       </div>
     </div>
@@ -230,8 +228,8 @@ function ScanNow({ scanning, platforms, free, freeLeft, onPlan, onStarted }: { s
 }
 
 /**
- * Write the replies: after paying, one click drafts the threads the free scan found (`sales_reply_drafts`). The price
- * is on the card and nothing is held until the founder approves it, as with a scan.
+ * Write the replies: after paying, one click drafts the threads the free scan found (`sales_reply_drafts`, included in
+ * the plan since wave 2); nothing runs until the founder approves it, as with a scan.
  */
 function WriteReplies({ count, busy, onPlan, onStarted }: { count: number; busy: boolean; onPlan: (action: string) => void; onStarted: (run: { id: string; status: string; created_at: string }) => void }) {
   const [step, setStep] = useState<"idle" | "confirm" | "busy">("idle");
@@ -273,7 +271,7 @@ function WriteReplies({ count, busy, onPlan, onStarted }: { count: number; busy:
         </span>
       ) : step === "idle" ? (
         <button type="button" className="primary" onClick={() => setStep("confirm")}>
-          Write the replies · {REPLIES_CREDITS} credit
+          Write the replies
         </button>
       ) : (
         <span style={{ display: "inline-flex", gap: "8px" }}>
@@ -281,7 +279,7 @@ function WriteReplies({ count, busy, onPlan, onStarted }: { count: number; busy:
             Cancel
           </button>
           <button type="button" className="primary" disabled={step === "busy"} onClick={() => void start()}>
-            {step === "busy" ? "Starting…" : `Approve and spend ${REPLIES_CREDITS} credit`}
+            {step === "busy" ? "Starting…" : "Write them"}
           </button>
         </span>
       )}
@@ -573,8 +571,9 @@ export function AgentSales() {
   const lastScan = runs[0]?.at ?? null;
   // Paid, and threads the free scan found without a reply: one click writes them.
   const undrafted = free ? 0 : worth.filter((t) => !t.drafted).length;
-  // The free scan is used once a scan finished (or one is under way); a failed one is given back by SQL.
-  const freeLeft = free && !data?.lastScan && !scanActive(scan);
+  // The free scan is used once a scan finished (or one is under way); a failed one is given back by SQL. One that found
+  // no one leaves one more (`cmo_first_run_free`, wave 2); if that one was the second, the 402 opens the plan sheet.
+  const freeLeft = free && !scanActive(scan) && (!data?.lastScan || (data.lastScan.free && data.lastScan.verdict === "none"));
   const name = ws.name ?? "your product";
   // Fair use (wave 2): at 100% new scans wait for the reset; `cmo_enqueue` refuses them on its own as well.
   const usage = useOptionalShellState()?.usage;

@@ -560,7 +560,8 @@ export function ChatPanel({
                   <li key={i}>{line}</li>
                 ))}
               </ul>
-              {card.credits ? <p className="cmo-muted">{card.credits} {card.credits === 1 ? "credit" : "credits"}</p> : null}
+              {/* Scans and research are included work (wave 2: one fair-use bar, no price per click). */}
+              {card.credits && card.name !== "create_task" ? <p className="cmo-muted">{card.credits} {card.credits === 1 ? "credit" : "credits"}</p> : null}
             </div>
           ))}
           <div className="cmo-confirm-actions">

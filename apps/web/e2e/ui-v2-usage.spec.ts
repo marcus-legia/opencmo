@@ -79,6 +79,13 @@ test("a paid founder sees Pro and the share used, Billing shows the bar and the 
   const chip = page.getByRole("banner").getByTestId("usage-chip");
   await expect(chip).toHaveText(/Pro · 60% used/);
   await expect(page.getByTestId("sales-paused")).toHaveCount(0);
+  // Included work shows no price per click (wave 2 C2): the scan's button and its confirm card name no credits.
+  const scan = page.getByTestId("v2-sales").getByRole("button", { name: "Scan now", exact: true });
+  await scan.click();
+  const confirm = page.getByRole("group", { name: "Scan now" });
+  await expect(confirm.getByRole("button", { name: "Start the scan" })).toBeVisible();
+  await expect(confirm).not.toContainText("credit");
+  await confirm.getByRole("button", { name: "Cancel" }).click();
 
   await chip.click();
   await expect(page).toHaveURL(/\/app\/billing/);
