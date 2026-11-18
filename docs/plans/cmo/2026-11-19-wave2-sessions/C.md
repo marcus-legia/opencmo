@@ -10,22 +10,22 @@ e2e specs, the PR description.
 
 ## Tasks
 
-### - [ ] C4. Chat folds (start now)
+### - [x] C4. Chat folds (start now)
 On every view but Feed the chat column starts folded to a 56px "Ask" rail; opening keeps its draft and session (the
 chat stays mounted). Feed keeps the open column. Update `e2e/ui-v2-shell.spec.ts` (the chat-column assertions).
 Commit `Wave 2 C4: the chat folds away off the Feed` and push.
 
-### - [ ] C5. FAQ (start now)
+### - [x] C5. FAQ (start now)
 `faqs()` in `components/landing/data.ts`: drop the video/slideshow answer, make "What does the plan include?" say fair
 use, keep the free-scan answer session C of #233 wrote. Check landing at 1440 and 390. Commit and push.
 
-### - [ ] C1. Usage chip and Billing bar (after A2)
+### - [x] C1. Usage chip and Billing bar (after A2)
 Top bar: the credits pill becomes `Pro · N% used` (free: `Free · see plans`), linking to Plan and billing. Billing
 page: plan, price, renewal, the bar with the reset date, "Switch to annual" when monthly, invoices link (Creem
 portal), cancel. Paused: the Sales screen shows the canvas banner "You used this month's allowance".
 Commit `Wave 2 C1: one usage bar` and push.
 
-### - [ ] C2. Hide included prices (after A2, A3)
+### - [x] C2. Hide included prices (after A2, A3)
 "Scan now · 5 credits" → "Scan now"; "Write the replies · 1 credit" → "Write the replies"; the scan confirm card
 drops its credit line. "Make an image" keeps its price. Grep for other `credits` labels on included work.
 Commit `Wave 2 C2: no per-click prices on included work` and push.
