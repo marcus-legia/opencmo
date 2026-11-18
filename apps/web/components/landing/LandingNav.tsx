@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
-import { MENUS, type Menu } from "./data";
+import { BRAND, MENUS, type Menu } from "./data";
 import { LineIcon, LogoMark, SocialTile } from "./Glyphs";
 import { gsap, onAnchorClick } from "./motion";
 
@@ -71,9 +71,9 @@ export function LandingNav({ user }: { user: boolean }) {
 
   return (
     <nav ref={navRef} aria-label="Main" className={`lv-nav ${state}`}>
-      <a href="#top" onClick={onAnchorClick("top")} className="lv-nav-brand" aria-label="OpenCMO home">
+      <a href="#top" onClick={onAnchorClick("top")} className="lv-nav-brand" aria-label={`${BRAND} home`}>
         <LogoMark size={28} />
-        <span>OpenCMO</span>
+        <span>{BRAND}</span>
       </a>
       <div className="lv-nav-menus" onMouseLeave={() => setOpen(null)}>
         {MENUS.map((m) => {

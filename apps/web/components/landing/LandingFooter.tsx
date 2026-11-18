@@ -5,13 +5,13 @@ import { useEffect, useRef } from "react";
 
 import { SUPPORT_EMAIL } from "@/lib/site";
 
-import { FOOTER_COLUMNS } from "./data";
+import { BRAND, FOOTER_COLUMNS } from "./data";
 import { LogoMark, SocialTile } from "./Glyphs";
 import { gsap, onAnchorClick, prefersReducedMotion } from "./motion";
 
 /**
  * Footer: the last website form on a brand-colour block, the link grid on paper below,
- * and a giant "OpenCMO" wordmark at the bottom.
+ * and a giant wordmark of the brand at the bottom.
  *
  * The four legal links + support email are a Creem review requirement (rule 6):
  * always visible while logged out.
@@ -45,7 +45,7 @@ export function LandingFooter({ action }: { action: string }) {
         <div className="lv-glass-inner">
           <div className="lv-foot-top">
             <div className="lv-foot-brand">
-              <span><LogoMark size={30} /><span>OpenCMO</span></span>
+              <span><LogoMark size={30} /><span>{BRAND}</span></span>
               <p>Your AI marketing team. It plans your week, writes the posts and finds the conversations. You approve.</p>
             </div>
             <p className="lv-foot-support">
@@ -77,7 +77,7 @@ export function LandingFooter({ action }: { action: string }) {
             ))}
           </nav>
           <div className="lv-foot-bottom">
-            <p>OpenCMO is independent software and is not affiliated with TikTok, YouTube, Meta, X or Reddit. Use OpenCMO only with content you own or have the rights to use.</p>
+            <p>{BRAND} is independent software and is not affiliated with TikTok, YouTube, Meta, X or Reddit. Use {BRAND} only with content you own or have the rights to use.</p>
             <div className="lv-foot-legal">
               <Link href="/privacy">Privacy</Link>
               <Link href="/terms">Terms</Link>
@@ -88,7 +88,7 @@ export function LandingFooter({ action }: { action: string }) {
           </div>
         </div>
       </div>
-      <div aria-hidden="true" className="lv-wordmark">OpenCMO</div>
+      <div aria-hidden="true" className="lv-wordmark">{BRAND}</div>
     </footer>
   );
 }

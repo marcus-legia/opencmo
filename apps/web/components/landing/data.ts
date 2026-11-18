@@ -1,100 +1,80 @@
 /**
- * Nội dung landing (thiết kế "OpenCMO Landing v3"). Không có "use client": trang server
- * đọc cùng mảng này để dựng JSON-LD FAQPage, nên chữ trong schema và chữ trên trang
- * không bao giờ lệch nhau.
+ * Nội dung landing. Không có "use client": trang server đọc cùng mảng này để dựng
+ * JSON-LD FAQPage, nên chữ trong schema và chữ trên trang không bao giờ lệch nhau.
+ *
+ * Copy follows the 2026-11-17 positioning (owner): one audience (founders selling software to businesses), Sales
+ * leads, Post comes with it, video is a side tool. Every claim here must be true of the product today (CLAUDE.md
+ * "Don't ship coming soon"); Sales reads exactly the platforms in `lib/cmo/social/conversations.ts` SALES_PLATFORMS.
  */
-import { DEPT_ICON, LUCIDE, type SocialKey } from "./icons";
+import { DEPT_ICON, LUCIDE, STEP_ICON, type SocialKey } from "./icons";
 
-export type DeptId = "video" | "post" | "sales";
+/**
+ * The name the landing page shows. Only the landing page uses it for now: the site-wide `SITE_NAME` (legal pages,
+ * emails, the app) changes with the domain move, in one pass.
+ */
+export const BRAND = "Ferreto";
 
-export type Dept = {
-  id: DeptId;
-  numeral: string;
-  short: string;
-  name: string;
-  goal: string;
-  steps: string[];
-  result: string;
-  channels: SocialKey[];
-};
+/** Where Sales searches: the four platforms of `SALES_PLATFORMS`, as landing logos (Hacker News is `ycombinator`). */
+export const SALES_SOURCES: SocialKey[] = ["reddit", "ycombinator", "threads", "facebook"];
+/** Where Post publishes the weekly plan. */
+export const POST_CHANNELS: SocialKey[] = ["x", "linkedin", "threads"];
 
-// The order of the CMO loop (CLAUDE.md "Strategy"): words are written first, video is built from them, and the
-// editor is where the founder finishes their own recordings by hand.
-export const DEPTS: Dept[] = [
+export type Beat = { num: string; title: string; body: string; logos?: SocialKey[] };
+
+/** The story I–IV under the hero, darkened word by word as the reader scrolls (ScrollEssay). */
+export const BEATS: Beat[] = [
+  { num: "I.", title: "You built it, then waited a hundred years.", body: "You posted on X every day for a month and got views but no signups." },
+  { num: "II.", title: "Someone is asking for it today.", body: "A founder on Reddit wants a tool like yours. Someone on Hacker News is comparing alternatives. By the time you find the thread by hand, it is two days old." },
   {
-    id: "post",
-    numeral: "I",
-    short: "Post",
-    name: "Post Department",
-    goal: "An AI post writer that knows your business.",
-    steps: [
-      "Reads your strategy and what you shipped this week",
-      "Drafts posts, slides and video scripts in your voice for each platform",
-      "You approve each post and its time; it posts then, on your account",
-    ],
-    result: "Posts for every platform, in your voice, every day.",
-    channels: ["x", "linkedin", "threads", "facebook", "reddit"],
+    num: "III.",
+    title: `${BRAND} finds them first.`,
+    body: "It reads your website, learns what you sell and who buys it, and checks Reddit, Hacker News, Threads and Facebook groups through the week. Each person comes with the quote that shows they need it.",
+    logos: SALES_SOURCES,
   },
   {
-    id: "video",
-    numeral: "II",
-    short: "Video",
-    name: "Video Department",
-    goal: "Slideshows, post images and short clips from your own videos.",
-    steps: [
-      "Builds slideshows and post images from the words you approved, with your Brand Kit",
-      "Cuts short clips from a video you recorded and finished in the editor",
-      "The editor is where you fine-tune by hand: cut by words, captions, voice-over",
-    ],
-    result: "Visual posts from your plan, and clips from what you record.",
-    channels: ["tiktok", "instagram", "youtubeshorts", "facebook", "threads"],
-  },
-  {
-    id: "sales",
-    numeral: "III",
-    short: "Sales",
-    name: "Sales Department",
-    goal: "Find the conversations where people need what you built.",
-    steps: [
-      "Searches public conversations across nine platforms",
-      "Shows why each one matters, with the link",
-      "Drafts a helpful reply you post yourself",
-    ],
-    result: "Conversations worth joining, with a reply drafted.",
-    channels: ["reddit", "x", "linkedin", "facebook", "threads", "ycombinator", "indiehackers", "youtube", "quora"],
+    num: "IV.",
+    title: "You reach out as yourself.",
+    body: "It drafts a reply that helps first, checked against the community's rules. You edit it and post it from your account. Then it plans your posts for the week on X, LinkedIn and Threads.",
+    logos: POST_CHANNELS,
   },
 ];
 
-/** The three beats I · II · III, darkened word by word as the reader scrolls (Hero.tsx). */
-export const BEATS = [
-  { num: "I.", title: "It starts with your website.", body: "The AI CMO reads your site and competitors, and turns them into one strategy and one goal." },
-  { num: "II.", title: "The plan takes shape.", body: "Your goal becomes a weekly calendar, mapped across the channels where your customers already are." },
-  { num: "III.", title: "Three departments carry it.", body: "Post writes, Video builds from the approved words, Sales finds the conversations. You approve what goes out and when." },
+/** "If this sounds like your week": the four strongest pains from the 2026-11 founder research. */
+export const PAINS = [
+  "You scroll Reddit for an hour looking for someone who needs your product.",
+  "Your posts get views and no signups.",
+  "You'd rather ship a feature than write a LinkedIn post.",
+  "A subreddit removed your post for mentioning your own product.",
 ];
 
-export const DEMOS: Record<DeptId, { src: string; poster: string; label: string; alt: string; caption: string }> = {
-  video: {
-    src: "/demos/video.mp4",
-    poster: "/demos/video.webp",
-    label: "Video department · 5s",
-    alt: "The Video editor: the founder asks the agent to punch up the hook of a video they recorded; captions and a voice-over are added",
-    caption: "Finish a video you recorded: ask the editor to tighten the hook, restyle the captions or add a voice-over.",
-  },
-  post: {
-    src: "/demos/post.mp4",
-    poster: "/demos/post.webp",
-    label: "Post department · 5s",
-    alt: "The Post department turns this week's update into five platform drafts and schedules them after approval",
-    caption: "One update from your week becomes a post for each platform, written in your voice, waiting for your approval.",
-  },
-  sales: {
-    src: "/demos/sales.mp4",
-    poster: "/demos/sales.webp",
-    label: "Sales department · 5s",
-    alt: "The Sales department scans nine platforms and surfaces three conversations with a drafted reply",
-    caption: "Sales searches public conversations on nine platforms and brings back the ones where people need what you built.",
-  },
+export const FIT = {
+  good: "founders who sell to developers, marketers, agencies, freelancers and online stores.",
+  poor: "you sell a consumer app, or your customers never write about their problems online.",
 };
+
+/** From a thread to a conversation. Each step is a job the product runs today. */
+export const STEPS = [
+  { icon: STEP_ICON.find, title: "Find", body: "Through the week, or whenever you ask, it searches Reddit, Hacker News, Threads and Facebook groups for people describing the problem you solve." },
+  { icon: STEP_ICON.score, title: "Score", body: "Each thread gets a score out of 100, with the quote that earned it: the pain, the fit with what you sell, how fresh it is." },
+  { icon: STEP_ICON.reach, title: "Reach", body: "It drafts a reply that helps first, using what it knows about your product, and tells you when a community allows no self-promotion. You edit it and post it yourself." },
+  { icon: STEP_ICON.followUp, title: "Follow up", body: "Three days later it reads the thread again and shows what your reply got." },
+  { icon: STEP_ICON.post, title: "Post", body: "It plans a week of posts for X, LinkedIn and Threads. You approve the week once." },
+];
+
+/** The scroll-darkened walkthrough that replaced the demo videos: Sales, then Post, then video. */
+export const SHOWCASE: Beat[] = [
+  { num: "Sales", title: "The people who need what you built.", body: "Sales searches Reddit, Hacker News, Threads and Facebook groups and brings them back with the quote and a drafted reply.", logos: SALES_SOURCES },
+  { num: "Post", title: "A week of posts, approved once.", body: "One update from your week becomes a post for each platform, waiting for your approval.", logos: POST_CHANNELS },
+  { num: "Video", title: "Clips from what you record.", body: "Finish a video you recorded: tighten the hook, restyle the captions or add a voice-over." },
+];
+
+/** What the product never does: assist, never act (CLAUDE.md "Product rules"). */
+export const PROMISES = [
+  `${BRAND} drafts. You read, edit and post from your own accounts.`,
+  "It never likes, follows, comments or replies on its own, and never uses extra accounts.",
+  "It tells you when a subreddit bans self-promotion, so you help instead of pitch.",
+  "We don't promise a number of customers. You see every conversation it found and what came of it.",
+];
 
 /** Giá chạy trên trang: đọc từ PLANS ở server rồi truyền xuống (pricing.ts là server-only). */
 export type Prices = { monthly: number; annual: number; annualBilled: number };
@@ -103,32 +83,33 @@ export function savePercent(p: Prices): number {
   return Math.round((1 - p.annual / p.monthly) * 100);
 }
 
-/** Cách làm thường: ước tính, trang có ghi chú ngay dưới bảng. */
-export const USUAL_STACK = [
-  { who: "Freelance video editor", what: "4 short videos a week, with captions", price: 480 },
-  { who: "Voice-over and caption tools", what: "Two subscriptions", price: 45 },
-  { who: "Social media manager", what: "Posts for X, LinkedIn, Threads, Facebook and Reddit", price: 350 },
-  { who: "Scheduling tool", what: "Queue and publish", price: 35 },
-  { who: "Social listening tool", what: "Alerts when people mention your problem", price: 150 },
+/** The usual way, by hand. Estimates, footnoted under the pricing grid. */
+export const USUAL_WAY = [
+  { who: "Scrolling Reddit and Hacker News by hand", cost: "1 to 3 hours a day" },
+  { who: "A keyword alert or social listening tool", cost: "free to $150 a month" },
+  { who: "A scheduler for X, LinkedIn and Threads", cost: "$6 to $35 a month" },
+  { who: "Writing a week of posts", cost: "an afternoon every week" },
 ];
 
 export const INCLUDED = [
-  { icon: DEPT_ICON.cmo, title: "AI CMO", body: "Reads your site and plans your week around one goal" },
-  { icon: DEPT_ICON.post, title: "Post department", body: "Drafts for X, LinkedIn, Threads, Facebook and Reddit" },
-  { icon: DEPT_ICON.video, title: "Video department", body: "Slideshows, post images and clips from your own videos, plus the editor" },
-  { icon: DEPT_ICON.sales, title: "Sales department", body: "Finds the conversations where people need what you sell, on 9 platforms" },
+  { icon: STEP_ICON.find, title: "Searches on four platforms", body: "Reddit, Hacker News, Threads and Facebook groups" },
+  { icon: STEP_ICON.score, title: "Scored threads", body: "Each with the quote that shows why" },
+  { icon: STEP_ICON.reach, title: "Drafted replies", body: "From your business plan, checked against each community's rules" },
+  { icon: STEP_ICON.post, title: "A week of posts", body: "For X, LinkedIn and Threads, approved in one go" },
+  { icon: DEPT_ICON.video, title: "Video editor", body: "Clips from videos you record" },
+  { icon: LUCIDE.wand, title: "Monthly credits", body: "For the AI work" },
 ];
 
 export function faqs(p: Prices | null): { q: string; a: string }[] {
   const price = p ? ` $${p.annual} a month billed annually, or $${p.monthly} month to month.` : "";
   return [
-    { q: "What is an AI marketing team?", a: "OpenCMO is an AI CMO with three departments. It reads your website, plans your week and writes the posts, slides and video scripts. Video builds slideshows, post images and clips from your own videos, and Sales finds conversations where people need what you built. You approve what goes out and when." },
-    { q: "Does OpenCMO post anything without me?", a: "No. Every post and reply waits in your inbox until you approve it. You can also edit or skip it." },
+    { q: `What does ${BRAND} do?`, a: `${BRAND} reads your website, then searches Reddit, Hacker News, Threads and Facebook groups for people describing the problem you solve. Each one comes with the quote that shows why, and a draft reply based on your business plan. You post it from your own account. It also plans a week of posts for X, LinkedIn and Threads.` },
+    { q: `Does ${BRAND} post anything without me?`, a: "No. Every post and reply waits in your inbox until you approve it. You can also edit or skip it." },
     { q: "What does it do with video?", a: "It builds slideshows and post images from the words you approved, and cuts short clips from videos you recorded and finished in the editor. In the editor you cut by editing the transcript and ask the agent for captions, B-roll or a voice-over." },
-    { q: "Which platforms does Sales search?", a: "Public conversations on Reddit, X, LinkedIn, Facebook groups, Threads, Hacker News, Indie Hackers, YouTube comments and Quora. It drafts a reply; you post it yourself." },
-    { q: "Will it like, follow or DM people for me?", a: "No. There are no automated likes, follows, DMs or replies. OpenCMO drafts; you decide what to say and where." },
+    { q: "Which platforms does Sales search?", a: "Reddit, Hacker News, Threads and Facebook groups. It drafts a reply; you post it yourself." },
+    { q: "Will it like, follow or DM people for me?", a: `No. There are no automated likes, follows, DMs or replies. ${BRAND} drafts; you decide what to say and where.` },
     { q: "Is there a free trial?", a: `Your first plan and drafts are free. Pick a plan to approve and post them. Give it your website, and your marketing strategy, your first week's plan and three X drafts arrive within minutes, with no card.${price}` },
-    { q: "What does the plan include?", a: `Everything: the AI CMO, all three departments, and the editor with captions and voice-over.${price}` },
+    { q: "What does the plan include?", a: `Everything: the searches, the drafted replies, the weekly posts, and the editor with captions and voice-over.${price}` },
     { q: "Can I cancel?", a: "Yes, anytime. Annual plans are refunded for the unused months." },
   ];
 }

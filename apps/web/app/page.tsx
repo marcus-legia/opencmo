@@ -1,23 +1,23 @@
 import type { Metadata } from "next";
 
-import { faqs } from "@/components/landing/data";
-import { DemoSection } from "@/components/landing/DemoSection";
-import { Channels, Departments } from "@/components/landing/Departments";
+import { BRAND, faqs, SHOWCASE } from "@/components/landing/data";
 import { FaqSection } from "@/components/landing/FaqSection";
 import { Hero } from "@/components/landing/Hero";
 import { LandingFooter } from "@/components/landing/LandingFooter";
 import { LandingMotion } from "@/components/landing/LandingMotion";
 import { LandingNav } from "@/components/landing/LandingNav";
 import { PricingSection } from "@/components/landing/PricingSection";
+import { ScrollEssay } from "@/components/landing/ScrollEssay";
+import { FitSection, PromiseSection, StepsSection } from "@/components/landing/Sections";
 import { JsonLd } from "@/components/seo/JsonLd";
 import { offerPrices, plansOnSale, type SellablePlan } from "@/lib/billing-catalog";
 import { SITE_NAME, SITE_URL, absoluteUrl } from "@/lib/site";
 import { currentUser } from "@/lib/supabase/user";
 
-const DESCRIPTION = "Your AI marketing team: it reads your website, plans your week, writes the posts and finds the conversations. Led by an AI CMO. You approve everything.";
+const DESCRIPTION = `${BRAND} reads your website and finds people on Reddit, Hacker News, Threads and Facebook groups who describe the problem you solve. It drafts a reply built from your business plan; you post it from your own account.`;
 
 export const metadata: Metadata = {
-  title: { absolute: "OpenCMO: your AI marketing team for founders" },
+  title: { absolute: `${BRAND}: find the people asking for what you built` },
   description: DESCRIPTION,
   alternates: { canonical: "/" },
 };
@@ -45,7 +45,7 @@ function landingLd(faq: { q: string; a: string }[], plans: SellablePlan[]) {
     {
       "@context": "https://schema.org",
       "@type": "SoftwareApplication",
-      name: SITE_NAME,
+      name: BRAND,
       url: SITE_URL,
       description: DESCRIPTION,
       applicationCategory: "BusinessApplication",
@@ -84,9 +84,10 @@ export default async function LandingPage() {
       <LandingNav user={!!user} />
       <main>
         <Hero action={action} />
-        <Channels />
-        <Departments />
-        <DemoSection />
+        <FitSection />
+        <StepsSection />
+        <ScrollEssay beats={SHOWCASE} label="See it work" id="demo" eyebrow="See it work" />
+        <PromiseSection />
         {/* No catalogue row, no price (cmo-review-2 S2.7): the section waits for the catalogue rather than guess. */}
         {prices ? (
           <PricingSection prices={prices} action={action} />
