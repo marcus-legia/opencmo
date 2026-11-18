@@ -10,7 +10,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { buildDigest, cardTitle, loadDigestInput, localClock } from "@/lib/cmo/digest";
+import { buildDigest, cardTitle, digestScheduleLabel, loadDigestInput, localClock } from "@/lib/cmo/digest";
 
 import { emailFooter, expiringEmail, unsubscribeUrl, type EmailSender } from "./email";
 
@@ -53,21 +53,37 @@ async function sendClaimed(admin: SupabaseClient, sender: EmailSender, c: Claim,
 
 export type Founder = { id: string; email: string | null; timezone: string; digest_hour: number | null };
 
+/** When this founder's last morning email went out: people found after it are new. Null before the first. */
+async function lastDigestAt(admin: SupabaseClient, userId: string): Promise<string | null> {
+  const { data, error } = await admin.from("email_log").select("sent_at").eq("user_id", userId).eq("kind", "digest").eq("status", "sent").order("sent_at", { ascending: false }).limit(1).maybeSingle<{ sent_at: string | null }>();
+  if (error) throw new Error(`email_log: ${error.message}`);
+  return data?.sent_at ?? null;
+}
+
 /** The morning digest for one founder whose digest is due (`digestDue`); false when nothing was sent. */
 export async function sendDigestEmail(admin: SupabaseClient, sender: EmailSender, founder: Founder, opts: { appUrl: string; now: Date }): Promise<boolean> {
   if (!founder.email) return false;
   const clock = localClock(opts.now, founder.timezone);
-  const input = await loadDigestInput(admin, founder.id, { appUrl: opts.appUrl, dateLabel: clock.dateLabel, now: opts.now, asService: true, timezone: founder.timezone });
-  if (!input.waiting.length) return false;
   const url = unsubscribeUrl(opts.appUrl, await token(admin, founder.id));
+  const input = await loadDigestInput(admin, founder.id, {
+    appUrl: opts.appUrl,
+    dateLabel: clock.dateLabel,
+    now: opts.now,
+    timezone: founder.timezone,
+    since: await lastDigestAt(admin, founder.id),
+    schedule: digestScheduleLabel("daily", founder.digest_hour ?? 8),
+    unsubscribeUrl: url,
+  });
+  // Nothing new: no person, follow-up or post due today. Not sent (B2 logs the day as skipped).
+  if (buildDigest(input).empty) return false;
+  // The claim holds the day; it needs a waiting card until the log takes rows without one (wave 2, A4).
   const c = await claim(admin, founder.id, "digest", input.waiting.map((w) => w.id));
   if (!c) return false;
   return sendClaimed(admin, sender, c, async () => {
     // Only the cards the claim kept (still waiting, the founder's own).
     const kept = new Set(c.approval_ids);
-    const digest = buildDigest({ ...input, waiting: input.waiting.filter((w) => kept.has(w.id)) });
-    const footer = emailFooter(url);
-    return sender.send({ to: founder.email!, subject: digest.subject, text: digest.text + footer.text, html: digest.html.replace(/<\/div>$/, `${footer.html}</div>`), unsubscribeUrl: url });
+    const digest = buildDigest({ ...input, people: input.people.filter((p) => kept.has(p.approvalId)), posts: input.posts.firstId && !kept.has(input.posts.firstId) ? { ...input.posts, firstId: null } : input.posts });
+    return sender.send({ to: founder.email!, subject: digest.subject, text: digest.text, html: digest.html, unsubscribeUrl: url });
   });
 }
 

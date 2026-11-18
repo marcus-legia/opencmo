@@ -296,7 +296,7 @@ async function dashboard({ supabase, userId }: LoadContext): Promise<Partial<Das
     digest: async () => {
       const p = await prof;
       const clock = localClock(now, p.timezone);
-      const input = await loadDigestInput(supabase, userId, { appUrl: SITE_URL, dateLabel: clock.dateLabel, now, today: false });
+      const input = await loadDigestInput(supabase, userId, { appUrl: SITE_URL, dateLabel: clock.dateLabel, now, timezone: p.timezone });
       if (!input.waiting.length && !input.wentOut.length && !input.stuck.length) return null;
       const dept = (d: string) => ((DEPARTMENTS as readonly string[]).includes(d) ? d : "brain") as Department;
       return {

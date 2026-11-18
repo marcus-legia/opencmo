@@ -127,11 +127,13 @@ export async function run(): Promise<void> {
   await me.rpc("cmo_resume");
   step("Pause CMO refused the next run; Resume cleared it");
 
-  // The digest lists what waits.
+  // The digest names what waits.
   const input = await loadDigestInput(me, userId, { appUrl: "http://127.0.0.1:3000", dateLabel: "today" });
   const digest = buildDigest(input);
   assert.equal(input.waiting.length, dashboard.data.queue.length, "the digest lists every waiting card");
-  assert.ok(digest.text.includes(`/app/inbox/${input.waiting[0]!.id}`), "with links that open the card");
+  // The email leads with people (wave 2, B1): a reply card is linked from People asking, a post from the Posts line.
+  const linked = input.people[0]?.approvalId ?? input.posts.firstId;
+  assert.ok(linked && digest.text.includes(`/app/inbox/${linked}`), "with links that open the card");
   assert.ok(dashboard.data.digest && dashboard.data.digest.waiting.length === input.waiting.length, "and the Dashboard shows it");
   const send = emailSender();
   if (send?.name === "local") {
