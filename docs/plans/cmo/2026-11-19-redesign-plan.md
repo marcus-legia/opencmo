@@ -37,6 +37,25 @@ feature review `opencmo-internal/docs/cmo/2026-11-18-ra-soat-tinh-nang.md`, and 
    and posts counts sign-ups. Without this the funnel stays empty, because founders rarely mark it by hand.
 6. **Launch date:** 23/11 with waves 1–2, or about 30/11 to ship wave 3 (Library + Post from Sales) first. Owner's call.
 
+## Emails (proposed, canvas row "Emails")
+
+Today (`lib/cmo/digest.ts`, `lib/notify/send.ts`): a digest every day at 7:00, weekends too; three "Today" rows where
+the people asking come last; "Went out" and "Stuck" with no limit; one more email per card about to expire; a footer
+that is false with autopilot on; `email_log` keeps card ids only, so nobody can see what was sent.
+
+Proposed:
+- **Morning email**, weekdays at 8:00 (founder can change), at most one a day. Subject and preview line lead with the
+  people: "3 people asked about late invoices". Body: up to 3 people (source, match, one quote, one link), up to 2
+  follow-ups, one line for posts (count and the next deadline). No "Went out", no "Stuck". Not sent when nothing is
+  new; the day is still logged as "Skipped".
+- **Expiring-card emails fold into the morning email** (the posts line names the next deadline).
+- **Weekly report** on Mondays in place of that day's morning email: found, replied, answered back, signed up; what
+  worked; what people said most; posts that went out.
+- **Strong match push** right after a scan, for a person who fits well in a thread under a day old.
+- **Log in Settings › Notifications**: every email and alert with time, kind, subject, status (sent, skipped, failed)
+  and why it was sent. `email_log` gains `subject`, `summary jsonb` and a `skipped` status; no open or click tracking.
+- Belongs to wave 2 (template, schedule, footer, fold the expiring emails) and wave 3 (weekly report, push, log page).
+
 ## Waves
 
 | Wave | What | Size | When |
