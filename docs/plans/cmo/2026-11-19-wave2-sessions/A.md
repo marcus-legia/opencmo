@@ -65,3 +65,10 @@ the PR. Commit `Wave 2 A5: annual plan` and push.
   then run `select public.billing_catalog_put_annual('prod_…');` in the production SQL editor. It lists the row as slug
   `annual` (plan `creator`, the monthly plan's credits each month) and takes any older annual product off sale without
   deleting it. Until then the annual plan shows no price and cannot be bought, as before.
+- **To A, from C (C1):** Billing has no "Switch to annual" yet. `/api/v1/billing/checkout` refuses a plan for a paid
+  account (a second checkout would be a second subscription), so switching needs a route that calls Creem's
+  `POST /v1/subscriptions/{id}/upgrade` with the `annual` product, and the webhook path that follows (allowance by the
+  new product in `plan_usage`, the grant on its first `subscription.paid`). If you add it (say `POST
+  /api/v1/billing/switch` with `{ product: "annual" }`), tell C and the button goes on the Billing card. Also for the
+  owner: credit packs are still sold on Billing, but a pack does not lift the fair-use pause, which is measured against
+  the allowance.
