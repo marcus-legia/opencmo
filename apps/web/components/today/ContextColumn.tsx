@@ -20,16 +20,6 @@ const DocIcon = () => (
   </svg>
 );
 
-const PaletteIcon = () => (
-  <svg className="i s" viewBox="0 0 24 24" aria-hidden="true" style={{ marginTop: "2px", color: "var(--muted)" }}>
-    <circle cx="13.5" cy="6.5" r=".5" />
-    <circle cx="17.5" cy="10.5" r=".5" />
-    <circle cx="8.5" cy="7.5" r=".5" />
-    <circle cx="6.5" cy="12.5" r=".5" />
-    <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z" />
-  </svg>
-);
-
 const Plus = () => (
   <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
     <path d="M5 12h14" />
@@ -40,8 +30,8 @@ const Plus = () => (
 const isToday = (iso: string | undefined) => (iso ? new Date(iso).toDateString() === new Date().toDateString() : false);
 
 /**
- * The Context column of the feed (Main.dc.html `.left`): what the CMO knows about the business, the documents every
- * agent reads, the week's goal and the competitors. A document opens the Context drawer (`?doc=`).
+ * The Context column (redesign 2026-11-19): what Ferreto knows about the business, one card for its documents, the
+ * week's goal and the competitors. A document opens the Context drawer (`?doc=`), which lists all of them.
  */
 export function ContextColumn({ goal }: { goal: { text: string | null; done: number; total: number } | null }) {
   const ws = useWorkspace();
@@ -105,35 +95,21 @@ export function ContextColumn({ goal }: { goal: { text: string | null; done: num
         </>
       ) : null}
 
-      <div style={{ borderTop: "1px solid var(--line)", paddingTop: "12px" }}>
-        <div className="sec" style={{ padding: "0 6px" }}>
-          <h2>
-            Documents{" "}
-            <span className="meta" style={{ marginLeft: "4px" }}>
-              {docCount}
-            </span>
-          </h2>
-          {missing ? (
-            <button type="button" className="ib" aria-label="Write a missing document" onClick={() => openDoc(missing, true)}>
-              <Plus />
-            </button>
-          ) : null}
-        </div>
-        {DOC_ROWS.map((row) => {
-          const kind = (DOCUMENT_KINDS as readonly string[]).includes(row.id) ? (row.id as DocumentKind) : null;
-          const written = kind ? ws.documents[kind] : undefined;
-          return (
-            <button key={row.id} type="button" className="doc" onClick={() => openDoc(row.id)} style={{ width: "100%", border: "0", background: "transparent", textAlign: "left", font: "inherit", color: "inherit", cursor: "pointer" }}>
-              {row.id === "brand" ? <PaletteIcon /> : <DocIcon />}
-              <div style={{ flex: "1", minWidth: "0" }}>
-                <span style={{ fontSize: "13.5px" }}>{row.title}</span>
-                <span className="u">{row.readBy}</span>
-              </div>
-              {isToday(written?.at) ? <span className="live" style={{ marginTop: "6px" }} title="Updated today"></span> : null}
-            </button>
-          );
-        })}
-      </div>
+      {/* One card for the documents (owner, 2026-11-18: the list here repeated the drawer's own list). */}
+      <button
+        type="button"
+        onClick={() => openDoc(missing ?? "product", Boolean(missing))}
+        data-testid="context-documents"
+        style={{ width: "100%", display: "flex", alignItems: "center", gap: "10px", padding: "10px", margin: "0 0 12px", border: "1px solid var(--line)", borderRadius: "10px", background: "transparent", textAlign: "left", font: "inherit", color: "inherit", cursor: "pointer" }}
+      >
+        <DocIcon />
+        <span style={{ flex: "1", minWidth: "0", display: "flex", flexDirection: "column" }}>
+          <span style={{ fontSize: "13.5px", fontWeight: "500" }}>Your business</span>
+          <span className="meta">{missing ? "One document still to write" : `${docCount} documents every step reads`}</span>
+        </span>
+        {DOC_ROWS.some((row) => (DOCUMENT_KINDS as readonly string[]).includes(row.id) && isToday(ws.documents[row.id as DocumentKind]?.at)) ? <span className="live" title="Updated today"></span> : null}
+        <span className="meta" style={{ color: "var(--accent)" }}>Open</span>
+      </button>
 
       <div style={{ borderTop: "1px solid var(--line)", paddingTop: "12px", marginTop: "10px" }}>
         <div className="sec" style={{ padding: "0 6px" }}>
@@ -156,14 +132,21 @@ export function ContextColumn({ goal }: { goal: { text: string | null; done: num
               {ws.competitors.length}
             </span>
           </h2>
-          <button type="button" className="ib" aria-label="Add a competitor" onClick={() => openDoc("competitors", true)}>
-            <Plus />
-          </button>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+            <a href="/app/research" className="meta" style={{ color: "var(--accent)", textDecoration: "none" }}>
+              Research
+            </a>
+            <button type="button" className="ib" aria-label="Add a competitor" onClick={() => openDoc("competitors", true)}>
+              <Plus />
+            </button>
+          </span>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: "2px" }}>
           {ws.competitors.map((c, i) => (
             <div key={c.name} className="doc" style={{ alignItems: "center" }}>
-              <span style={{ width: "16px", height: "16px", borderRadius: "4px", background: SWATCH[i % SWATCH.length], display: "inline-block", flexShrink: 0 }}></span>
+              <span aria-hidden="true" style={{ width: "18px", height: "18px", borderRadius: "5px", background: SWATCH[i % SWATCH.length], color: "#fff", display: "inline-grid", placeItems: "center", fontSize: "10.5px", fontWeight: "700", flexShrink: 0 }}>
+                {(c.name || siteLabel(c.website) || "?").charAt(0).toUpperCase()}
+              </span>
               <span style={{ fontSize: "13.5px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{siteLabel(c.website) ?? c.name}</span>
             </div>
           ))}

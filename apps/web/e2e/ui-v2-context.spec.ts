@@ -22,7 +22,7 @@ test("a document is edited in the drawer over the feed and saved as a new versio
   await signIn(page, user);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/app");
-  await page.getByRole("complementary", { name: "Context" }).getByRole("button", { name: /^Product/ }).click();
+  await page.getByRole("complementary", { name: "Context" }).getByTestId("context-documents").click();
   await expect(page).toHaveURL(/\/app\?doc=product$/);
   const drawer = page.getByRole("dialog", { name: "Product" });
   await expect(drawer).toBeVisible();
