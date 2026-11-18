@@ -1,6 +1,6 @@
 -- P6 A0 (20270101090000): the new tables are the founder's to read and nobody's to write directly; push subscriptions,
 -- notify settings and unsubscribing go through RPCs that check their input; an email is claimed once (one digest a
--- day, one expiring email per card, only waiting cards of the founder); a card can be held; metrics, best slots and
+-- day, one push per card, only waiting cards of the founder); a card can be held; metrics, best slots and
 -- reply outcomes have their columns.
 create extension if not exists pgtap with schema extensions;
 
@@ -21,7 +21,7 @@ select ok(not has_table_privilege('anon', 'public.notify_settings', 'select'), '
 select ok(has_table_privilege('service_role', 'public.card_budget', 'insert'), 'the service role writes the card budget');
 select ok(has_function_privilege('authenticated', 'public.push_subscribe(text,text,text,text)', 'execute'), 'a founder subscribes');
 select ok(has_function_privilege('anon', 'public.email_unsubscribe(uuid)', 'execute'), 'an unsubscribe link works signed out');
-select ok(not has_function_privilege('authenticated', 'public.email_log_claim(uuid,text,uuid[])', 'execute'), 'only the sender claims an email');
+select ok(not has_function_privilege('authenticated', 'public.email_log_claim(uuid,text,uuid[],text,jsonb)', 'execute'), 'only the sender claims an email');
 select ok(not has_function_privilege('anon', 'public.notify_settings_for(uuid)', 'execute'), 'anon reads no token');
 
 insert into auth.users (id, email) values
@@ -85,15 +85,16 @@ select is((select approval_ids from public.email_log_claim('e2290000-0000-4000-8
 select is((select count(*)::int from public.email_log_claim('e2290000-0000-4000-8000-00000000000a', 'digest',
   array['e2290000-0000-4000-8000-0000000000c2']::uuid[])), 0, 'one digest a day');
 create temp table e (log_id uuid, approval_ids uuid[]) on commit drop;
-insert into e select * from public.email_log_claim('e2290000-0000-4000-8000-00000000000a', 'expiring',
+-- Wave 2 A4: the expiring email is gone; a push names its card, once (20270131020002).
+insert into e select * from public.email_log_claim('e2290000-0000-4000-8000-00000000000a', 'push',
   array['e2290000-0000-4000-8000-0000000000c1', 'e2290000-0000-4000-8000-0000000000c2']::uuid[]);
-select is((select cardinality(approval_ids) from e), 2, 'an expiring email names both cards');
-select is((select approval_ids from public.email_log_claim('e2290000-0000-4000-8000-00000000000a', 'expiring',
+select is((select cardinality(approval_ids) from e), 2, 'a push names both cards');
+select is((select approval_ids from public.email_log_claim('e2290000-0000-4000-8000-00000000000a', 'push',
   array['e2290000-0000-4000-8000-0000000000c1']::uuid[])), null, 'never twice for one card');
 select lives_ok($$ select public.email_log_done((select log_id from e), 're_123', null) $$, 'the sender records Resend''s id');
 select is((select status from public.email_log where id = (select log_id from e)), 'sent', 'the email is sent');
 update public.notify_settings set email_digest = false where user_id = 'e2290000-0000-4000-8000-00000000000b';
-select is((select count(*)::int from public.email_log_claim('e2290000-0000-4000-8000-00000000000b', 'expiring',
+select is((select count(*)::int from public.email_log_claim('e2290000-0000-4000-8000-00000000000b', 'digest',
   array['e2290000-0000-4000-8000-0000000000c3']::uuid[])), 0, 'an unsubscribed founder gets no email');
 
 -- Held cards, metrics, best slots, outcomes.

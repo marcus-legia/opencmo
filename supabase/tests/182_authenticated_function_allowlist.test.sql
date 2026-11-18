@@ -72,6 +72,7 @@ insert into allowed values
   ('cmo_onboard_step(uuid,jsonb)'),
   ('cmo_onboarding_answers(jsonb)'),
   ('cmo_script_open(uuid)'),
+  ('my_email_log(integer)'),  -- wave 2 A4: the founder's own email log, read-only
   ('plan_usage()'),  -- wave 2 A2: the founder's own fair-use bar, read-only
   ('post_video_start(uuid,uuid)'),
   ('post_video_wanted(uuid)'),
@@ -155,7 +156,7 @@ insert into allowed values
   ('save_autopilot(text[],smallint)'),
   ('set_autopilot_paused(boolean)'),
   ('save_brand_kit(uuid,text,jsonb)'),
-  ('save_cmo_settings(integer,text,smallint)'),
+  ('save_cmo_settings(integer,text,smallint,text)'),
   ('save_editor_document(uuid,integer,jsonb,jsonb)'),
   ('save_editor_skill(text,text,text)'),
   ('save_marketing_document(text,jsonb,uuid)'),

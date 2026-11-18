@@ -8419,10 +8419,10 @@ $$;
 
 
 --
--- Name: email_log_claim(uuid, text, uuid[]); Type: FUNCTION; Schema: public; Owner: -
+-- Name: email_log_claim(uuid, text, uuid[], text, jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.email_log_claim(p_user uuid, p_kind text, p_approval_ids uuid[]) RETURNS TABLE(log_id uuid, approval_ids uuid[])
+CREATE FUNCTION public.email_log_claim(p_user uuid, p_kind text, p_approval_ids uuid[], p_subject text DEFAULT NULL::text, p_summary jsonb DEFAULT NULL::jsonb) RETURNS TABLE(log_id uuid, approval_ids uuid[])
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
@@ -8431,28 +8431,39 @@ declare
   v_ids uuid[];
   v_id uuid;
 begin
-  if p_kind not in ('digest', 'expiring') then
+  if p_kind not in ('digest', 'weekly', 'push', 'expiring') then
     raise exception 'Unknown email kind.' using errcode = '22023';
   end if;
+  -- The expiring-card email is gone (wave 2): an old caller gets nothing to send, not an error.
+  if p_kind = 'expiring' then
+    return;
+  end if;
+  if p_summary is not null and (jsonb_typeof(p_summary) <> 'object' or octet_length(p_summary::text) > 4096) then
+    raise exception 'An email summary is a small object.' using errcode = '22023';
+  end if;
   perform pg_advisory_xact_lock(hashtextextended('email_log:' || p_user::text, 0));
-  if exists (select 1 from public.notify_settings n where n.user_id = p_user and not n.email_digest) then
+  if p_kind in ('digest', 'weekly') and (
+    exists (select 1 from public.notify_settings n where n.user_id = p_user and not n.email_digest)
+    or exists (select 1 from public.profiles p where p.id = p_user and p.digest_days = 'off')
+  ) then
     return;
   end if;
   -- Only the founder's own cards that still wait.
   select coalesce(array_agg(a.id order by a.created_at), '{}') into v_ids
   from public.approvals a
   where a.id = any(coalesce(p_approval_ids, '{}')) and a.user_id = p_user and a.status = 'waiting';
-  if p_kind = 'expiring' then
+  if p_kind = 'push' then
+    -- One push per card.
     select coalesce(array_agg(i order by i), '{}') into v_ids from unnest(v_ids) i
     where not exists (select 1 from public.email_log l
-                      where l.user_id = p_user and l.kind = 'expiring' and l.status <> 'failed' and i = any(l.approval_ids));
-  end if;
-  if cardinality(v_ids) = 0 then
-    return;
+                      where l.user_id = p_user and l.kind = 'push' and l.status <> 'failed' and i = any(l.approval_ids));
+    if cardinality(v_ids) = 0 then
+      return;
+    end if;
   end if;
   v_ids := v_ids[1:50];
-  insert into public.email_log (user_id, kind, day, approval_ids)
-  values (p_user, p_kind, v_day, v_ids)
+  insert into public.email_log (user_id, kind, day, approval_ids, subject, summary)
+  values (p_user, p_kind, v_day, v_ids, left(nullif(btrim(coalesce(p_subject, '')), ''), 200), p_summary)
   on conflict do nothing
   returning id into v_id;
   if v_id is null then
@@ -8478,6 +8489,32 @@ begin
     update public.email_log set status = 'failed', error = left(p_error, 500) where id = p_log;
     delete from public.email_log where id = p_log and kind = 'digest';
   end if;
+end;
+$$;
+
+
+--
+-- Name: email_log_skip(uuid, text, jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.email_log_skip(p_user uuid, p_kind text, p_summary jsonb DEFAULT NULL::jsonb) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_id uuid;
+begin
+  if p_kind not in ('digest', 'weekly') then
+    raise exception 'Only a digest or weekly email can be skipped.' using errcode = '22023';
+  end if;
+  if p_summary is not null and (jsonb_typeof(p_summary) <> 'object' or octet_length(p_summary::text) > 4096) then
+    raise exception 'An email summary is a small object.' using errcode = '22023';
+  end if;
+  insert into public.email_log (user_id, kind, day, approval_ids, status, summary)
+  values (p_user, p_kind, (now() at time zone public.schedule_timezone(p_user))::date, '{}', 'skipped', p_summary)
+  on conflict do nothing
+  returning id into v_id;
+  return v_id;
 end;
 $$;
 
@@ -9586,6 +9623,30 @@ declare
 begin
   update public.mcp_grants set revoked_at = now()
   where user_id = v_user and client_id = p_client_id and revoked_at is null;
+end;
+$$;
+
+
+--
+-- Name: my_email_log(integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.my_email_log(p_limit integer DEFAULT 30) RETURNS TABLE(id uuid, kind text, day date, status text, subject text, summary jsonb, created_at timestamp with time zone, sent_at timestamp with time zone)
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_user uuid := public.require_user();
+begin
+  if p_limit is null or p_limit < 1 or p_limit > 100 then
+    raise exception 'Pick 1 to 100 emails.' using errcode = '22023';
+  end if;
+  return query
+    select l.id, l.kind, l.day, l.status, l.subject, l.summary, l.created_at, l.sent_at
+    from public.email_log l
+    where l.user_id = v_user and l.status in ('sent', 'skipped') and l.created_at > now() - interval '14 days'
+    order by l.created_at desc
+    limit p_limit;
 end;
 $$;
 
@@ -14081,10 +14142,10 @@ $$;
 
 
 --
--- Name: save_cmo_settings(integer, text, smallint); Type: FUNCTION; Schema: public; Owner: -
+-- Name: save_cmo_settings(integer, text, smallint, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.save_cmo_settings(p_weekly_credit_budget integer, p_timezone text, p_digest_hour smallint) RETURNS TABLE(weekly_credit_budget integer, timezone text, digest_hour smallint)
+CREATE FUNCTION public.save_cmo_settings(p_weekly_credit_budget integer, p_timezone text, p_digest_hour smallint, p_digest_days text DEFAULT NULL::text) RETURNS TABLE(weekly_credit_budget integer, timezone text, digest_hour smallint, digest_days text)
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
@@ -14101,14 +14162,17 @@ begin
   if p_digest_hour is not null and (p_digest_hour < 0 or p_digest_hour > 23) then
     raise exception 'The digest hour must be between 0 and 23.' using errcode = '22023';
   end if;
+  if p_digest_days is not null and p_digest_days not in ('weekdays', 'daily', 'monday', 'off') then
+    raise exception 'Choose weekdays, every day, Mondays or off.' using errcode = '22023';
+  end if;
   update public.profiles p
   set weekly_credit_budget = p_weekly_credit_budget, timezone = p_timezone, digest_hour = p_digest_hour,
-      timezone_source = 'founder'
+      digest_days = coalesce(p_digest_days, p.digest_days), timezone_source = 'founder'
   where p.id = v_user;
   if not found then
     raise exception 'Profile not found.' using errcode = 'P0002';
   end if;
-  return query select p.weekly_credit_budget, p.timezone, p.digest_hour from public.profiles p where p.id = v_user;
+  return query select p.weekly_credit_budget, p.timezone, p.digest_hour, p.digest_days from public.profiles p where p.id = v_user;
 end;
 $$;
 
@@ -18394,7 +18458,7 @@ CREATE TABLE public.profiles (
     retention_exempt boolean DEFAULT false NOT NULL,
     weekly_credit_budget integer DEFAULT 80 NOT NULL,
     timezone text DEFAULT 'UTC'::text NOT NULL,
-    digest_hour smallint DEFAULT 7,
+    digest_hour smallint DEFAULT 8,
     cmo_paused_at timestamp with time zone,
     timezone_source text DEFAULT 'default'::text NOT NULL,
     creem_customer_id text,
@@ -18407,9 +18471,11 @@ CREATE TABLE public.profiles (
     autopilot_note text,
     posting_plan jsonb,
     autopilot_paused boolean DEFAULT false NOT NULL,
+    digest_days text DEFAULT 'weekdays'::text NOT NULL,
     CONSTRAINT profiles_autopilot_hours_check CHECK ((autopilot_hours = ANY (ARRAY[6, 12, 24]))),
     CONSTRAINT profiles_autopilot_note_check CHECK ((char_length(autopilot_note) <= 200)),
     CONSTRAINT profiles_autopilot_platforms_check CHECK ((autopilot_platforms <@ ARRAY['x'::text, 'threads'::text, 'linkedin'::text])),
+    CONSTRAINT profiles_digest_days_check CHECK ((digest_days = ANY (ARRAY['weekdays'::text, 'daily'::text, 'monday'::text, 'off'::text]))),
     CONSTRAINT profiles_digest_hour_check CHECK (((digest_hour >= 0) AND (digest_hour <= 23))),
     CONSTRAINT profiles_heard_from_check CHECK (((heard_from IS NULL) OR (heard_from = ANY (ARRAY['search'::text, 'x'::text, 'reddit'::text, 'linkedin'::text, 'youtube'::text, 'ai_assistant'::text, 'friend'::text, 'newsletter'::text, 'other'::text])))),
     CONSTRAINT profiles_heard_from_note_check CHECK (((heard_from_note IS NULL) OR (char_length(heard_from_note) <= 100))),
@@ -18900,11 +18966,15 @@ CREATE TABLE public.email_log (
     error text,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     sent_at timestamp with time zone,
-    CONSTRAINT email_log_approval_ids_check CHECK (((cardinality(approval_ids) >= 1) AND (cardinality(approval_ids) <= 50))),
+    subject text,
+    summary jsonb,
+    CONSTRAINT email_log_approval_ids_check CHECK (((cardinality(approval_ids) <= 50) AND ((cardinality(approval_ids) >= 1) OR (kind = ANY (ARRAY['digest'::text, 'weekly'::text]))))),
     CONSTRAINT email_log_error_check CHECK ((char_length(error) <= 500)),
-    CONSTRAINT email_log_kind_check CHECK ((kind = ANY (ARRAY['digest'::text, 'expiring'::text]))),
+    CONSTRAINT email_log_kind_check CHECK ((kind = ANY (ARRAY['digest'::text, 'weekly'::text, 'push'::text, 'expiring'::text]))),
     CONSTRAINT email_log_provider_id_check CHECK ((char_length(provider_id) <= 100)),
-    CONSTRAINT email_log_status_check CHECK ((status = ANY (ARRAY['claimed'::text, 'sent'::text, 'failed'::text])))
+    CONSTRAINT email_log_status_check CHECK ((status = ANY (ARRAY['claimed'::text, 'sent'::text, 'failed'::text, 'skipped'::text]))),
+    CONSTRAINT email_log_subject_check CHECK ((char_length(subject) <= 200)),
+    CONSTRAINT email_log_summary_check CHECK (((jsonb_typeof(summary) = 'object'::text) AND (octet_length((summary)::text) <= 4096)))
 );
 
 
@@ -20901,6 +20971,13 @@ CREATE INDEX editor_transcripts_clip_created_idx ON public.editor_transcripts US
 --
 
 CREATE UNIQUE INDEX email_log_one_digest ON public.email_log USING btree (user_id, day) WHERE (kind = 'digest'::text);
+
+
+--
+-- Name: email_log_one_weekly; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX email_log_one_weekly ON public.email_log USING btree (user_id, day) WHERE (kind = 'weekly'::text);
 
 
 --

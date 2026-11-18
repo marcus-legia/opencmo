@@ -64,7 +64,7 @@ select throws_ok(format($$ select public.cmo_decide_correction(%L, 'approve') $$
 -- Settings.
 set local request.jwt.claims = '{"sub":"e2010000-0000-4000-8000-00000000000a"}';
 select results_eq($$ select * from public.save_cmo_settings(120, 'Asia/Ho_Chi_Minh', 7::smallint) $$,
-  $$ values (120, 'Asia/Ho_Chi_Minh'::text, 7::smallint) $$, 'settings save');
+  $$ values (120, 'Asia/Ho_Chi_Minh'::text, 7::smallint, 'weekdays'::text) $$, 'settings save');
 select throws_ok($$ select public.save_cmo_settings(10001, 'UTC', 7::smallint) $$, '22023',
   'The weekly budget must be between 0 and 10,000 credits.', 'budget has an upper bound');
 select throws_ok($$ select public.save_cmo_settings(-1, 'UTC', 7::smallint) $$, '22023',

@@ -29,7 +29,7 @@ Commit `Wave 2 A2: plan usage and the pause` and push.
   with `output->>'verdict' = 'none'` and there were fewer than 2 of them.
 - pgTAP for both. Commit `Wave 2 A3: replies included, one more free scan after none` and push.
 
-### - [ ] A4. Email settings and the log columns
+### - [x] A4. Email settings and the log columns
 - `profiles.digest_days` and `digest_hour` default 8 (plan's contract); extend `save_cmo_settings` with `p_digest_days`.
 - `email_log`: `subject text`, `summary jsonb`, status `skipped`, kinds `digest | weekly | push` (+ old `expiring`);
   allow a `skipped` row with no approvals (`approval_ids` may be empty for it).
@@ -49,3 +49,15 @@ the PR. Commit `Wave 2 A5: annual plan` and push.
   on 18 Dec.", a plain 400-class message the Sales card can show as is.
 - **To C (A3 done):** `JOB_PRICES.sales_reply_drafts` is now 0 and the run holds nothing; the Write replies button should
   show no price (C2). A free account still gets the 402 plan sheet from it.
+- **To B (A4 done, for B2/B3):** `email_log_claim(p_user, p_kind, p_approval_ids, p_subject, p_summary)`: kinds
+  `digest | weekly | push`; a digest or weekly email may be claimed with `'{}'` (follow-ups only); a push needs at least
+  one waiting card and is claimed once per card; `expiring` now returns no row (no error), so the old cron path sends
+  nothing until B3 deletes it. Digest and weekly claims return nothing when the founder unsubscribed or
+  `profiles.digest_days = 'off'` (the weekday/Monday choice is the cron's, B2). `email_log_skip(p_user, 'digest',
+  p_summary)` logs a skipped day (once a day; a later claim that day returns nothing). `summary` is a JSON object under
+  4 KB; `subject` up to 200 characters.
+- **To C (A4 done, for C3):** `my_email_log(p_limit)` (1–100) returns the founder's sent and skipped emails of the
+  last 14 days, newest first: `id, kind, day, status, subject, summary, created_at, sent_at`.
+  `save_cmo_settings` takes `p_digest_days` (`weekdays | daily | monday | off`; null keeps it) and returns
+  `digest_days`; `profiles.digest_days` is readable by the founder. `app/api/v1/cmo/settings/route.ts` does not pass
+  it yet.

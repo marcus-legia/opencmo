@@ -64,7 +64,7 @@ select isnt(public.schedule_content('e2321000-0000-4000-8000-00000000000a', 'x')
   'changing a post of the thread changes the hash');
 
 select lives_ok($$ select * from public.email_log_claim('e2320000-0000-4000-8000-00000000000a', 'digest', '{}') $$,
-  'a claim takes the lock and returns nothing to send');
+  'a claim with no cards takes the lock and lives (a digest may carry follow-ups only, wave 2 A4)');
 
 select * from finish();
 rollback;
