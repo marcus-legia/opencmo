@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Thanh trên cùng của Dashboard: dấu OpenCMO · chọn project · Activity · một câu
+ * Thanh trên cùng của Dashboard: dấu Ferreto · chọn project · Activity · một câu
  * trạng thái của CMO · công tắc theme. Màn này "bleed" (ẩn top bar chung), nên
  * công tắc theme phải nằm ở đây.
  */
@@ -25,7 +25,7 @@ export function TopBar({ ws, logOpen, onToggleLog, onOpenPlan }: Props) {
     <header className="cmo-bar">
       <span className="cmo-bar-mark">
         <img src="/icon.svg" alt="" width={22} height={22} />
-        <span>OpenCMO</span>
+        <span>Ferreto</span>
       </span>
 
       <details className="cmo-project" ref={menu}>

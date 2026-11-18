@@ -95,7 +95,7 @@ test("6. B-roll over the talk", async () => {
 
 test("7. UGC ad: title, CTA, square version", async () => {
   await fresh();
-  const result = await ask(page, "Make this work as an ad: a title at the start, a 'Try OpenCMO free' call to action at the end, and switch the frame to 1:1.");
+  const result = await ask(page, "Make this work as an ad: a title at the start, a 'Try Ferreto free' call to action at the end, and switch the frame to 1:1.");
   report("ugc-ad", result, { export: await exportClip(page, "ugc-ad") });
   expect.soft(usedAny(result, ["set_frame"]), "1:1 frame").toBe(true);
 });
@@ -151,7 +151,7 @@ test("14. 5-second outro CTA: /video on a New edit", async () => {
   await newEdit(page, "9:16");
   const result = await ask(
     page,
-    "/video 5-second vertical outro, cinematic and clean. A sleek laptop on a minimal desk at golden hour, its screen glowing with soft colorful blocks sliding into a neat row. Slow push-in, warm rim light. In the final second the glow blooms into a solid deep-navy background with calm empty space in the center. No people, no brand logos.\nVoiceover: \"Your videos, cut into clips. You approve, you post. OpenCMO.\"",
+    "/video 5-second vertical outro, cinematic and clean. A sleek laptop on a minimal desk at golden hour, its screen glowing with soft colorful blocks sliding into a neat row. Slow push-in, warm rim light. In the final second the glow blooms into a solid deep-navy background with calm empty space in the center. No people, no brand logos.\nVoiceover: \"Your videos, cut into clips. You approve, you post. Ferreto.\"",
   );
   report("video-outro", result, { export: await exportClip(page, "video-outro") });
 });

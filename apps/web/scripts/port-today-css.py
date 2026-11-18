@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Ports the CSS of the "OpenCMO Today" canvas artboards (claude.ai/artifact/77MyWuSem4GCssg7Bx11wi) into
+Ports the CSS of the "Ferreto Today" canvas artboards (claude.ai/artifact/77MyWuSem4GCssg7Bx11wi) into
 apps/web/styles/today.css, verbatim except for scope:
 
 - every rule of artboard <Name>.dc.html is prefixed with `.pg-<name>`, so artboards that reuse a class name with a

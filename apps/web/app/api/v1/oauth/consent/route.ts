@@ -12,7 +12,7 @@ const body = z.object({
 });
 
 /**
- * Allow or Deny on the consent screen (`/oauth/consent`) of OpenCMO's OAuth server. Returns the
+ * Allow or Deny on the consent screen (`/oauth/consent`) of Ferreto's OAuth server. Returns the
  * URL back to the app that asked (its registered redirect URI, with the code or `access_denied`);
  * the page navigates there itself, because the site's CSP (`form-action 'self'`) blocks a form
  * that redirects to another site. Signed in, same site only (`withApi`).
@@ -44,7 +44,7 @@ export const POST = withApi({ body, rateLimit: { bucket: "project-write", limit:
     throw new ApiError(502, "That did not go through. Please try again.");
   }
   // An app whose redirect host we do not support is denied without being sent back to it: following its registered
-  // URI from opencmo.io's own page would make the site an open redirector for a phishing client (RFC 9700 §4.11.2).
+  // URI from ferreto.io's own page would make the site an open redirector for a phishing client (RFC 9700 §4.11.2).
   if (body.decision === "deny" && !allowedRedirectHost(details.data.redirect_uri)) return { redirect_url: null, denied: true };
   return { redirect_url: data.redirect_url };
 });

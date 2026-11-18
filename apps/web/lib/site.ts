@@ -1,18 +1,18 @@
 /**
  * Địa chỉ gốc của site — một chỗ cho canonical, sitemap, RSS, JSON-LD.
  *
- * Mặc định `https://opencmo.io`: build preview của Vercel không đặt biến này
+ * Mặc định `https://ferreto.io`: build preview của Vercel không đặt biến này
  * thì canonical vẫn trỏ về domain thật, không để Google index bản preview.
  */
-export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || "https://opencmo.io").replace(/\/$/, "");
+export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || "https://ferreto.io").replace(/\/$/, "");
 
-export const SITE_NAME = "OpenCMO";
+export const SITE_NAME = "Ferreto";
 
 export const SITE_DESCRIPTION =
-  "OpenCMO is an AI CMO for founders: it learns your business from your website and runs three departments — Video, Post and Sales — that draft your marketing for you to approve.";
+  "Ferreto finds the people already asking for what you built on Reddit, Hacker News, Threads and Facebook groups, with their own words as proof and a draft reply you post yourself. A week of posts comes with it.";
 
 /** Email hỗ trợ — phải TRÙNG email khai với bên thanh toán (Creem đối chiếu khi duyệt). */
-export const SUPPORT_EMAIL = "support@opencmo.io";
+export const SUPPORT_EMAIL = "support@ferreto.io";
 
 export function absoluteUrl(path = "/"): string {
   return `${SITE_URL}${path.startsWith("/") ? path : `/${path}`}`;

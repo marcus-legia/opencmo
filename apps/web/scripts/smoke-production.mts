@@ -2,7 +2,7 @@
  * Smoke test of a deployed site (web hardening round 3, item 2). Run by `.github/workflows/post-deploy.yml` after each
  * production deploy, and by hand:
  *
- *   SMOKE_URL=https://opencmo.io npx tsx apps/web/scripts/smoke-production.mts
+ *   SMOKE_URL=https://ferreto.io npx tsx apps/web/scripts/smoke-production.mts
  *
  * GET only, no cookie, no sign-in, no account: what any visitor can read. It checks what CI cannot, because CI builds
  * the PR's code on a local stack and never sees the deploy's env: the database answers, the catalogue reaches the

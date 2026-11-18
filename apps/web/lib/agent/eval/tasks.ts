@@ -610,7 +610,7 @@ const ALL_TASKS: EvalTask[] = [
   {
     id: "video-outro",
     prompt:
-      '/video 5-second vertical outro, cinematic and clean. A sleek laptop on a minimal desk at golden hour, its screen glowing with soft colorful blocks sliding into a neat row. No people, no brand logos. Voiceover: "Your videos, cut into clips. You approve, you post. OpenCMO."',
+      '/video 5-second vertical outro, cinematic and clean. A sleek laptop on a minimal desk at golden hour, its screen glowing with soft colorful blocks sliding into a neat row. No people, no brand logos. Voiceover: "Your videos, cut into clips. You approve, you post. Ferreto."',
     setup: blankEdit,
     grade: (outcome) => gradeVideo(outcome, { seconds: 5 }),
   },

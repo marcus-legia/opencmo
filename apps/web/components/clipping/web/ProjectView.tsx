@@ -78,7 +78,7 @@ export function ProjectView({ projectId }: { projectId: string }) {
   useEffect(() => {
     if (!activeTitle) return;
     const original = document.title;
-    document.title = `${activeTitle} · OpenCMO`;
+    document.title = `${activeTitle} · Ferreto`;
     return () => {
       document.title = original;
     };

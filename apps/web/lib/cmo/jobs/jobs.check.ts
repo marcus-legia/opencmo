@@ -667,7 +667,7 @@ async function main() {
   assert.equal(goalBlock(proposal ?? null), "", "a goal still proposed does not steer the plan");
 
   // The founder's Claude inbox is gone (2026-11-14): a run queued before that with `brain: "claude"` thinks with
-  // OpenCMO like any other, makes its card and records our model, never "founder-claude".
+  // Ferreto like any other, makes its card and records our model, never "founder-claude".
   const memOld = memoryStore(docs);
   const old = memOld.enqueue("post_draft", { brain: "claude", inbox: "gone", idea: "The 3-7-14 reminder rule" });
   await drainCmoQueue(memOld.store);

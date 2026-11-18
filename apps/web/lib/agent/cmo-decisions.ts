@@ -288,7 +288,7 @@ async function prepareCard(supabase: SupabaseClient, raw: unknown): Promise<Prep
           ? `This approves its time too: it goes out on ${where}${proposed.handle ? ` (${proposed.handle})` : ""} on ${localLabel(proposed.at, zone)} (${zone}).`
           : `This approves its time too: on ${localLabel(proposed.at, zone)} (${zone}) you get it to copy and post on ${where}.`,
       );
-    } else changes.push("It goes out at its approved time; nothing is posted by OpenCMO now.");
+    } else changes.push("It goes out at its approved time; nothing is posted by Ferreto now.");
   }
 
   return {

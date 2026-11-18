@@ -28,7 +28,7 @@ export const salesFixture: SalesScreen = {
         { text: "Timeline editors are overkill for a 40 second clip.", from: "top comment" },
       ],
       draft:
-        "Same problem here. What helped me: record once, then cut by deleting words from the transcript instead of scrubbing a timeline. Ums and retakes go in a minute. For a 40 second demo, add captions and one zoom on the click that matters, nothing else. I built a tool for this (OpenCMO), but the transcript approach works in most editors now.",
+        "Same problem here. What helped me: record once, then cut by deleting words from the transcript instead of scrubbing a timeline. Ums and retakes go in a minute. For a 40 second demo, add captions and one zoom on the click that matters, nothing else. I built a tool for this (Ferreto), but the transcript approach works in most editors now.",
       draftChecks: "No links · product named once, at the end · r/SaaS allows it",
       drafted: true,
       status: "open",

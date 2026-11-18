@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * The v2 shell (NEXT_PUBLIC_OPENCMO_UI=v2), built to the "OpenCMO Today" canvas (docs/design/today-canvas): no rail and
+ * The v2 shell (NEXT_PUBLIC_OPENCMO_UI=v2), built to the "Ferreto Today" canvas (docs/design/today-canvas): no rail and
  * no tab strip. Each screen is one artboard: the root carries `k pg-<artboard>` so the artboard's own CSS
  * (`styles/today.css`) applies, the top bar is that artboard's, and the CMO chat is the right column on the feed and a
  * drawer everywhere else.

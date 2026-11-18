@@ -17,5 +17,5 @@ export const ACCOUNTS: Account[] = [
   { id: "acc-tiktok", platform: "tiktok", handle: "@opencmo", status: "connected", syncedAt: at("2026-10-29", "10:40"), noDataSince: null },
   { id: "acc-linkedin", platform: "linkedin", handle: "Marcus", status: "connected", syncedAt: at("2026-10-29", "09:42"), noDataSince: null },
   { id: "acc-threads", platform: "threads", handle: "@opencmo", status: "reconnect", syncedAt: at("2026-10-27", "08:00"), noDataSince: at("2026-10-27", "08:00") },
-  { id: "acc-youtube", platform: "youtube", handle: "OpenCMO", status: "connected", syncedAt: at("2026-10-29", "07:42"), noDataSince: null },
+  { id: "acc-youtube", platform: "youtube", handle: "Ferreto", status: "connected", syncedAt: at("2026-10-29", "07:42"), noDataSince: null },
 ];

@@ -73,7 +73,7 @@ assert.equal(nextCheckAt(new Date("2026-10-29T00:01:00Z")).toISOString(), "2026-
 
 // The digest: links open cards, nothing decides, text is escaped.
 const digest = buildDigest({
-  appUrl: "https://opencmo.io/",
+  appUrl: "https://ferreto.io/",
   dateLabel: "Thursday 29 Oct",
   waiting: [{ id: "card-1", title: "Most AI video tools <stop>", department: "writer" }],
   wentOut: [{ title: "Cut by words", where: "X" }],
@@ -84,7 +84,7 @@ const links = digest.text.match(/https?:\/\/\S+/g) ?? [];
 assert.ok(
   links.some((link) => {
     const url = new URL(link);
-    return url.origin === "https://opencmo.io" && url.pathname === "/app/inbox/card-1";
+    return url.origin === "https://ferreto.io" && url.pathname === "/app/inbox/card-1";
   }),
   "links open the card",
 );

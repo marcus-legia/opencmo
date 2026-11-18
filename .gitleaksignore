@@ -1,0 +1,2 @@
+# Token giả trong test (unsubscribe), commit đổi tên Ferreto trước khi có dấu gitleaks:allow.
+a7e82da0fb1c82e8fb8f49595e995eff79567d87:apps/web/lib/notify/notify.check.ts:generic-api-key:30

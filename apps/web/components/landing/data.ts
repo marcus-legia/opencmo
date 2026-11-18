@@ -159,7 +159,7 @@ export const MENUS: Menu[] = [
       mi("Blog", "Founder-led marketing, week by week", "/blog", { icon: LUCIDE.book }),
       mi("Guides", "Playbooks for each channel", "/guides", { icon: LUCIDE.compass }),
       mi("Free tools", "Hook, caption and post generators", "/tools", { icon: LUCIDE.wand }),
-      mi("Compare", "OpenCMO vs Buffer, Hootsuite", "/compare", { icon: LUCIDE.scale }),
+      mi("Compare", "Ferreto vs Buffer, Hootsuite", "/compare", { icon: LUCIDE.scale }),
       mi("Changelog", "What shipped this month", "/changelog", { icon: LUCIDE.history }),
     ],
   },
@@ -176,6 +176,6 @@ export const FOOTER_COLUMNS: { title: string; links: FootLink[] }[] = [
   { title: "Solutions", links: [fl("Solo founders", "/for/solo-founders"), fl("Indie hackers", "/for/indie-hackers"), fl("SaaS startups", "/for/saas"), fl("Agencies", "/for/agencies"), fl("Creators & coaches", "/for/creators")] },
   { title: "Channels", links: [fl("TikTok videos", "/channels/tiktok"), fl("YouTube Shorts", "/channels/youtube-shorts"), fl("Instagram Reels", "/channels/instagram-reels"), fl("LinkedIn posts", "/channels/linkedin"), fl("Reddit marketing", "/channels/reddit"), fl("X posts", "/channels/x")] },
   { title: "Free tools", links: [fl("Video hook generator", "/tools/hook-generator"), fl("Caption generator", "/tools/caption-generator"), fl("LinkedIn post generator", "/tools/linkedin-post-generator"), fl("X thread writer", "/tools/x-thread-writer"), fl("Reddit thread finder", "/tools/reddit-thread-finder")] },
-  { title: "Resources", links: [fl("Blog", "/blog"), fl("Guides", "/guides"), fl("OpenCMO vs Buffer", "/compare/buffer"), fl("OpenCMO vs Hootsuite", "/compare/hootsuite"), fl("Changelog", "/changelog")] },
+  { title: "Resources", links: [fl("Blog", "/blog"), fl("Guides", "/guides"), fl("Ferreto vs Buffer", "/compare/buffer"), fl("Ferreto vs Hootsuite", "/compare/hootsuite"), fl("Changelog", "/changelog")] },
   { title: "Connect", links: [fl("X", "#", "x"), fl("LinkedIn", "#", "linkedin"), fl("YouTube", "#", "youtube"), fl("TikTok", "#", "tiktok"), fl("Reddit", "#", "reddit")] },
 ];

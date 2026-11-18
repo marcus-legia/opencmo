@@ -37,7 +37,7 @@ export default function BlogIndex() {
         }}
       />
       <header className="blog-header">
-        <p className="section-kicker">The OpenCMO Blog</p>
+        <p className="section-kicker">The Ferreto Blog</p>
         <h1>Think like a CMO. Ship like a founder.</h1>
         <p>{DESCRIPTION}</p>
       </header>

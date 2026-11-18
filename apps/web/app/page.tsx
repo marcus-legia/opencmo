@@ -22,7 +22,7 @@ export const metadata: Metadata = {
   alternates: { canonical: "/" },
 };
 
-// Ai/cái gì/giá bao nhiêu — ba thứ máy trả lời câu hỏi cần để nhắc tới OpenCMO
+// Ai/cái gì/giá bao nhiêu — ba thứ máy trả lời câu hỏi cần để nhắc tới Ferreto
 // đúng. `offers` và FAQ đọc cùng nguồn với trang: giá và câu trả lời không lệch nhau.
 function landingLd(faq: { q: string; a: string }[], plans: SellablePlan[]) {
   return [

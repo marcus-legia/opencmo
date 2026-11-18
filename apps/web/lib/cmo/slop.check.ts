@@ -16,9 +16,9 @@ import { writerMemory } from "./writer/context";
 // Lines the writer and the planner produced on 2026-11-11.
 const seen: [string, string][] = [
   ["Why manual approval is the secret to AI marketing", "headline"],
-  ["The hidden $1,000/month cost of juggling freelancers and tools vs $60 with OpenCMO", "headline"],
+  ["The hidden $1,000/month cost of juggling freelancers and tools vs $60 with Ferreto", "headline"],
   ["The danger of automated DMs and likes – why human-approved AI beats bots", "dash"],
-  ["OpenCMO is one inbox with three departments. Nothing goes out until you approve it. Which department would you open first?", "closing_question"],
+  ["Ferreto is one inbox with three departments. Nothing goes out until you approve it. Which department would you open first?", "closing_question"],
   ["This is a game changer for founders.", "hype"],
   ["The question isn't the model. It's the eval.", "binary_contrast"],
   ["Here's why we approve every draft by hand.", "headline"],

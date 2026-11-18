@@ -166,7 +166,7 @@ function splitsInside(before: string, after: string): string | null {
 /**
  * The script made from the beats: each beat's words are what its shot shows and the voice reads, so they are the
  * script. The director often rewrote a word in one and not the other, and the turn failed on a mismatch the
- * user cannot fix (2026-11-08, "give 'This is OpenCMO.…' to a beat"); the words-per-second check still applies.
+ * user cannot fix (2026-11-08, "give 'This is Ferreto.…' to a beat"); the words-per-second check still applies.
  */
 export function scriptFromBeats(plan: DirectorPlan): DirectorPlan {
   const script = plan.shots.map((shot) => shot.words.trim()).filter(Boolean).join(" ");

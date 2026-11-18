@@ -63,7 +63,7 @@ async function coreDraftDay() {
   assert.equal(created.error, null);
   const userId = created.data.user!.id;
   ok(await admin.from("profiles").update({ plan: "starter", timezone: "UTC", credit_balance: 200 }).eq("id", userId), "profile");
-  ok(await admin.from("marketing_documents").insert({ user_id: userId, kind: "product", version: 1, created_by: "user", body: { name: "OpenCMO", one_liner: "An AI CMO for solo founders." } }), "document");
+  ok(await admin.from("marketing_documents").insert({ user_id: userId, kind: "product", version: 1, created_by: "user", body: { name: "Ferreto", one_liner: "An AI CMO for solo founders." } }), "document");
   ok(await clientFor(userId).rpc("save_posting_plan", { p_plan: { text: { x: 1, threads: 1, linkedin: 1, facebook: 0 }, video: { tiktok: 0, instagram: 0, youtube: 0 } } }), "the founder's plan");
   ok(await admin.rpc("zernio_profile_save", { p_user: userId, p_profile: `prof-${userId.slice(0, 8)}` }), "zernio profile");
   for (const platform of ["x", "threads"]) {
@@ -100,7 +100,7 @@ async function main() {
   const userId = created.data.user!.id;
   await admin.from("profiles").update({ timezone: "UTC", credit_balance: 200 }).eq("id", userId);
   await admin.from("marketing_documents").insert([
-    { user_id: userId, kind: "product", version: 1, created_by: "user", body: { name: "OpenCMO", one_liner: "An AI CMO for solo founders." } },
+    { user_id: userId, kind: "product", version: 1, created_by: "user", body: { name: "Ferreto", one_liner: "An AI CMO for solo founders." } },
     { user_id: userId, kind: "strategy", version: 1, created_by: "user", body: { pains: ["editing demos takes hours"], avoid: [] } },
   ]);
   ok(await admin.rpc("zernio_profile_save", { p_user: userId, p_profile: `prof-${userId.slice(0, 8)}` }), "zernio profile");
@@ -175,7 +175,7 @@ async function main() {
   const list = (await (await fetch(`${mail}/api/v1/search?query=${encodeURIComponent(`to:${email}`)}`)).json()) as { messages: { ID: string; Subject: string }[] };
   assert.equal(list.messages.length, 1);
   const message = (await (await fetch(`${mail}/api/v1/message/${list.messages[0]!.ID}`)).json()) as { HTML: string; Subject: string };
-  assert.ok(message.HTML.includes("/app/inbox/") && message.HTML.includes("/unsubscribe?token=") && message.HTML.includes("support@opencmo.io"));
+  assert.ok(message.HTML.includes("/app/inbox/") && message.HTML.includes("/unsubscribe?token=") && message.HTML.includes("support@ferreto.io"));
   writeFileSync(join(OUT, "digest-email.html"), message.HTML);
   console.log(`F1: "${message.Subject}" in the local mail catcher, sent once`);
 

@@ -64,7 +64,7 @@ function securityHeaders(): { key: string; value: string }[] {
     { key: "Content-Security-Policy", value: csp },
     // Vercel tự gắn HSTS cho custom domain, nhưng header bảo mật của app không
     // nên phụ thuộc vào nhà cung cấp: đổi chỗ host là mất, mà mất thì im lặng.
-    // Hai năm + subdomain vì `opencmo.io` chỉ phục vụ HTTPS.
+    // Hai năm + subdomain vì `ferreto.io` chỉ phục vụ HTTPS.
     {
       key: "Strict-Transport-Security",
       value: "max-age=63072000; includeSubDomains; preload",

@@ -8,12 +8,12 @@ import { createServerClient } from "@/lib/supabase/server";
 
 import { ConsentButtons } from "./ConsentButtons";
 
-export const metadata: Metadata = { title: "Connect to OpenCMO", robots: { index: false } };
+export const metadata: Metadata = { title: "Connect to Ferreto", robots: { index: false } };
 export const dynamic = "force-dynamic";
 
 /**
- * The consent screen of OpenCMO's OAuth server (Supabase Auth, `authorization_url_path`): an app
- * such as Claude asks to use OpenCMO as the signed-in user. Supabase sends the browser here with
+ * The consent screen of Ferreto's OAuth server (Supabase Auth, `authorization_url_path`): an app
+ * such as Claude asks to use Ferreto as the signed-in user. Supabase sends the browser here with
  * `authorization_id`; Allow or Deny posts to `/api/v1/oauth/consent`, which hands the answer to
  * Supabase, and the page follows its redirect back to the app. The MCP server (packages/mcp-server) then accepts the
  * token that app receives.
@@ -40,7 +40,7 @@ export default async function ConsentPage({ searchParams }: { searchParams: Prom
   const host = allowedRedirectHost(data.redirect_uri);
   if (!host) {
     return (
-      <Consent title={UNKNOWN_APP_CONSENT} text={`${client} wants to send you to ${hostOf(data.redirect_uri)}, which OpenCMO does not support.`}>
+      <Consent title={UNKNOWN_APP_CONSENT} text={`${client} wants to send you to ${hostOf(data.redirect_uri)}, which Ferreto does not support.`}>
         <ConsentButtons authorizationId={data.authorization_id} denyOnly />
       </Consent>
     );
@@ -56,7 +56,7 @@ export default async function ConsentPage({ searchParams }: { searchParams: Prom
     );
   }
   return (
-    <Consent title={`Connect ${client} (${host})`} text={`${client} wants to use OpenCMO as ${data.user.email}.`}>
+    <Consent title={`Connect ${client} (${host})`} text={`${client} wants to use Ferreto as ${data.user.email}.`}>
       <ul className="auth-consent">
         <li>Read your projects, clips and editing skills.</li>
         <li>Edit your clips. Every change is saved in Version history.</li>
@@ -85,7 +85,7 @@ function hostOf(uri: string): string {
 function Consent({ title, text, children }: { title: string; text: string; children?: React.ReactNode }) {
   return (
     <main className="auth-page">
-      <Link href="/" aria-label="OpenCMO home">
+      <Link href="/" aria-label="Ferreto home">
         <Brand />
       </Link>
       <div className="auth-content">
@@ -95,7 +95,7 @@ function Consent({ title, text, children }: { title: string; text: string; child
           {children}
         </section>
       </div>
-      <p className="auth-footer">OpenCMO · The AI CMO for founders.</p>
+      <p className="auth-footer">Ferreto · The AI CMO for founders.</p>
     </main>
   );
 }

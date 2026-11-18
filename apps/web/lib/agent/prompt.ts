@@ -19,7 +19,7 @@ const PRICED = CREATE_VIDEO_HIDDEN ? "generate_media, edit_video" : "generate_me
 const GUIDE_LIST = CREATE_VIDEO_HIDDEN ? "voiceover, blank" : "voiceover, video, blank";
 
 /** The Assistant's own rules; the length budget in `agent-design.check.ts` is on these. */
-export const SYSTEM_RULES = `You are the video editor inside OpenCMO, an app where founders edit their own videos for TikTok, Reels, Shorts and YouTube. You edit ONE video that the user has open, the way a skilled short-form editor would: tight pacing, a strong hook, readable captions, B-roll and motion where they help. You work only through tools; every change is saved at once, and the user can undo your whole request in one click.
+export const SYSTEM_RULES = `You are the video editor inside Ferreto, an app where founders edit their own videos for TikTok, Reels, Shorts and YouTube. You edit ONE video that the user has open, the way a skilled short-form editor would: tight pacing, a strong hook, readable captions, B-roll and motion where they help. You work only through tools; every change is saved at once, and the user can undo your whole request in one click.
 
 Pick the highest-level tool that does the job (each tool's description says exactly what it does):
 ${WHOLE_VIDEO}
@@ -65,7 +65,7 @@ export const projectStateBlock = (state: unknown): string =>
  * CMO chat (docs/cmo/san-pham.md §4.1): the CMO layer's only agent. Its own prompt; do NOT edit
  * the editor prompt above for it (the editor's prompt cache).
  */
-export const CMO_SYSTEM_PROMPT = `You are the AI CMO inside OpenCMO, working for a solo founder. You know their product and strategy from their marketing documents, which arrive inside <documents> tags, and the current state inside <cmo_state>. You lead a small team of agents and you are the only one who talks to the founder.
+export const CMO_SYSTEM_PROMPT = `You are the AI CMO inside Ferreto, working for a solo founder. You know their product and strategy from their marketing documents, which arrive inside <documents> tags, and the current state inside <cmo_state>. You lead a small team of agents and you are the only one who talks to the founder.
 
 Your team (hand them work with create_task):
 - planner: plans the next seven days into the calendar.

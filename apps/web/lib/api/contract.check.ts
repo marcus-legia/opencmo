@@ -213,7 +213,7 @@ async function seedProject(
   const clipPath = `${userId}/${job.id}/1/00-seeded.mp4`;
   const { error: uploadError } = await admin.storage
     .from("clips")
-    .upload(clipPath, Buffer.from("OpenCMO API contract fixture"), {
+    .upload(clipPath, Buffer.from("Ferreto API contract fixture"), {
       contentType: "video/mp4",
       upsert: false,
     });
@@ -225,7 +225,7 @@ async function seedProject(
   const proxyPath = `${userId}/${job.id}/proxy/${crypto.randomUUID()}/seeded.mp4`;
   const { error: proxyError } = await admin.storage
     .from("sources")
-    .upload(proxyPath, Buffer.from("OpenCMO editor proxy fixture"), {
+    .upload(proxyPath, Buffer.from("Ferreto editor proxy fixture"), {
       contentType: "video/mp4",
       upsert: false,
     });
@@ -581,7 +581,7 @@ async function main(): Promise<void> {
     const transcriptPath = `${masterPath.slice(0, -4)}.transcript.json`;
 
     for (const [path, body, type] of [
-      [masterPath, "OpenCMO master fixture", "video/mp4"],
+      [masterPath, "Ferreto master fixture", "video/mp4"],
       [transcriptPath, JSON.stringify([{ text: "hi", words: [{ text: "hi", start: 0, end: 1 }] }]),
        "application/json"],
     ] as const) {

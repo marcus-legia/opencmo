@@ -126,7 +126,7 @@ test("the morning digest lands in the mail catcher and its link opens the card b
       expect(digest).toBeTruthy();
       html = ((await (await fetch(`${mail}/api/v1/message/${digest!.ID}`)).json()) as { HTML: string }).HTML;
     }).toPass({ timeout: 20_000 });
-    expect(html).toContain("support@opencmo.io");
+    expect(html).toContain("support@ferreto.io");
     expect(html).toContain("/unsubscribe?token=");
     expect(html).not.toMatch(/approve\?|action=approve/i);
     const link = /href="(http[^"]+\/app\/inbox\/[0-9a-f-]{36})"/.exec(html)![1]!;
@@ -142,7 +142,7 @@ test("the morning digest lands in the mail catcher and its link opens the card b
     // The unsubscribe link asks first; the button stops the emails.
     const unsubscribe = /href="(http[^"]+\/unsubscribe\?token=[0-9a-f-]{36})"/.exec(html)![1]!;
     await page.goto(new URL(unsubscribe).pathname + new URL(unsubscribe).search);
-    await expect(page.getByRole("heading", { name: "Stop OpenCMO emails?" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Stop Ferreto emails?" })).toBeVisible();
     await page.getByRole("button", { name: "Stop emails" }).click();
     await expect(page.getByRole("heading", { name: "You will not get these emails anymore" })).toBeVisible();
     const { data: settings } = await admin.from("notify_settings").select("email_digest").eq("user_id", user.id).single();

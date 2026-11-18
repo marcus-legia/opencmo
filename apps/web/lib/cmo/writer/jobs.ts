@@ -34,7 +34,7 @@ export const CAPTION_CLIPS_MAX = 6;
 
 const text = (value: unknown, max: number): string => (typeof value === "string" ? value.trim().slice(0, max) : "");
 
-/** The writer for one run: the job's model call, a fix round only on OpenCMO's own brain, the model that answered. */
+/** The writer for one run: the job's model call, a fix round only on Ferreto's own brain, the model that answered. */
 function runWriter(ctx: JobContext, labelSuffix = "") {
   const seen = { model: null as string | null };
   const deps: WriterDeps = {

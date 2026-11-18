@@ -1,5 +1,5 @@
 /*
- * "OpenCMO Today" redesign (canvas: claude.ai/artifact/77MyWuSem4GCssg7Bx11wi), layered on the v2 UI.
+ * "Ferreto Today" redesign (canvas: claude.ai/artifact/77MyWuSem4GCssg7Bx11wi), layered on the v2 UI.
  *
  * Loaded after `ui-v2.css`, so the same selectors win here without touching the components. Three parts:
  *   1. Tokens: the v2 names keep their meaning, their values come from the canvas, light and dark. Dark follows

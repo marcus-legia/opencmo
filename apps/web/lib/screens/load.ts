@@ -654,7 +654,7 @@ async function socialAccounts(supabase: SupabaseClient): Promise<SocialAccountDb
 }
 
 /**
- * Every platform OpenCMO posts to, connected or not (P4 F1): Settings offers Connect for the rest. `reconnect` when
+ * Every platform Ferreto posts to, connected or not (P4 F1): Settings offers Connect for the rest. `reconnect` when
  * Zernio reports the account refused or gone; then posts to it wait until the founder connects it again.
  */
 function accountList(rows: SocialAccountDb[], all: boolean): SettingsScreen["accounts"] {
