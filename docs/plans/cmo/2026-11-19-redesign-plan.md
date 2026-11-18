@@ -48,7 +48,8 @@ Proposed:
   people: "3 people asked about late invoices". Body: up to 3 people (source, match, one quote, one link), up to 2
   follow-ups, one line for posts (count and the next deadline). No "Went out", no "Stuck". Not sent when nothing is
   new; the day is still logged as "Skipped".
-- **Expiring-card emails fold into the morning email** (the posts line names the next deadline).
+- **Expiring-card emails are removed** (owner, 2026-11-19): the morning email's posts line names the next deadline;
+  a founder with autopilot on gets a push before a post goes out.
 - **Weekly report** on Mondays in place of that day's morning email: found, replied, answered back, signed up; what
   worked; what people said most; posts that went out.
 - **Strong match push** right after a scan, for a person who fits well in a thread under a day old.
@@ -76,3 +77,13 @@ asked, Plan picker and checkout hand-off, Billing, Settings. Parts: top bar, lef
 Assist, never act (no post button for replies). No "coming soon": a hidden feature is hidden, not teased. English on
 every screen, copy through `no-ai-slop`. Every write through an RPC with its pgTAP test. Hide before delete: wave 2
 removes entry points only, so a rollback is one revert.
+
+## Open items found in the review of 2026-11-19 (not designed yet)
+
+- Screens: a paid account before its first scan; a scan that failed or a source that did not answer; Sales "not set
+  up" (no reader key); the Following up tab and its nudge drafts; "I replied" asking for the reply link (needed for
+  the funnel); the tracking link setup for sign-ups; the 100% used state; delete account and export data; light theme.
+- What a free account sees on Post and Feed after its free scan.
+- Legal: Terms and Privacy still describe video and clips; Privacy must say the Library keeps public posts' quotes and
+  summaries, and how a removed post is dropped. Reddit/ScrapeCreators/Lurk data terms (R0) still unchecked.
+- Creem: store description and screenshots must match the Sales-first product before review.
