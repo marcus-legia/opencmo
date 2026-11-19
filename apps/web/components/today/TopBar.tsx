@@ -191,7 +191,7 @@ function Avatar({ email }: { email: string | null }) {
 /** Pages the canvas reaches from the business menu rather than from a rail. */
 const MORE = (
   <>
-    <Link href="/app?doc=product">Documents and Brand Kit</Link>
+    <Link href="/app/business">Your business</Link>
     <Link href="/app/research">Research: competitors</Link>
     <Link href="/app?doc=plan">Plan and orders</Link>
     <Link href="/app?doc=voice">Voice and skills</Link>

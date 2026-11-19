@@ -266,7 +266,7 @@ function SettingsBody({ data, live }: { data: Data; live: Record<keyof Data, boo
             </span>
             <span className="scr-off-links">
               <a href="/app/billing">Billing</a>
-              <a href="/app?doc=brand">Brand Kit</a>
+              <a href="/app/business?d=brand">Brand</a>
               <a href="#api-keys">API keys</a>
             </span>
           </div>

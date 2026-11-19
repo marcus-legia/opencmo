@@ -24,7 +24,7 @@ this"; filter by source. Left panel link with the quote count.
 Each draft in the Post list shows "Based on N conversations · sources"; the draft view lists each source's summary
 and platform. Date and time editable next to Approve (already there or add). "Make an image" stays a small link.
 
-### - [ ] C3. Your business page (after A4)
+### - [x] C3. Your business page (after A4)
 Five documents in the drawer's list: Product, Strategy (with Where they ask, This week), Competitors, Post plan,
 Brand (Voice: paste samples, intro line, words to avoid; Look: colours, font, logo, screenshots, preview). "Read my
 website again" asks before overwriting edits.

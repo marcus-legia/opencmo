@@ -65,7 +65,7 @@ test("old project routes redirect to Studio", async ({ page }) => {
   await expect(page).toHaveURL(new RegExp(`/app/studio\\?item=${id}$`));
   await page.goto(`/app/jobs/${id}`);
   await expect(page).toHaveURL(new RegExp(`/app/studio\\?item=${id}$`));
-  // The Brand Kit is a pane of the Context drawer over the feed (plan 2026-11-10-today-in-place).
+  // `/app/brand` opens the Brand document in the Context drawer over the feed (wave 3 A4).
   await page.goto("/app/brand");
   await expect(page).toHaveURL(/\/app\?doc=brand$/);
 });

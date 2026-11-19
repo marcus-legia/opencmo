@@ -100,7 +100,7 @@ export function ContextColumn({ goal }: { goal: { text: string | null; done: num
       {/* One card for the documents (owner, 2026-11-18: the list here repeated the drawer's own list). */}
       <button
         type="button"
-        onClick={() => openDoc(missing ?? "product", Boolean(missing))}
+        onClick={() => router.push(`/app/business${missing ? `?d=${missing}` : ""}`)}
         data-testid="context-documents"
         style={{ width: "100%", display: "flex", alignItems: "center", gap: "10px", padding: "10px", margin: "0 0 12px", border: "1px solid var(--line)", borderRadius: "10px", background: "transparent", textAlign: "left", font: "inherit", color: "inherit", cursor: "pointer" }}
       >
