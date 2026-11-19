@@ -38,6 +38,11 @@ export function parseRedditSearch(json: unknown): RedditThread[] {
     .map(toThread);
 }
 
+/**
+ * Sales keeps threads under 7 days old, so it asks Reddit for the past week, most relevant first. Without the window
+ * Reddit answers from all time: on 2026-11-20 five of seven results per query were older than a week and were dropped,
+ * which left a scan for a form builder with 9 threads to score (docs/cmo/2026-11-20-scan-quality.md).
+ */
 export async function searchReddit(query: string, budget?: ScBudget): Promise<RedditThread[]> {
-  return (await redditSearch(query, budget)).map(toThread);
+  return (await redditSearch(query, budget, { sort: "relevance", timeframe: "week" })).map(toThread);
 }

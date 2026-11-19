@@ -53,3 +53,33 @@ link, theo luật sub). Chất lượng từng thẻ tốt; vấn đề là **s�
   Reddit ít kết quả cho sản phẩm không thuộc ngách founder. Trước launch: nạp ScrapeCreators (chủ dự án), sửa query
   ngắn và tìm theo sub (B), giữ thẻ khi draft trượt (B).
 - Đo lại sau khi sửa với cùng ba site, so số thread đã chấm và số thẻ.
+
+## Sau khi sửa (20/11, cùng ngày)
+
+Sửa (commit cùng báo cáo này):
+- **Reddit tìm trong 7 ngày qua** (`sort=relevance`, `timeframe=week`). Trước đó Reddit trả kết quả mọi thời điểm:
+  thử tay "typeform too expensive per submission" thì 1/7 kết quả dưới 7 ngày; với khung tuần thì 7/7.
+- **Query ngắn:** prompt viết query đòi ít nhất 3 query 2–3 từ ("typeform alternative", "GA4 confusing").
+- **Chia suất chấm điểm:** Facebook, Threads, HN lần lượt từng bài và tối đa nửa số suất (15/30); Reddit giữ phần còn
+  lại. Khi Facebook và Threads chạy lại, chúng có thể chiếm 24/30 suất và đẩy Reddit ra ngoài.
+- **Giữ thẻ khi draft trượt kiểm** (bản trả phí): người vẫn ở lại, chưa có draft, như bản free.
+- **Lurk ↔ ScrapeCreators tự chuyển** khi một bên hết credit hoặc lỗi (commit `061ef105`); chủ dự án đã nạp
+  ScrapeCreators (1.200 credit), Facebook và Threads chạy lại.
+
+| Lần đo | Thread đã chấm (Ferreto / Tally / Plausible, free) | Thẻ (free) | Chi |
+|---|---|---|---|
+| 1 (trước khi sửa) | 24 / 9 / 11 | 4 / 0 / 1 | $0.345 (cả free và trả phí) |
+| 2 (khung tuần, query ngắn, nguồn social sống lại) | 30 / 30 / 30 | 1 / 1 / 2 | $0.403 (cả hai lượt) |
+| 3 (thêm chia suất) | 30 / 30 / 30 | 2 / 0 / 3 | $0.210 (chỉ free) |
+
+Đọc kết quả:
+- Mỗi lượt giờ luôn có đủ 30 thread để chấm, cả với sản phẩm ngoài ngách. Số thẻ do ngưỡng điểm quyết định (tối đa 5
+  thẻ một lượt): 2–5 thẻ một lượt cho Ferreto và Plausible là đúng thiết kế; thẻ ra vẫn đúng người, còn mới.
+- Bài Facebook group và Threads chưa ra thẻ nào ở cả hai lần đo sau: chúng được chấm nhưng dưới ngưỡng. Cần xem
+  chúng có đúng người không trước khi kể bốn nguồn trên landing như nhau (việc sau launch).
+- Tally (form builder) 0–1 thẻ: ít người than chuyện form trên các nơi mình quét trong một tuần. Đây là giới hạn của
+  ngách, không phải lỗi; phép thử ICP lúc onboarding nên nói rõ điều này với founder.
+- HN: trong 7 ngày gần như không có story nào cho các ngách này ("typeform alternative" 0, "google analytics
+  alternative" 1, kiểm tay trên Algolia); comment thì nhiều hơn. Tìm cả comment HN là việc sau launch.
+- Lượt trả phí trong script dùng chung bộ nhớ với lượt free cùng site, nên bỏ qua thread lượt free đã thấy: số thẻ
+  lượt trả phí trong bảng trên thấp hơn thực tế.

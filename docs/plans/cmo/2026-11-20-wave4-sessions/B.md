@@ -62,3 +62,6 @@ copy instead). Check.
 - **Từ C (C4, rà chữ):** `lib/cmo/weekly-report.ts:120` "You chose one email a week: this report is it, every Monday."
   là một colon reveal (no-ai-slop). Đề nghị: "You chose one email a week, so this report comes every Monday." Chỉ đổi
   chữ; nếu có check hay test so nguyên văn thì đổi theo.
+- **Done by the owner's session (2026-11-20):** the four B1 follow-ups are in: Reddit searched over the past week
+  (`searchReddit`), short queries in the query prompt, the smaller rooms capped at half the 30 scoring slots, a paid card
+  whose draft fails kept undrafted, and Lurk ↔ ScrapeCreators fallback. Reruns in the report. Nothing left for B in 4a.
