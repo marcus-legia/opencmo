@@ -34,13 +34,9 @@ export type LoopState = {
   connectedAccounts?: number;
   /** Replies marked "replied" three or more days ago and not checked yet (P6 A3). */
   repliesDue?: number;
-<<<<<<< Updated upstream
-  /** Wave 3 B2: people replied to 4+ days ago with no answer and no nudge yet (filled by A, `schedule.ts`). */
-=======
   /** The founder's Sales scan cadence (`sales_settings.cadence`, wave 3); unset reads as Mon/Wed/Fri. */
   scanCadence?: ScanCadence | null;
   /** People replied to 4+ days ago with no answer and no nudge yet (wave 3 B2): `pull_metrics` drafts their nudges. */
->>>>>>> Stashed changes
   nudgesDue?: number;
   /** The server has a ScrapeCreators key (or the fake). */
   socialReader: boolean;

@@ -189,13 +189,11 @@ export async function enqueueDueLoops(admin: SupabaseClient, now = new Date()): 
     admin.from("cmo_draft_outcomes").select("user_id").eq("department", "sales").eq("action", "replied").is("outcome_checked_at", null)
       .lte("decided_at", new Date(now.getTime() - 3 * 86_400_000).toISOString()).order("id").range(from, to),
   ));
-<<<<<<< Updated upstream
   // Wave 3 B2: the same condition as `cmo_nudges_due`.
   const nudgesBy = count(await readAll((from, to) =>
     admin.from("opportunities").select("user_id").eq("person_status", "replied").is("nudge_draft", null)
       .lte("replied_at", new Date(now.getTime() - 4 * 86_400_000).toISOString()).order("id").range(from, to),
   ));
-=======
   // Wave 3: each founder's Sales scan days (Settings › Sales scans); a founder with no row scans Mon/Wed/Fri.
   const cadenceBy = new Map<string, ScanCadence>();
   for (const row of await readAll<{ user_id: string; cadence: string | null }>((from, to) =>
@@ -203,7 +201,6 @@ export async function enqueueDueLoops(admin: SupabaseClient, now = new Date()): 
   )) {
     if ((SCAN_CADENCES as readonly string[]).includes(row.cadence ?? "")) cadenceBy.set(row.user_id, row.cadence as ScanCadence);
   }
->>>>>>> Stashed changes
   const socialReader = socialReaderReady();
   // CMO review 3, 3.1: loops run for accounts with a plan or credits left, the same rule as `cmo_require_paid`.
   const paid = await paidUsers(admin, users);
@@ -222,11 +219,8 @@ export async function enqueueDueLoops(admin: SupabaseClient, now = new Date()): 
       publishedRecently: publishedBy.get(user) ?? 0,
       connectedAccounts: connectedBy.get(user) ?? 0,
       repliesDue: repliesBy.get(user) ?? 0,
-<<<<<<< Updated upstream
       nudgesDue: nudgesBy.get(user) ?? 0,
-=======
       scanCadence: cadenceBy.get(user) ?? "mwf",
->>>>>>> Stashed changes
       socialReader,
       paid: paid.has(user),
     };
