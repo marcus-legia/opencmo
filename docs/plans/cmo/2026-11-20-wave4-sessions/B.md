@@ -59,3 +59,6 @@ copy instead). Check.
   check what it returns for these queries. (4) A paid card whose draft fails its checks is dropped (Plausible lost 2):
   keep the card with an empty draft, as the free scan does. Then rerun the harness on the same three sites
   (command in the file's header; source `apps/web/.env.local` and unset the Supabase variables first).
+- **Từ C (C4, rà chữ):** `lib/cmo/weekly-report.ts:120` "You chose one email a week: this report is it, every Monday."
+  là một colon reveal (no-ai-slop). Đề nghị: "You chose one email a week, so this report comes every Monday." Chỉ đổi
+  chữ; nếu có check hay test so nguyên văn thì đổi theo.

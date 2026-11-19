@@ -24,7 +24,7 @@ budget.
 Settings › Account: "Delete my account", type your email, the RPC, sign out, landing with one line. "Cancel your plan
 first" links to Billing. Export: one line with the support email. e2e for the refusal and the delete.
 
-### - [ ] C4. Copy pass
+### - [x] C4. Copy pass
 Every wave 3 and wave 4 screen read once with `no-ai-slop` beside the canvas: Sales, reach out, Following up,
 Library, Your business, Research and its chat, the funnel, Settings › Sales scans and Tracking, the emails' templates.
 Fix only words.

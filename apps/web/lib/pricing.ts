@@ -51,9 +51,8 @@ export const PLANS: Plan[] = [
     // gets is the free first run (CMO review 3, 3.1), so the list says exactly that.
     features: [
       "Your first scan, free: the people asking, in their own words",
-      "No monthly credits: pick a plan for the replies, posting and more",
-      "Auto captions",
-      "Watermarked exports",
+      "Reply drafts, more scans and posts come with a plan",
+      "The video editor, with a watermark on exports",
       "Account deleted 30 days after sign-up unless you buy a plan",
     ],
   },
@@ -72,9 +71,10 @@ export const PLANS: Plan[] = [
     watermark: false,
     quota: { previews: 100, exports: 30, storageBytes: 10 * 1024 ** 3, storageObjects: 1000 },
     features: [
-      "AI CMO + Post, Video and Sales departments",
+      "Sales: people asking on Reddit, Hacker News, Threads and Facebook groups, with reply drafts",
+      "Post: posts for X, LinkedIn and Threads, sent only after you approve them",
       "Monthly credits",
-      "No watermark, full-resolution 1080×1920 download",
+      "The video editor, 1080p exports with no watermark",
     ],
   },
   {
