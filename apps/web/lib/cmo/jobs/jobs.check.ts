@@ -28,6 +28,14 @@ import { parseRedditSearch, type RedditThread } from "../social/reddit";
 import { memoryStore } from "./memory-store";
 import { isoDay, type Documents, type ItemRow, type MemoryEvent } from "./types";
 
+/** A memory store whose Library holds one conversation (wave 3 B3): the week plan writes posts only from it. */
+function withLibrary(m: ReturnType<typeof memoryStore>): ReturnType<typeof memoryStore> {
+  const url = "https://www.reddit.com/r/freelance/comments/lib1/late/";
+  m.opps.push({ url, community: "freelance", title: "Clients pay late", author: "mo", snippet: "", posted_at: new Date().toISOString(), comments: 3, score: 80, score_parts: [], reply: "Try reminders." });
+  m.library.set(url, { url, summary: "A designer with ten clients has three invoices over 60 days late.", theme: "Chasing late invoices", quotes: [{ kind: "pain", text: "I hate chasing" }] });
+  return m;
+}
+
 async function main() {
   const docs: Documents = {
     product: { name: "Paylane", one_liner: "Invoicing that chases late payments.", pricing: "$12/month" },
@@ -86,7 +94,7 @@ async function main() {
 
   // The fake week plan follows the founder's plan end to end, and the calendar keeps each post's targets.
   {
-    const followed = memoryStore(docs);
+    const followed = withLibrary(memoryStore(docs));
     followed.posting.plan = plan({ x: 1, linkedin: 1 }, { tiktok: 2 });
     const run = followed.enqueue("plan_week");
     await drainCmoQueue(followed.store);
@@ -95,6 +103,27 @@ async function main() {
     assert.equal(posts.length, 7, "seven post items");
     assert.ok(posts.every((i) => JSON.stringify(i.body.targets) === '["x","linkedin"]'), "each with body.targets = [x, linkedin]");
     assert.ok(posts.every((i) => i.body.slot === 0), "and body.slot = 0, as cmo_plan_week writes it");
+    // Wave 3 B3: with no Library the week has no posts, and says so; the founder's own brief still plans them.
+    const empty = memoryStore(docs);
+    const bare = empty.enqueue("plan_week", { source: "schedule" });
+    await drainCmoQueue(empty.store);
+    assert.equal(bare.status, "done", `an empty Library is not an error (${bare.error})`);
+    assert.equal(empty.items.filter((i) => i.department === "post").length, 0, "no post without the Library");
+    assert.ok(bare.steps.some((s) => s.tool === "library"), "the plan says why in one line");
+    // Onboarding: the plan waits for the free scan to fill the Library, then plans posts from it.
+    const waiting = memoryStore(docs);
+    const first = waiting.enqueue("plan_week", { source: "onboarding", wait_for_scan: true, queued_at: new Date().toISOString() });
+    await drainCmoQueue(waiting.store, { runId: first.id });
+    assert.equal(first.status, "queued", "an empty Library defers the onboarding plan");
+    assert.equal(waiting.items.length, 0, "and writes nothing yet");
+    const late = memoryStore(docs);
+    const old = late.enqueue("plan_week", { source: "onboarding", wait_for_scan: true, queued_at: new Date(Date.now() - 10 * 60_000).toISOString() });
+    await drainCmoQueue(late.store, { runId: old.id });
+    assert.equal(old.status, "done", "past the wait it plans anyway, with no posts");
+    const briefed = memoryStore(docs);
+    briefed.enqueue("plan_week", { brief: "a week about our launch" });
+    await drainCmoQueue(briefed.store);
+    assert.ok(briefed.items.some((i) => i.department === "post"), "a brief from the chat still plans posts");
     assert.equal(followed.items.filter((i) => i.department === "video" && i.platform === "TikTok").length, 2, "two TikTok scripts");
     assert.ok(!followed.items.some((i) => i.platform === "Slideshow"), "no slideshow");
     const silent = memoryStore(docs);
@@ -131,7 +160,7 @@ async function main() {
   assert.equal(pickDueItem(named, "2026-10-05", "gone"), null, "a named item no longer planned is not swapped for another");
 
   // W1 rồi W2 chạy hết hàng đợi với LLM giả.
-  const mem = memoryStore(docs);
+  const mem = withLibrary(memoryStore(docs));
   const w1 = mem.enqueue("plan_week");
   const w2 = mem.enqueue("post_draft");
   assert.equal(await drainCmoQueue(mem.store), 2, "chạy hai lượt");
@@ -572,7 +601,7 @@ async function main() {
   assert.deepEqual(dueLoops({ ...base, weekday: 1 }).map((r) => r.kind), ["plan_week"]);
   assert.deepEqual(dueLoops({ ...base, weekday: 1, duePost: { idea: "left from last week" } }).map((r) => r.kind), ["plan_week", "post_draft"]);
   {
-    const monday = memoryStore(docs);
+    const monday = withLibrary(memoryStore(docs));
     const plan = monday.enqueue("plan_week", { source: "schedule", loop: "weekly-plan" });
     await drainCmoQueue(monday.store);
     assert.equal(plan.status, "done", `the scheduled plan is done (${plan.error})`);
@@ -593,7 +622,7 @@ async function main() {
   // Daily core drafts, the main flow (core-drafts follow-ups Task 1): a slot for three platforms is one item and one
   // draft. Three drafts would cost the founder three times and put three cards on the Feed for the same post.
   {
-    const three = memoryStore(docs);
+    const three = withLibrary(memoryStore(docs));
     three.posting.plan = plan({ x: 1, threads: 1, linkedin: 1 });
     const week = three.enqueue("plan_week", { source: "schedule", loop: "weekly-plan" });
     await drainCmoQueue(three.store);
@@ -749,7 +778,7 @@ async function main() {
   // Daily core drafts D4: a rewrite for one platform saves one variant within that platform's limit, and nothing else
   // about the post changes; a post that is gone, or a platform that takes no post, spends nothing.
   {
-    const rep = memoryStore(docs);
+    const rep = withLibrary(memoryStore(docs));
     rep.enqueue("post_draft");
     await drainCmoQueue(rep.store);
     const post = rep.items.find((i) => i.department === "post" && i.status === "in_review")!;

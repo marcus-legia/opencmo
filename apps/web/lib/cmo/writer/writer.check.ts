@@ -16,6 +16,7 @@ import { checkPost } from "../jobs/check-post";
 import { REVIEW_SYSTEM } from "../jobs/draft-post";
 import { postProfile } from "../platforms";
 import { memoryStore } from "../jobs/memory-store";
+import { seedLibrary } from "../jobs/eval/library";
 import { drainCmoQueue, type JobContext } from "../jobs/runner";
 import { CMO_JOB_KINDS, isoDay, type ItemRow } from "../jobs/types";
 import { stockPatterns } from "../jobs/eval/style";
@@ -251,6 +252,8 @@ async function postChecks() {
   // A Threads item: its own agent, the <platform> block first, X's prefix. The model is stubbed to read each request.
   process.env.OPENCMO_AGENT_FAKE = "1";
   const docs = { product: { name: "Paylane", pricing: "$12/month" }, strategy: { avoid: ["revolutionary"] }, content_strategy: { pillars: [{ name: "Getting paid", ideas: ["The 3-7-14 reminder rule"] }] } };
+  // Wave 3 B3: posts are written from the Library, so every store below starts with a few conversations in it.
+  const withLibrary = (m: ReturnType<typeof memoryStore>) => (seedLibrary(m, { ...docs, strategy: { ...docs.strategy, pains: ["late invoices"] } }), m);
   const item = (platform: string, id: string): ItemRow => ({ id, run_id: null, department: "post", platform, day: isoDay(), idea: "Why reminders on day 3, 7 and 14 get invoices paid", reason: "pillar", status: "planned", priority: "medium", body: {}, final_text: null, external_url: null, decided_at: null, published_at: null, created_at: new Date().toISOString() });
   // A 400-character version fits Threads, and X too since X takes long posts (D6).
   const answer = { versions: [{ text: long, angle: "long" }, { text: "Reminders on day 3, 7 and 14.", angle: "short" }], rationale: "r" };
@@ -263,7 +266,7 @@ async function postChecks() {
     };
     return { calls, think };
   };
-  const mem = memoryStore(docs, []);
+  const mem = withLibrary(memoryStore(docs, []));
   mem.items.push(item("threads", "t1"), item("x", "x1"));
   mem.enqueue("post_draft", { item_id: "t1" });
   mem.enqueue("post_draft", { item_id: "x1" });
@@ -282,7 +285,7 @@ async function postChecks() {
   assert.deepEqual([xCard.body.text, xCard.body.alternates], [long, ["Reminders on day 3, 7 and 14."]], "X keeps the long version");
 
   // A slot for two platforms is one core post (D3): the core profile, and the draft keeps the planner's targets.
-  const core = memoryStore(docs, []);
+  const core = withLibrary(memoryStore(docs, []));
   core.items.push({ ...item("X", "c1"), body: { targets: ["x", "linkedin"], slot: 0 } });
   core.enqueue("post_draft", { item_id: "c1" });
   const coreAsk = asking();
@@ -293,7 +296,7 @@ async function postChecks() {
 
   // W2: the founder's rules first, then their voice notes (newest, weightiest), then documents; the prefix is the same
   // whatever the founder's notes say; voice notes are not read twice through the general memories.
-  const voiced = memoryStore(docs, ["Skipped a draft: too salesy"], [], ["Never end with a summary line."]);
+  const voiced = withLibrary(memoryStore(docs, ["Skipped a draft: too salesy"], [], ["Never end with a summary line."]));
   voiced.voice.push(
     { body: 'Edited on LinkedIn before approving (cut it shorter): "Reminders get paid."', platform: "linkedin", created_at: "2026-10-28T09:00:00Z", weight: 0.98 },
     { body: 'Approved as written on X: "Day 3, 7, 14."', platform: "x", created_at: "2026-09-10T09:00:00Z", weight: 0.2 },
@@ -313,7 +316,7 @@ async function postChecks() {
   assert.match(asked.system, /When their voice and the no-ai-slop guidance disagree, write it their way/);
 
   // The fake writer drafts LinkedIn too, end to end.
-  const fake = memoryStore(docs, []);
+  const fake = withLibrary(memoryStore(docs, []));
   fake.items.push(item("linkedin", "l1"));
   const run = fake.enqueue("post_draft", { item_id: "l1" });
   await drainCmoQueue(fake.store);

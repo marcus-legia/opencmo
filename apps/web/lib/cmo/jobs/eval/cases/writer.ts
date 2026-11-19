@@ -21,6 +21,7 @@ import { memoryStore } from "../../memory-store";
 import { isoDay, type ItemRow } from "../../types";
 import { stockPatterns } from "../style";
 import { registerCases, type EvalCase } from "../types";
+import { seedLibrary, sourcesOf } from "../library";
 
 const BUDGET_MS = 240_000;
 const PLATFORMS = ["threads", "linkedin"] as const;
@@ -52,6 +53,7 @@ function platformCase(platform: (typeof PLATFORMS)[number]): EvalCase {
       const profile = profileOf(platform)!;
       const rules = checkRules(fixture.docs);
       const mem = memoryStore(fixture.docs, []);
+      seedLibrary(mem, fixture.docs);
       const row = item(platform, fixture.brief);
       mem.items.push(row);
       const run = mem.enqueue("post_draft", { item_id: row.id });
@@ -60,6 +62,9 @@ function platformCase(platform: (typeof PLATFORMS)[number]): EvalCase {
       if (drafted?.body.gen) env.recordGen(job, drafted.body.gen);
       const texts = drafted?.status === "in_review" ? [String(drafted.body.text ?? ""), ...((drafted.body.alternates as string[] | undefined) ?? [])] : [];
       const results: CaseResult[] = [{ id: `${job}:${fixture.name}:run`, epoch: env.epoch, pass: run.status === "done", decided_by: "code", ...(run.error ? { notes: [run.error] } : {}) }];
+      // Wave 3 B3: the draft carries the Library conversations it was written from.
+      const cited = drafted ? sourcesOf(drafted as never) : [];
+      results.push({ id: `${job}:${fixture.name}:sources`, epoch: env.epoch, pass: cited.length > 0, decided_by: "code", ...(cited.length ? {} : { notes: ["no source on the draft"] }) });
       // Always three outputs, so a run that drafted fewer pairs as fails, not as missing cases.
       for (let index = 0; index < 3; index++) {
         const text = texts[index] ?? "";

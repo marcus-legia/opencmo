@@ -19,6 +19,7 @@ import { avoidList, checkRules, knownNumbers, normalizeNumber } from "../context
 import { cascade } from "../judge";
 import { memoryStore } from "../memory-store";
 import type { Documents } from "../types";
+import { seedLibrary, sourcesOf } from "./library";
 import { stockPatterns } from "./style";
 import { registerCases, type EvalCase } from "./types";
 
@@ -50,6 +51,7 @@ const w1: EvalCase = {
   job: "w1",
   async run(fixture, env) {
     const mem = memoryStore(fixture.docs, []);
+    seedLibrary(mem, fixture.docs);
     const run = mem.enqueue("plan_week", {});
     await env.drain(mem.store, { runId: run.id, budgetMs: BUDGET_MS });
     const plan = mem.items.filter((i) => i.run_id === run.id);
@@ -61,6 +63,17 @@ const w1: EvalCase = {
       plan.every((i) => i.department !== "video" || i.platform === "Slideshow");
     const notes = [...(run.error ? [run.error] : []), ...(shapeOk ? [] : [`plan shape is off: ${plan.length} items, Reddit per day ${JSON.stringify(Object.fromEntries(salesPerDay))}`])];
     const results: CaseResult[] = [runResult(`w1:${fixture.name}:run`, env.epoch, run.status === "done" && shapeOk, notes)];
+    // Wave 3 B3: every planned post is written from at least one Library conversation, cited by its summary.
+    const posts = plan.filter((i) => i.department === "post");
+    const unsourced = posts.filter((i) => !sourcesOf(i as never).length).map((i) => `${i.day}: "${i.idea}" cites no conversation`);
+    const titled = posts.flatMap((i) => sourcesOf(i as never).filter((src) => /^Question about /.test(src.summary)).map(() => `${i.day}: cites a title`));
+    results.push(runResult(`w1:${fixture.name}:sources`, env.epoch, posts.length > 0 && !unsourced.length && !titled.length, [...unsourced, ...titled]));
+    // No Library, no post: the same plan with nothing from Sales plans none and says why.
+    const bare = memoryStore(fixture.docs, []);
+    const empty = bare.enqueue("plan_week", { source: "schedule" });
+    await env.drain(bare.store, { runId: empty.id, budgetMs: BUDGET_MS });
+    const emptyPosts = bare.items.filter((i) => i.run_id === empty.id && i.department === "post").length;
+    results.push(runResult(`w1:${fixture.name}:no-library`, env.epoch, empty.status === "done" && emptyPosts === 0 && empty.steps.some((st) => st.tool === "library"), [`${emptyPosts} posts`]));
     plan.forEach((item, index) => {
       const issues = [...(item.reason.trim() ? [] : ["no reason"]), ...ideaIssues(item.idea, item.reason, fixture.docs)];
       env.log(`${item.day} ${item.department.padEnd(5)} ${item.idea} — ${item.reason}${issues.length ? `  ✗ ${issues.join("; ")}` : ""}`);

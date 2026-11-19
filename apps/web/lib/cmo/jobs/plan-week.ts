@@ -2,6 +2,10 @@
  * W1 Plan the week (docs/cmo/san-pham.md §4.3; daily core drafts, owner 2026-11-12): the code builds the week's
  * skeleton from the founder's posting plan (a slot per core post a day, video scripts a week per platform) and the
  * model fills each slot with an idea and a one-sentence reason. Nothing is posted; it only writes the calendar.
+ *
+ * Wave 3 B3: a post's topic comes from the Library (the themes people raised in Sales conversations in the last 14
+ * days) and the post carries the conversations it is written from (`sources`). An empty Library plans no posts and
+ * says so in one line; a week brief the founder wrote in the chat still plans them.
  */
 
 import { z } from "zod";
@@ -11,8 +15,13 @@ import { mondayOf } from "./summarize-memory";
 import { profileIdOf, profileOf } from "../platforms";
 import { VIDEO_PLATFORMS, dayTargets, type PostingPlan, type VideoPlatform } from "../posting-plan";
 import { NO_AI_SLOP, skillText } from "../skills";
-import type { JobContext, JobOutput } from "./runner";
-import { isoDay, type Documents, type PlanItem } from "./types";
+import { Deferred, type JobContext, type JobOutput } from "./runner";
+import { isoDay, type Documents, type PlanItem, type PostSource } from "./types";
+import type { LibraryTopTheme } from "../library";
+import { libraryBlock, libraryRefs, NO_LIBRARY, sourcesFor, themeSources, type SourceRef } from "./library-sources";
+
+/** A planned item with the Library conversations a post is written from (wave 3 B3). */
+export type SourcedPlanItem = PlanItem & { sources?: PostSource[] };
 
 export const PlanSchema = z.object({
   items: z
@@ -25,6 +34,7 @@ export const PlanSchema = z.object({
         idea: z.string().describe("A topic note in one plain line (what happened, what was learned, what to show), specific to this product; not a headline"),
         reason: z.string().describe("One sentence: why this, why now, citing the strategy or last week"),
         image: z.boolean().optional().describe("Posts only: true when the post is stronger with an image (a launch, a product screen, a before and after); false otherwise"),
+        sources: z.array(z.string()).optional().describe("Posts only: the ids from <library> (c1, c2…) of the one to three conversations this post is written from"),
       }),
     )
     .describe("One post per slot in <post_slots>, the video scripts in <video_scripts>, and any Reddit items"),
@@ -36,6 +46,7 @@ const SYSTEM = `You are the CMO for a solo founder. Plan the next seven days of 
 
 Rules:
 - Posts: exactly one post idea for each slot in <post_slots>, with that slot's day_offset and slot number. One post goes to every platform its slot lists, so write an idea that stands on its own on each of them.
+- Post topics come from <library>: the problems people raised in conversations the founder's Sales scans found. Each post takes one theme, says what the founder knows about it, and lists in sources the ids of the one to three conversations it is written from. Spread the week over the themes people raised most. Never name a person, quote a post's title, or say where the founder found them. When <library> is empty and the founder wrote a brief for this week, plan from the brief and leave sources empty.
 - Video scripts: exactly the scripts <video_scripts> asks for, on the platform it names and on days you pick, spread over the week. You write the script and the storyboard; the founder records the video themselves, to camera or as a screen recording. Its idea says what the video shows. Never plan an AI-generated video. Short clips are cut from the founder's finished videos, outside this plan.
 - Reddit (department "sales"): at most one a day, where the strategy says to help on Reddit.
 - At most two posts a week get an image (image true): a launch, a product screen, a before and after. The image is the post's title on the founder's brand, or a frame of their product; nothing is generated. Every other item has image false.
@@ -54,6 +65,10 @@ ${NO_AI_SLOP}`;
 
 /** Posts a week that get an image (C3): the Post image squad builds one when the founder approves the post. */
 export const MAX_IMAGES = 2;
+
+/** How long the onboarding plan waits for the free scan to fill the Library, and how often it looks again. */
+export const SCAN_WAIT_MS = 6 * 60_000;
+const SCAN_WAIT_STEP_S = 60;
 
 /** The calendar label of each video platform's script (`platform_profile_id` maps them back). */
 export const VIDEO_LABEL: Readonly<Record<VideoPlatform, string>> = { tiktok: "TikTok", instagram: "Reels", youtube: "Shorts" };
@@ -98,16 +113,26 @@ const clampDay = (offset: number) => Math.min(6, Math.max(0, Math.round(offset))
  * for a video. A script is one the founder records (owner, 2026-11-09): SQL orders only its brief. Slideshows are no
  * longer planned (D7). Reddit: at most one a day. `image` may be missing (older answers): it means false.
  */
-export function toPlanItems(plan: Plan, posting: PostingPlan, opts: { today?: Date; docs?: Documents } = {}): PlanItem[] {
+export function toPlanItems(
+  plan: Plan,
+  posting: PostingPlan,
+  opts: { today?: Date; docs?: Documents; library?: LibraryTopTheme[]; fromBrief?: boolean } = {},
+): SourcedPlanItem[] {
   const today = opts.today ?? new Date();
   const pillars = pillarIdeas(opts.docs);
+  // Wave 3 B3: with a Library, every post cites conversations; an empty one plans no posts, unless the founder's own
+  // brief asked for them. Callers that pass no Library keep the pillars (older checks).
+  const refs: SourceRef[] | null = opts.library ? libraryRefs(opts.library) : null;
+  const themes = (opts.library ?? []).filter((t) => t.entries.length).map((t) => t.name);
+  let nextTheme = 0;
+  const postsAllowed = refs === null || refs.length > 0 || opts.fromBrief === true;
   let filled = 0;
   const nextPillar = () => pillars[filled++ % pillars.length]!;
   const text = (s: string, max = 300) => s.trim().slice(0, max);
   let images = 0;
-  const out: PlanItem[] = [];
+  const out: SourcedPlanItem[] = [];
 
-  const slots = postSlots(posting);
+  const slots = postsAllowed ? postSlots(posting) : [];
   const taken = new Map<string, Answer>();
   const loose = new Map<number, Answer[]>();
   for (const item of plan.items) {
@@ -119,8 +144,24 @@ export function toPlanItems(plan: Plan, posting: PostingPlan, opts: { today?: Da
   }
   for (const slot of slots) {
     const item = taken.get(`${slot.day_offset}:${slot.slot}`) ?? loose.get(slot.day_offset)?.shift();
-    const fill = item ? null : nextPillar();
     const platform = postPlatform(slot.targets[0]!);
+    const cited = refs && item ? sourcesFor(item.sources, refs) : [];
+    // A Library week: an idea that cites nothing real, or an empty slot, takes the next theme people raised.
+    if (refs && refs.length && !cited.length) {
+      const theme = themes[nextTheme++ % themes.length]!;
+      out.push({
+        department: "post",
+        platform,
+        targets: slot.targets,
+        slot: slot.slot,
+        day: isoDay(slot.day_offset, today),
+        idea: `What people say about ${theme.toLowerCase()}, and what you know about it`.slice(0, 300),
+        reason: `People raised "${theme}" in your Sales conversations.`.slice(0, 300),
+        sources: themeSources(theme, refs),
+      });
+      continue;
+    }
+    const fill = item ? null : nextPillar();
     out.push({
       department: "post",
       platform,
@@ -130,6 +171,7 @@ export function toPlanItems(plan: Plan, posting: PostingPlan, opts: { today?: Da
       idea: (item && text(item.idea)) || fill?.idea.slice(0, 300) || `Post for ${platform}`,
       reason: item ? text(item.reason) : `From your pillar "${fill!.pillar}".`,
       ...(item?.image && ++images <= MAX_IMAGES ? { image: true } : {}),
+      ...(cited.length ? { sources: cited } : {}),
     });
   }
 
@@ -194,17 +236,22 @@ function skeletonBlock(posting: PostingPlan): string {
 }
 
 /** The fake planner: one pillar idea per slot, the plan's scripts, one Reddit item. */
-function fakePlan(docs: Documents, posting: PostingPlan, brief?: unknown): Plan {
+function fakePlan(docs: Documents, posting: PostingPlan, brief?: unknown, library: LibraryTopTheme[] = []): Plan {
   const base = pillarIdeas(docs);
-  const items: Plan["items"] = postSlots(posting).map((s, i) => ({
-    day_offset: s.day_offset,
-    slot: s.slot,
-    department: "post" as const,
-    platform: postPlatform(s.targets[0]!),
-    idea: base[i % base.length]!.idea,
-    reason: `From your pillar "${base[i % base.length]!.pillar}".`,
-    image: false,
-  }));
+  const refs = libraryRefs(library);
+  const items: Plan["items"] = postSlots(posting).map((s, i) => {
+    const r = refs[i % Math.max(refs.length, 1)];
+    return {
+      day_offset: s.day_offset,
+      slot: s.slot,
+      department: "post" as const,
+      platform: postPlatform(s.targets[0]!),
+      idea: r ? `How to handle ${r.theme.toLowerCase()} without losing a good client` : base[i % base.length]!.idea,
+      reason: r ? `People raised "${r.theme}" in your Sales conversations.` : `From your pillar "${base[i % base.length]!.pillar}".`,
+      image: false,
+      ...(r ? { sources: [r.ref] } : {}),
+    };
+  });
   items.push({ day_offset: 2, department: "sales", platform: "Reddit", idea: "Join threads where people describe the problem you solve", reason: "Your strategy says to help first on Reddit.", image: false });
   for (const p of VIDEO_PLATFORMS) {
     for (let k = 0; k < posting.video[p]; k++) {
@@ -226,7 +273,7 @@ export async function planWeek(ctx: JobContext): Promise<JobOutput> {
   // Last week from its Monday 00:00 UTC, not "now minus 7 days": the weekly plan runs at nearly the same minute each
   // Monday, so a few seconds of queue delay used to drop all of last week's decided items.
   const since = `${isoDay(-7, new Date(`${mondayOf(ctx.now)}T00:00:00Z`))}T00:00:00.000Z`;
-  const { recent, memories, insight, goal, posting } = await ctx.step(
+  const { recent, memories, insight, goal, posting, library } = await ctx.step(
     "get_results",
     "Looked at last week",
     async () => ({
@@ -235,6 +282,8 @@ export async function planWeek(ctx: JobContext): Promise<JobOutput> {
       goal: await store.goal(run.user_id, mondayOf()),
       insight: await store.latestInsight(run.user_id),
       posting: await store.postingPlan(run.user_id),
+      // Wave 3 B3: the themes people raised in the last 14 days are the week's post topics.
+      library: await store.libraryTopThemes(run.user_id, 14, 5),
     }),
     ({ recent: r }) => {
       const approved = r.filter((i) => i.status !== "skipped").length;
@@ -242,16 +291,23 @@ export async function planWeek(ctx: JobContext): Promise<JobOutput> {
     },
   );
 
+  // Onboarding queued the free scan first: while the Library is still empty, wait for it a few minutes rather than plan
+  // a week with no posts. Past the wait, the plan goes on and says why it has none.
+  const queuedAt = typeof run.input.queued_at === "string" ? Date.parse(run.input.queued_at) : NaN;
+  if (run.input.wait_for_scan === true && !library.length && Number.isFinite(queuedAt) && ctx.now.getTime() - queuedAt < SCAN_WAIT_MS) {
+    throw new Deferred(SCAN_WAIT_STEP_S);
+  }
+
   const plan = await ctx.step("plan_items", "Planning the week", async () => {
     const lastWeek = recent.length
       ? recent.map((i) => `- ${i.day} ${i.department}: ${i.status} "${i.idea}"`).join("\n")
       : "(nothing yet)";
     return ctx.think({
       title: "Plan the founder's next seven days (one idea per post slot, the video scripts, Reddit)",
-      fake: () => fakePlan(docs, posting, run.input.brief),
+      fake: () => fakePlan(docs, posting, run.input.brief, library),
       agent: "planner",
       system: SYSTEM,
-      prompt: `${documentsBlock(docs)}\n\n${memories}\n\n${goalBlock(goal)}${insightBlock(insight)}\n\n<last_week>\n${lastWeek}\n</last_week>\n\n${skeletonBlock(posting)}\n\n${typeof run.input.brief === "string" && run.input.brief ? `Your CMO's brief for this week: "${run.input.brief.slice(0, 300)}"\n\n` : ""}Today is ${isoDay()}. Plan the next seven days.`,
+      prompt: `${documentsBlock(docs)}\n\n${memories}\n\n${goalBlock(goal)}${insightBlock(insight)}\n\n<last_week>\n${lastWeek}\n</last_week>\n\n${libraryBlock(library)}\n\n${skeletonBlock(posting)}\n\n${typeof run.input.brief === "string" && run.input.brief ? `Your CMO's brief for this week: "${run.input.brief.slice(0, 300)}"\n\n` : ""}Today is ${isoDay()}. Plan the next seven days.`,
       schema: PlanSchema,
       label: "plan_week",
       failure: "We could not plan your week. Try again in a minute.",
@@ -259,7 +315,11 @@ export async function planWeek(ctx: JobContext): Promise<JobOutput> {
   }, (p) => `${p.items.length} items planned`);
 
   // Stage fit before the skeleton is filled, so a dropped idea's slot is filled from the pillars rather than left empty.
-  const items = toPlanItems({ items: fitStage(plan.items, docs) }, posting, { today: new Date(), docs });
+  // A week brief the founder wrote in the chat is the one way to posts without the Library; the schedule's is not.
+  const fromBrief = run.input.source !== "schedule" && typeof run.input.brief === "string" && run.input.brief.trim().length > 0;
+  const items = toPlanItems({ items: fitStage(plan.items, docs) }, posting, { today: new Date(), docs, library, fromBrief });
+  const noPosts = !items.some((i) => i.department === "post") && postSlots(posting).length > 0;
+  if (noPosts) await ctx.step("library", NO_LIBRARY, async () => 0);
   const saved = await ctx.step("write_calendar", "Saving your calendar", () => store.planWeek(run.user_id, run.id, items), (n) =>
     `${n} items in your calendar`,
   );
@@ -275,5 +335,5 @@ export async function planWeek(ctx: JobContext): Promise<JobOutput> {
       (n) => (n ? `Writer is drafting today's ${n === 1 ? "post" : `${n} posts`}` : "No post is due today"),
     );
   }
-  return { items: saved };
+  return { items: saved, ...(noPosts ? { note: NO_LIBRARY } : {}) };
 }

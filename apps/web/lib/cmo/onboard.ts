@@ -71,7 +71,7 @@ export async function runOnboarding(supabase: SupabaseClient, userId: string, si
   type Row = { status: string; input: { brain?: unknown } | null };
   const real = (rows: unknown) => ((rows ?? []) as Row[]).filter((row) => row.input?.brain !== "claude");
   const planRows = real(plans);
-  if (planRows.length === 0) return { runId: run.id, firstWeek: await startFirstWeek(supabase, userId, started), firstScan };
+  if (planRows.length === 0) return { runId: run.id, firstWeek: await startFirstWeek(supabase, userId, started, firstScan), firstScan };
   // The plan is done and its draft failed: draft again. Not while the plan still runs (its own trigger drafts).
   const planDone = planRows.some((row) => row.status === "done");
   if (planDone && real(drafts).length === 0) return { runId: run.id, firstWeek: await startFirstDraft(supabase), firstScan };
@@ -163,8 +163,10 @@ async function startFirstScan(supabase: SupabaseClient, started: number): Promis
  * Queues the week's plan and runs it, then today's draft (`kickFirstWeek`). False when the plan could not be queued
  * (paused, capped, no credits, no plan after the free one): the documents are saved either way.
  */
-async function startFirstWeek(supabase: SupabaseClient, userId: string, started: number): Promise<boolean> {
-  const input: Record<string, unknown> = { source: "onboarding" };
+async function startFirstWeek(supabase: SupabaseClient, userId: string, started: number, afterScan = false): Promise<boolean> {
+  // Wave 3 B3: posts are written from the Library, which the free scan fills. The plan waits a few minutes for it
+  // (`planWeek` defers while the Library is empty), so the first week has posts about what people said.
+  const input: Record<string, unknown> = { source: "onboarding", ...(afterScan ? { wait_for_scan: true, queued_at: new Date().toISOString() } : {}) };
   let plan: StartedRun;
   try {
     plan = await startCmoRun(supabase, "plan_week", input, { kick: false });

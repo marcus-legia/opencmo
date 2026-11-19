@@ -23,11 +23,13 @@ For DM-ready people, draft one DM (short, refers to the public reply, says the p
 at most 20 a day per founder.
 For replied people with no answer after 4 days, draft one nudge. Saved by A3's RPCs; founder sends. Eval cases.
 
-### - [ ] B3. Posts from the Library (after A2, A4)
+### - [x] B3. Posts from the Library (after A2, A4)
 `plan_week` picks topics from the top Library themes of the last 14 days (and the Post plan's channels and rhythm);
 each planned post carries `PostSource[]`. `post_draft` writes from those sources and stores them on the content
 item. No Library entries: no automatic post (the week plan says so in one line). A chat brief still drafts.
 Eval: every draft cites at least one source; no invented numbers.
+*Done:* `jobs/library-sources.ts`; an item planned before sources (or while `cmo_plan_week` drops them, A request)
+takes the Library theme closest to its idea. The onboarding plan waits up to 6 minutes for the free scan's Library.
 
 ### - [ ] B4. Onboarding writes documents v2; voice in prompts (after A4)
 Onboarding asks "who do you sell to?" while it reads the site (the answer goes into the Strategy and the first
