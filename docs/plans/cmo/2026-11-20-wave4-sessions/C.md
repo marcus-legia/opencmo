@@ -73,3 +73,5 @@ code outside the editor and history docs. Open "Wave 4b: delete and extend". Do 
   người dùng, rồi `createAdminClient().auth.admin.deleteUser(user_id)` (giống `purgeUnpaidAccounts` trong
   `app/api/cron/cleanup/route.ts`), rồi đăng xuất và về landing. Nếu `deleteUser` lỗi thì vẫn trả thành công cho
   người dùng: cron cleanup hằng ngày xoá lại (yêu cầu đã nằm trong `account_deletions`). Gọi RPC hai lần không sao.
+- **From the owner (PR):** the 4a PR is open as a draft: #241 (from `claude/launch`). C5 opens no new PR: update
+  #241's description and screenshots, and mark it ready when 4a is reviewed. 4b gets its own PR later.
