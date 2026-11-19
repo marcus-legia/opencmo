@@ -13,7 +13,7 @@ import { dueLoops } from "../loops";
 import { HnReadError, parseHnItem } from "../social/hn";
 import type { RedditComment } from "../social/scrapecreators";
 import { memoryStore } from "./memory-store";
-import { checkReplies, checkReply, findReply, replyOverlap, type ReplyReaders } from "./reply-outcomes";
+import { checkReplies, checkReply, draftNudges, findReply, replyOverlap, type ReplyReaders } from "./reply-outcomes";
 import { drainCmoQueue } from "./runner";
 import type { ReplyOutcomeDue } from "./types";
 
@@ -85,6 +85,26 @@ async function main() {
   const answered = await checkReplies({ store: mem2.store, run: { user_id: "u" }, step: async (_t: string, _l: string, fn: () => unknown) => fn() } as never, readers);
   assert.deepEqual(answered, { checked: 1, found: 1, answered: 1 });
   assert.equal(mem2.people.get(url)!.status, "answered_back");
+
+  // Wave 3 B2: a reply with no answer after four days gets one nudge, through pull_metrics; an answered one, a fresh one
+  // and one already nudged get none.
+  const mem3 = memoryStore({ product: { name: "Paylane" } } as never);
+  const person = (url: string, status: string, days: number) => {
+    mem3.opps.push({ url, community: "r/SaaS", title: "Late invoices", author: "a", snippet: "My clients pay late and I hate chasing them.", posted_at: null, comments: 3, score: 80, score_parts: [], reply: REPLY });
+    mem3.people.set(url, { level: "reply_first", reach: {} as never, dm: null, dmAt: null, nudge: null, status, repliedAt: Date.now() - days * 86_400_000 });
+  };
+  person("https://www.reddit.com/r/SaaS/comments/n1/a/", "replied", 5);
+  person("https://www.reddit.com/r/SaaS/comments/n2/b/", "answered_back", 5);
+  person("https://www.reddit.com/r/SaaS/comments/n3/c/", "replied", 2);
+  const metrics = mem3.enqueue("pull_metrics");
+  await drainCmoQueue(mem3.store);
+  assert.equal(metrics.status, "done", `pull_metrics done (${metrics.error})`);
+  assert.ok(metrics.steps.some((st) => st.tool === "draft_nudge"), "the nudge step ran");
+  assert.ok(mem3.people.get("https://www.reddit.com/r/SaaS/comments/n1/a/")!.nudge, "the quiet reply has a nudge");
+  assert.equal(mem3.people.get("https://www.reddit.com/r/SaaS/comments/n2/b/")!.nudge, null, "an answered one has none");
+  assert.equal(mem3.people.get("https://www.reddit.com/r/SaaS/comments/n3/c/")!.nudge, null, "a two-day-old one has none yet");
+  const quiet = await draftNudges({ store: mem3.store, run: { user_id: "u", id: metrics.id } } as never);
+  assert.deepEqual(quiet, { drafted: 0 }, "nudged once");
 
   // The loop: connected accounts or due replies run pull_metrics without the social reader.
   const base = { weekday: 3, duePost: null, dueSales: null, competitorHandles: 0, publishedRecently: 0, socialReader: false };

@@ -13,7 +13,13 @@ import { redditThread } from "../social/research";
 import { readThreadsPost, THREADS_POST } from "../social/threads-search";
 import { ScBudget, SocialReadError, socialReaderReady, type RedditComment } from "../social/scrapecreators";
 import type { JobContext } from "./runner";
-import type { ReplyOutcomeDue } from "./types";
+import { safeForSales } from "../sales/ban-risk";
+import { voiceBlock } from "../writer/context";
+import { draftMessages, type DmTarget } from "./sales-scan";
+import type { NudgeDue, ReplyOutcomeDue } from "./types";
+
+/** Nudges drafted a run: one model call, a few people. */
+export const MAX_NUDGES = 10;
 
 /** At most this many replies checked a run: each Reddit read costs a lookup. */
 export const MAX_REPLY_CHECKS = 10;
@@ -135,5 +141,39 @@ export async function checkReplies(ctx: JobContext, readers: ReplyReaders = defa
       return { checked, found, answered };
     },
     (r) => `${r.checked} replies checked, ${r.found} found${r.answered ? `, ${r.answered} answered back` : ""}`,
+  );
+}
+
+/**
+ * Wave 3 B2: one follow-up for each person the founder replied to four or more days ago who has not answered and has
+ * no nudge yet (`cmo_nudges_due`). Runs after the re-reads, so an answer found today stops the nudge. Drafted with the
+ * nudge prompt and its checks (`draftMessages`), saved on the person (`cmo_save_nudge`); the founder sends it or not.
+ */
+export async function draftNudges(ctx: JobContext): Promise<{ drafted: number }> {
+  const { store, run } = ctx;
+  const due = (await store.nudgesDue(run.user_id, MAX_NUDGES)).filter((d): d is NudgeDue & { reply: string } => typeof d.reply === "string" && d.reply.trim().length > 0);
+  if (!due.length) return { drafted: 0 };
+  return ctx.step(
+    "draft_nudge",
+    `Drafting ${due.length === 1 ? "a follow-up" : `${due.length} follow-ups`} for replies with no answer`,
+    async () => {
+      const docs = await store.documents(run.user_id);
+      const voice = voiceBlock(
+        (await store.voiceNotes(run.user_id, 5))
+          .filter((n) => safeForSales(n.body))
+          .map((n) => ({ body: n.body, platform: n.platform, weight: n.weight, createdAt: n.created_at })),
+      );
+      const targets: DmTarget[] = due.map((d) => ({
+        thread: { platform: d.platform, url: d.url, community: d.community, title: d.title, author: "", text: d.snippet, comments: 0, postedAt: d.posted_at },
+        reply: d.reply,
+      }));
+      const { textFor } = await draftMessages(ctx, "nudge", { docs, voice, targets });
+      let drafted = 0;
+      for (const [index, text] of textFor) {
+        if (await store.saveNudge(run.user_id, run.id, due[index]!.opportunity_id, text)) drafted += 1;
+      }
+      return { drafted };
+    },
+    (r) => `${r.drafted} ${r.drafted === 1 ? "follow-up" : "follow-ups"} drafted`,
   );
 }

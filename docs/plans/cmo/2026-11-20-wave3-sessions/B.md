@@ -18,7 +18,7 @@ community's rules; an email only when it is in the post or thread, or on the bus
 Save via `cmo_save_library` and `cmo_save_reach`. No profile reads. Eval: summary is not the title; a vendor author is
 not a buyer; HN is never DM ready.
 
-### - [ ] B2. DM drafts and nudges (after B1)
+### - [x] B2. DM drafts and nudges (after B1)
 For DM-ready people, draft one DM (short, refers to the public reply, says the product is theirs, asks before linking),
 at most 20 a day per founder.
 For replied people with no answer after 4 days, draft one nudge. Saved by A3's RPCs; founder sends. Eval cases.
@@ -42,7 +42,7 @@ scan), and fills `strategy.where_they_ask` and `this_week`, `brand.look` (colour
 `dueSales` condition). `today.ts`: a `hot_lead` reason (Strong match or thread under 24 h) and a `follow_up` reason
 above posts; the "nothing posted for N days" reason drops below them. Checks updated.
 
-### - [ ] B6. Follow-up re-reads (after A3)
+### - [x] B6. Follow-up re-reads (after A3)
 `reply-outcomes` uses `reply_url` when present, sets `person_status = answered_back` when someone answered the
 founder, and adds Threads and Facebook groups where the social reader returns comments; where it cannot, it leaves
 the status to the founder. Check updated.
