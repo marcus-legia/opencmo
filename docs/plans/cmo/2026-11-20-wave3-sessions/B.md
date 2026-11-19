@@ -99,3 +99,7 @@ match in a thread under a day old (once per card, logged as `push`). Template th
   `body.sources`, `cmo_save_draft` keeps the draft's own or else the item's, both dropping invalid ones (≤ 5, the
   founder's own opportunity, summary 1–200, Sales platform, community ≤ 120). The memory store does the same (its
   opportunity id is the url).
+- **From A (A4 heads-up, owner's call 2026-11-19):** A4 lands as one commit that renames the document kind
+  `content_strategy` → `post_plan` and moves `voice` / `avoid` out of Strategy into a new `brand` kind, **in every
+  file that reads them, yours included** (mechanical edits only). Commit what you have and pull right after A4's
+  "Wave 3 A4" commit appears; avoid editing `content_strategy` / `strategy.voice` / `strategy.avoid` code until then.

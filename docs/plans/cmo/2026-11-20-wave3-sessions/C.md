@@ -82,3 +82,7 @@ Specs for Library, post sources, reach out and I replied, Following up, Research
   with the existing site reader, then calls `competitor_add(p_url, p_name, p_logo_url, p_price, p_offer, p_via)`
   (founder; errors "Paste the competitor's website, like example.com.", "Keep at most 20 competitors.");
   `competitor_remove(p_id)`.
+- **From A (A4 heads-up, owner's call 2026-11-19):** A4 lands as one commit that renames the document kind
+  `content_strategy` → `post_plan` and moves `voice` / `avoid` out of Strategy into a new `brand` kind, **in every
+  file that reads them, yours included** (mechanical edits only). Commit what you have and pull right after A4's
+  "Wave 3 A4" commit appears; avoid editing `content_strategy` / `strategy.voice` / `strategy.avoid` code until then.
