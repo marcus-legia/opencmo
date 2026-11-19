@@ -36,9 +36,13 @@ async function main() {
   // Onboarding code tier: invented numbers, a made-up price and hidden text are caught.
   const site = SITES.find((s) => s.name === "tallybook")!;
   const drafts = (over: Partial<OnboardingDrafts["product"]>) =>
-    ({ product: { name: "Tallybook", one_liner: "", description: "", audience: "", problems: [], features: [], pricing: "Not listed", category: "", ...over }, strategy: { icp: "", pains: [], where_they_ask: [], positioning: "", value_props: [], this_week: "" }, competitors: { competitors: [] }, post_plan: { topics: [], channels: [], rhythm: "" }, brand: { voice: "", voice_samples: [], intro_line: "", avoid: [], look: { logo_url: "", colors: [], font: "", screenshots: [], image_styles: [] } } }) as OnboardingDrafts;
+    ({ product: { name: "Tallybook", one_liner: "", description: "", audience: "", problems: [], features: [], pricing: "Not listed", category: "", ...over }, strategy: { icp: "", pains: [], where_they_ask: ["r/freelance"], positioning: "", value_props: [], this_week: "Find freelancers asking about late invoices" }, competitors: { competitors: [] }, post_plan: { topics: [], channels: ["x"], rhythm: "" }, brand: { voice: "", voice_samples: [], intro_line: "", avoid: [], look: { logo_url: "", colors: [], font: "", screenshots: [], image_styles: [] } } }) as OnboardingDrafts;
   assert.deepEqual(onboardingIssues(site, drafts({}), { prices: true }), []);
   assert.ok(onboardingIssues(site, drafts({ pricing: "$19/month" }), { prices: true }).some((i) => i.includes("invents a price")));
+  // Wave 3 B4: documents v2 are graded too.
+  const v2 = drafts({});
+  assert.ok(onboardingIssues(site, { ...v2, post_plan: { ...v2.post_plan, channels: [] } }, { prices: true }).some((i) => i.startsWith("post plan channels")));
+  assert.ok(onboardingIssues(site, { ...v2, brand: { ...v2.brand, voice_samples: ["x"] } }, { prices: true }).includes("writes the founder's writing samples"));
   assert.ok(onboardingIssues(site, drafts({ description: "Trusted by 4,000 sellers" }), { prices: true }).some((i) => i.includes("4000")));
   assert.deepEqual(onboardingIssues(site, drafts({ description: "Short 15-second clips and 30 minute calls" }), { prices: true }), [], "durations are formats, not claims");
   assert.ok(onboardingIssues(site, drafts({ name: "Ledgerly" }), { prices: true }).some((i) => i.startsWith("name")));
