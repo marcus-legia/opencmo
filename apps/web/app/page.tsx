@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { BRAND, faqs, SHOWCASE } from "@/components/landing/data";
+import { DeletedNotice } from "@/components/landing/DeletedNotice";
 import { FaqSection } from "@/components/landing/FaqSection";
 import { Hero } from "@/components/landing/Hero";
 import { LandingFooter } from "@/components/landing/LandingFooter";
@@ -81,6 +82,7 @@ export default async function LandingPage() {
     <div className="landing">
       <LandingMotion />
       <JsonLd data={landingLd(faq, plans)} />
+      <DeletedNotice />
       <LandingNav user={!!user} />
       <main>
         <Hero action={action} />

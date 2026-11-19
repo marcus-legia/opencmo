@@ -20,7 +20,7 @@ budget.
 - A free account after its free scan, on Post and Feed: one locked card each with the reason and the plan.
 - The Feed's Sales card shows the reach level and its reason (B3).
 
-### - [ ] C3. Delete my account (after A2)
+### - [x] C3. Delete my account (after A2)
 Settings › Account: "Delete my account", type your email, the RPC, sign out, landing with one line. "Cancel your plan
 first" links to Billing. Export: one line with the support email. e2e for the refusal and the delete.
 

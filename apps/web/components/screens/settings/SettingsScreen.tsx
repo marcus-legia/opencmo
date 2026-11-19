@@ -17,6 +17,7 @@ import { PauseButton } from "../brain/PauseButton";
 import { cx, ErrorNote, PageHeader, Panel, Screen, SkeletonBlocks } from "../parts";
 import { isSample, useScreen } from "../useScreen";
 import { ACCOUNTS_PANEL_ID, AccountsPanel } from "./AccountsPanel";
+import { DeleteAccount } from "./DeleteAccount";
 import { NotifyPanel } from "./NotifyPanel";
 import { SalesScansPanel } from "./SalesScansPanel";
 import { TrackingPanel } from "./TrackingPanel";
@@ -326,6 +327,7 @@ function AccountPanel() {
           </span>
         )}
       </div>
+      {account ? <DeleteAccount email={account.email} /> : null}
     </Panel>
   );
 }

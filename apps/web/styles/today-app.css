@@ -541,3 +541,11 @@ html:not([data-theme="dark"]) .k { --ok: #16744c; --warn: #8f5a0e; }
   .pg-settings .nav :is(a, button) { min-height: 44px; }
   .pg-settings .bd > .ghost, .pg-settings [data-testid="billing-usage"] .ghost { min-height: 44px; }
 }
+
+/* Delete my account (wave 4 C3): a separate block under the account line, its refusal in the warning colour. */
+.scr-delete { display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--line, #e7e3dc); }
+.scr-delete-error { color: var(--warn, #a86a12); }
+@media (max-width: 640px) { .scr-delete .v2-button { min-height: 44px; } }
+@media (max-width: 640px) {
+  .pg-settings :is(.v2-button, select, .v2-input) { min-height: 44px; }
+}
