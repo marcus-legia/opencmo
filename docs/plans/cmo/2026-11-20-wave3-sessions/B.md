@@ -47,7 +47,7 @@ above posts; the "nothing posted for N days" reason drops below them. Checks upd
 founder, and adds Threads and Facebook groups where the social reader returns comments; where it cannot, it leaves
 the status to the founder. Check updated.
 
-### - [ ] B7. Research chat (after A6)
+### - [x] B7. Research chat (after A6)
 The CMO chat scoped to Research gets a `find_competitors` tool: it searches Reddit, HN and the web through the same
 Lurk reader Sales uses, returns up to 5 names people mention that the founder does not have yet, each with one line of
 why and where, and adds one only when the founder presses Add (`competitor_add`). Included in the plan (no price).

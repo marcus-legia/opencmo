@@ -25,6 +25,8 @@ import { ScBudget } from "@/lib/cmo/social/scrapecreators";
 import type { LlmUsage } from "@/lib/cmo/jobs/llm";
 
 import { RESEARCH_CALLS_PER_TURN, RESEARCH_TOOLS, runResearchTool } from "./cmo-research";
+import { competitorsOutcome, defaultCompetitorReaders, findCompetitors, knownNames } from "./cmo-competitors";
+import { LlmError } from "@/lib/cmo/jobs/llm-error";
 import { CMO_TOOL_SPECS, cmoContext, cmoState, isCmoWrite, pricedTaskCard, runCmoTool, salesNowhere, salesPlatformsAllowed, type CmoTurn } from "./cmo-tools";
 import { DECISION_WRITES, prepareDecision, readCredits, runDecision, type DecisionCard, type Prepared } from "./cmo-decisions";
 import { CMO_SYSTEM_PROMPT, SYSTEM_PROMPT, projectStateBlock } from "./prompt";
@@ -627,7 +629,7 @@ function checkBlock(report: Awaited<ReturnType<typeof runCheck>>): string {
 export function chatReadBucket(name: string): "chat_social" | "chat_site" | "research_credits" | null {
   if (name === "read_site") return "chat_site";
   if (name === "research_credits") return "research_credits";
-  return RESEARCH_TOOLS.has(name) ? "chat_social" : null;
+  return RESEARCH_TOOLS.has(name) || name === "find_competitors" ? "chat_social" : null;
 }
 
 /**
@@ -679,6 +681,20 @@ export function cmoScope(supabase: SupabaseClient, sessionId?: string): Scope {
             : "The research limit for now is reached. Work with what you have read, or try again later.";
           return { ok: false, content: JSON.stringify({ error: message }), summary: "Research limit reached" };
         }
+      }
+      // Research chat (wave 3 B7): included in the plan, no price card; its lookups count like the other research.
+      if (call.name === "find_competitors") {
+        const query = typeof (call.input as { query?: unknown })?.query === "string" ? (call.input as { query: string }).query : "";
+        return withSpend({ via: "founder", client: supabase, refKind: "agent_turn" }, async () => {
+          try {
+            return competitorsOutcome(query, await findCompetitors(query, { readers: defaultCompetitorReaders(budget), known: await knownNames(supabase) }));
+          } catch (error) {
+            const known = error instanceof LlmError;
+            if (!known) console.error("[cmo] tool find_competitors:", error);
+            const message = known ? error.message : "Could not look for competitors right now. Try again in a minute.";
+            return { ok: false, content: JSON.stringify({ error: message }), summary: message };
+          }
+        });
       }
       // Lookups are recorded in the founder's spend ledger and refused past their daily cap.
       return RESEARCH_TOOLS.has(call.name)

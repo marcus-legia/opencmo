@@ -60,7 +60,9 @@ async function main() {
   }
 
   // The tools sit at the end of the list, and wait for the founder after outside content.
-  assert.deepEqual(CMO_TOOL_SPECS.slice(-EDITOR_TOOLS.size).map((spec) => spec.name), [...EDITOR_TOOLS]);
+  // Wave 3 B7's find_competitors went in after them, the same way (the cached prefix stays the same).
+  assert.deepEqual(CMO_TOOL_SPECS.slice(-EDITOR_TOOLS.size - 1, -1).map((spec) => spec.name), [...EDITOR_TOOLS]);
+  assert.equal(CMO_TOOL_SPECS.at(-1)!.name, "find_competitors");
   assert.ok(isCmoWrite("open_editor") && TAINT_GATED_TOOLS.has("open_editor"));
 
   console.log("cmo-editor.check ok");

@@ -14,6 +14,7 @@ import { SYSTEM_PROMPT } from "@/lib/agent/prompt";
 import { PHOTO_CAPTION_SYSTEM } from "@/lib/cmo/jobs/photo-caption";
 import { REPURPOSE_SYSTEM } from "@/lib/cmo/jobs/repurpose-post";
 import { DM_SYSTEM, NUDGE_SYSTEM, SCORE_SYSTEM } from "@/lib/cmo/jobs/sales-scan";
+import { COMPETITORS_SYSTEM } from "@/lib/agent/cmo-competitors";
 import { CAPTION_SYSTEM, VIDEO_BRIEF_SYSTEM, YOUTUBE_SYSTEM } from "@/lib/cmo/writer/prompts";
 import { CLIP_EDITOR } from "@/lib/departments/studio/shorts/squad";
 
@@ -35,6 +36,7 @@ const prompts: Record<string, string> = {
   "Sales scorer (Library summary and theme)": SCORE_SYSTEM,
   "DM writer (wave 3 B2)": DM_SYSTEM,
   "Nudge writer (wave 3 B2)": NUDGE_SYSTEM,
+  "Research chat competitor finder (wave 3 B7)": COMPETITORS_SYSTEM,
 };
 for (const [name, prompt] of Object.entries(prompts)) assert.ok(prompt.includes(guide), `${name} carries no-ai-slop`);
 
