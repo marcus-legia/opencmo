@@ -722,15 +722,18 @@ export function AgentSales() {
   // The person open full width on a phone: the page shows that thread alone, with a way back to where the list was.
   const person = phone && tab === "threads" ? (list.find((t) => t.id === open) ?? null) : null;
   const backTo = useRef<string | null>(null);
+  // Keyed on the id: `person` is a new object after every reload or draft update, and scrolling to the top each time
+  // pulled the founder away from the reply they were reading or typing.
+  const personId = person?.id ?? null;
   useEffect(() => {
-    if (person) {
-      backTo.current = person.id;
+    if (personId) {
+      backTo.current = personId;
       window.scrollTo(0, 0);
     } else if (backTo.current) {
       document.querySelector(`[data-thread="${CSS.escape(backTo.current)}"]`)?.scrollIntoView({ block: "center" });
       backTo.current = null;
     }
-  }, [person]);
+  }, [personId]);
 
   const openSettings = () => {
     setTab("settings");

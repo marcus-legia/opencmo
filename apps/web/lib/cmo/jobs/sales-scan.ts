@@ -872,7 +872,8 @@ export async function salesScan(ctx: JobContext): Promise<SalesScanOutput & JobO
   const threads: ScanThread[] = !platforms.includes("reddit") ? [] : await ctx.step("reddit_search", "Searching Reddit", async () => {
     const found: ScanThread[] = [];
     const list = queries.slice(0, MAX_QUERIES);
-    const search = ctx.searchReddit ?? searchReddit;
+    // Reddit's window matches what `fresh()` keeps (MAX_AGE_DAYS = 30): a month, most relevant first.
+    const search = ctx.searchReddit ?? ((query: string) => searchReddit(query, undefined, { timeframe: "month" }));
     let errors = 0;
     let message = "Reddit did not answer. Try again in a minute.";
     for (const query of list) {
@@ -1080,10 +1081,10 @@ export async function salesScan(ctx: JobContext): Promise<SalesScanOutput & JobO
       ...(r.needs.minKarma ? { min_karma: r.needs.minKarma } : {}),
       ...(r.needs.minAccountAgeDays ? { min_account_age_days: r.needs.minAccountAgeDays } : {}),
       ...(r.thread.platform !== "reddit" ? { platform: r.thread.platform } : {}),
-    }));
-  // A card whose draft failed its checks keeps the person, undrafted (reply ''), as a free scan's cards are: the founder
-  // writes the reply or asks for it again. Dropping it lost real people (2026-11-20: 2 of 2 on a paid scan,
-  // docs/cmo/2026-11-20-scan-quality.md).
+    }))
+    // A free scan keeps every card undrafted (reply ''); a paid one drops a card whose draft failed its checks, as
+    // `cmo_save_opportunities` does (keeping it undrafted needs that function changed: after launch).
+    .filter((o) => free || o.reply.length > 0);
 
   const saved = await ctx.step(
     "create_card",
@@ -1094,7 +1095,7 @@ export async function salesScan(ctx: JobContext): Promise<SalesScanOutput & JobO
   const cards = Math.max(0, saved);
 
   // Wave 3 B1: what each kept conversation said goes to the Library, by url (`cmo_save_library` finds the opportunity
-  // this run saved), drafted or not.
+  // this run saved). A card dropped for a failed draft is not kept, so it has no Library line either.
   const kept = new Set([...items, ...skipped].map((o) => o.url));
   const lines: LibrarySaveItem[] = planned.flatMap((p) => {
     if (!kept.has(p.thread.url)) return [];
@@ -1177,6 +1178,5 @@ export async function salesScan(ctx: JobContext): Promise<SalesScanOutput & JobO
       return reachItems.filter((x) => x.level !== "reply_first").length;
     }, (n) => (n ? `${n} ready for a message, ${reachItems.length - n} reply first` : "Reply first for everyone"));
   }
-  // `dropped` now counts the paid cards kept without a draft.
-  return output(scanned.length, { cards, skipped: skipped.length, dropped: free ? 0 : items.filter((o) => !o.reply).length });
+  return output(scanned.length, { cards, skipped: skipped.length, dropped: toDraft.length - items.length });
 }

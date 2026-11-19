@@ -22,7 +22,7 @@ const TIMEOUT_MS = 20_000;
  * `kind` lets a job tell "this post or account is gone" (`not_found`) from a problem on our side (`setup`, `credits`,
  * `busy`) or a passing one (`unavailable`), instead of reading the English message.
  */
-export type SocialReadKind = "setup" | "credits" | "not_found" | "busy" | "unavailable" | "cap";
+export type SocialReadKind = "setup" | "credits" | "not_found" | "busy" | "unavailable" | "cap" | "budget";
 export class SocialReadError extends Error {
   constructor(
     message: string,
@@ -109,7 +109,7 @@ export class ScBudget {
   constructor(readonly limit: number) {}
   take(credits = 1): void {
     if (this.used + credits > this.limit) {
-      throw new SocialReadError(`Research limit reached for this request (${this.limit} lookups). Summarize what you found.`);
+      throw new SocialReadError(`Research limit reached for this request (${this.limit} lookups). Summarize what you found.`, "budget");
     }
     this.used += credits;
   }
@@ -119,10 +119,14 @@ export class ScBudget {
 export async function scGet(path: string, params: Record<string, string>, budget?: ScBudget): Promise<unknown> {
   const routes = socialRoutes(path, params);
   if (!routes.length) throw new SocialReadError("Social research is not set up on this server yet.", "setup");
+  // The founder's daily provider cap (spend ledger), before the lookup is paid for; one lookup of the request's
+  // budget, whichever provider answers it.
+  if (!(await spendAllowed())) throw new SocialReadError(SPEND_CAP_MESSAGE, "cap");
+  budget?.take();
   let last: SocialReadError | null = null;
   for (const route of routes) {
     try {
-      return await callRoute(route, path, budget);
+      return await callRoute(route, path);
     } catch (error) {
       // "Not found" is the post's answer and the cap is the founder's: neither changes with the provider.
       if (!(error instanceof SocialReadError) || !PROVIDER_FAULT.has(error.kind)) throw error;
@@ -134,10 +138,7 @@ export async function scGet(path: string, params: Record<string, string>, budget
 }
 
 /** One lookup on one provider. */
-async function callRoute(route: Route, path: string, budget?: ScBudget): Promise<unknown> {
-  // The founder's daily provider cap (spend ledger), before the lookup is paid for.
-  if (!(await spendAllowed())) throw new SocialReadError(SPEND_CAP_MESSAGE, "cap");
-  budget?.take();
+async function callRoute(route: Route, path: string): Promise<unknown> {
   let response: Response;
   try {
     response = await fetch(route.url, { headers: { "x-api-key": route.key }, signal: AbortSignal.timeout(TIMEOUT_MS), cache: "no-store" });

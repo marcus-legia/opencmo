@@ -70,8 +70,10 @@ begin
 
   perform 1 from public.profiles p where p.id = v_user for update;
 
+  -- An open row from the unpaid cleanup (its `deleteUser` failed, then the account paid) would keep this request out
+  -- of the self-deletion retry: the founder's own request takes it over (review of #241).
   insert into public.account_deletions (user_id, source) values (v_user, 'self')
-  on conflict (user_id) where done_at is null do nothing;
+  on conflict (user_id) where done_at is null do update set source = 'self';
   v_files := public.account_purge_files(v_user);
 
   return jsonb_build_object('user_id', v_user, 'files', v_files);
@@ -10493,6 +10495,11 @@ begin
                            where d.user_id = v_user and d.kind = 'product')
         -- Onboarding has not written the product document yet: the free scan is still to come.
         then 'not_ready'
+      -- Review of #241: three failed runs also end the free run (`cmo_first_run_free`), but nothing was found, so it
+      -- is not "used": the screens lock nothing and the scan's own refusal says what happened.
+      when not exists (select 1 from public.cmo_runs r
+                       where r.user_id = v_user and r.kind = 'sales_scan' and r.status = 'done')
+        then 'failed'
       else 'used'
     end;
     if v_free_scan = 'used' then

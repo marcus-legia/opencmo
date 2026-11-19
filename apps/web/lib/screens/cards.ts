@@ -423,8 +423,15 @@ export function withReach(cards: ApprovalCard[], approvals: Pick<ApprovalRow, "i
     if (card.body.kind !== "reply") return card;
     const row = byId.get(opportunityOf.get(card.id) ?? "");
     if (!row) return card;
-    const level = REACH_LEVELS.find((l) => l === row.reach_level) ?? "reply_first";
-    const reason = clip(reachReason(level, ReachCheckSchema.safeParse(row.reach).data ?? null), 200);
+    // Never checked (the scan's reach step has not run or failed): the column's default is not a verdict, so the card
+    // shows no level, as Sales shows none for that person.
+    // (`reach_level` 'reply_first' with `reach` '{}', the columns' defaults). A check saved but not readable still
+    // shows its level with the plain line.
+    const unchecked = row.reach_level === "reply_first" && (row.reach == null || (typeof row.reach === "object" && !Array.isArray(row.reach) && Object.keys(row.reach).length === 0));
+    const level = REACH_LEVELS.find((l) => l === row.reach_level);
+    if (!level || unchecked) return card;
+    const check = ReachCheckSchema.safeParse(row.reach).data ?? null;
+    const reason = clip(reachReason(level, check), 200);
     return { ...card, body: { ...card.body, reach: { level, reason } } };
   });
 }

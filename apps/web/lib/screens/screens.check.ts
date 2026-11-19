@@ -376,6 +376,8 @@ check("cards: a reply card on the Feed carries the person's reach level and its 
   const cards = withReach(rows.map((r) => approvalToCard(r)!), rows, [
     { id: "o1", reach_level: "dm_ready", reach: check },
     { id: "o2", reach_level: "reply_first", reach: { broken: true } },
+    // Review of #241: the columns' defaults mean "never checked", not "reply first".
+    { id: "o3", reach_level: "reply_first", reach: {} },
   ]);
   for (const c of cards) ApprovalCardSchema.parse(c);
   const reach = cards.map((c) => (c.body.kind === "reply" ? c.body.reach : "post"));

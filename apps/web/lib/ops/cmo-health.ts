@@ -131,14 +131,18 @@ export const probeCmoQueue: CmoHealthProbe["queue"] = async () => {
   try {
     const [count, oldest] = await Promise.all([
       db.from("cmo_runs").select("id", { count: "exact", head: true }).eq("status", "queued").or(due),
-      db.from("cmo_runs").select("created_at").eq("status", "queued").or(due).order("created_at", { ascending: true }).limit(1),
+      // A deferred or re-queued run keeps its first `created_at`: it has waited only since its `not_before`. Read a
+      // handful and take the oldest real wait, so a run that just became due does not read as stuck for hours.
+      db.from("cmo_runs").select("created_at, not_before").eq("status", "queued").or(due).order("created_at", { ascending: true }).limit(50),
     ]);
     if (count.error || oldest.error) {
       console.error("[health/cmo] queue", (count.error ?? oldest.error)!.message);
       return undefined;
     }
-    const at = (oldest.data as { created_at: string }[] | null)?.[0]?.created_at;
-    return { depth: count.count ?? 0, oldest: at ? Date.parse(at) : null };
+    const waits = ((oldest.data as { created_at: string; not_before: string | null }[] | null) ?? []).map((r) =>
+      Math.max(Date.parse(r.created_at), r.not_before ? Date.parse(r.not_before) : 0),
+    );
+    return { depth: count.count ?? 0, oldest: waits.length ? Math.min(...waits) : null };
   } catch (error) {
     console.error("[health/cmo] queue", error instanceof Error ? error.message : error);
     return undefined;
