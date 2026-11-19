@@ -15,7 +15,7 @@ included work is stopped (`blocked`), what still works when blocked (reading, ed
 period resets. Built on the existing usage / credit functions, no new money path. pgTAP: free, paid under, paid at
 100%, annual. Tell C under **Requests** in C.md.
 
-### - [ ] A2. Delete my account (after the owner's decision 2; default: build it)
+### - [x] A2. Delete my account (after the owner's decision 2; default: build it)
 `account_delete(p_email text)` (founder): the typed email must match, then the existing purge path for the user's rows
 and storage (reuse it, do not write a second one), a row in the purge log, and the auth user removed through the same
 mechanism the purge uses. Refuses while a paid subscription is active ("Cancel your plan first" with the Billing

@@ -38,6 +38,63 @@ CREATE TYPE public.job_status AS ENUM (
 
 
 --
+-- Name: account_delete(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.account_delete(p_email text) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_email text;
+  v_files integer;
+begin
+  select u.email into v_email from auth.users u where u.id = v_user;
+  if p_email is null or v_email is null or lower(btrim(p_email)) <> lower(btrim(v_email)) then
+    raise exception 'The email you typed is not the one on this account.' using errcode = '22023';
+  end if;
+
+  -- Statuses that can still take a payment. A plan set to cancel at the period end charges nothing more.
+  if exists (
+    select 1 from public.creem_subscriptions s
+    where s.user_id = v_user and s.status in ('active', 'trialing', 'past_due', 'unpaid', 'paused')
+  ) then
+    raise exception 'Cancel your plan first, on the Billing page. Then you can delete your account.'
+      using errcode = 'P0001';
+  end if;
+
+  if exists (select 1 from public.tasks t where t.user_id = v_user and t.status in ('queued', 'running')) then
+    raise exception 'A video is still being processed. Try again when it is done.' using errcode = 'P0001';
+  end if;
+
+  perform 1 from public.profiles p where p.id = v_user for update;
+
+  insert into public.account_deletions (user_id, source) values (v_user, 'self')
+  on conflict (user_id) where done_at is null do nothing;
+  v_files := public.account_purge_files(v_user);
+
+  return jsonb_build_object('user_id', v_user, 'files', v_files);
+end;
+$$;
+
+
+--
+-- Name: account_deletions_done(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.account_deletions_done() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+begin
+  update public.account_deletions set done_at = now() where user_id = old.id and done_at is null;
+  return old;
+end;
+$$;
+
+
+--
 -- Name: account_is_paid(uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -58,6 +115,31 @@ CREATE FUNCTION public.account_is_paid(p_user uuid) RETURNS boolean
       select 1 from public.creem_subscriptions s
       where s.user_id = p_user and s.status in ('active', 'trialing', 'scheduled_cancel', 'past_due')
     );
+$$;
+
+
+--
+-- Name: account_purge_files(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.account_purge_files(p_user uuid) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_count integer;
+begin
+  insert into public.storage_deletions (bucket, path, user_id)
+  select o.bucket_id, o.name, p_user
+  from storage.objects o
+  where o.bucket_id in ('clips', 'sources', 'renders', 'media', 'exports', 'brand', 'captures', 'photos')
+    and o.name like p_user::text || '/%'
+    and not exists (
+      select 1 from public.storage_deletions d where d.bucket = o.bucket_id and d.path = o.name
+    );
+  get diagnostics v_count = row_count;
+  return v_count;
+end;
 $$;
 
 
@@ -13162,9 +13244,35 @@ CREATE FUNCTION public.purge_unpaid_accounts(p_limit integer DEFAULT 50) RETURNS
     AS $$
 declare
   v_user uuid;
+  v_left integer;
 begin
   if p_limit is null or p_limit < 1 or p_limit > 500 then
     raise exception 'p_limit must be between 1 and 500.';
+  end if;
+  v_left := p_limit;
+
+  for v_user in
+    select d.user_id
+    from public.account_deletions d
+    where d.done_at is null and d.source = 'self'
+      and exists (select 1 from auth.users u where u.id = d.user_id)
+      -- Work still running (the worker holds a lease): leave it to the next cron run.
+      and not exists (
+        select 1 from public.tasks t
+        where t.user_id = d.user_id and t.status in ('queued', 'running')
+      )
+    order by d.requested_at
+    limit v_left
+    for update of d skip locked
+  loop
+    -- Files uploaded after the founder asked are queued too.
+    perform public.account_purge_files(v_user);
+    v_left := v_left - 1;
+    return next v_user;
+  end loop;
+
+  if v_left < 1 then
+    return;
   end if;
 
   for v_user in
@@ -13172,23 +13280,21 @@ begin
     from public.profiles p
     where p.retention_from + interval '30 days' < now()
       and not public.account_is_paid(p.id)
-      -- Work still running (the worker holds a lease): leave it to the next cron run.
       and not exists (
         select 1 from public.tasks t
         where t.user_id = p.id and t.status in ('queued', 'running')
       )
+      -- An unpaid pick whose `deleteUser` failed is checked again here, so an account that paid since is kept.
+      and not exists (
+        select 1 from public.account_deletions d where d.user_id = p.id and d.done_at is null and d.source = 'self'
+      )
     order by p.retention_from
-    limit p_limit
+    limit v_left
     for update of p skip locked
   loop
-    insert into public.storage_deletions (bucket, path, user_id)
-    select o.bucket_id, o.name, v_user
-    from storage.objects o
-    where o.bucket_id in ('clips', 'sources', 'renders', 'media', 'exports', 'brand', 'captures', 'photos')
-      and o.name like v_user::text || '/%'
-      and not exists (
-        select 1 from public.storage_deletions d where d.bucket = o.bucket_id and d.path = o.name
-      );
+    perform public.account_purge_files(v_user);
+    insert into public.account_deletions (user_id, source) values (v_user, 'unpaid')
+    on conflict (user_id) where done_at is null do nothing;
     return next v_user;
   end loop;
 end;
@@ -19453,6 +19559,34 @@ $$;
 
 
 --
+-- Name: account_deletions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.account_deletions (
+    id bigint NOT NULL,
+    user_id uuid NOT NULL,
+    source text NOT NULL,
+    requested_at timestamp with time zone DEFAULT now() NOT NULL,
+    done_at timestamp with time zone,
+    CONSTRAINT account_deletions_source_check CHECK ((source = ANY (ARRAY['self'::text, 'unpaid'::text])))
+);
+
+
+--
+-- Name: account_deletions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.account_deletions ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.account_deletions_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
 -- Name: account_metrics; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -20622,6 +20756,14 @@ ALTER TABLE ONLY public.storage_deletions ALTER COLUMN id SET DEFAULT nextval('p
 
 
 --
+-- Name: account_deletions account_deletions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.account_deletions
+    ADD CONSTRAINT account_deletions_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: account_metrics account_metrics_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -21579,6 +21721,13 @@ ALTER TABLE ONLY public.zernio_profiles
 
 ALTER TABLE ONLY public.zernio_receipts
     ADD CONSTRAINT zernio_receipts_pkey PRIMARY KEY (event_id);
+
+
+--
+-- Name: account_deletions_open_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX account_deletions_open_key ON public.account_deletions USING btree (user_id) WHERE (done_at IS NULL);
 
 
 --
@@ -24233,6 +24382,12 @@ ALTER TABLE ONLY public.write_budget_ledger
 ALTER TABLE ONLY public.zernio_profiles
     ADD CONSTRAINT zernio_profiles_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
 
+
+--
+-- Name: account_deletions; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.account_deletions ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: account_metrics; Type: ROW SECURITY; Schema: public; Owner: -

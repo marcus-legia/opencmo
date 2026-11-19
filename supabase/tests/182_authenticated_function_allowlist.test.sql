@@ -15,6 +15,7 @@ select plan(2);
 
 create temp table allowed (signature text primary key) on commit drop;
 insert into allowed values
+  ('account_delete(text)'),  -- wave 4 A2: typed email, then the existing purge
   ('account_retention()'),
   ('account_summary()'),
   ('agent_3d_hold_credits()'),
