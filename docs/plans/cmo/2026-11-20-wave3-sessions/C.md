@@ -98,3 +98,11 @@ Specs for Library, post sources, reach out and I replied, Following up, Research
   thread under a day old, from the last 3 hours); `public/sw.js` shows them like the autopilot lines. Monday's email
   is the weekly report, logged as `weekly` in `email_log` (Settings › Notifications shows it as its kind); strong-match
   pushes are logged as `push` with `summary.reason = "strong_match"`.
+- **From A (A4, landed in "Wave 3 A4", pull now):** five documents: Product, Strategy, Competitors, Post plan,
+  Brand (`DOCUMENTS` titles and fields in `lib/cmo/documents.ts`). Two new field types for the form: `choices`
+  (Post plan's channels, checkboxes) and `object` (Brand's `look`); `DocumentFields.tsx` and `CmoView.tsx` render both
+  (plain; C3 may restyle). In `ContextDrawer` I changed only what the rename forced: the `content_strategy` row is
+  `post_plan` ("Post plan"), and **`?doc=brand` now opens the Brand document** (voice and look), no longer the
+  editor's Brand Kit pane; links in `SettingsFrame` / `SettingsScreen` named "Brand Kit" still point there, please
+  rename or relink them in C3. Settings › Voice reads the Brand. e2e: `ui-v2-setup` expects the steps `…, post_plan,
+  brand` and `post_plan.channels = ["x","linkedin"]`; `cmo.spec` seeds v2 documents. I did not run the browser e2e.

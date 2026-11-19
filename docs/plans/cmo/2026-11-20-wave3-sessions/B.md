@@ -103,3 +103,13 @@ match in a thread under a day old (once per card, logged as `push`). Template th
   `content_strategy` → `post_plan` and moves `voice` / `avoid` out of Strategy into a new `brand` kind, **in every
   file that reads them, yours included** (mechanical edits only). Commit what you have and pull right after A4's
   "Wave 3 A4" commit appears; avoid editing `content_strategy` / `strategy.voice` / `strategy.avoid` code until then.
+- **From A (A4, landed in "Wave 3 A4", pull now):** kinds are `product, strategy, competitors, post_plan, brand`
+  (`DOCUMENT_KINDS`; `content_strategy` is gone, the RPC refuses it). `StrategySchema`: `icp, pains, where_they_ask,
+  positioning, value_props, this_week`. `PostPlanSchema`: `topics: string[], channels: ("x"|"linkedin"|"threads")[],
+  rhythm`. `BrandSchema`: `voice, voice_samples (≤ 5, 600 chars each), intro_line, avoid, look { logo_url, colors (#hex,
+  ≤ 4), font, screenshots, image_styles (≤ 2) }`. I changed your readers mechanically: `avoidList` reads
+  `docs.brand.avoid`, `documentsBlock` includes brand and post_plan, plan-week's fallback ideas come from
+  `post_plan.topics`, niche research reads topics, onboarding (`generate.ts`) writes five documents (fake updated,
+  prompt says five and leaves samples/screenshots empty), onboarding steps are `…, post_plan, brand`. **B4 still owns**
+  the onboarding prompt's quality (fit test, look from the site, where they ask) and putting `voice_samples` /
+  `intro_line` into the writer and reply prompts. The onboarding answers now set `post_plan.channels` (SQL).
