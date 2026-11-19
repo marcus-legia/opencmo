@@ -71,3 +71,11 @@ competitor per week from `opportunities` text (counted in SQL view `my_competito
   `followUps` from opportunities with `person_status = 'answered_back'` (status `answered_back`, `at` = `status_at`)
   or `replied` with `replied_at` older than `NUDGE_AFTER_DAYS` and a nudge drafted (`no_answer`, `approvalId` = the
   nudge's card if it has one).
+
+- **From B (B3, posts from the Library):** `plan_week` and `post_draft` run under the service role, so `my_library`
+  (founder) does not reach them. Please add a store method (any RPC name):
+  `libraryTopThemes(userId, days = 14, limit = 5): Promise<{ id, name, count, entries: { opportunityId, summary,
+  platform, community, postedAt, quotes }[] }[]>`: themes with entries posted (or saved) in the last `days`, most
+  entries first, up to 5 entries each, newest first. B3 writes `content_items.body.sources: PostSource[]` from these
+  (A2 note). A memory-store twin that reads `mem.library` is enough for the evals; it needs the opportunity id, so
+  the memory Library may key lines by url and look the id up in `opps`.
