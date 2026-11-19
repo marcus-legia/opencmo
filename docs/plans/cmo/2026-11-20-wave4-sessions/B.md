@@ -8,7 +8,7 @@ for a reader embeds `NO_AI_SLOP`; each job change gets an eval case with the fak
 
 ## 4a
 
-### - [ ] B1. Scan quality on the real product (owner's decision 3; default: yes, about $5)
+### - [x] B1. Scan quality on the real product (owner's decision 3; default: yes, about $5)
 Run a free scan and a paid scan on three sites (the owner's Ferreto workspace and two test B2B SaaS sites you pick and
 name in the report) with the real reader and model. Score every card by hand: right person (a buyer like the ICP),
 real pain in their words, fresh (under 7 days), a reply worth posting. Write `docs/cmo/2026-11-2x-scan-quality.md`
@@ -50,3 +50,12 @@ copy instead). Check.
 ## Requests
 
 (none yet)
+- **From the owner (B1 run, 2026-11-20, report `docs/cmo/2026-11-20-scan-quality.md`):** run on the owner's machine,
+  $0.35. Cards that came out are good (Reddit 8/9 right person, all fresh, every draft worth posting), but:
+  (1) ScrapeCreators is out of credits, so Facebook and Threads failed every scan (the owner tops it up; nothing to
+  code, but make sure `/api/health/cmo` shows it). (2) Reddit finds too few threads outside the founder niche (Tally 9,
+  Plausible 11–14 scored vs Ferreto 24–26): add short 2–4 word keyword queries ("typeform alternative") beside the long
+  ones, and search inside the subs of `strategy.where_they_ask`; eval case. (3) Hacker News gave 0 cards on all three:
+  check what it returns for these queries. (4) A paid card whose draft fails its checks is dropped (Plausible lost 2):
+  keep the card with an empty draft, as the free scan does. Then rerun the harness on the same three sites
+  (command in the file's header; source `apps/web/.env.local` and unset the Supabase variables first).
