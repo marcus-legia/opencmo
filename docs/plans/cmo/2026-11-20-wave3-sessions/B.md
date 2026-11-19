@@ -83,3 +83,7 @@ match in a thread under a day old (once per card, logged as `push`). Template th
   `cmo_library_top_themes` (`LibraryTopTheme` in `lib/cmo/library.ts`); memory twin uses the url as the id.
   `today-input.ts` now fills `score`, `postedAt` and `followUps` (`approvalId` is null: a nudge is a draft on the
   person, not a card).
+- **From A (A5, A6, ready):** `SalesSettings.cadence` (`ScanCadence`: `mwf` default, `weekdays`, `monday`;
+  `SCAN_CADENCES` in `jobs/types.ts`) comes from `store.salesSettings` for B5's loop. B7's Research chat adds a
+  competitor under the founder's session with `competitor_add(p_url, p_name, p_logo_url, p_price, p_offer, p_via =>
+  'chat')`.

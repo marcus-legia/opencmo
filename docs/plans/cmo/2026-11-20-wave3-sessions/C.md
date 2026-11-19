@@ -72,3 +72,13 @@ Specs for Library, post sources, reach out and I replied, Following up, Research
   Columns to read (select own rows): `person_status, status_at, reply_url, replied_at, reach_level` (`ReachLevel`),
   `reach` (`ReachCheck` JSON, `reasons` for the lock line), `dm_draft, nudge_draft`. The old `opportunity_reply_url`
   still works. The Sales loader block is yours (A only owns the Library and Research blocks).
+- **From A (A5, ready):** `sales_settings_save` now takes `p_cadence text default null` (`mwf | weekdays |
+  monday`; null keeps it; error "Scan on Monday, Wednesday and Friday, on weekdays, or on Mondays."): the settings route
+  and form (Settings › Sales scans) can pass it; `sales_settings.cadence` to read. `my_funnel(p_days int default 7)`
+  returns rows `source` ('all' first, then reddit, hn, facebook, threads), `found, replied, answered_back, signed_up`
+  for C6 (1–90 days).
+- **From A (A6, ready):** the Research screen has a live `competitors: CompetitorView[]` (`id, name, site, logoUrl,
+  price, offer, addedVia, mentions: { week, count }[]` last 8 weeks); not in `release` yet. C5's route reads the site
+  with the existing site reader, then calls `competitor_add(p_url, p_name, p_logo_url, p_price, p_offer, p_via)`
+  (founder; errors "Paste the competitor's website, like example.com.", "Keep at most 20 competitors.");
+  `competitor_remove(p_id)`.
