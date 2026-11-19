@@ -53,7 +53,7 @@ Lurk reader Sales uses, returns up to 5 names people mention that the founder do
 why and where, and adds one only when the founder presses Add (`competitor_add`). Included in the plan (no price).
 Eval with the fake reader.
 
-### - [ ] B8. Weekly report and the strong-match push (after A5)
+### - [x] B8. Weekly report and the strong-match push (after A5)
 Mondays: the weekly report replaces that day's morning email (found, replied, answered back, signed up; what worked;
 the theme people mentioned most; posts that went out), logged as `weekly`. Right after a scan: one push for a Strong
 match in a thread under a day old (once per card, logged as `push`). Template through `no-ai-slop`; checks.

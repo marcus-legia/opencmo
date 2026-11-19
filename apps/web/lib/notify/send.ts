@@ -12,12 +12,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { DIGEST_SKIPPED_NOTE, buildDigest, digestDayAllowed, digestScheduleLabel, loadDigestInput, localClock, type DigestDays } from "@/lib/cmo/digest";
+import { buildWeekly, loadWeeklyInput } from "@/lib/cmo/weekly-report";
 
 import { unsubscribeUrl, type EmailSender } from "./email";
 
 type Claim = { log_id: string; approval_ids: string[] };
 
-async function claim(admin: SupabaseClient, userId: string, kind: "digest", ids: string[], log?: { subject: string; summary: Record<string, unknown> }): Promise<Claim | null> {
+async function claim(admin: SupabaseClient, userId: string, kind: "digest" | "weekly", ids: string[], log?: { subject: string; summary: Record<string, unknown> }): Promise<Claim | null> {
   const { data, error } = await admin.rpc("email_log_claim", {
     p_user: userId,
     p_kind: kind,
@@ -86,6 +87,8 @@ export async function sendDigestEmail(admin: SupabaseClient, sender: EmailSender
   if (!notify.email_digest) return "none";
   const clock = localClock(opts.now, founder.timezone);
   const url = unsubscribeUrl(opts.appUrl, notify.unsubscribe_token);
+  // Wave 3 B8: on Mondays the weekly report replaces the morning email.
+  if (clock.weekday === 1) return sendWeekly(admin, sender, founder, { ...opts, dateLabel: clock.dateLabel, unsubscribeUrl: url });
   const input = await loadDigestInput(admin, founder.id, {
     appUrl: opts.appUrl,
     dateLabel: clock.dateLabel,
@@ -117,5 +120,39 @@ export async function sendDigestEmail(admin: SupabaseClient, sender: EmailSender
     const digest = buildDigest({ ...input, people: input.people.filter((p) => kept.has(p.approvalId)), posts: input.posts.firstId && !kept.has(input.posts.firstId) ? { ...input.posts, firstId: null } : input.posts });
     return sender.send({ to: founder.email!, subject: digest.subject, text: digest.text, html: digest.html, unsubscribeUrl: url });
   });
+  return ok ? "sent" : "none";
+}
+
+/** What a skipped Monday's log row says. */
+export const WEEKLY_SKIPPED_NOTE = "Nothing this week: no one found, no reply and no post";
+
+/**
+ * The weekly report for one founder (wave 3 B8), in place of Monday's morning email: claimed as `weekly` (one a local
+ * day, nothing once unsubscribed), sent, and recorded. A week with nothing in it is logged as skipped, not sent.
+ */
+async function sendWeekly(
+  admin: SupabaseClient,
+  sender: EmailSender,
+  founder: Founder,
+  opts: { appUrl: string; now: Date; dateLabel: string; unsubscribeUrl: string },
+): Promise<DigestOutcome> {
+  const input = await loadWeeklyInput(admin, founder.id, {
+    appUrl: opts.appUrl,
+    dateLabel: opts.dateLabel,
+    now: opts.now,
+    schedule: digestScheduleLabel(founder.digest_days, founder.digest_hour ?? 8),
+    unsubscribeUrl: opts.unsubscribeUrl,
+  });
+  const report = buildWeekly(input);
+  if (report.empty) {
+    const { data, error } = await admin.rpc("email_log_skip", { p_user: founder.id, p_kind: "weekly", p_summary: { ...report.summary, note: WEEKLY_SKIPPED_NOTE } });
+    if (error) throw new Error(`email_log_skip: ${error.message}`);
+    return data ? "skipped" : "none";
+  }
+  const c = await claim(admin, founder.id, "weekly", [], { subject: report.subject, summary: report.summary });
+  if (!c) return "none";
+  const ok = await sendClaimed(admin, sender, c, () =>
+    sender.send({ to: founder.email!, subject: report.subject, text: report.text, html: report.html, unsubscribeUrl: opts.unsubscribeUrl }),
+  );
   return ok ? "sent" : "none";
 }
