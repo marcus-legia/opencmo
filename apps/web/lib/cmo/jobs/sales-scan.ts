@@ -33,7 +33,7 @@ import { genModel, promptVersion } from "./edit-taxonomy";
 import { safeForSales } from "../sales/ban-risk";
 import { NO_AI_SLOP, skillText } from "../skills";
 import { fakeAllowed, LlmError } from "./llm";
-import { LIBRARY_LIMITS, type LibraryQuote } from "../library";
+import { LIBRARY_LIMITS, type LibraryQuote, type LibrarySaveItem } from "../library";
 import { isFresh, platformHasDms, reachLevel, type ReachCheck, type ReachLevel } from "../reach";
 import type { JobContext, JobOutput } from "./runner";
 import { mayMention, toVerdict, type Documents, type Opportunity, type SalesScanOutput, type SalesSettings, type ScorePart, type SubredditVerdict } from "./types";
@@ -461,6 +461,12 @@ export function reachFor(
   return { level: reachLevel(reach), reach };
 }
 
+/** The founder's Library themes for the scoring prompt, as data. Names came from earlier model output. */
+export function themesBlock(themes: string[]): string {
+  const names = themes.map((t) => escapeForTag(cleanUntrusted(t)).slice(0, LIBRARY_LIMITS.themeNameChars)).filter(Boolean);
+  return `<themes>\n${names.length ? names.map((n) => `- ${n}`).join("\n") : "(none yet)"}\n</themes>`;
+}
+
 /** One thread for the scoring prompt. Its text cannot close the block or forge an attribute. */
 export function threadBlock(t: RedditThread & { platform?: SalesPlatform }, i: number): string {
   const text = (value: string) => escapeForTag(cleanUntrusted(value));
@@ -620,7 +626,7 @@ export async function salesScan(ctx: JobContext): Promise<SalesScanOutput & JobO
   const { store, run } = ctx;
   // A brief from the CMO chat or a Reddit item on the calendar (H3): it steers the searches, not the scoring rules.
   const brief = typeof run.input.brief === "string" ? run.input.brief.slice(0, 300) : "";
-  const { docs, memories, seen, settings, mentionsUsed, mentionsWaiting = 0, voice, paid = true } = await ctx.step(
+  const { docs, memories, seen, settings, mentionsUsed, mentionsWaiting = 0, voice, paid = true, themes = [] } = await ctx.step(
     "read_doc",
     "Read your product and strategy",
     async () => ({
@@ -634,6 +640,8 @@ export async function salesScan(ctx: JobContext): Promise<SalesScanOutput & JobO
       mentionsWaiting: await store.waitingMentions(run.user_id),
       // Free scan A3: read once here, so a retried run decides the same way.
       paid: await store.paid(run.user_id),
+      // Wave 3 B1: the founder's Library themes, so a thread about the same problem joins its theme.
+      themes: await store.libraryThemeNames(run.user_id, 30),
       voice: voiceBlock(
         (await store.voiceNotes(run.user_id, 5))
           .filter((n) => safeForSales(n.body))
@@ -810,17 +818,17 @@ export async function salesScan(ctx: JobContext): Promise<SalesScanOutput & JobO
             fake: () => ({ scores: fakeScores(scanned) }),
             agent: "checker",
             system: SCORE_SYSTEM,
-            prompt: `${documentsBlock({ product: docs.product, strategy: docs.strategy })}\n\n${scanned.map(threadBlock).join("\n\n")}\n\nScore every thread.`,
+            prompt: `${documentsBlock({ product: docs.product, strategy: docs.strategy })}\n\n${themesBlock(themes)}\n\n${scanned.map(threadBlock).join("\n\n")}\n\nScore every thread.`,
             schema: ScoreSchema,
-            maxTokens: 8000,
+            maxTokens: 12000,
             label: "score_thread",
             failure: "We could not score the threads. Try again in a minute.",
           })
         ).scores;
     const byIndex = new Map(scores.map((s) => [s.index, s]));
     return scanned
-      .map((thread, i) => ({ thread, result: scoreThread(thread, byIndex.get(i), ctx.now.getTime()) }))
-      .filter((r): r is { thread: ScanThread; result: { score: number; parts: ScorePart[] } } => r.result !== null && r.result.score >= PASS_SCORE)
+      .map((thread, i) => ({ thread, scored: byIndex.get(i), result: scoreThread(thread, byIndex.get(i), ctx.now.getTime()) }))
+      .filter((r): r is { thread: ScanThread; scored: Scored; result: { score: number; parts: ScorePart[] } } => r.result !== null && r.result.score >= PASS_SCORE)
       .sort((a, b) => b.result.score - a.result.score)
       .slice(0, MAX_CARDS);
   }, (r) => (r.length ? `${r.length} worth joining (score ${PASS_SCORE}+)` : "None scored high enough"));
@@ -914,5 +922,26 @@ export async function salesScan(ctx: JobContext): Promise<SalesScanOutput & JobO
     (n) => `${Math.max(0, n)} ${n === 1 ? "card" : "cards"} in Approvals${skipped.length ? ` · ${skipped.length} skipped by community rules` : ""}`,
   );
   const cards = Math.max(0, saved);
+
+  // Wave 3 B1: what each kept conversation said goes to the Library, by url (`cmo_save_library` finds the opportunity
+  // this run saved). A card dropped for a failed draft is not kept, so it has no Library line either.
+  const kept = new Set([...items, ...skipped].map((o) => o.url));
+  const lines: LibrarySaveItem[] = planned.flatMap((p) => {
+    if (!kept.has(p.thread.url)) return [];
+    const summary = librarySummary(p.scored.summary, p.thread);
+    return summary ? [{ url: p.thread.url, summary, theme: themeName(p.scored.theme, themes) ?? "", quotes: libraryQuotes(p.result.parts) }] : [];
+  });
+  if (lines.length) {
+    await ctx.step("save_library", "Saving what people said to your Library", async () => {
+      // The cards are saved already: a Library that fails must not fail the scan, whose retry would find every thread
+      // seen and end with no cards.
+      try {
+        return await store.saveLibrary(run.user_id, run.id, lines);
+      } catch (error) {
+        console.error(`[cmo] sales_scan ${run.id}: Library not saved`, error);
+        return 0;
+      }
+    }, (n) => `${n} ${n === 1 ? "conversation" : "conversations"} in your Library`);
+  }
   return output(scanned.length, { cards, skipped: skipped.length, dropped: toDraft.length - items.length });
 }

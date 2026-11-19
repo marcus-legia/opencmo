@@ -93,6 +93,20 @@ async function runFixture(fixture: RedditFixture, env: EvalEnv): Promise<CaseRes
     },
   ];
 
+  // Wave 3 B1: every card's conversation is in the Library, by a summary that is not its title.
+  const libraryNotes = cards.flatMap((card) => {
+    const line = mem.library.get(card.url);
+    const key = byUrl.get(card.url)!.key;
+    if (!line) return [`${key}: no Library line`];
+    return [
+      ...(sameAsTitle(line.summary, card.title) ? [`${key}: summary is the title ("${line.summary}")`] : []),
+      ...(line.quotes.length ? [] : [`${key}: no quotes`]),
+      ...(line.quotes.every((q) => quoteIn(q.text, toThread(byUrl.get(card.url)!, now))) ? [] : [`${key}: a quote is not in the thread`]),
+    ];
+  });
+  if (env.provider !== "fake") for (const line of mem.library.values()) env.log(`library [${line.theme}]: ${line.summary}`);
+  results.push({ id: id("library"), epoch: env.epoch, pass: cards.length > 0 && !libraryNotes.length, decided_by: "code", notes: libraryNotes });
+
   const product = String(fixture.docs.product?.name ?? "");
   for (const card of cards) {
     const thread = byUrl.get(card.url)!;

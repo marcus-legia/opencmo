@@ -230,8 +230,11 @@ async function main() {
   const w4 = mem3.enqueue("sales_scan");
   await drainCmoQueue(mem3.store);
   assert.equal(w4.status, "done", `W4 xong (${w4.error})`);
-  assert.deepEqual(w4.steps.map((s) => s.tool), ["read_doc", "make_queries", "reddit_search", "hn_search", "facebook_search", "threads_search", "score_thread", "check_rules", "draft_reply", "create_card"]);
+  assert.deepEqual(w4.steps.map((s) => s.tool), ["read_doc", "make_queries", "reddit_search", "hn_search", "facebook_search", "threads_search", "score_thread", "check_rules", "draft_reply", "create_card", "save_library"]);
   assert.ok(mem3.opps.length > 0 && mem3.opps.length <= 5, `1–5 thẻ (${mem3.opps.length})`);
+  // Wave 3 B1: every card is in the Library, by a summary that is not its title.
+  assert.equal(mem3.library.size, mem3.opps.length, "one Library line per card");
+  assert.ok(mem3.opps.every((o) => { const line = mem3.library.get(o.url); return line && line.summary !== o.title && line.quotes.length > 0; }), "Library lines have a summary and quotes");
   assert.ok(mem3.opps.every((o) => o.score >= PASS_SCORE && o.reply.length > 0 && o.score_parts.length === 5), "thẻ đủ điểm, có trả lời");
   const HOST = { reddit: "www.reddit.com", hn: "news.ycombinator.com", facebook: "www.facebook.com", threads: "www.threads.com" } as const;
   assert.ok(mem3.opps.every((o) => new URL(o.url).hostname === HOST[o.platform ?? "reddit"]), "every link is on its own platform's host");
