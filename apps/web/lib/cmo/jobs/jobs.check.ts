@@ -230,7 +230,7 @@ async function main() {
   const w4 = mem3.enqueue("sales_scan");
   await drainCmoQueue(mem3.store);
   assert.equal(w4.status, "done", `W4 xong (${w4.error})`);
-  assert.deepEqual(w4.steps.map((s) => s.tool), ["read_doc", "make_queries", "reddit_search", "hn_search", "facebook_search", "threads_search", "score_thread", "check_rules", "draft_reply", "create_card", "save_library"]);
+  assert.deepEqual(w4.steps.map((s) => s.tool), ["read_doc", "make_queries", "reddit_search", "hn_search", "facebook_search", "threads_search", "score_thread", "check_rules", "draft_reply", "create_card", "save_library", "save_reach"]);
   assert.ok(mem3.opps.length > 0 && mem3.opps.length <= 5, `1–5 thẻ (${mem3.opps.length})`);
   // Wave 3 B1: every card is in the Library, by a summary that is not its title.
   assert.equal(mem3.library.size, mem3.opps.length, "one Library line per card");

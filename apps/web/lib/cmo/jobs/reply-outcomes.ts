@@ -128,7 +128,8 @@ export async function checkReplies(ctx: JobContext, readers: ReplyReaders = defa
         if (await store.saveReplyOutcome(run.user_id, d.outcome_id, result)) {
           checked += 1;
           if (result.status === "found") found += 1;
-          if (result.answeredBack) answered += 1;
+          // SQL moves the person from replied to answered back, never backwards.
+          if (result.answeredBack && (await store.markAnsweredBack(run.user_id, d.opportunity_id))) answered += 1;
         }
       }
       return { checked, found, answered };

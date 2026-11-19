@@ -77,6 +77,15 @@ async function main() {
   const again = await checkReplies({ store: mem.store, run: { user_id: "u" }, step: async (_t: string, _l: string, fn: () => unknown) => fn() } as never, readers);
   assert.deepEqual(again, { checked: 0, found: 0 }, "checked once");
 
+  // Wave 3 B6: a reply someone answered moves its person from replied to answered back.
+  const mem2 = memoryStore({ product: { name: "Paylane" } } as never);
+  const url = "https://www.reddit.com/r/SaaS/comments/abc/x/";
+  mem2.replies.push(due("reddit", { opportunity_id: url }));
+  mem2.people.set(url, { level: "reply_first", reach: {} as never, dm: null, dmAt: null, nudge: null, status: "replied", repliedAt: Date.now() - 5 * 86_400_000 });
+  const answered = await checkReplies({ store: mem2.store, run: { user_id: "u" }, step: async (_t: string, _l: string, fn: () => unknown) => fn() } as never, readers);
+  assert.deepEqual(answered, { checked: 1, found: 1, answered: 1 });
+  assert.equal(mem2.people.get(url)!.status, "answered_back");
+
   // The loop: connected accounts or due replies run pull_metrics without the social reader.
   const base = { weekday: 3, duePost: null, dueSales: null, competitorHandles: 0, publishedRecently: 0, socialReader: false };
   assert.deepEqual(dueLoops(base), []);

@@ -10,7 +10,7 @@ case with the fake provider (`npm run cmo:eval -- --provider fake`).
 
 ## Tasks
 
-### - [ ] B1. The scan fills the Library and the reach check (after A2, A3)
+### - [x] B1. The scan fills the Library and the reach check (after A2, A3)
 In the scoring step, also return per thread: a one-line summary of the post (never its title), the theme it belongs
 to (reuse an existing theme name when it fits, else a new short name), and the reach check from the post and thread
 only (buyer in their own words, wants now, warm, fresh, a way to reach them: DMs allowed by the platform and the

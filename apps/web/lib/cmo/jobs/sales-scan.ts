@@ -26,6 +26,7 @@ import { FACEBOOK_POST, searchFacebookGroups } from "../social/facebook";
 import { ScBudget } from "../social/scrapecreators";
 import { searchThreadsConversations, THREADS_POST } from "../social/threads-search";
 import { cleanUntrusted, escapeAttribute, escapeForTag } from "../untrusted";
+import { fetchPage, SiteError } from "../site";
 import { voiceBlock } from "../writer/context";
 import { hasLink } from "./check-post";
 import { avoidList, documentsBlock, productNames, recall } from "./context";
@@ -34,7 +35,7 @@ import { safeForSales } from "../sales/ban-risk";
 import { NO_AI_SLOP, skillText } from "../skills";
 import { fakeAllowed, LlmError } from "./llm";
 import { LIBRARY_LIMITS, type LibraryQuote, type LibrarySaveItem } from "../library";
-import { isFresh, platformHasDms, reachLevel, type ReachCheck, type ReachLevel } from "../reach";
+import { isFresh, platformHasDms, reachLevel, type ReachCheck, type ReachLevel, type ReachSaveItem } from "../reach";
 import type { JobContext, JobOutput } from "./runner";
 import { mayMention, toVerdict, type Documents, type Opportunity, type SalesScanOutput, type SalesSettings, type ScorePart, type SubredditVerdict } from "./types";
 
@@ -415,6 +416,31 @@ export function emailIn(text: string): string | null {
 const VENDOR_SAYS = /\b(i|we)(\s*['’]ve|\s+have)?\s+(just\s+)?(built|made|launched|created|developed)\b|\bmy (own )?(app|tool|product|startup|saas|agency services)\b/i;
 const PROMO = /\blaunch(ing|ed) (today|this week)\b|\b\d{1,3}\s?% off\b|\bfirst \d+ (users|customers)\b|\bpromo code\b|\bsign up (now|today)\b/i;
 
+/** Hosts that are a platform or a short link, never the person's own business site. */
+const NOT_A_BUSINESS_SITE = /(^|\.)(reddit\.com|redd\.it|ycombinator\.com|facebook\.com|fb\.com|fb\.me|threads\.(com|net)|instagram\.com|x\.com|twitter\.com|t\.co|linkedin\.com|lnkd\.in|youtube\.com|youtu\.be|tiktok\.com|google\.[a-z.]+|goo\.gl|bit\.ly|tinyurl\.com|imgur\.com|github\.com|medium\.com|substack\.com|discord\.(gg|com)|t\.me|wa\.me)$/i;
+
+/** The business site the post links (its first link off the platforms), or null. */
+export function linkedSite(text: string): URL | null {
+  for (const [raw] of text.matchAll(/https?:\/\/[^\s<>"')\]]+/g)) {
+    try {
+      const url = new URL(raw.replace(/[.,;:!?]+$/, ""));
+      if ((url.protocol === "https:" || url.protocol === "http:") && !NOT_A_BUSINESS_SITE.test(url.hostname)) return new URL(url.origin);
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
+/** An address a site publishes: a mailto link first, then one written in the page. */
+export function emailInPage(html: string): string | null {
+  const mailto = /href\s*=\s*["']mailto:([^"'?]+)/i.exec(html)?.[1];
+  return (mailto && emailIn(decodeURIComponent(mailto))) ?? emailIn(html.replace(/<[^>]+>/g, " "));
+}
+
+/** Sites read per scan for an email: one page each, only for a warm DM-ready person with no address in the post. */
+const SITE_READS = 2;
+
 /** Words that invite a private message or an email, as people write them. */
 const INVITES = /\b(dm|pm|message|email|e-mail|inbox) me\b|\bmy (dms|inbox) (are|is) open\b|\bfeel free to (dm|message|email)\b/i;
 
@@ -430,6 +456,8 @@ export function reachFor(
   parts: ScorePart[],
   rule: RuleRead,
   now: Date,
+  /** An address found on the business site the post links (B1): counts like one in the post. */
+  siteEmail: string | null = null,
 ): { level: ReachLevel; reach: ReachCheck } {
   const buyerQuote = s.buyer.quote.trim();
   const buyer = !s.exclude && quoteIn(buyerQuote, thread) && !VENDOR_SAYS.test(buyerQuote) && !PROMO.test(`${thread.title} ${thread.text}`);
@@ -441,7 +469,8 @@ export function reachFor(
   const platform = thread.platform ?? "reddit";
   const dmAllowed = platformHasDms(platform) && rule.verdict !== "skip" && !rule.noDms;
   const asksForTools = wantsNow && s.asksForTools;
-  const emailFound = emailIn(`${thread.title}\n${thread.text}`);
+  const inPost = emailIn(`${thread.title}\n${thread.text}`);
+  const emailFound = inPost ?? siteEmail;
   const days = thread.postedAt ? Math.max(0, Math.floor((now.getTime() - Date.parse(thread.postedAt)) / 86_400_000)) : null;
   const reasons = [
     buyer ? `Says who they are: “${short(buyerQuote)}”` : "Not clear they are a buyer like your customers",
@@ -455,7 +484,7 @@ export function reachFor(
         : rule.verdict === "skip"
           ? "This community is not a place for this"
           : `${PLATFORM_LABEL[platform]} allows DMs`,
-    ...(emailFound ? ["Email in the post"] : []),
+    ...(inPost ? ["Email in the post"] : siteEmail ? ["Email on the site they linked"] : []),
   ];
   const reach: ReachCheck = { buyer, wantsNow, warm, fresh, dmAllowed, asksForTools, emailFound, reasons };
   return { level: reachLevel(reach), reach };
@@ -530,6 +559,7 @@ export async function readCommunityRules(ctx: JobContext, names: string[]): Prom
         minKarma: r.cached.min_karma ?? null,
         minAccountAgeDays: r.cached.min_account_age_days ?? null,
         megathread: r.cached.megathread ?? false,
+        noDms: r.cached.no_dms ?? false,
       });
     }
     // Rules we could not read are never a reason to name the product: not verified, help only (5.1).
@@ -564,9 +594,9 @@ export async function readCommunityRules(ctx: JobContext, names: string[]): Prom
       const minKarma = count(r?.minKarma, 1_000_000);
       const minAccountAgeDays = count(r?.minAccountAgeDays, 3650);
       // The cache is shared by every founder: only Ferreto's own model writes it.
-      await ctx.store.saveSubredditRule({ subreddit: u.name, verdict, summary, min_karma: minKarma, min_account_age_days: minAccountAgeDays, megathread });
-      // No DMs is kept for this run only until the rules cache stores it (request to A, wave 3 A3).
-      out.set(u.name, { verdict, summary, minKarma, minAccountAgeDays, megathread, noDms: r?.noDms === true });
+      await ctx.store.saveSubredditRule({ subreddit: u.name, verdict, summary, min_karma: minKarma, min_account_age_days: minAccountAgeDays, megathread, no_dms: r?.noDms === true });
+      const noDms = r?.noDms === true;
+      out.set(u.name, { verdict, summary, minKarma, minAccountAgeDays, megathread, noDms });
     }
   }
   return Object.fromEntries(out);
@@ -624,6 +654,8 @@ export async function draftReplies(
 
 /** Words a DM may have, and a nudge: shorter than a reply, since it lands in someone's inbox. */
 export const DM_MAX_WORDS = 80;
+/** A scan keeps at most five cards, so at most five DMs; SQL holds the founder's 20 a day (`cmo_save_reach`). */
+const DM_DRAFTS_PER_SCAN = MAX_CARDS;
 export const NUDGE_MAX_WORDS = 50;
 
 export const DmSchema = z.object({
@@ -985,7 +1017,7 @@ export async function salesScan(ctx: JobContext): Promise<SalesScanOutput & JobO
       : read;
     if (mayMention(rule.verdict) && allowance > 0) {
       allowance -= 1;
-      return { ...r, rule: rule.verdict, why: rule.summary, needs };
+      return { ...r, rule: rule.verdict, why: rule.summary, needs, read: rule };
     }
     if (mayMention(rule.verdict)) {
       const why = mentionsUsed >= 1
@@ -993,9 +1025,9 @@ export async function salesScan(ctx: JobContext): Promise<SalesScanOutput & JobO
         : mentionsWaiting >= 1
           ? "Help only this time: a reply that names the product already waits for you"
           : "Help only: one product mention per scan";
-      return { ...r, rule: "no_product_mention" as const, why, needs };
+      return { ...r, rule: "no_product_mention" as const, why, needs, read: rule };
     }
-    return { ...r, rule: rule.verdict, why: rule.summary, needs };
+    return { ...r, rule: rule.verdict, why: rule.summary, needs, read: rule };
   });
   const toDraft = planned.filter((p) => p.rule !== "skip");
 
@@ -1068,6 +1100,60 @@ export async function salesScan(ctx: JobContext): Promise<SalesScanOutput & JobO
         return 0;
       }
     }, (n) => `${n} ${n === 1 ? "conversation" : "conversations"} in your Library`);
+  }
+
+  // Wave 3 B1/B2: who is ready for a DM, from the post and its thread only, and one DM draft for each who is. A free
+  // scan saves the checks (the screen shows why) but drafts no DM, as it drafts no reply.
+  const replyByUrl = new Map(items.map((o) => [o.url, o.reply]));
+  let people = planned
+    .filter((p) => kept.has(p.thread.url))
+    .map((p) => ({ p, ...reachFor(p.thread, p.scored, p.result.parts, p.read, ctx.now) }));
+  // An email on the business site the post links counts too, but only for someone already warm and DM ready: we
+  // read one page of a site they chose to share, never a profile. CI has no network, so the fake skips it.
+  const lookups = free || fakeAllowed() ? [] : people
+    .filter((x) => x.level === "dm_ready" && x.reach.warm && !x.reach.emailFound && linkedSite(x.p.thread.text))
+    .slice(0, SITE_READS);
+  if (lookups.length) {
+    const found = await ctx.step("read_site", "Looking for an email on the sites people linked", async () => {
+      const out = new Map<string, string>();
+      for (const x of lookups) {
+        try {
+          const page = await fetchPage(linkedSite(x.p.thread.text)!);
+          const email = page ? emailInPage(page.html) : null;
+          if (email) out.set(x.p.thread.url, email);
+        } catch (error) {
+          if (!(error instanceof SiteError)) throw error;
+        }
+      }
+      return Object.fromEntries(out);
+    }, (m) => `${Object.keys(m).length} ${Object.keys(m).length === 1 ? "email" : "emails"} found`);
+    people = people.map((x) => (found[x.p.thread.url] ? { p: x.p, ...reachFor(x.p.thread, x.p.scored, x.p.result.parts, x.p.read, ctx.now, found[x.p.thread.url]) } : x));
+  }
+  const dmReady = free ? [] : people.filter((x) => x.level !== "reply_first").slice(0, DM_DRAFTS_PER_SCAN);
+  const dmFor = !dmReady.length ? new Map<number, string>() : (await ctx.step(
+    "draft_dm",
+    `Drafting ${dmReady.length} ${dmReady.length === 1 ? "message" : "messages"} for people ready for one`,
+    // The public reply comes first on the card, so the DM may refer to it; the founder sends both.
+    async () => draftMessages(ctx, "dm", { docs, voice, targets: dmReady.map((x) => ({ thread: x.p.thread, reply: replyByUrl.get(x.p.thread.url) || null })) }),
+    (r) => `${r.textFor.size} ${r.textFor.size === 1 ? "message" : "messages"} drafted`,
+  )).textFor;
+  const dmByUrl = new Map(dmReady.flatMap((x, i) => (dmFor.has(i) ? [[x.p.thread.url, dmFor.get(i)!] as const] : [])));
+  const reachItems: ReachSaveItem[] = people.map((x) => ({
+    url: x.p.thread.url,
+    level: x.level,
+    reach: x.reach,
+    ...(dmByUrl.has(x.p.thread.url) ? { dm: dmByUrl.get(x.p.thread.url)! } : {}),
+  }));
+  if (reachItems.length) {
+    await ctx.step("save_reach", "Checking who is ready for a message", async () => {
+      // As the Library: the cards are saved, so this never fails the scan.
+      try {
+        await store.saveReach(run.user_id, run.id, reachItems);
+      } catch (error) {
+        console.error(`[cmo] sales_scan ${run.id}: reach not saved`, error);
+      }
+      return reachItems.filter((x) => x.level !== "reply_first").length;
+    }, (n) => (n ? `${n} ready for a message, ${reachItems.length - n} reply first` : "Reply first for everyone"));
   }
   return output(scanned.length, { cards, skipped: skipped.length, dropped: toDraft.length - items.length });
 }

@@ -16,7 +16,7 @@ import type { RedditThread } from "../../../social/reddit";
 import { cascade } from "../../judge";
 import { memoryStore } from "../../memory-store";
 import type { JobContext } from "../../runner";
-import { dmProblems, draftMessages, librarySummary, nudgeProblems, quoteIn, reachFor, REPLY_MAX_WORDS, sameAsTitle, scoreThread, themeName, type RuleRead } from "../../sales-scan";
+import { dmProblems, draftMessages, emailInPage, linkedSite, librarySummary, nudgeProblems, quoteIn, reachFor, REPLY_MAX_WORDS, sameAsTitle, scoreThread, themeName, type RuleRead } from "../../sales-scan";
 import { think } from "../../think";
 import type { Documents, Opportunity } from "../../types";
 import invoicing from "../fixtures/reddit/invoicing.json";
@@ -281,6 +281,13 @@ function runReach(env: EvalEnv): CaseResult[] {
     result("asks-for-tools-dm", cold.level === "dm_ready" && !cold.reach.warm, [cold.level]),
     result("email-ready", emailed.level === "email_ready" && emailed.reach.emailFound === "dana@studio-dana.com", [emailed.level, String(emailed.reach.emailFound)]),
     result("buyer-quote-must-hold", !invented.reach.buyer && invented.level === "reply_first", [invented.level]),
+    // The business site the post links, never a platform or a short link.
+    result("linked-site", linkedSite("see https://www.reddit.com/r/x and https://bit.ly/a, our site https://studio-dana.com/about.")?.href === "https://studio-dana.com/"
+      && linkedSite("only https://www.linkedin.com/in/dana") === null),
+    result("site-email", emailInPage('<a href="mailto:hello@studio-dana.com?subject=hi">Mail</a>') === "hello@studio-dana.com"
+      && emailInPage("<p>Write to <b>dana@studio-dana.com</b></p>") === "dana@studio-dana.com" && emailInPage("<p>noreply@x.com</p>") === null),
+    result("site-email-counts", check(base, {}, safe).level === "dm_ready"
+      && reachFor(base, scored(base), scoreThread(base, scored(base), now.getTime())!.parts, safe, now, "dana@studio-dana.com").level === "email_ready"),
   ];
 }
 
@@ -331,6 +338,33 @@ async function runMessages(fixture: RedditFixture, env: EvalEnv): Promise<CaseRe
   return out;
 }
 
+/**
+ * Wave 3 B1/B2 through the real scan: a buyer who asks for a tool and says "DM me" is DM ready with a drafted DM; the
+ * same post on Hacker News stays Reply first with no DM, since HN has no DMs.
+ */
+async function runReachScan(fixture: RedditFixture, env: EvalEnv): Promise<CaseResult[]> {
+  const id = (output: string) => `w4:reach-scan:${output}`;
+  const postedAt = new Date(Date.now() - 6 * 3_600_000).toISOString();
+  const text = "I'm a freelance designer with about ten clients. Three of them are over 60 days late and I hate writing the follow-up emails. Is there a tool people actually use for this? Happy to try one, DM me.";
+  const reddit: RedditThread = { url: "https://www.reddit.com/r/freelance/comments/dm1/late/", community: "freelance", title: "How do you chase clients who pay 60 days late?", author: "pixelpusher", text, comments: 6, postedAt };
+  const hn = { url: "https://news.ycombinator.com/item?id=4242", objectId: "4242", community: "Hacker News" as const, title: "Ask HN: How do you chase clients who pay 60 days late?", author: "pg2", text, points: 12, comments: 9, postedAt };
+  const mem = memoryStore(fixture.docs, []);
+  const run = mem.enqueue("sales_scan", {});
+  await env.drain(mem.store, { runId: run.id, budgetMs: 240_000, searchReddit: async () => [reddit], searchHn: async () => [hn], searchConversations: async () => [] });
+  const state = mem.runs.find((r) => r.id === run.id);
+  if (state?.status !== "done") return [{ id: id("run"), epoch: env.epoch, pass: false, decided_by: "error", notes: [state?.error ?? "the scan did not finish"] }];
+  const r = mem.people.get(reddit.url);
+  const h = mem.people.get(hn.url);
+  const products = [String(fixture.docs.product?.name ?? "")];
+  const dmIssues = r?.dm ? dmProblems(r.dm, products, true) : ["no DM drafted"];
+  if (env.provider !== "fake" && r?.dm) env.log(`dm: ${r.dm}`);
+  return [
+    { id: id("run"), epoch: env.epoch, pass: true, decided_by: "code" },
+    { id: id("reddit-dm-ready"), epoch: env.epoch, pass: r?.level === "dm_ready" && !dmIssues.length, decided_by: "code", notes: [String(r?.level), ...dmIssues, ...(r?.reach.reasons ?? [])] },
+    { id: id("hn-reply-first"), epoch: env.epoch, pass: !!h && h.level === "reply_first" && !h.dm, decided_by: "code", notes: [String(h?.level), ...(h?.reach.reasons ?? [])] },
+  ];
+}
+
 export const salesCase: EvalCase = {
   job: "w4",
   once: true,
@@ -341,6 +375,7 @@ export const salesCase: EvalCase = {
     results.push(...(await runFree(REDDIT_FIXTURES[0]!, env)));
     results.push(...runReach(env));
     results.push(...(await runMessages(REDDIT_FIXTURES[0]!, env)));
+    results.push(...(await runReachScan(REDDIT_FIXTURES[0]!, env)));
     return results;
   },
 };
