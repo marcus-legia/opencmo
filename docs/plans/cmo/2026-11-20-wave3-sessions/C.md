@@ -10,7 +10,7 @@ routes needed by these screens under `app/api/v1/`, e2e specs.
 
 ## Tasks
 
-### - [ ] C0. Wave 2's red e2e (now, lands in #238)
+### - [x] C0. Wave 2's red e2e (now, lands in #238)
 CI on #238: `ui-v2-activation.spec.ts` (two tests) and `ui-v2-setup.spec.ts` (three) wait for "Start with your
 website." and time out: Setup now starts reading on its own when `?site=` is set (free-scan B4). Update the specs to
 the current flow (assert the reading progress, then the end on Sales or the Dashboard), keep what they guard (the

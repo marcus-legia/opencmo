@@ -35,8 +35,9 @@ test("the free first run: website → documents, plan and drafts with no payment
   // CMO review 3, 3.1: a new account goes to Setup, not Billing.
   await page.goto("/app?site=paylane.test");
   await expect(page).toHaveURL(/\/app\/setup\?site=paylane\.test/);
-  await page.getByRole("button", { name: "Read my website" }).click();
-  await expect(page).toHaveURL(/\/app$/, { timeout: 180_000 });
+  // `?site=` starts reading at once (free-scan B4); Setup ends on Sales (the free scan) or the Dashboard.
+  await expect(page.getByTestId("setup-progress")).toBeVisible();
+  await expect(page).toHaveURL(/\/app(\/sales)?$/, { timeout: 180_000 });
 
   const db = admin();
   await expect
@@ -61,7 +62,7 @@ test("the free first run: website → documents, plan and drafts with no payment
   expect(((await again.json()) as { detail: { code: string } }).detail.code).toBe("plan_required");
 
   // Approve on the post card answers with the plan sheet; the draft stays waiting.
-  await page.reload();
+  await page.goto("/app");
   const card = await openFeedCard(page, /\bpost · /i);
   await card.getByRole("button", { name: /^Approve( for this time)?$/ }).click();
   await expect(page.getByTestId("plan-sheet")).toBeVisible();
@@ -94,12 +95,14 @@ test("the first week: website → plan card and a first draft, then I posted it 
   await page.goto("/app?site=paylane.test");
   await expect(page).toHaveURL(/\/app\/setup\?site=paylane\.test/);
 
-  // One step: the website, already filled in from the landing page.
-  await expect(page.getByRole("heading", { name: "Start with your website." })).toBeVisible();
-  await expect(page.getByLabel("Your website")).toHaveValue("paylane.test");
+  // No form: the website from the landing page is read at once, and Setup shows the run.
   const started = Date.now();
-  await page.getByRole("button", { name: "Read my website" }).click();
-  await expect(page).toHaveURL(/\/app$/, { timeout: 60_000 });
+  await expect(page.getByTestId("setup-progress")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Start with your website." })).toHaveCount(0);
+  await expect(page).toHaveURL(/\/app(\/sales)?$/, { timeout: 180_000 });
+  const { data: onboard } = await admin().from("cmo_runs").select("input").eq("user_id", user.id).eq("kind", "onboard").single();
+  expect((onboard!.input as { site?: string }).site).toBe("paylane.test");
+  await page.goto("/app");
 
   // No Agents block on the feed (owner, 2026-11-18): the views live in the bar.
   await expect(page.getByRole("region", { name: "Your team" })).toHaveCount(0);
@@ -124,7 +127,7 @@ test("the first week: website → plan card and a first draft, then I posted it 
   expect((items ?? []).filter((item) => item.department === "video" && item.platform !== "Slideshow")).toEqual([]);
 
   // The X draft, with no X account: Open X and I posted it on the card itself.
-  await page.reload();
+  await page.goto("/app");
   const card = await openFeedCard(page, /\bpost · /i);
   await expect(card.getByRole("button", { name: "Open X" })).toBeVisible();
   const cardId = await card.getAttribute("data-card-id");
