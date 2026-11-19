@@ -595,11 +595,12 @@ async function main() {
 
   // Vòng lặp: thứ Hai lập tuần + soạn; Chủ nhật nghiên cứu khi có handle; số liệu khi có bài đăng; Reddit theo lịch, mang brief.
   const { dueLoops } = await import("../loops");
-  const base = { weekday: 3, duePost: null, dueSales: null, competitorHandles: 0, publishedRecently: 0, socialReader: true };
+  // Tuesday: no scan on the default Mon/Wed/Fri cadence (wave 3 B5).
+  const base = { weekday: 2, duePost: null, dueSales: null, competitorHandles: 0, publishedRecently: 0, socialReader: true };
   assert.deepEqual(dueLoops(base), []);
-  // Monday queues the plan alone: the plan queues the drafts of its own posts due that day (below).
-  assert.deepEqual(dueLoops({ ...base, weekday: 1 }).map((r) => r.kind), ["plan_week"]);
-  assert.deepEqual(dueLoops({ ...base, weekday: 1, duePost: { idea: "left from last week" } }).map((r) => r.kind), ["plan_week", "post_draft"]);
+  // Monday queues the plan (the plan queues the drafts of its own posts due that day, below) and a scan day's scan.
+  assert.deepEqual(dueLoops({ ...base, weekday: 1 }).map((r) => r.kind), ["plan_week", "sales_scan"]);
+  assert.deepEqual(dueLoops({ ...base, weekday: 1, duePost: { idea: "left from last week" } }).map((r) => r.kind), ["plan_week", "post_draft", "sales_scan"]);
   {
     const monday = withLibrary(memoryStore(docs));
     const plan = monday.enqueue("plan_week", { source: "schedule", loop: "weekly-plan" });
@@ -645,9 +646,16 @@ async function main() {
     dueLoops({ ...base, weekday: 0, competitorHandles: 2, publishedRecently: 3 }).map((r) => r.kind),
     ["competitor_research", "summarize_memory", "review_week", "pull_metrics"],
   );
-  const sales = dueLoops({ ...base, dueSales: { idea: "People chasing late invoices" } });
-  assert.deepEqual([sales[0]!.kind, sales[0]!.input.brief], ["sales_scan", "People chasing late invoices"]);
-  assert.deepEqual(dueLoops({ ...base, dueSales: { idea: "x" }, socialReader: false }), [], "không khoá ScrapeCreators thì không tự tiêu credit");
+  // Wave 3 B5: Sales scans on its cadence, whatever the week plan says; a Sales item due that day steers it.
+  const sales = dueLoops({ ...base, weekday: 3, dueSales: { idea: "People chasing late invoices" } });
+  assert.deepEqual([sales[0]!.kind, sales[0]!.loop, sales[0]!.input.brief], ["sales_scan", "sales-scan", "People chasing late invoices"]);
+  assert.deepEqual(dueLoops({ ...base, weekday: 3 }).map((r) => [r.kind, r.input.brief]), [["sales_scan", undefined]], "no Sales item needed");
+  assert.deepEqual(dueLoops({ ...base, dueSales: { idea: "x" } }), [], "a Sales item off the cadence does not scan");
+  assert.deepEqual(dueLoops({ ...base, scanCadence: "weekdays" }).map((r) => r.kind), ["sales_scan"], "weekdays scans on Tuesday");
+  assert.deepEqual(dueLoops({ ...base, weekday: 3, scanCadence: "monday" }), [], "Mondays only");
+  assert.deepEqual(dueLoops({ ...base, weekday: 6, scanCadence: "weekdays" }), [], "never on a weekend");
+  assert.deepEqual(dueLoops({ ...base, weekday: 3, socialReader: false }), [], "không khoá ScrapeCreators thì không tự tiêu credit");
+  assert.deepEqual(dueLoops({ ...base, nudgesDue: 1 }).map((r) => r.kind), ["pull_metrics"], "a nudge due runs the follow-up loop");
 
   // Memory tiers: the weekly summary writes one lesson per topic; jobs then read lessons for their topic.
   assert.equal(mondayOf(new Date(Date.UTC(2026, 10, 15))), "2026-11-09", "Sunday belongs to the week that started Monday");

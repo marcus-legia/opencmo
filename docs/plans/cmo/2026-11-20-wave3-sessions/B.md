@@ -37,7 +37,7 @@ scan), and fills `strategy.where_they_ask` and `this_week`, `brand.look` (colour
 `post_plan` (channels default X, LinkedIn, Threads). Reply, DM, nudge and post prompts read `brand.voice_samples`,
 `intro_line` and `avoid`. Update the document eval.
 
-### - [ ] B5. Scan cadence and Today (after A5)
+### - [x] B5. Scan cadence and Today (after A5)
 `loops.ts`: a `sales_scan` loop on `sales_settings.cadence` for paid accounts, independent of the week plan (drop the
 `dueSales` condition). `today.ts`: a `hot_lead` reason (Strong match or thread under 24 h) and a `follow_up` reason
 above posts; the "nothing posted for N days" reason drops below them. Checks updated.
