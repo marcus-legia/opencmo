@@ -16,7 +16,7 @@ website." and time out: Setup now starts reading on its own when `?site=` is set
 the current flow (assert the reading progress, then the end on Sales or the Dashboard), keep what they guard (the
 answers saved, Skip saves nothing, Approve asks for a plan). Run them, push, and check CI turns green.
 
-### - [ ] C1. Library page (after A2)
+### - [x] C1. Library page (after A2)
 "What people said": themes with count, this week's trend, posts that used it, 2–3 quotes each, "Write a post from
 this"; filter by source. Left panel link with the quote count.
 
