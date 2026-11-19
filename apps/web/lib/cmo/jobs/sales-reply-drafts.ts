@@ -61,13 +61,18 @@ export async function salesReplyDrafts(ctx: JobContext): Promise<SalesReplyDraft
   const ownWaiting = cards.filter((c) => mayMention(c.rule)).length;
   let allowance = mentionsUsed + Math.max(0, mentionsWaiting - ownWaiting) >= 1 ? 0 : 1;
   const planned: Planned[] = [];
+  const stayOut: { card: (typeof cards)[number]; why: string }[] = [];
   for (const card of cards) {
     let rule = card.rule;
     let why = card.rule_why ?? "";
     const read = card.platform === "reddit" ? verdicts[subredditOf(card.community)] : undefined;
     if (read) {
-      // The community now says stay out: no reply is written, the card stays as the founder saw it.
-      if (read.verdict === "skip") continue;
+      // The community now says stay out: no reply is written, and the card is marked skip so it stops waiting for one
+      // (review of #238: left as it was, the "Write the replies" banner never went away).
+      if (read.verdict === "skip") {
+        stayOut.push({ card, why: read.summary });
+        continue;
+      }
       if (!mayMention(read.verdict) || read.megathread) {
         if (mayMention(rule)) why = read.megathread ? `${read.summary.replace(/\.$/, "")} · self-promotion only in the megathread` : read.summary;
         rule = mayMention(rule) ? "no_product_mention" : rule;
@@ -96,6 +101,20 @@ export async function salesReplyDrafts(ctx: JobContext): Promise<SalesReplyDraft
       postedAt: p.card.posted_at,
     },
   }));
+  if (stayOut.length) {
+    await ctx.step(
+      "check_rules",
+      "Leaving the communities that say stay out",
+      async () => {
+        let n = 0;
+        for (const s of stayOut) if (await store.markOpportunitySkip(run.user_id, run.id, s.card.id, s.why)) n += 1;
+        return n;
+      },
+      (n) => `${n} ${n === 1 ? "card" : "cards"} left without a reply: the community says stay out`,
+    );
+  }
+  if (!planned.length) return { drafted: 0, cards: cards.length, refund: true };
+
   const { replyFor, gen } = await draftReplies(ctx, { docs, memories, voice, threads: targets });
 
   const drafted = await ctx.step(

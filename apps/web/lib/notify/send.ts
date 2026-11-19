@@ -106,7 +106,10 @@ export async function sendDigestEmail(admin: SupabaseClient, sender: EmailSender
     // Null: the day already has a row (sent, skipped or claimed).
     return data ? "skipped" : "none";
   }
-  const c = await claim(admin, founder.id, "digest", input.waiting.map((w) => w.id), { subject: draft.subject, summary: draft.summary });
+  // `email_log_claim` keeps at most 50 ids, the oldest first: send the ones the email is about first, so a founder
+  // with a long queue never gets an email that lost its newest people (review of #238).
+  const ids = [...new Set([...input.people.map((p) => p.approvalId), ...(input.posts.firstId ? [input.posts.firstId] : []), ...input.waiting.map((w) => w.id)])].slice(0, 50);
+  const c = await claim(admin, founder.id, "digest", ids, { subject: draft.subject, summary: draft.summary });
   if (!c) return "none";
   const ok = await sendClaimed(admin, sender, c, async () => {
     // Only the cards the claim kept (still waiting, the founder's own).

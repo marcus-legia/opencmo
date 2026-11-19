@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 type Row = { weekly_credit_budget: number; timezone: string; digest_hour: number | null; digest_days: (typeof DIGEST_DAYS)[number] };
 
 // Each panel saves its own fields (Your CMO: budget and time zone; Notifications: the morning email's days and hour):
-// a field left out keeps its stored value, so one panel never writes back another's stale copy.
+// a field left out is not touched (`save_cmo_settings_patch`), so one panel never writes back another's copy.
 const body = z
   .object({
     weeklyCreditBudget: z.number().int().min(BUDGET_MIN).max(BUDGET_MAX).optional(),
@@ -24,20 +24,13 @@ const body = z
 export const PUT = withApi(
   { body, rateLimit: { bucket: "presets", limit: 60, windowSeconds: 3600 } },
   async ({ supabase, body }) => {
-    const { data: current, error } = await supabase
-      .from("profiles")
-      .select("weekly_credit_budget, timezone, digest_hour")
-      .maybeSingle<Pick<Row, "weekly_credit_budget" | "timezone" | "digest_hour">>();
-    if (error) throw error;
-    if (!current) throw new ApiError(404, "Profile not found.");
-    const row = firstRow(
-      await rpcOrThrow<Row | Row[]>(supabase, "save_cmo_settings", {
-        p_weekly_credit_budget: body.weeklyCreditBudget ?? current.weekly_credit_budget,
-        p_timezone: body.timezone ?? current.timezone,
-        p_digest_hour: body.digestHour === undefined ? current.digest_hour : body.digestHour,
-        p_digest_days: body.digestDays ?? null,
-      }),
-    );
+    // One statement changes only the keys sent (review of #238: a read then a full write let two panels undo each other).
+    const patch: Record<string, unknown> = {};
+    if (body.weeklyCreditBudget !== undefined) patch.weekly_credit_budget = body.weeklyCreditBudget;
+    if (body.timezone !== undefined) patch.timezone = body.timezone;
+    if (body.digestHour !== undefined) patch.digest_hour = body.digestHour;
+    if (body.digestDays !== undefined) patch.digest_days = body.digestDays;
+    const row = firstRow(await rpcOrThrow<Row | Row[]>(supabase, "save_cmo_settings_patch", { p_patch: patch }));
     if (!row) throw new ApiError(500, "Could not save your settings.");
     return { weeklyCreditBudget: row.weekly_credit_budget, timezone: row.timezone, digestHour: row.digest_hour, digestDays: row.digest_days };
   },

@@ -337,6 +337,8 @@ export interface CmoStore {
     gen: { model: string; prompt_version: string },
     rule?: { rule: "no_product_mention"; why: string },
   ): Promise<boolean>;
+  /** An undrafted card whose community now says stay out becomes `skip` (`cmo_mark_opportunity_skip`). */
+  markOpportunitySkip(userId: string, runId: string, id: string, why: string): Promise<boolean>;
   /** P5 R1: a subreddit's cached verdict (any age; the scan decides what is fresh), and saving a new one. */
   subredditRule(subreddit: string): Promise<SubredditRule | null>;
   saveSubredditRule(rule: Omit<SubredditRule, "read_at">): Promise<void>;

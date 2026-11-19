@@ -61,6 +61,11 @@ export const SalesScreenSchema = z.object({
   free: z.boolean(),
   /** The newest finished scan, or null before the first one. */
   lastScan: SalesScanSchema.nullable(),
+  /**
+   * Free scans already used (done, `output.free`): SQL `cmo_first_run_free` allows a second one only when the first
+   * found no one, and never a third. Defaults to 0 for samples.
+   */
+  freeScansDone: z.number().int().min(0).default(0),
   /** Product mentions in the last ten replies: at most one in ten may name the product. */
   mentions: z.object({ used: z.number().int().min(0), window: z.number().int().positive() }),
   /**

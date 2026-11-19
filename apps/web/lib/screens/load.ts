@@ -296,7 +296,7 @@ async function dashboard({ supabase, userId }: LoadContext): Promise<Partial<Das
     digest: async () => {
       const p = await prof;
       const clock = localClock(now, p.timezone);
-      const input = await loadDigestInput(supabase, userId, { appUrl: SITE_URL, dateLabel: clock.dateLabel, now, timezone: p.timezone });
+      const input = await loadDigestInput(supabase, userId, { appUrl: SITE_URL, dateLabel: clock.dateLabel, now, timezone: p.timezone, emailOnly: false });
       if (!input.waiting.length && !input.wentOut.length && !input.stuck.length) return null;
       const dept = (d: string) => ((DEPARTMENTS as readonly string[]).includes(d) ? d : "brain") as Department;
       return {
@@ -1416,6 +1416,11 @@ async function sales({ supabase, userId }: LoadContext): Promise<Partial<SalesSc
   })();
   return parts<SalesScreen>("sales", {
     free: async () => !(await paid),
+    freeScansDone: async () => {
+      const r = await supabase.from("cmo_runs").select("id", { count: "exact", head: true }).eq("kind", "sales_scan").eq("status", "done").eq("output->>free", "true");
+      if (r.error) throw new Error(`cmo_runs: ${r.error.message}`);
+      return r.count ?? 0;
+    },
     lastScan: async () => {
       const r = await supabase.from("cmo_runs").select("output, finished_at, created_at").eq("kind", "sales_scan").eq("status", "done").order("created_at", { ascending: false }).limit(1).maybeSingle<{ output: unknown; finished_at: string | null; created_at: string }>();
       if (r.error) throw new Error(`cmo_runs: ${r.error.message}`);

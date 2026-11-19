@@ -7,6 +7,7 @@
  * itself no longer shows what went out or what is stuck (the founder acts on people, not on our job log).
  */
 
+import { matchLabel, zoneOrUtc } from "./match";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { PLATFORM_LABEL, SALES_PLATFORMS } from "./social/conversations";
@@ -16,7 +17,7 @@ export const DIGEST_PEOPLE = 3;
 /** Follow-up rows in the email. */
 export const DIGEST_FOLLOW_UPS = 2;
 /** The Sales screen's line between Strong and Good match (`components/today/AgentSales.tsx`). */
-export const STRONG_MATCH = 75;
+export { STRONG_MATCH } from "./match";
 
 /** A person asking: an open reply card. */
 export type DigestPerson = {
@@ -100,7 +101,6 @@ export function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 }
 
-const matchLabel = (score: number) => (score >= STRONG_MATCH ? "Strong match" : "Good match");
 
 /** Sources in the order they first appear, joined for a sentence: "r/SaaS, r/startups and Hacker News". */
 function sourceList(sources: string[]): string {
@@ -109,14 +109,7 @@ function sourceList(sources: string[]): string {
 }
 
 function clockIn(iso: string, timezone: string, now: Date): { time: string; today: boolean } {
-  const zone = (() => {
-    try {
-      new Intl.DateTimeFormat("en-GB", { timeZone: timezone });
-      return timezone;
-    } catch {
-      return "UTC";
-    }
-  })();
+  const zone = zoneOrUtc(timezone);
   const at = new Date(iso);
   const day = (d: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: zone }).format(d);
   const time = new Intl.DateTimeFormat("en-GB", { timeZone: zone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(at);
@@ -292,8 +285,11 @@ export function personQuote(parts: unknown): string | null {
 export async function loadDigestInput(
   db: SupabaseClient,
   userId: string,
-  opts: { appUrl: string; dateLabel: string; now?: Date; timezone?: string; since?: string | null; schedule?: string; unsubscribeUrl?: string },
+  opts: { appUrl: string; dateLabel: string; now?: Date; timezone?: string; since?: string | null; schedule?: string; unsubscribeUrl?: string; emailOnly?: boolean },
 ): Promise<DigestInput> {
+  // The Dashboard reads only waiting, went out and stuck: `emailOnly: false` skips the email's follow-up and thread reads,
+  // so a failure there never drops the Dashboard's block (review of #238).
+  const emailParts = opts.emailOnly !== false;
   const now = opts.now ?? new Date();
   const dayAgo = new Date(now.getTime() - 24 * 3_600_000).toISOString();
   const since = opts.since ?? dayAgo;
@@ -301,7 +297,9 @@ export async function loadDigestInput(
     db.from("approvals").select("id, kind, department, ref_kind, ref_id, snapshot, expires_at, auto_at, post_at").eq("user_id", userId).eq("status", "waiting").order("created_at").limit(100),
     db.from("content_items").select("idea, platform, final_text").eq("user_id", userId).eq("status", "published").gte("published_at", dayAgo).limit(20),
     db.from("work_orders").select("title, department, error").eq("user_id", userId).eq("status", "failed").gte("updated_at", dayAgo).limit(20),
-    db
+    !emailParts
+      ? Promise.resolve({ data: [], error: null })
+      : db
       .from("cmo_draft_outcomes")
       .select("item_id, outcome_replies, outcome_url")
       .eq("user_id", userId)
@@ -320,7 +318,7 @@ export async function loadDigestInput(
   const threadIds = [...new Set([...replyCards.map((c) => c.ref_id), ...outcomes.map((o) => o.item_id)])];
   type Thread = { id: string; platform: string | null; community: string | null; title: string; url: string; score: number; score_parts: unknown; created_at: string };
   let threads = new Map<string, Thread>();
-  if (threadIds.length) {
+  if (emailParts && threadIds.length) {
     const r = await db.from("opportunities").select("id, platform, community, title, url, score, score_parts, created_at").eq("user_id", userId).in("id", threadIds);
     if (r.error) throw new Error(`digest: ${r.error.message}`);
     threads = new Map(((r.data ?? []) as Thread[]).map((t) => [t.id, t]));
@@ -383,14 +381,7 @@ export async function loadDigestInput(
 
 /** The founder's local hour, weekday (0 Sunday to 6 Saturday) and date label in their time zone (unknown zone: UTC). */
 export function localClock(now: Date, timezone: string): { hour: number; weekday: number; dateLabel: string } {
-  const zone = (() => {
-    try {
-      new Intl.DateTimeFormat("en-GB", { timeZone: timezone });
-      return timezone;
-    } catch {
-      return "UTC";
-    }
-  })();
+  const zone = zoneOrUtc(timezone);
   const hour = Number(new Intl.DateTimeFormat("en-GB", { timeZone: zone, hour: "2-digit", hourCycle: "h23" }).format(now));
   const short = new Intl.DateTimeFormat("en-US", { timeZone: zone, weekday: "short" }).format(now);
   const weekday = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(short);

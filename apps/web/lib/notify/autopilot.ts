@@ -5,6 +5,7 @@
  * `/api/v1/notify/next` for the line it shows, and a tap opens the card, where the founder edits or skips it.
  */
 
+import { zoneOrUtc } from "@/lib/cmo/match";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { PUSH_BATCH, PUSH_HOSTS, sendPush, type Vapid } from "./push";
@@ -13,15 +14,6 @@ import { PUSH_BATCH, PUSH_HOSTS, sendPush, type Vapid } from "./push";
 export const AUTOPILOT_PUSH_HOURS = 2;
 
 const PLATFORM: Record<string, string> = { x: "X", threads: "Threads", linkedin: "LinkedIn" };
-
-function zoneOrUtc(timezone: string): string {
-  try {
-    new Intl.DateTimeFormat("en-GB", { timeZone: timezone });
-    return timezone;
-  } catch {
-    return "UTC";
-  }
-}
 
 /** "X post goes out at 14:00. Edit or skip it before then." in the founder's time zone. */
 export function autopilotLine(card: { platform: string | null; autoAt: string }, timezone: string): string {
@@ -34,28 +26,16 @@ export function autopilotLine(card: { platform: string | null; autoAt: string },
 export type AutopilotSoon = { approvalId: string; platform: string | null; autoAt: string };
 
 /**
- * The founder's next autopilot post within the push window, read under their own session (RLS) for the service
- * worker, or with the service role and `userId` for the cron.
+ * The founder's posts autopilot will really approve within the push window (`my_autopilot_due`, the cron's rule),
+ * read under their own session for the service worker.
  */
-export async function nextAutopilot(db: SupabaseClient, now: Date, userId?: string): Promise<AutopilotSoon | null> {
-  let q = db
-    .from("approvals")
-    .select("id, snapshot, auto_at")
-    .eq("status", "waiting")
-    .eq("kind", "post")
-    .gt("auto_at", now.toISOString())
-    .lte("auto_at", new Date(now.getTime() + AUTOPILOT_PUSH_HOURS * 3_600_000).toISOString())
-    .order("auto_at")
-    .limit(1);
-  if (userId) q = q.eq("user_id", userId);
-  const { data, error } = await q.maybeSingle<{ id: string; snapshot: Record<string, unknown> | null; auto_at: string }>();
-  if (error) throw new Error(`approvals: ${error.message}`);
-  if (!data) return null;
-  const platform = typeof data.snapshot?.platform === "string" ? data.snapshot.platform : null;
-  return { approvalId: data.id, platform, autoAt: data.auto_at };
+export async function autopilotSoon(db: SupabaseClient): Promise<AutopilotSoon[]> {
+  const { data, error } = await db.rpc("my_autopilot_due");
+  if (error) throw new Error(`my_autopilot_due: ${error.message}`);
+  return ((data ?? []) as { id: string; platform: string | null; auto_at: string }[]).map((r) => ({ approvalId: r.id, platform: r.platform, autoAt: r.auto_at }));
 }
 
-type DueCard = { id: string; user_id: string; snapshot: Record<string, unknown> | null; auto_at: string };
+type DueCard = { id: string; user_id: string; platform: string | null; auto_at: string };
 
 /**
  * The cron's autopilot round: for each post card autopilot will approve within two hours, one push to each of its
@@ -70,16 +50,13 @@ export async function pushAutopilotSoon(
   opts: { now?: Date; deadline?: number } = {},
 ): Promise<number> {
   const now = opts.now ?? new Date();
-  const { data, error } = await admin
-    .from("approvals")
-    .select("id, user_id, snapshot, auto_at")
-    .eq("status", "waiting")
-    .eq("kind", "post")
-    .gt("auto_at", now.toISOString())
-    .lte("auto_at", new Date(now.getTime() + AUTOPILOT_PUSH_HOURS * 3_600_000).toISOString())
-    .order("auto_at")
-    .limit(200);
-  if (error) throw new Error(`approvals: ${error.message}`);
+  // The same rule `autopilot_approve_due` applies (`post_autopilot_still_on`): a card autopilot would not publish (CMO
+  // paused, plan gone, account disconnected, platform off autopilot, a chat brief) gets no "goes out at" push.
+  const { data, error } = await admin.rpc("autopilot_push_due", {
+    p_now: now.toISOString(),
+    p_until: new Date(now.getTime() + AUTOPILOT_PUSH_HOURS * 3_600_000).toISOString(),
+  });
+  if (error) throw new Error(`autopilot_push_due: ${error.message}`);
   const cards = (data ?? []) as DueCard[];
   if (!cards.length) return 0;
   const users = [...new Set(cards.map((c) => c.user_id))];
@@ -104,7 +81,7 @@ export async function pushAutopilotSoon(
     const targets = browsers.get(card.user_id) ?? [];
     // Paused from the top bar: nothing counts down, so nothing is about to go out.
     if (!p || p.autopilot_paused === true || pushOff.has(card.user_id) || !targets.length) continue;
-    const line = autopilotLine({ platform: typeof card.snapshot?.platform === "string" ? card.snapshot.platform : null, autoAt: card.auto_at }, p.timezone ?? "UTC");
+    const line = autopilotLine({ platform: card.platform, autoAt: card.auto_at }, p.timezone ?? "UTC");
     try {
       const claimed = await admin.rpc("email_log_claim", { p_user: card.user_id, p_kind: "push", p_approval_ids: [card.id], p_subject: line, p_summary: { browsers: targets.length } });
       if (claimed.error) throw new Error(`email_log_claim: ${claimed.error.message}`);

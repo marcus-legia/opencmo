@@ -239,6 +239,7 @@ export function supabaseStore(admin: BaseClient): CmoStore {
         p_rule: rule?.rule ?? null,
         p_rule_why: rule?.why ?? null,
       }),
+    markOpportunitySkip: (userId, runId, id, why) => rpc<boolean>("cmo_mark_opportunity_skip", { p_user: userId, p_run: runId, p_id: id, p_why: why }),
     saveOpportunities: (userId, runId, items) => rpc<number>("cmo_save_opportunities", { p_user: userId, p_run: runId, p_items: items }),
     async subredditRule(subreddit) {
       const { data, error } = await admin

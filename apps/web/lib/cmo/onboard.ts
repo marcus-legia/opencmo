@@ -138,6 +138,15 @@ async function startFirstScan(supabase: SupabaseClient, started: number): Promis
     return false;
   }
   if ((data ?? []).length > 0) return false;
+  // Only the free scan starts on its own. A paid founder's scan costs credits, and every paid scan is one they ask for
+  // (review of #238: reading the site again queued a paid scan nobody approved).
+  const usage = await supabase.rpc("plan_usage");
+  if (usage.error) {
+    console.error("[cmo] could not read the plan before the first scan", usage.error.message);
+    return false;
+  }
+  const row = (Array.isArray(usage.data) ? usage.data[0] : usage.data) as { plan?: string } | null;
+  if (row?.plan !== "free") return false;
   let scan: StartedRun;
   try {
     scan = await startCmoRun(supabase, "sales_scan", { source: "onboarding" }, { kick: false });

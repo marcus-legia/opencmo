@@ -22,13 +22,12 @@ async function main() {
   const vapid = vapidFromEnv({ VAPID_PUBLIC_KEY: pub, VAPID_PRIVATE_KEY: jwk.d! })!;
 
   const cards = [
-    { id: "c-1", user_id: "u-1", snapshot: { platform: "x" }, auto_at: "2026-11-02T09:00:00Z" },
-    { id: "c-2", user_id: "u-paused", snapshot: { platform: "x" }, auto_at: "2026-11-02T09:00:00Z" },
-    { id: "c-3", user_id: "u-off", snapshot: { platform: "x" }, auto_at: "2026-11-02T09:00:00Z" },
-    { id: "c-4", user_id: "u-nobrowser", snapshot: { platform: "x" }, auto_at: "2026-11-02T09:00:00Z" },
+    { id: "c-1", user_id: "u-1", platform: "x", auto_at: "2026-11-02T09:00:00Z" },
+    { id: "c-2", user_id: "u-paused", platform: "x", auto_at: "2026-11-02T09:00:00Z" },
+    { id: "c-3", user_id: "u-off", platform: "x", auto_at: "2026-11-02T09:00:00Z" },
+    { id: "c-4", user_id: "u-nobrowser", platform: "x", auto_at: "2026-11-02T09:00:00Z" },
   ];
   const rows: Record<string, unknown[]> = {
-    approvals: cards,
     profiles: [
       { id: "u-1", timezone: "UTC", autopilot_paused: false },
       { id: "u-paused", timezone: "UTC", autopilot_paused: true },
@@ -58,6 +57,11 @@ async function main() {
     from: table,
     rpc: async (name: string, args: Record<string, unknown>) => {
       calls.push([name, args]);
+      // SQL decides which cards autopilot will really approve (`post_autopilot_still_on`); the fake lists them all.
+      if (name === "autopilot_push_due") {
+        filters.push(`auto_at>${args.p_now}`, `auto_at<=${args.p_until}`);
+        return { data: cards, error: null };
+      }
       if (name === "email_log_claim") {
         // A second run finds the card already pushed.
         if (claimed) return { data: [], error: null };

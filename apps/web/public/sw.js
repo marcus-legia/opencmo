@@ -1,7 +1,7 @@
 /*
  * Ferreto's service worker (P6 C1): web push only. A push carries no payload, so it says nothing by itself: the worker
- * asks the app what to say (same origin, the founder's own session): an autopilot post about to go out, else how many
- * cards wait. A tap opens the queue;
+ * asks the app what to say (same origin, the founder's own session): every autopilot post about to go out, and how
+ * many cards wait. A tap opens the queue;
  * nothing is ever decided from a notification. No caching, no offline: the app stays exactly as it is without it.
  */
 self.addEventListener("install", () => self.skipWaiting());
@@ -10,24 +10,26 @@ self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim(
 self.addEventListener("push", (event) => {
   event.waitUntil(
     (async () => {
-      // Wave 2: an autopilot post about to go out comes first; its tap opens that card.
+      // Every autopilot post about to go out, each under its own tag (showing it again does not alert again), and the
+      // waiting count beside them: a push carries no payload, so this push may be for any of them (review of #238).
       try {
         const res = await fetch("/api/v1/notify/next", { credentials: "same-origin", cache: "no-store" });
         if (res.ok) {
           const json = await res.json();
-          const soon = json && (json.data ? json.data.autopilot : json.autopilot);
-          if (soon && typeof soon.line === "string" && typeof soon.approvalId === "string") {
+          const list = json && (json.data ? json.data.autopilot : json.autopilot);
+          for (const soon of Array.isArray(list) ? list : []) {
+            if (!soon || typeof soon.line !== "string" || typeof soon.approvalId !== "string") continue;
             await self.registration.showNotification("Ferreto", {
               body: soon.line,
               icon: "/icon.svg",
               tag: "autopilot-" + soon.approvalId,
+              renotify: false,
               data: { url: "/app/inbox/" + encodeURIComponent(soon.approvalId) },
             });
-            return;
           }
         }
       } catch (_) {
-        // Fall back to the waiting count.
+        // The waiting count below still shows.
       }
       let body = "Cards wait for your decision.";
       try {
@@ -41,7 +43,7 @@ self.addEventListener("push", (event) => {
       } catch (_) {
         // Signed out or offline: the generic line still opens the queue.
       }
-      await self.registration.showNotification("Your CMO", { body, icon: "/icon.svg", tag: "opencmo-queue", renotify: true, data: { url: "/app" } });
+      await self.registration.showNotification("Ferreto", { body, icon: "/icon.svg", tag: "opencmo-queue", renotify: true, data: { url: "/app" } });
     })(),
   );
 });

@@ -74,6 +74,7 @@ insert into allowed values
   ('cmo_script_open(uuid)'),
   ('billing_switch_target(text)'),  -- wave 2 A7: own subscription only, read-only; the route calls Creem
   ('my_email_log(integer)'),  -- wave 2 A4: the founder's own email log, read-only
+  ('my_autopilot_due()'),  -- review of #238: the founder's autopilot posts due soon, for the service worker
   ('plan_usage()'),  -- wave 2 A2: the founder's own fair-use bar, read-only
   ('post_video_start(uuid,uuid)'),
   ('post_video_wanted(uuid)'),
@@ -158,6 +159,7 @@ insert into allowed values
   ('set_autopilot_paused(boolean)'),
   ('save_brand_kit(uuid,text,jsonb)'),
   ('save_cmo_settings(integer,text,smallint,text)'),
+  ('save_cmo_settings_patch(jsonb)'),  -- review of #238: one statement, only the keys sent
   ('save_editor_document(uuid,integer,jsonb,jsonb)'),
   ('save_editor_skill(text,text,text)'),
   ('save_marketing_document(text,jsonb,uuid)'),

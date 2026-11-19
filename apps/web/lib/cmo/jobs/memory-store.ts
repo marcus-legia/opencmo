@@ -197,6 +197,13 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
       Object.assign(card, { reply: reply.trim().slice(0, 3000), gen }, rule ? { rule: rule.rule, rule_why: rule.why.slice(0, 200) } : {});
       return true;
     },
+    async markOpportunitySkip(_u, runId, id, why) {
+      if (!runs.some((r) => r.id === runId && r.kind === "sales_reply_drafts")) throw new Error("cmo_mark_opportunity_skip: Run not found.");
+      const card = opps.find((o) => o.url === id && o.reply === "" && o.rule !== "skip" && !decided.has(o.url));
+      if (!card) return false;
+      Object.assign(card, { rule: "skip", rule_why: why.trim().slice(0, 200) || null });
+      return true;
+    },
     async saveOpportunities(_u, runId, list) {
       // As `cmo_save_opportunities`: a card with no draft is kept only by the account's free scan (priced 0).
       const free = runs.some((r) => r.id === runId && r.kind === "sales_scan" && r.credits === 0);

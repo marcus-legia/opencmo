@@ -2683,6 +2683,24 @@ CREATE FUNCTION public.autopilot_min_window() RETURNS interval
 
 
 --
+-- Name: autopilot_push_due(timestamp with time zone, timestamp with time zone); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.autopilot_push_due(p_now timestamp with time zone, p_until timestamp with time zone) RETURNS TABLE(id uuid, user_id uuid, platform text, auto_at timestamp with time zone)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select a.id, a.user_id, a.snapshot->'proposed'->>'platform', a.auto_at
+  from public.approvals a
+  where a.status = 'waiting' and a.kind = 'post'
+    and a.auto_at > p_now and a.auto_at <= p_until
+    and public.post_autopilot_still_on(a)
+  order by a.auto_at
+  limit 200;
+$$;
+
+
+--
 -- Name: best_slots_refresh(uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -4856,6 +4874,29 @@ begin
       classified_at = case when v_mode is not null then now() else classified_at end
   where user_id = p_user and item_id = p_item and department = 'post'
     and (action = 'skip' or edit_mode is distinct from 'NO_MEANINGFUL_EDIT');
+end;
+$$;
+
+
+--
+-- Name: cmo_mark_opportunity_skip(uuid, uuid, uuid, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_mark_opportunity_skip(p_user uuid, p_run uuid, p_id uuid, p_why text) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+begin
+  if not exists (
+    select 1 from public.cmo_runs r where r.id = p_run and r.user_id = p_user and r.kind = 'sales_reply_drafts'
+  ) then
+    raise exception 'Run not found.' using errcode = 'P0002';
+  end if;
+  update public.opportunities o set
+    rule = 'skip',
+    rule_why = left(nullif(btrim(coalesce(p_why, '')), ''), 200)
+  where o.id = p_id and o.user_id = p_user and o.status = 'in_review' and o.reply = '' and o.rule is distinct from 'skip';
+  return found;
 end;
 $$;
 
@@ -9736,6 +9777,26 @@ $$;
 
 
 --
+-- Name: my_autopilot_due(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.my_autopilot_due() RETURNS TABLE(id uuid, platform text, auto_at timestamp with time zone)
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_user uuid := public.require_user();
+begin
+  return query
+    select d.id, d.platform, d.auto_at
+    from public.autopilot_push_due(now(), now() + interval '2 hours') d
+    where d.user_id = v_user
+    limit 5;
+end;
+$$;
+
+
+--
 -- Name: my_email_log(integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -10706,6 +10767,13 @@ begin
     v_months := (extract(year from age(now(), v_sub.grant_anchor)) * 12 + extract(month from age(now(), v_sub.grant_anchor)))::integer;
     v_start := v_sub.grant_anchor + make_interval(months => greatest(v_months, 0));
     v_reset := v_start + interval '1 month';
+  elsif v_sub."interval" = 'year' and v_sub.current_period_end is not null and v_sub.current_period_end > now() then
+    -- A year not anchored yet: step back from its end, a month at a time, to the month running now.
+    v_reset := v_sub.current_period_end;
+    while v_reset - interval '1 month' > now() loop
+      v_reset := v_reset - interval '1 month';
+    end loop;
+    v_start := v_reset - interval '1 month';
   elsif v_sub.current_period_end is not null and v_sub.current_period_end > now() then
     v_reset := v_sub.current_period_end;
     v_start := v_reset - interval '1 month';
@@ -14284,6 +14352,63 @@ begin
   update public.profiles p
   set weekly_credit_budget = p_weekly_credit_budget, timezone = p_timezone, digest_hour = p_digest_hour,
       digest_days = coalesce(p_digest_days, p.digest_days), timezone_source = 'founder'
+  where p.id = v_user;
+  if not found then
+    raise exception 'Profile not found.' using errcode = 'P0002';
+  end if;
+  return query select p.weekly_credit_budget, p.timezone, p.digest_hour, p.digest_days from public.profiles p where p.id = v_user;
+end;
+$$;
+
+
+--
+-- Name: save_cmo_settings_patch(jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.save_cmo_settings_patch(p_patch jsonb) RETURNS TABLE(weekly_credit_budget integer, timezone text, digest_hour smallint, digest_days text)
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_budget integer;
+  v_zone text;
+  v_hour smallint;
+  v_days text;
+begin
+  if p_patch is null or jsonb_typeof(p_patch) <> 'object' or p_patch = '{}'::jsonb then
+    raise exception 'Nothing to save.' using errcode = '22023';
+  end if;
+  if p_patch ? 'weekly_credit_budget' then
+    v_budget := (p_patch->>'weekly_credit_budget')::integer;
+    if v_budget is null or v_budget < 0 or v_budget > 10000 then
+      raise exception 'The weekly budget must be between 0 and 10,000 credits.' using errcode = '22023';
+    end if;
+  end if;
+  if p_patch ? 'timezone' then
+    v_zone := p_patch->>'timezone';
+    if v_zone is null or not exists (select 1 from pg_catalog.pg_timezone_names where name = v_zone) then
+      raise exception 'Choose a time zone from the list.' using errcode = '22023';
+    end if;
+  end if;
+  if p_patch ? 'digest_hour' then
+    v_hour := (p_patch->>'digest_hour')::smallint;
+    if v_hour is not null and (v_hour < 0 or v_hour > 23) then
+      raise exception 'The digest hour must be between 0 and 23.' using errcode = '22023';
+    end if;
+  end if;
+  if p_patch ? 'digest_days' then
+    v_days := p_patch->>'digest_days';
+    if v_days is null or v_days not in ('weekdays', 'daily', 'monday', 'off') then
+      raise exception 'Choose weekdays, every day, Mondays or off.' using errcode = '22023';
+    end if;
+  end if;
+  update public.profiles p set
+    weekly_credit_budget = case when p_patch ? 'weekly_credit_budget' then v_budget else p.weekly_credit_budget end,
+    timezone = case when p_patch ? 'timezone' then v_zone else p.timezone end,
+    timezone_source = case when p_patch ? 'timezone' then 'founder' else p.timezone_source end,
+    digest_hour = case when p_patch ? 'digest_hour' then v_hour else p.digest_hour end,
+    digest_days = case when p_patch ? 'digest_days' then v_days else p.digest_days end
   where p.id = v_user;
   if not found then
     raise exception 'Profile not found.' using errcode = 'P0002';

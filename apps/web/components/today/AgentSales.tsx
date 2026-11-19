@@ -1,5 +1,6 @@
 "use client";
 
+import { STRONG_MATCH, matchLabel } from "@/lib/cmo/match";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { Logs } from "@/app/api/v1/logs/route";
@@ -22,8 +23,7 @@ type Tab = "threads" | "runs" | "settings";
 const DISMISS_REASONS = ["Not our customer", "Already solved", "Too old", "Wrong community"] as const;
 
 /** A word reads faster than a number (owner, 2026-11-19); the number stays in "how it was counted". */
-const matchLabel = (score: number) => (score >= 75 ? "Strong match" : "Good match");
-const tone = (score: number) => (score >= 75 ? "score hi" : score >= 60 ? "score mid" : "score lo");
+const tone = (score: number) => (score >= STRONG_MATCH ? "score hi" : score >= 60 ? "score mid" : "score lo");
 
 function ago(iso: string | null): string {
   if (!iso) return "";
@@ -573,7 +573,8 @@ export function AgentSales() {
   const undrafted = free ? 0 : worth.filter((t) => !t.drafted).length;
   // The free scan is used once a scan finished (or one is under way); a failed one is given back by SQL. One that found
   // no one leaves one more (`cmo_first_run_free`, wave 2); if that one was the second, the 402 opens the plan sheet.
-  const freeLeft = free && !scanActive(scan) && (!data?.lastScan || (data.lastScan.free && data.lastScan.verdict === "none"));
+  const freeDone = data?.freeScansDone ?? 0;
+  const freeLeft = free && !scanActive(scan) && (freeDone === 0 || (freeDone === 1 && data?.lastScan?.free === true && data.lastScan.verdict === "none"));
   const name = ws.name ?? "your product";
   // Fair use (wave 2): at 100% new scans wait for the reset; `cmo_enqueue` refuses them on its own as well.
   const usage = useOptionalShellState()?.usage;

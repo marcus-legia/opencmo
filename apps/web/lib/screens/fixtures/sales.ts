@@ -3,6 +3,7 @@ import { at } from "./shared";
 
 export const salesFixture: SalesScreen = {
   free: false,
+  freeScansDone: 0,
   lastScan: { cards: 6, platforms: ["reddit", "hn", "facebook", "threads"], failed: [], free: false, queries: ["edit product demo video", "screen recording editor for founders"], scanned: 48, verdict: "found", at: at("2026-10-29", "06:00") },
   mentions: { used: 0, window: 10 },
   stuck: { text: "Your last two scans found no conversation worth joining. Try a different brief, or fewer excluded subreddits.", creditsToFinish: 5, found: 0 },
@@ -44,4 +45,4 @@ export const salesFixture: SalesScreen = {
   settings: { excludedSubreddits: ["memes"], pairs: [["video", "editor"]], platforms: ["reddit", "hn", "facebook", "threads"] },
 };
 
-export const salesEmpty: SalesScreen = { free: false, lastScan: null, mentions: { used: 0, window: 10 }, stuck: null, threads: [], week: { replied: 0, dismissed: 0 }, settings: { excludedSubreddits: [], pairs: [], platforms: ["reddit", "hn", "facebook", "threads"] } };
+export const salesEmpty: SalesScreen = { free: false, freeScansDone: 0, lastScan: null, mentions: { used: 0, window: 10 }, stuck: null, threads: [], week: { replied: 0, dismissed: 0 }, settings: { excludedSubreddits: [], pairs: [], platforms: ["reddit", "hn", "facebook", "threads"] } };
