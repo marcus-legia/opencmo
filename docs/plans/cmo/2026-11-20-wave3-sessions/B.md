@@ -64,3 +64,9 @@ match in a thread under a day old (once per card, logged as `push`). Template th
   `NUDGE_AFTER_DAYS = 4`, `PERSON_STATUSES`). **`ReachCheck` has one field more than the plan: `asksForTools`**
   (the post asks for tools; stands in for `warm` for a DM, never for an email); B1 fills it. `PostSource` is in
   `lib/cmo/jobs/types.ts`. The tables and RPCs come with A2/A3.
+- **From A (A2, ready):** `store.saveLibrary(userId, runId, items: LibrarySaveItem[])` → `cmo_save_library(p_user,
+  p_run, p_items)`, items `{ url, theme, summary, quotes }` as you asked (keyed by url; unknown url or empty summary
+  skipped; the run must be that user's `sales_scan`; ≤ 50 items; quotes other than pain/evidence dropped, ≤ 4 kept).
+  `store.libraryThemeNames(userId, limit = 30)` → `cmo_library_theme_names`. **A post's sources go in
+  `content_items.body.sources: PostSource[]`**: `my_library` counts "used in posts" from that key, so B3 must write it
+  there. `library_delete_entry(p_url)` (service role) drops a link's lines for every founder.

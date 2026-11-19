@@ -59,3 +59,8 @@ Specs for Library, post sources, reach out and I replied, Following up, Research
   `lib/cmo/reach.ts` (`ReachLevel`, `ReachCheck` with `reasons` for the one-line lock reason, `PersonStatus`,
   `PERSON_STATUSES`); `PostSource` in `lib/cmo/jobs/types.ts`. `ReachCheck` also has `asksForTools`. Loaders and RPCs
   come with A2/A3.
+- **From A (A2, ready):** the Library screen (`screen("library")`) has two new live fields: `themes:
+  LibraryThemeView[]` (`id, name, count, thisWeek` (last 7 days), `usedInPosts`, `entries` (≤ 3 `LibraryEntry`,
+  newest post first)), most quoted first, and `source` (the `?source=reddit|hn|facebook|threads` filter, null for all).
+  Not in `release` yet: add them when C1 shows them. Fixtures carry one sample theme. Direct reads: `library_themes`,
+  `library_entries` (select, own rows). RPC for founders: `my_library(p_source text default null)`.
