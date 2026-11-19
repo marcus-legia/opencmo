@@ -15,7 +15,7 @@ import { z } from "zod";
 import { HnBudget, HnReadError, searchHn, type HnThread } from "@/lib/cmo/social/hn";
 import { searchReddit, type RedditThread } from "@/lib/cmo/social/reddit";
 import { googleSearch, type WebResult } from "@/lib/cmo/social/research";
-import { SocialReadError, type ScBudget } from "@/lib/cmo/social/scrapecreators";
+import { scFakeAllowed, SocialReadError, type ScBudget } from "@/lib/cmo/social/scrapecreators";
 import { NO_AI_SLOP } from "@/lib/cmo/skills";
 import { cleanUntrusted, escapeAttribute, escapeForTag } from "@/lib/cmo/untrusted";
 import { think as realThink, type ThinkOptions } from "@/lib/cmo/jobs/think";
@@ -159,11 +159,26 @@ export async function findCompetitors(
 
 /** The real readers, on the turn's lookup budget: Reddit and the web through the social reader, HN through Algolia. */
 export function defaultCompetitorReaders(budget: ScBudget): CompetitorReaders {
+  // CI and e2e: fixed conversations that name two tools, no network (as the other social readers' fakes).
+  if (scFakeAllowed()) return fakeCompetitorReaders();
   const hn = new HnBudget(1);
   return {
     reddit: (query) => searchReddit(query, budget),
     hn: (query) => searchHn(query, hn),
     web: (query) => googleSearch(query, budget),
+  };
+}
+
+/** The fakes' conversations: two tools named, one twice, so the list and its order can be checked. */
+export function fakeCompetitorReaders(): CompetitorReaders {
+  const at = new Date().toISOString();
+  return {
+    reddit: async (query) => [
+      { url: "https://www.reddit.com/r/freelance/comments/fk1/x/", community: "freelance", title: `What do you use to ${query}?`, author: "a", text: "We switched to Chaser last year and it does the reminders.", comments: 5, postedAt: at },
+      { url: "https://www.reddit.com/r/smallbusiness/comments/fk2/x/", community: "smallbusiness", title: "Late payers again", author: "b", text: "I tried InvoiceNinja, then Chaser. Both work if clients read email.", comments: 3, postedAt: at },
+    ],
+    hn: async () => [],
+    web: async () => [],
   };
 }
 
