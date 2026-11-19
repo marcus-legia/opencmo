@@ -15,7 +15,9 @@ import type { ConversationThread } from "../../../social/conversations";
 import type { RedditThread } from "../../../social/reddit";
 import { cascade } from "../../judge";
 import { memoryStore } from "../../memory-store";
-import { librarySummary, quoteIn, reachFor, REPLY_MAX_WORDS, sameAsTitle, scoreThread, themeName, type RuleRead } from "../../sales-scan";
+import type { JobContext } from "../../runner";
+import { dmProblems, draftMessages, librarySummary, nudgeProblems, quoteIn, reachFor, REPLY_MAX_WORDS, sameAsTitle, scoreThread, themeName, type RuleRead } from "../../sales-scan";
+import { think } from "../../think";
 import type { Documents, Opportunity } from "../../types";
 import invoicing from "../fixtures/reddit/invoicing.json";
 import { registerCases, type EvalCase, type EvalEnv } from "../types";
@@ -282,6 +284,53 @@ function runReach(env: EvalEnv): CaseResult[] {
   ];
 }
 
+/**
+ * Wave 3 B2: a DM for a DM-ready person and a nudge for a reply with no answer. Code tier: no link, short, the product
+ * named once and as the founder's, no public reply claimed that never happened, a nudge that is not a bare bump.
+ * Judge tier: the DM refers to what the person wrote; the nudge adds something new.
+ */
+async function runMessages(fixture: RedditFixture, env: EvalEnv): Promise<CaseResult[]> {
+  const id = (output: string) => `w4:messages:${output}`;
+  const product = String(fixture.docs.product?.name ?? "");
+  const products = [product];
+  const result = (name: string, pass: boolean, notes: string[] = []): CaseResult => ({ id: id(name), epoch: env.epoch, pass, decided_by: "code", notes });
+  // The graders catch what they exist to catch.
+  const graders = [
+    result("grader:link", dmProblems(`I make ${product}. See https://duely.example`, products, true).includes("has a link")),
+    result("grader:claimed-reply", dmProblems(`I replied in the thread. I make ${product}, want the link?`, products, false).includes("says you replied, and you did not")),
+    result("grader:undisclosed", dmProblems(`${product} would fix this for you. Want the link?`, products, false).includes("names the product without saying it is yours")),
+    result("grader:bump", nudgeProblems("Just checking in on this!", products).includes("only bumps the thread")),
+    result("grader:nudge-product", nudgeProblems(`Have you tried ${product}?`, products).includes("names the product")),
+  ];
+
+  const ctx = { now: new Date(), think: (call: Parameters<JobContext["think"]>[0]) => think(call) } as unknown as JobContext;
+  const fit = fixture.threads.filter((t) => t.expect === "fit").slice(0, 2).map((t) => ({ ...toThread(t), platform: "reddit" as const }));
+  const reply = "Put the due date and the late fee on the invoice itself, then send the same short reminder on day 3, 7 and 14.";
+  const targets = [{ thread: fit[0]!, reply }, { thread: fit[1]!, reply: null }];
+  const dms = await draftMessages(ctx, "dm", { docs: fixture.docs, voice: "", targets });
+  const nudges = await draftMessages(ctx, "nudge", { docs: fixture.docs, voice: "", targets: [{ thread: fit[0]!, reply }] });
+  const out: CaseResult[] = [...graders, result("dm:drafted", dms.textFor.size === 2, [`${dms.textFor.size} of 2 passed the checks`]), result("nudge:drafted", nudges.textFor.size === 1)];
+  for (const [index, text] of dms.textFor) {
+    if (env.provider !== "fake") env.log(`dm ${index}: ${text}`);
+    out.push(await cascade(id(`dm:${index}`), env.epoch, [], env.judge, {
+      job: "w4",
+      docs: fixture.docs,
+      output: text,
+      criteria: ["The message refers to what the person wrote, says the product is the founder's own, and asks before sending a link."],
+    }));
+  }
+  for (const text of nudges.textFor.values()) {
+    if (env.provider !== "fake") env.log(`nudge: ${text}`);
+    out.push(await cascade(id("nudge"), env.epoch, [], env.judge, {
+      job: "w4",
+      docs: fixture.docs,
+      output: text,
+      criteria: ["The follow-up adds one useful thing the first reply did not say, and does not only ask for an answer."],
+    }));
+  }
+  return out;
+}
+
 export const salesCase: EvalCase = {
   job: "w4",
   once: true,
@@ -291,6 +340,7 @@ export const salesCase: EvalCase = {
     results.push(...(await runSocial(REDDIT_FIXTURES[0]!, env)));
     results.push(...(await runFree(REDDIT_FIXTURES[0]!, env)));
     results.push(...runReach(env));
+    results.push(...(await runMessages(REDDIT_FIXTURES[0]!, env)));
     return results;
   },
 };
