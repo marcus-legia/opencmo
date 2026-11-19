@@ -335,6 +335,14 @@ async function runMessages(fixture: RedditFixture, env: EvalEnv): Promise<CaseRe
       criteria: ["The follow-up adds one useful thing the first reply did not say, and does not only ask for an answer."],
     }));
   }
+  // Wave 3 B4: the founder's writing samples and intro line reach the DM and nudge prompts as <founder_writing>.
+  const seen: string[] = [];
+  const capture = { now: new Date(), think: async (call: Parameters<JobContext["think"]>[0]) => (seen.push(`${call.system}\n${call.prompt}`), call.fake!()) } as unknown as JobContext;
+  const branded = { ...fixture.docs, brand: { ...(fixture.docs.brand ?? {}), voice_samples: ["Chasing invoices is the worst part of my week, so I wrote it down."], intro_line: "I make Duely so freelancers stop chasing." } };
+  await draftMessages(capture, "dm", { docs: branded, voice: "", targets: [targets[0]!] });
+  await draftMessages(capture, "nudge", { docs: branded, voice: "", targets: [targets[0]!] });
+  const carried = seen.length === 2 && seen.every((p) => p.includes("<founder_writing>") && p.includes("so I wrote it down") && p.includes("<intro_line>I make Duely"));
+  out.push(result("founder-writing", carried, [`${seen.length} prompts`]));
   return out;
 }
 

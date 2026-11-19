@@ -16,7 +16,7 @@ import "server-only";
 import { ApiError } from "@/lib/api/errors";
 import { firstRow, rpcOrThrow, type SupabaseClient } from "@/lib/api/handler";
 
-import { DOCUMENT_KINDS } from "./documents";
+import { DOCUMENT_KINDS, type OnboardingDrafts } from "./documents";
 import { draftDocuments, GenerateError } from "./generate";
 import { kickCmoQueue, kickFirstWeek, startCmoRun, type StartedRun } from "./jobs/start";
 import { readSite, SiteError } from "./site";
@@ -37,7 +37,8 @@ export async function runOnboarding(supabase: SupabaseClient, userId: string, si
     const snapshot = await readSite(site);
     await steps.set("site", "done");
     await steps.set(DOCUMENT_KINDS[0], "running");
-    const drafts = await draftDocuments(snapshot);
+    // Wave 3 B4: "who do you sell to?", asked while the site was read, reaches the documents when it is in by now.
+    const drafts = keepFounderBrand(await draftDocuments(snapshot, { sellsTo: await sellsTo(supabase, userId) }), await currentBrand(supabase, userId));
     for (const [index, kind] of DOCUMENT_KINDS.entries()) {
       await rpcOrThrow(supabase, "save_marketing_document", { p_kind: kind, p_body: drafts[kind], p_run: run.id });
       await steps.set(kind, "done");
@@ -76,6 +77,42 @@ export async function runOnboarding(supabase: SupabaseClient, userId: string, si
   const planDone = planRows.some((row) => row.status === "done");
   if (planDone && real(drafts).length === 0) return { runId: run.id, firstWeek: await startFirstDraft(supabase), firstScan };
   return { runId: run.id, firstWeek: false, firstScan };
+}
+
+/** The Brand the founder already has, when the website is read again; null on the first read. */
+async function currentBrand(supabase: SupabaseClient, userId: string): Promise<Record<string, unknown> | null> {
+  const { data, error } = await supabase.from("marketing_documents_latest").select("body").eq("user_id", userId).eq("kind", "brand").maybeSingle<{ body: Record<string, unknown> }>();
+  return error ? null : (data?.body ?? null);
+}
+
+/**
+ * Reading the website again rewrites the documents, but what the founder put in the Brand themselves (writing samples,
+ * screenshots, their intro line) is not the website's to replace.
+ */
+export function keepFounderBrand(drafts: OnboardingDrafts, current: Record<string, unknown> | null): OnboardingDrafts {
+  if (!current) return drafts;
+  const list = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && x.trim().length > 0) : []);
+  const look = current.look && typeof current.look === "object" ? (current.look as Record<string, unknown>) : {};
+  const samples = list(current.voice_samples);
+  const shots = list(look.screenshots);
+  const intro = typeof current.intro_line === "string" ? current.intro_line.trim() : "";
+  return {
+    ...drafts,
+    brand: {
+      ...drafts.brand,
+      ...(samples.length ? { voice_samples: samples } : {}),
+      ...(intro ? { intro_line: intro } : {}),
+      look: { ...drafts.brand.look, ...(shots.length ? { screenshots: shots } : {}) },
+    },
+  };
+}
+
+/** The founder's answer to "who do you sell to?" (`profiles.sells_to`); null when unanswered or not stored yet. */
+async function sellsTo(supabase: SupabaseClient, userId: string): Promise<string | null> {
+  const { data, error } = await supabase.from("profiles").select("sells_to").eq("id", userId).maybeSingle<{ sells_to: string | null }>();
+  // Before the column exists (A's sells_to answer) the read fails: the documents come from the website alone.
+  if (error) return null;
+  return data?.sells_to?.trim() || null;
 }
 
 /** The plan is there but its first draft failed: queue the draft again (the plan's own trigger only queues it once). */

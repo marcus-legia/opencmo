@@ -1,7 +1,7 @@
 /** Text that goes into prompts: documents, memory, recent posts. In one place so W1, W2 and the chat say the same. */
 
 import { DOCUMENTS } from "../documents";
-import { escapeAttribute, escapeForTag } from "../untrusted";
+import { cleanUntrusted, escapeAttribute, escapeForTag } from "../untrusted";
 import type { CmoStore, CompetitorInsight, Documents, Goal, ItemRow, Lesson, MemoryTopic, NicheVideoInsight } from "./types";
 
 const DOC_ORDER = ["product", "strategy", "brand", "post_plan", "competitors"] as const;
@@ -102,6 +102,24 @@ export function postText(item: ItemRow): string {
 export function avoidList(docs: Documents): string[] {
   const avoid = docs.brand?.avoid;
   return Array.isArray(avoid) ? avoid.filter((a): a is string => typeof a === "string" && a.trim().length > 0).map((a) => a.trim()) : [];
+}
+
+/** The rule every writing prompt adds for `<founder_writing>` (wave 3 B4). */
+export const FOUNDER_WRITING_RULE = "<founder_writing> holds pieces the founder wrote themselves and the line they use to say what they make. Match how they write (sentence length, plain words, how they open), never copy their sentences, and when the text says what the founder makes, use their intro line if it is there.";
+
+/**
+ * The Brand's writing samples and intro line (wave 3 B4) as data for a writing prompt: the founder pasted them, so
+ * they are escaped like any text, and empty when there are none.
+ */
+export function founderWritingBlock(docs: Documents): string {
+  const brand = docs.brand ?? {};
+  const samples = (Array.isArray(brand.voice_samples) ? brand.voice_samples : [])
+    .filter((s): s is string => typeof s === "string" && s.trim().length > 0)
+    .slice(0, 5)
+    .map((s, i) => `<sample index="${i + 1}">${escapeForTag(cleanUntrusted(s).trim().slice(0, 600))}</sample>`);
+  const intro = typeof brand.intro_line === "string" ? cleanUntrusted(brand.intro_line).trim().slice(0, 200) : "";
+  if (!samples.length && !intro) return "";
+  return `<founder_writing>\n${samples.join("\n")}${intro ? `${samples.length ? "\n" : ""}<intro_line>${escapeForTag(intro)}</intro_line>` : ""}\n</founder_writing>`;
 }
 
 /** The product's own name(s) from the product document: "Cal.com" names the product, it is not a link. */

@@ -104,7 +104,15 @@ async function main() {
     assert.equal(posts.length, 7, "seven post items");
     assert.ok(posts.every((i) => JSON.stringify(i.body.targets) === '["x","linkedin"]'), "each with body.targets = [x, linkedin]");
     assert.ok(posts.every((i) => i.body.slot === 0), "and body.slot = 0, as cmo_plan_week writes it");
-    // Wave 3 B3: with no Library the week has no posts, and says so; the founder's own brief still plans them.
+    // Wave 3 B4: a post draft reads the founder's writing samples and intro line from the Brand.
+  {
+    const asks: string[] = [];
+    const branded = withLibrary(memoryStore({ ...docs, brand: { voice: "Plain.", voice_samples: ["I send three reminders, then I call."], intro_line: "I make Paylane.", avoid: [], look: {} } }));
+    branded.enqueue("post_draft", { idea: "How I chase invoices" });
+    await drainCmoQueue(branded.store, { think: async (call) => (asks.push(call.prompt), call.fake!()) });
+    assert.ok(asks.some((p) => p.includes("<founder_writing>") && p.includes("then I call") && p.includes("<intro_line>I make Paylane.")), "the post prompt carries the founder's writing");
+  }
+  // Wave 3 B3: with no Library the week has no posts, and says so; the founder's own brief still plans them.
     const empty = memoryStore(docs);
     const bare = empty.enqueue("plan_week", { source: "schedule" });
     await drainCmoQueue(empty.store);

@@ -31,7 +31,7 @@ Eval: every draft cites at least one source; no invented numbers.
 *Done:* `jobs/library-sources.ts`; an item planned before sources (or while `cmo_plan_week` drops them, A request)
 takes the Library theme closest to its idea. The onboarding plan waits up to 6 minutes for the free scan's Library.
 
-### - [ ] B4. Onboarding writes documents v2; voice in prompts (after A4)
+### - [x] B4. Onboarding writes documents v2; voice in prompts (after A4)
 Onboarding asks "who do you sell to?" while it reads the site (the answer goes into the Strategy and the first
 scan), and fills `strategy.where_they_ask` and `this_week`, `brand.look` (colours, font, logo from the site),
 `post_plan` (channels default X, LinkedIn, Threads). Reply, DM, nudge and post prompts read `brand.voice_samples`,
