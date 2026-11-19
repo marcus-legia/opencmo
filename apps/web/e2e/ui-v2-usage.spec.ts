@@ -112,13 +112,14 @@ test("at 100% the chip and Sales say new scans wait for the reset", async ({ pag
   await page.goto("/app/sales");
   await expect(page.getByRole("banner").getByTestId("usage-chip")).toHaveText(/Pro · 100% used/);
   const banner = page.getByTestId("sales-paused");
-  await expect(banner).toContainText("You used this month's allowance");
-  await expect(banner).toContainText(/New scans start again on \d{1,2} \w{3}\./);
+  await expect(banner).toContainText("You used 100% of this month's allowance");
+  await expect(banner).toContainText(/New scans and competitor research stop until \d{1,2} \w+\./);
+  await expect(banner).toContainText("The people already found, your drafts and your posts keep working.");
   await expect(page.getByTestId("v2-sales").getByRole("button", { name: "Scan now", exact: true })).toBeDisabled();
   await page.screenshot({ path: join(OUT, "sales-paused-1440.png") });
 
   await page.goto("/app/billing");
-  await expect(page.getByTestId("billing-usage")).toContainText(/New scans pause until \d{1,2} \w{3}\./);
+  await expect(page.getByTestId("billing-usage-full")).toHaveText(/New scans and competitor research stop until \d{1,2} \w{3}\. The people already found, your drafts and your posts keep working\./);
 });
 
 test("a free founder's chip leads to the plans", async ({ page }) => {
