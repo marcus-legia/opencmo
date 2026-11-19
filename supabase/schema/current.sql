@@ -4169,9 +4169,11 @@ CREATE TABLE public.opportunities (
     dm_drafted_at timestamp with time zone,
     nudge_draft text,
     nudge_drafted_at timestamp with time zone,
+    contacted_via text,
     CONSTRAINT opportunities_author_check CHECK ((char_length(author) <= 100)),
     CONSTRAINT opportunities_comments_check CHECK ((comments >= 0)),
     CONSTRAINT opportunities_community_check CHECK ((char_length(community) <= 100)),
+    CONSTRAINT opportunities_contacted_via_check CHECK ((contacted_via = ANY (ARRAY['dm'::text, 'email'::text]))),
     CONSTRAINT opportunities_dm_draft_check CHECK ((char_length(dm_draft) <= 1000)),
     CONSTRAINT opportunities_gen_check CHECK (((jsonb_typeof(gen) = 'object'::text) AND (octet_length((gen)::text) <= 256))),
     CONSTRAINT opportunities_min_account_age_days_check CHECK (((min_account_age_days >= 0) AND (min_account_age_days <= 3650))),
@@ -5087,7 +5089,7 @@ CREATE FUNCTION public.cmo_nudges_due(p_user uuid, p_limit integer DEFAULT 10) R
     AS $$
   select o.id, o.url, o.platform, o.community, o.title, o.snippet, o.reply, o.posted_at
   from public.opportunities o
-  where o.user_id = p_user and o.person_status = 'replied' and o.nudge_draft is null
+  where o.user_id = p_user and o.person_status = 'replied' and o.nudge_draft is null and o.contacted_via is null
     and o.replied_at < now() - interval '4 days'
   order by o.replied_at
   limit greatest(1, least(coalesce(p_limit, 10), 50));
@@ -5338,7 +5340,12 @@ begin
         when jsonb_typeof(v_item->'slot') = 'number' and (v_item->>'slot')::numeric in (0, 1, 2)
           then jsonb_build_object('targets', v_targets, 'slot', (v_item->>'slot')::int)
         else jsonb_build_object('targets', v_targets)
-      end) || jsonb_strip_nulls(jsonb_build_object('sources', v_sources))
+      end) || jsonb_strip_nulls(jsonb_build_object(
+        'sources', v_sources,
+        -- A post planned with no Library sources from the founder's brief or the first week (onboarding): the draft
+        -- writes it without sources instead of refusing it for an empty Library.
+        'planned_from', case when v_item->>'department' = 'post' and v_sources is null
+                               and v_item->>'planned_from' in ('brief', 'onboarding') then v_item->>'planned_from' end))
     );
     v_count := v_count + 1;
   end loop;
@@ -5830,7 +5837,7 @@ CREATE FUNCTION public.cmo_reply_outcomes_due(p_user uuid, p_limit integer) RETU
   from public.cmo_draft_outcomes o
   join public.opportunities p on p.id = o.item_id and p.user_id = o.user_id
   where o.user_id = p_user and o.department = 'sales' and o.action = 'replied' and o.outcome_checked_at is null
-    and o.decided_at <= now() - interval '3 days' and p.reply is not null
+    and o.decided_at <= now() - interval '3 days' and p.reply is not null and p.contacted_via is null
     and p.platform in ('reddit', 'hn', 'threads')
   order by o.decided_at desc
   limit greatest(1, least(coalesce(p_limit, 10), 50));
@@ -10530,7 +10537,7 @@ CREATE FUNCTION public.opportunity_mark_replied(p_id uuid, p_url text) RETURNS p
 declare
   v_user uuid := public.require_user();
   v_opp public.opportunities;
-  v_url text := btrim(coalesce(p_url, ''));
+  v_url text;
 begin
   select * into v_opp from public.opportunities o where o.id = p_id and o.user_id = v_user;
   if not found then
@@ -10539,14 +10546,17 @@ begin
   if v_opp.status = 'dismissed' then
     raise exception 'You dismissed this conversation.' using errcode = 'P0001';
   end if;
+  v_url := public.reply_url_clean(v_opp.platform, p_url);
   if not public.reply_url_fits(v_opp.platform, v_opp.url, v_url) then
     raise exception 'Paste the link to your reply in this thread.' using errcode = '22023';
   end if;
   if v_opp.status = 'in_review' then
     perform public.cmo_decide_opportunity(p_id, 'replied');
   end if;
+  -- A public reply after a DM: the person is now followed as a public reply too.
   update public.opportunities o set
     reply_url = v_url,
+    contacted_via = null,
     replied_at = coalesce(o.replied_at, now()),
     person_status = case when o.person_status = 'found' then 'replied' else o.person_status end,
     status_at = case when o.person_status = 'found' then now() else o.status_at end
@@ -10554,6 +10564,44 @@ begin
   returning * into v_opp;
   update public.cmo_draft_outcomes d set outcome_url = v_url
   where d.user_id = v_user and d.department = 'sales' and d.item_id = p_id and d.action = 'replied';
+  return v_opp;
+end;
+$$;
+
+
+--
+-- Name: opportunity_mark_sent(uuid, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.opportunity_mark_sent(p_id uuid, p_via text) RETURNS public.opportunities
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_opp public.opportunities;
+begin
+  if p_via is null or p_via not in ('dm', 'email') then
+    raise exception 'Say whether you sent a DM or an email.' using errcode = '22023';
+  end if;
+  select * into v_opp from public.opportunities o where o.id = p_id and o.user_id = v_user;
+  if not found then
+    raise exception 'Conversation not found.' using errcode = 'P0002';
+  end if;
+  if v_opp.status = 'dismissed' then
+    raise exception 'You dismissed this conversation.' using errcode = 'P0001';
+  end if;
+  if v_opp.status = 'in_review' then
+    perform public.cmo_decide_opportunity(p_id, 'replied');
+  end if;
+  update public.opportunities o set
+    -- A public reply already linked stays the way the person is followed.
+    contacted_via = case when o.reply_url is null then p_via else o.contacted_via end,
+    replied_at = coalesce(o.replied_at, now()),
+    person_status = case when o.person_status = 'found' then 'replied' else o.person_status end,
+    status_at = case when o.person_status = 'found' then now() else o.status_at end
+  where o.id = p_id
+  returning * into v_opp;
   return v_opp;
 end;
 $$;
@@ -14096,6 +14144,25 @@ $$;
 
 
 --
+-- Name: reply_url_clean(text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.reply_url_clean(p_platform text, p_url text) RETURNS text
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO ''
+    AS $_$
+  select case
+    -- HN's only form is `?id=`; a Facebook comment link names the comment in its query (`?comment_id=`).
+    when p_platform in ('hn', 'facebook') then btrim(coalesce(p_url, ''))
+    when p_platform = 'threads' then regexp_replace(
+      rtrim(regexp_replace(btrim(coalesce(p_url, '')), '[?#].*$', ''), '/'),
+      '^https://(www\.)?threads\.(com|net)/', 'https://www.threads.com/', 'i')
+    else rtrim(regexp_replace(btrim(coalesce(p_url, '')), '[?#].*$', ''), '/')
+  end;
+$_$;
+
+
+--
 -- Name: reply_url_fits(text, text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -14104,14 +14171,20 @@ CREATE FUNCTION public.reply_url_fits(p_platform text, p_thread text, p_url text
     SET search_path TO ''
     AS $_$
   select char_length(p_url) <= 500 and p_url !~ '\s' and case p_platform
-    when 'reddit' then p_url ~ '^https://(www\.|old\.)?reddit\.com/r/'
-      and position(rtrim(regexp_replace(p_thread, '^https://(www\.|old\.)?reddit\.com', ''), '/') || '/'
-                   in regexp_replace(p_url, '^https://(www\.|old\.)?reddit\.com', '')) = 1
+    when 'reddit' then p_url ~* '^https://(www\.|old\.|new\.|m\.)?reddit\.com/r/'
+      and (
+        -- A comment or post link: the same subreddit and post id as the thread.
+        coalesce(lower(substring(p_url from '(?i)/r/[^/]+/comments/[a-z0-9]+'))
+          = lower(substring(p_thread from '(?i)/r/[^/]+/comments/[a-z0-9]+')), false)
+        -- A phone share link names no post: it must at least be in the thread's subreddit.
+        or (p_url ~* '^https://(www\.)?reddit\.com/r/[^/]+/s/[A-Za-z0-9]+$'
+            and coalesce(lower(substring(p_url from '(?i)/r/[^/]+/')) = lower(substring(p_thread from '(?i)/r/[^/]+/')), false))
+      )
     when 'hn' then p_url ~ '^https://news\.ycombinator\.com/item\?id=[0-9]{1,12}$'
     when 'facebook' then p_url ~ '^https://www\.facebook\.com/groups/'
       and split_part(regexp_replace(p_url, '^https://www\.facebook\.com/groups/', ''), '/', 1)
         = split_part(regexp_replace(p_thread, '^https://www\.facebook\.com/groups/', ''), '/', 1)
-    when 'threads' then p_url ~ '^https://www\.threads\.com/@[A-Za-z0-9._]{1,30}/post/[A-Za-z0-9_-]{1,40}/?$'
+    when 'threads' then p_url ~ '^https://www\.threads\.com/@[A-Za-z0-9._]{1,30}/post/[A-Za-z0-9_-]{1,40}$'
     else false
   end;
 $_$;

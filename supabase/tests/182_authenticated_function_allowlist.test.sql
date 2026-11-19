@@ -130,6 +130,7 @@ insert into allowed values
   ('normalize_capture_url(text)'),
   ('notify_settings_save(boolean,boolean)'),
   ('opportunity_mark_replied(uuid,text)'),  -- wave 3 A3
+  ('opportunity_mark_sent(uuid,text)'),  -- wave 3 review: I sent it on a DM or email
   ('opportunity_reply_url(uuid,text)'),
   ('opportunity_set_status(uuid,text)'),  -- wave 3 A3
   ('purge_in_progress()'),

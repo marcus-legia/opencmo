@@ -1,13 +1,13 @@
 "use client";
 
 import { STRONG_MATCH, matchLabel } from "@/lib/cmo/match";
+import dynamic from "next/dynamic";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { Logs } from "@/app/api/v1/logs/route";
 import { PlanSheet, isPlanRequired } from "@/components/billing/PlanSheet";
 import { api, jsonBody } from "@/components/clipping/api";
 import { useLive } from "@/components/clipping/useLive";
-import { SalesSettings } from "@/components/screens/sales/SalesSettings";
 import { useScreen } from "@/components/screens/useScreen";
 import { useOptionalShellState } from "@/components/shell-v2/ShellState";
 import { salesScanCard } from "@/lib/cmo/jobs/price-card";
@@ -15,8 +15,14 @@ import { PLATFORM_LABEL, SALES_PLATFORMS, type SalesPlatform } from "@/lib/cmo/s
 import type { SalesScreen } from "@/lib/screens/sales";
 import { createClient } from "@/lib/supabase/client";
 
-import { FollowingUp, ReachPanel, ReplyLink } from "./SalesReach";
 import { useWorkspace } from "./workspace";
+
+// Reaching out, Following up and the settings tab open after the list: their code loads when first shown, which keeps
+// the Sales page inside its first-load budget (scripts/bundle-budget.mts, review of #239).
+const ReachPanel = dynamic(() => import("./SalesReach").then((m) => m.ReachPanel), { loading: () => <div className="meta">Loading…</div> });
+const ReplyLink = dynamic(() => import("./SalesReach").then((m) => m.ReplyLink));
+const FollowingUp = dynamic(() => import("./SalesReach").then((m) => m.FollowingUp), { loading: () => <div className="meta">Loading…</div> });
+const SalesSettings = dynamic(() => import("@/components/screens/sales/SalesSettings").then((m) => m.SalesSettings), { loading: () => <div className="meta">Loading…</div> });
 
 type Thread = SalesScreen["threads"][number];
 type Tab = "threads" | "following" | "runs" | "settings";
@@ -29,7 +35,7 @@ const tone = (score: number) => (score >= STRONG_MATCH ? "score hi" : score >= 6
 function ago(iso: string | null): string {
   if (!iso) return "";
   const h = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 3_600_000));
-  return h < 24 ? `${h} h` : `${Math.round(h / 24)} d`;
+  return h < 1 ? "just now" : h < 24 ? `${h} h` : `${Math.round(h / 24)} d`;
 }
 
 const runTime = (iso: string) => {
@@ -376,7 +382,7 @@ function NoOneAsked({ scan, onEdit }: { scan: NonNullable<SalesScreen["lastScan"
   );
 }
 
-function ThreadRow({ t, free, open, onToggle, onPlan, onDecide, onSent }: { t: Thread; free: boolean; open: boolean; onToggle: () => void; onPlan: (action: string) => void; onDecide: (t: Thread, action: "replied" | "dismissed", reason?: string, text?: string) => Promise<void>; onSent: (t: Thread) => Promise<void> }) {
+function ThreadRow({ t, free, open, onToggle, onPlan, onDecide, onSent }: { t: Thread; free: boolean; open: boolean; onToggle: () => void; onPlan: (action: string) => void; onDecide: (t: Thread, action: "replied" | "dismissed", reason?: string, text?: string) => Promise<void>; onSent: (t: Thread, via: "dm" | "email") => Promise<void> }) {
   const [draft, setDraft] = useState(t.draft ?? "");
   const [copied, setCopied] = useState(false);
   const [dismissing, setDismissing] = useState(false);
@@ -426,7 +432,7 @@ function ThreadRow({ t, free, open, onToggle, onPlan, onDecide, onSent }: { t: T
         </svg>
       </button>
       {open ? (
-        <div style={{ borderTop: "1px solid var(--line)", padding: "14px 14px 14px 60px", display: "flex", flexDirection: "column", gap: "12px" }}>
+        <div className="th-body">
           {t.quotes.length ? (
             <div>
               <div className="meta" style={{ marginBottom: "6px" }}>
@@ -456,7 +462,7 @@ function ThreadRow({ t, free, open, onToggle, onPlan, onDecide, onSent }: { t: T
           ) : !done && t.person ? (
             <ReachPanel
               t={t}
-              onSent={() => onSent(t)}
+              onSent={(via) => onSent(t, via)}
               publicReply={
                 <div>
                   <label className="meta" htmlFor={`reply-${t.id}`} style={{ display: "block", marginBottom: "6px" }}>
@@ -546,6 +552,11 @@ export function AgentSales() {
   const [state, reload] = useScreen("sales");
   const ws = useWorkspace();
   const [tab, setTab] = useState<Tab>("threads");
+  // Today's "Open Following up" links to `?tab=following`: the tab named in the link opens first.
+  useEffect(() => {
+    const named = new URLSearchParams(window.location.search).get("tab");
+    if (named === "threads" || named === "following" || named === "runs" || named === "settings") setTab(named);
+  }, []);
   const [threads, setThreads] = useState<Thread[] | null>(null);
   const [week, setWeek] = useState<SalesScreen["week"] | null>(null);
   const [open, setOpen] = useState<string | null>(null);
@@ -637,11 +648,12 @@ export function AgentSales() {
   const setPerson = (id: string, change: Partial<NonNullable<Thread["person"]>>) =>
     setThreads((all) => (all ?? []).map((x) => (x.id === id && x.person ? { ...x, person: { ...x.person, ...change } } : x)));
 
-  async function decide(t: Thread, action: "replied" | "dismissed", reason?: string, text?: string, ask = true) {
+  async function decide(t: Thread, action: "replied" | "dismissed", reason?: string, text?: string, ask = true, via?: "dm" | "email") {
     setError(null);
     try {
       // Sample threads change only in the browser; live ones go through the ownership-checking RPC.
-      if (live) await api(`/cmo/opportunities/${encodeURIComponent(t.id)}`, jsonBody(action === "replied" ? { action, ...(text ? { text } : {}) } : { action, reason }));
+      // A DM or an email sent is its own action: SQL keeps it out of the public reply re-reads and nudges.
+      if (live) await api(`/cmo/opportunities/${encodeURIComponent(t.id)}`, jsonBody(via ? { action: "sent", via } : action === "replied" ? { action, ...(text ? { text } : {}) } : { action, reason }));
       setThreads((all) =>
         (all ?? []).map((x) =>
           x.id === t.id
@@ -813,7 +825,7 @@ export function AgentSales() {
             {list.length === 0 && data.lastScan?.verdict !== "none" ? <div className="meta">No threads yet. Sales scans the communities your customers use and scores what it finds.</div> : null}
             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }} role={list.length ? "list" : undefined} aria-label={list.length ? "Threads" : undefined}>
               {list.map((t) => (
-                <ThreadRow key={t.id} t={t} free={free} open={open === t.id} onToggle={() => setOpen(open === t.id ? null : t.id)} onPlan={setPlanFor} onDecide={decide} onSent={(x) => decide(x, "replied", undefined, undefined, false)} />
+                <ThreadRow key={t.id} t={t} free={free} open={open === t.id} onToggle={() => setOpen(open === t.id ? null : t.id)} onPlan={setPlanFor} onDecide={decide} onSent={(x, via) => decide(x, "replied", undefined, undefined, false, via)} />
               ))}
             </div>
           </>
@@ -843,7 +855,8 @@ export function AgentSales() {
       <aside style={{ flex: "1 1 300px", maxWidth: "360px", display: "flex", flexDirection: "column", gap: "14px" }}>
         <section className="card">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "6px" }}>
-            <h2 style={{ margin: "0", fontSize: "14px", fontWeight: "600" }}>This week</h2>
+            {/* The funnel ("This week") is the Context column's; this box is the replies and the 1-in-10 mention rule. */}
+            <h2 style={{ margin: "0", fontSize: "14px", fontWeight: "600" }}>Your replies</h2>
             <span className="meta">since Mon</span>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: "8px" }}>

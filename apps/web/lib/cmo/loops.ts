@@ -69,8 +69,9 @@ export const LOOPS: Loop[] = [
     run: () => ({ loop: "daily-post-draft", kind: "post_draft", input: { source: "schedule" } }),
   },
   {
-    // Wave 3: Sales scans on its own cadence, not only when the week plan has a Sales item. A Sales item due that
-    // day still steers the searches with its idea.
+    // Wave 3: Sales scans on its own cadence, not only when the week plan has a Sales item. A Sales item due by then
+    // steers the searches with its idea: one planned on a day off the cadence is still due (`day <= today` in
+    // schedule.ts) and is used by the next scan day, so it is never left planned (review of #239).
     name: "sales-scan",
     cadence: "the founder's scan days (Mon/Wed/Fri by default, weekdays, or Mondays); included in the plan",
     when: (s) => s.socialReader && scanDay(s.scanCadence, s.weekday),

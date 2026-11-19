@@ -50,7 +50,7 @@ const when = (iso: string) => {
 
 function Section({ label, uses, children }: { label: string; uses?: string; children: ReactNode }) {
   return (
-    <section style={{ display: "grid", gridTemplateColumns: "minmax(0, 200px) minmax(0, 1fr)", gap: "8px 24px", padding: "14px 0", borderTop: "1px solid var(--line)" }} className="td-bizfield">
+    <section style={{ padding: "14px 0", borderTop: "1px solid var(--line)" }} className="td-bizfield">
       <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
         <span style={{ fontWeight: "500", fontSize: "13.5px" }}>{label}</span>
         {uses ? <span className="meta">{uses}</span> : null}
@@ -135,7 +135,7 @@ function DocumentBody({ kind, body, name }: { kind: DocumentKind; body: Record<s
         {rows.length ? (
           <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
             {rows.map((r, i) => (
-              <div key={i} style={{ display: "grid", gridTemplateColumns: "minmax(0, 180px) minmax(0, 1fr)", gap: "4px 16px" }}>
+              <div key={i} className="td-bizpair">
                 <span>
                   <b style={{ fontWeight: "600" }}>{text(r.name)}</b>
                   <span className="meta" style={{ display: "block" }}>

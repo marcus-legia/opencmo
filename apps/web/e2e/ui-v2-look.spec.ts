@@ -25,7 +25,7 @@ const SCREENS: { name: string; path: string; ready: string }[] = [
   // P5 C0: the slideshow card on its fixture.
   { name: "inbox-card-slideshow", path: "/app/inbox/card-slideshow", ready: "inbox-card-page" },
   // Session C's pages on their fixtures (`?sample=1`), so the screenshots compare with the frames.
-  ...["analytics", "research", "writer", "studio", "sales", "schedule", "settings", "setup"].map((name) => ({
+  ...["analytics", "research", "writer", "studio", "sales", "schedule", "settings", "setup", "library", "business"].map((name) => ({
     name,
     path: `/app/${name}?sample=1`,
     ready: `v2-${name}`,
@@ -48,6 +48,9 @@ for (const screen of SCREENS) {
       await expect(page.getByTestId(screen.ready).filter({ visible: true })).toBeVisible();
       // Screens read their data client-side: look (and run axe) once loading blocks are gone.
       await expect(page.locator('main [aria-busy="true"]')).toHaveCount(0);
+      // Lists that load after the page (Sales threads, Research, the funnel) show "Loading…" until they arrive: a
+      // screenshot taken before then reviewed nothing (review of #239).
+      await expect(page.locator("main").getByText(/^Loading…$/)).toHaveCount(0, { timeout: 30_000 });
       const overflow = await sidewaysOverflow(page);
       expect(overflow.width, `sideways scroll from: ${overflow.culprits.join("; ")}`).toBeLessThanOrEqual(width);
       await page.screenshot({ path: join(OUT, `${screen.name}-${width}.png`), fullPage: true });

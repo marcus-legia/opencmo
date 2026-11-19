@@ -92,8 +92,10 @@ export async function checkReply(due: ReplyOutcomeDue, readers: ReplyReaders): P
       if (!readers.threads) return null;
       // On Threads a reply is a post of its own: its link reads the answers under it. Without the link, the post's
       // first replies say only whether the founder's reply is there.
-      if (due.outcome_url && THREADS_POST.test(due.outcome_url)) {
-        const answers = await readers.threads(due.outcome_url);
+      // Links saved before they were cleaned (20270201090000) may still carry a query or a trailing slash.
+      const link = due.outcome_url?.replace(/[?#].*$/, "").replace(/\/+$/, "").replace(/^https:\/\/(www\.)?threads\.(com|net)\//i, "https://www.threads.com/");
+      if (link && THREADS_POST.test(link)) {
+        const answers = await readers.threads(link);
         return withAnswer({ status: "found", votes: null, replies: answers.length });
       }
       const replies = await readers.threads(due.url);
@@ -150,6 +152,17 @@ export async function checkReplies(ctx: JobContext, readers: ReplyReaders = defa
  * nudge prompt and its checks (`draftMessages`), saved on the person (`cmo_save_nudge`); the founder sends it or not.
  */
 export async function draftNudges(ctx: JobContext): Promise<{ drafted: number }> {
+  // Runs inside the founder's daily `pull_metrics`: a model or store error here costs today's nudges, never the
+  // metrics pull that follows it.
+  try {
+    return await draftNudgesOrThrow(ctx);
+  } catch (error) {
+    console.error(`[cmo] pull_metrics ${ctx.run.id}: nudges not drafted`, error);
+    return { drafted: 0 };
+  }
+}
+
+async function draftNudgesOrThrow(ctx: JobContext): Promise<{ drafted: number }> {
   const { store, run } = ctx;
   const due = (await store.nudgesDue(run.user_id, MAX_NUDGES)).filter((d): d is NudgeDue & { reply: string } => typeof d.reply === "string" && d.reply.trim().length > 0);
   if (!due.length) return { drafted: 0 };

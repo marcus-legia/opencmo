@@ -86,7 +86,7 @@ select throws_ok($$ select public.opportunity_set_status('e3390000-0000-4000-800
 select is((select person_status || ' / ' || status from public.opportunity_mark_replied('e3390000-0000-4000-8000-0000000000c1',
   'https://www.reddit.com/r/freelance/comments/c1/late_invoices/kx1/')), 'replied / replied', 'the card and the person are replied');
 select is((select outcome_url from public.cmo_draft_outcomes where item_id = 'e3390000-0000-4000-8000-0000000000c1'),
-  'https://www.reddit.com/r/freelance/comments/c1/late_invoices/kx1/', 'the link is on the draft''s outcome');
+  'https://www.reddit.com/r/freelance/comments/c1/late_invoices/kx1', 'the link is on the draft''s outcome, cleaned (no trailing slash)');
 select is((select reply_url from public.opportunity_mark_replied('e3390000-0000-4000-8000-0000000000c3',
   'https://www.facebook.com/groups/founders/posts/123/?comment_id=9')), 'https://www.facebook.com/groups/founders/posts/123/?comment_id=9',
   'a Facebook comment link in the same group');

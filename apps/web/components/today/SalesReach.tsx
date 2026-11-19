@@ -65,7 +65,7 @@ const SR: React.CSSProperties = { position: "absolute", width: "1px", height: "1
  * open only when the checks allow them, and a locked tab says why. "I sent it" marks the person replied, which moves
  * them to Following up. Nothing is sent from here.
  */
-export function ReachPanel({ t, publicReply, onSent }: { t: Thread; publicReply: React.ReactNode; onSent: () => Promise<void> }) {
+export function ReachPanel({ t, publicReply, onSent }: { t: Thread; publicReply: React.ReactNode; onSent: (via: "dm" | "email") => Promise<void> }) {
   const person = t.person;
   const [tab, setTab] = useState<Tab>("public");
   const [dm, setDm] = useState(person?.dmDraft ?? "");
@@ -84,10 +84,10 @@ export function ReachPanel({ t, publicReply, onSent }: { t: Thread; publicReply:
         : null;
   const emailLock = level !== "email_ready" || !reach?.emailFound ? "Reply in public first. An email opens only when they published an address and answered you." : null;
 
-  async function sent() {
+  async function sent(via: "dm" | "email") {
     setBusy(true);
     try {
-      await onSent();
+      await onSent(via);
     } finally {
       setBusy(false);
     }
@@ -116,10 +116,13 @@ export function ReachPanel({ t, publicReply, onSent }: { t: Thread; publicReply:
                 <span aria-hidden="true" style={{ width: "14px", color: c.ok ? "var(--ok)" : "var(--subtle)" }}>
                   {c.ok ? "✓" : "–"}
                 </span>
-                <span style={{ fontWeight: "500" }}>{c.label}</span>
-                <span className="meta" style={{ minWidth: "0" }}>
-                  <span style={SR}>{c.ok ? "yes" : "no"}: </span>
-                  {c.why}
+                {/* The reason goes under the check when the row is narrow (a phone), not beside it one word a line. */}
+                <span style={{ display: "flex", flexWrap: "wrap", gap: "0 8px", minWidth: "0", flex: "1 1 auto" }}>
+                  <span style={{ fontWeight: "500", whiteSpace: "nowrap" }}>{c.label}</span>
+                  <span className="meta" style={{ minWidth: "0" }}>
+                    <span style={SR}>{c.ok ? "yes" : "no"}: </span>
+                    {c.why}
+                  </span>
                 </span>
               </li>
             ))}
@@ -162,7 +165,7 @@ export function ReachPanel({ t, publicReply, onSent }: { t: Thread; publicReply:
             <textarea id={`dm-${t.id}`} className="reply" rows={4} value={dm} onChange={(e) => setDm(e.target.value)} style={{ width: "100%", resize: "vertical", font: "inherit", fontSize: "15px", lineHeight: "1.55", color: "var(--text)" }} />
             <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "flex-end", alignItems: "center" }}>
               {note ? <span className="meta">{note}</span> : null}
-              <button type="button" className="ghost" disabled={busy} onClick={() => void sent()}>
+              <button type="button" className="ghost" disabled={busy} onClick={() => void sent("dm")}>
                 I sent it
               </button>
               <button
@@ -198,7 +201,7 @@ export function ReachPanel({ t, publicReply, onSent }: { t: Thread; publicReply:
             <textarea aria-label="Email" className="reply" rows={5} value={dm} onChange={(e) => setDm(e.target.value)} style={{ width: "100%", resize: "vertical", font: "inherit", fontSize: "15px", lineHeight: "1.55", color: "var(--text)" }} />
             <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "flex-end", alignItems: "center" }}>
               {note ? <span className="meta">{note}</span> : null}
-              <button type="button" className="ghost" disabled={busy} onClick={() => void sent()}>
+              <button type="button" className="ghost" disabled={busy} onClick={() => void sent("email")}>
                 I sent it
               </button>
               <button type="button" className="ghost" onClick={async () => setNote((await copy(reach!.emailFound!)) ? "Address copied." : "Select the address and copy it.")}>

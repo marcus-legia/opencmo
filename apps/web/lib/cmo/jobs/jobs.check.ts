@@ -70,6 +70,11 @@ async function main() {
   assert.deepEqual(both.map((p) => `${p.day.slice(8)} ${p.idea}`), [
     "05 Monday's idea", "06 Slot five is not asked for", "07 The 3-7-14 reminder rule", "08 Why invoices go unpaid", "09 The 3-7-14 reminder rule", "10 Why invoices go unpaid", "11 Clamped to the last day",
   ], "an idea for a slot not asked for takes its day's open slot; an empty slot is filled from the pillars");
+  // Review of #239: with no Library, a week from the founder's brief or the first week marks its posts, so their
+  // drafts later write them instead of refusing them for an empty Library.
+  const briefed = toPlanItems({ items: [post(0, "Our launch")] }, plan({ x: 1 }), { today, docs, library: [], fromBrief: true, plannedFrom: "brief" });
+  const briefPosts = briefed.filter((p) => p.department === "post");
+  assert.ok(briefPosts.length > 0 && briefPosts.every((p) => p.planned_from === "brief" && !p.sources), "a brief's posts are marked");
   const two = toPlanItems({ items: [] }, plan({ x: 2, threads: 1 }), { today, docs });
   assert.equal(two.length, 14);
   assert.deepEqual(two.slice(0, 2).map((p) => [p.platform, p.targets]), [["X", ["x", "threads"]], ["X", ["x"]]]);

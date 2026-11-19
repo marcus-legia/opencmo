@@ -298,8 +298,8 @@ export function ReplyBody({ body }: { body: Body<"reply"> }) {
           {body.rule.needs}. Check your account first: a new or low-karma reply is often removed.
         </p>
       ) : null}
+      {/* "You post it yourself" is on the card's meta line already. */}
       <div className="v2-card-draft">{body.draft}</div>
-      <div className="v2-card-meta">Rules: {body.rules}</div>
     </>
   );
 }

@@ -146,11 +146,14 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
     async planWeek(_u, runId, plan) {
       for (let i = items.length - 1; i >= 0; i--) if (items[i].status === "planned") items.splice(i, 1);
       for (const p of plan) {
-        const { targets, slot, sources, ...item } = p;
+        const { targets, slot, sources, planned_from, ...item } = p;
         // As `cmo_plan_week` writes it: a post keeps its slot's platforms in `body.targets` and its index in `body.slot`,
         // and its valid Library sources in `body.sources`.
         const kept = item.department === "post" ? cleanSources(sources) : null;
-        const body = { ...(targets?.length ? { targets, ...(slot === undefined ? {} : { slot }) } : {}), ...(kept ? { sources: kept } : {}) };
+        const body = {
+          ...(targets?.length ? { targets, ...(slot === undefined ? {} : { slot }) } : {}),
+          ...(kept ? { sources: kept } : item.department === "post" && planned_from ? { planned_from } : {}),
+        };
         items.push({ id: id(), run_id: runId, ...item, status: "planned", priority: "medium", body, final_text: null, external_url: null, decided_at: null, published_at: null, created_at: new Date().toISOString() });
       }
       return plan.length;

@@ -183,7 +183,11 @@ html[data-theme="dark"] .k.pg-agentsales{--bg:#121110;--panel:#181715;--raised:#
 .pg-agentsales .th{border:1px solid var(--line);border-radius:10px;background:var(--panel);overflow:hidden}
 .pg-agentsales .th[data-open="true"]{border-color:var(--line-2)}
 .pg-agentsales .row{display:flex;align-items:center;gap:12px;width:100%;min-height:52px;padding:8px 12px;border:0;background:transparent;text-align:left}
-.pg-agentsales .score{display:inline-flex;align-items:center;justify-content:center;width:36px;height:24px;border-radius:6px;font-family:"Geist Mono",ui-monospace,monospace;font-size:13px;font-weight:500}
+/* A word, not a number (owner, 2026-11-19): "Strong match" on one line, in the UI font. */
+.pg-agentsales .score{display:inline-flex;align-items:center;justify-content:center;flex:none;height:24px;padding:0 8px;border-radius:6px;white-space:nowrap;font-size:12px;font-weight:600}
+/* An open thread lines up under its title on a wide screen; on a phone the indent only takes room from the checks. */
+.pg-agentsales .th-body{border-top:1px solid var(--line);padding:14px 14px 14px 60px;display:flex;flex-direction:column;gap:12px}
+@media (max-width:640px){.pg-agentsales .th-body{padding:14px}}
 .pg-agentsales .hi{background:var(--ok-wash);color:var(--ok)}
 .pg-agentsales .mid{background:var(--warn-wash);color:var(--warn)}
 .pg-agentsales .lo{background:var(--raised);color:var(--muted)}

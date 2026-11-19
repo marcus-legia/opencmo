@@ -1125,7 +1125,8 @@ export async function salesScan(ctx: JobContext): Promise<SalesScanOutput & JobO
           const email = page ? emailInPage(page.html) : null;
           if (email) out.set(x.p.thread.url, email);
         } catch (error) {
-          if (!(error instanceof SiteError)) throw error;
+          // The cards are saved: a site that will not load (or a bad redirect, a TypeError) only means no email.
+          if (!(error instanceof SiteError)) console.error(`[cmo] sales_scan ${run.id}: site not read`, error);
         }
       }
       return Object.fromEntries(out);
@@ -1137,7 +1138,16 @@ export async function salesScan(ctx: JobContext): Promise<SalesScanOutput & JobO
     "draft_dm",
     `Drafting ${dmReady.length} ${dmReady.length === 1 ? "message" : "messages"} for people ready for one`,
     // The public reply comes first on the card, so the DM may refer to it; the founder sends both.
-    async () => draftMessages(ctx, "dm", { docs, voice, targets: dmReady.map((x) => ({ thread: x.p.thread, reply: replyByUrl.get(x.p.thread.url) || null })) }),
+    // The cards are saved: a model that fails here leaves these people with no DM draft, never a failed scan whose
+    // refund and retry would find every thread seen, and `save_reach` below still runs.
+    async () => {
+      try {
+        return await draftMessages(ctx, "dm", { docs, voice, targets: dmReady.map((x) => ({ thread: x.p.thread, reply: replyByUrl.get(x.p.thread.url) || null })) });
+      } catch (error) {
+        console.error(`[cmo] sales_scan ${run.id}: DMs not drafted`, error);
+        return { textFor: new Map<number, string>() };
+      }
+    },
     (r) => `${r.textFor.size} ${r.textFor.size === 1 ? "message" : "messages"} drafted`,
   )).textFor;
   const dmByUrl = new Map(dmReady.flatMap((x, i) => (dmFor.has(i) ? [[x.p.thread.url, dmFor.get(i)!] as const] : [])));

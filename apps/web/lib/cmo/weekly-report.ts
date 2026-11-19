@@ -115,7 +115,10 @@ export function buildWeekly(input: WeeklyInput): Weekly {
   const stopUrl = input.unsubscribeUrl ?? settingsUrl;
   const footer = [
     "Every number here counts your own conversations and posts from the last 7 days.",
-    `This report replaces your Monday morning email. You get the morning email ${input.schedule}.`,
+    // A founder who chose Monday emails only gets this report as that email: no morning email to promise them.
+    input.schedule.startsWith("every Monday")
+      ? "You chose one email a week: this report is it, every Monday."
+      : `This report replaces your Monday morning email. You get the morning email ${input.schedule}.`,
   ];
 
   const text = [

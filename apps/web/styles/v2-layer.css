@@ -631,3 +631,11 @@ html[data-ui="v2"] .v2-main-body:has(.ed2) {
 .td-setup-chip:focus-visible { outline: 2px solid var(--v2-brand, #c93a0f); outline-offset: 2px; }
 .td-setup-buyer-input { flex: 1 1 220px; min-width: 0; }
 .scr-setup-title { margin: 0 0 4px; font-size: 22px; font-weight: 500; letter-spacing: -.02em; }
+
+/* Your business (wave 3 C3): a field's name beside its value on a wide screen, above it on a phone, where two columns
+   left the value one word a line (review of #239). */
+.td-bizfield { display: grid; grid-template-columns: minmax(0, 200px) minmax(0, 1fr); gap: 8px 24px; }
+.td-bizpair { display: grid; grid-template-columns: minmax(0, 180px) minmax(0, 1fr); gap: 4px 16px; }
+@media (max-width: 640px) {
+  .td-bizfield, .td-bizpair { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+}

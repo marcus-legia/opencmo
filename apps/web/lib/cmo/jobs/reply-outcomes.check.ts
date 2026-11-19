@@ -105,6 +105,9 @@ async function main() {
   assert.equal(mem3.people.get("https://www.reddit.com/r/SaaS/comments/n3/c/")!.nudge, null, "a two-day-old one has none yet");
   const quiet = await draftNudges({ store: mem3.store, run: { user_id: "u", id: metrics.id } } as never);
   assert.deepEqual(quiet, { drafted: 0 }, "nudged once");
+  // Review of #239: a nudge that cannot be drafted costs the nudge, never the founder's daily metrics pull.
+  const broken = { ...mem3.store, nudgesDue: async () => { throw new Error("store down"); } };
+  assert.deepEqual(await draftNudges({ store: broken, run: { user_id: "u", id: metrics.id } } as never), { drafted: 0 }, "a failing nudge is swallowed");
 
   // The loop: connected accounts or due replies run pull_metrics without the social reader.
   const base = { weekday: 3, duePost: null, dueSales: null, competitorHandles: 0, publishedRecently: 0, socialReader: false };

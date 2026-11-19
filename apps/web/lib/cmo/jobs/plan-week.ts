@@ -21,7 +21,8 @@ import type { LibraryTopTheme } from "../library";
 import { libraryBlock, libraryRefs, NO_LIBRARY, sourcesFor, themeSources, type SourceRef } from "./library-sources";
 
 /** A planned item with the Library conversations a post is written from (wave 3 B3). */
-export type SourcedPlanItem = PlanItem & { sources?: PostSource[] };
+/** `planned_from`: a post planned with no Library sources from the founder's brief or in the first week; its draft writes it. */
+export type SourcedPlanItem = PlanItem;
 
 export const PlanSchema = z.object({
   items: z
@@ -113,7 +114,7 @@ const clampDay = (offset: number) => Math.min(6, Math.max(0, Math.round(offset))
 export function toPlanItems(
   plan: Plan,
   posting: PostingPlan,
-  opts: { today?: Date; docs?: Documents; library?: LibraryTopTheme[]; fromBrief?: boolean } = {},
+  opts: { today?: Date; docs?: Documents; library?: LibraryTopTheme[]; fromBrief?: boolean; plannedFrom?: "brief" | "onboarding" } = {},
 ): SourcedPlanItem[] {
   const today = opts.today ?? new Date();
   const pillars = pillarIdeas(opts.docs);
@@ -168,7 +169,7 @@ export function toPlanItems(
       idea: (item && text(item.idea)) || fill?.idea.slice(0, 300) || `Post for ${platform}`,
       reason: item ? text(item.reason) : `From your pillar "${fill!.pillar}".`,
       ...(item?.image && ++images <= MAX_IMAGES ? { image: true } : {}),
-      ...(cited.length ? { sources: cited } : {}),
+      ...(cited.length ? { sources: cited } : opts.plannedFrom ? { planned_from: opts.plannedFrom } : {}),
     });
   }
 
@@ -309,7 +310,8 @@ export async function planWeek(ctx: JobContext): Promise<JobOutput> {
   // from onboarding, which a new founder sees before Sales has found anyone (owner, 2026-11-19: a free account sees
   // its week plan and first drafts). From the next week on, posts come from the Library only.
   const fromBrief = run.input.source === "onboarding" || (run.input.source !== "schedule" && typeof run.input.brief === "string" && run.input.brief.trim().length > 0);
-  const items = toPlanItems({ items: fitStage(plan.items, docs) }, posting, { today: new Date(), docs, library, fromBrief });
+  const plannedFrom = run.input.source === "onboarding" ? "onboarding" : fromBrief ? "brief" : undefined;
+  const items = toPlanItems({ items: fitStage(plan.items, docs) }, posting, { today: new Date(), docs, library, fromBrief, plannedFrom });
   const noPosts = !items.some((i) => i.department === "post") && postSlots(posting).length > 0;
   if (noPosts) await ctx.step("library", NO_LIBRARY, async () => 0);
   const saved = await ctx.step("write_calendar", "Saving your calendar", () => store.planWeek(run.user_id, run.id, items), (n) =>

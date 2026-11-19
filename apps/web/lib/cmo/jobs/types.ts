@@ -178,7 +178,7 @@ export type ItemRow = {
  * label. `slot`: that slot's index within its day, so saving a new plan retargets each post by it (`save_posting_plan`).
  */
 /** `sources`: posts only, the Library conversations it is written from (B3); `cmo_plan_week` keeps the valid ones. */
-export type PlanItem = { department: "post" | "sales" | "video"; platform: string; day: string; idea: string; reason: string; image?: boolean; targets?: string[]; slot?: number; sources?: PostSource[] };
+export type PlanItem = { department: "post" | "sales" | "video"; platform: string; day: string; idea: string; reason: string; image?: boolean; targets?: string[]; slot?: number; sources?: PostSource[]; planned_from?: "brief" | "onboarding" };
 
 export type Documents = Partial<Record<DocumentKind, Record<string, unknown>>>;
 

@@ -140,8 +140,10 @@ export async function draftPost(ctx: JobContext): Promise<JobOutput> {
   const planned = storedSources(due?.body);
   const closest = planned.length || fromFounder ? null : closestTheme(idea, library);
   const sources: PostSource[] = planned.length ? planned : closest ? themeSources(closest.name, libraryRefs(library)) : [];
-  // The first week's drafts (onboarding) are the one exception: they are written before Sales has found anyone.
-  if (!fromFounder && !sources.length && run.input.source !== "onboarding") {
+  // The first week's drafts (onboarding) are the one exception: they are written before Sales has found anyone. So is
+  // a post the plan made from the founder's brief or in the first week (`planned_from`), drafted on its day later.
+  const plannedWithout = due?.body?.planned_from === "brief" || due?.body?.planned_from === "onboarding";
+  if (!fromFounder && !plannedWithout && !sources.length && run.input.source !== "onboarding") {
     await ctx.step("library", NO_LIBRARY, async () => 0);
     return { refund: true, reason: NO_LIBRARY };
   }
