@@ -23,8 +23,9 @@ import type { Documents } from "./types";
 
 const docs: Documents = {
   product: { name: "Paylane", one_liner: "Invoicing that chases late payments.", pricing: "$12/month" },
-  strategy: { icp: "Freelancers who invoice 3–15 clients a month", avoid: ["revolutionary"] },
-  content_strategy: { pillars: [{ name: "Getting paid", ideas: ["The 3-7-14 reminder rule"] }] },
+  strategy: { icp: "Freelancers who invoice 3–15 clients a month" },
+  brand: { avoid: ["revolutionary"] },
+  post_plan: { topics: ["The 3-7-14 reminder rule"] },
 };
 
 async function main() {

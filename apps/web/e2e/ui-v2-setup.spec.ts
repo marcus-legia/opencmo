@@ -63,10 +63,10 @@ for (const width of [1280, 390]) {
     await expect(page).toHaveURL(/\/app(\/sales)?$/, { timeout: 180_000 });
     // The run wrote its real steps, in order (the fake model is quicker than the 2 s poll, so the list is read back).
     const { data: run } = await admin().from("cmo_runs").select("steps").eq("user_id", user.id).eq("kind", "onboard").single();
-    expect(run!.steps).toEqual(["site", "product", "strategy", "competitors", "content_strategy"].map((id) => ({ id, status: "done" })));
-    // The answers reached the content plan the planner reads.
-    const { data: plan } = await admin().from("marketing_documents_latest").select("body").eq("user_id", user.id).eq("kind", "content_strategy").single();
-    expect(String((plan!.body as { cadence?: string }).cadence)).toMatch(/^The founder posts on X, LinkedIn\./);
+    expect(run!.steps).toEqual(["site", "product", "strategy", "competitors", "post_plan", "brand"].map((id) => ({ id, status: "done" })));
+    // The answers reached the Post plan the planner reads.
+    const { data: plan } = await admin().from("marketing_documents_latest").select("body").eq("user_id", user.id).eq("kind", "post_plan").single();
+    expect((plan!.body as { channels?: string[] }).channels).toEqual(["x", "linkedin"]);
     // Today opens with the strategy to read.
     await page.goto("/app");
     await expect(page.getByTestId("approval-queue").getByTestId("feed-row").filter({ hasText: "Ready to read: your marketing strategy" })).toBeVisible();

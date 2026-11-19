@@ -21,10 +21,10 @@ const base: OnboardingStatus = {
 const steps = setupSteps({ ...base, run: { ...base.run!, steps: [{ id: "site", status: "done" }, { id: "product", status: "running" }] } });
 assert.deepEqual(
   steps.map((step) => `${step.id}:${step.state}`),
-  ["site:done", "product:running", "strategy:waiting", "competitors:waiting", "content_strategy:waiting", "plan:waiting", "draft:waiting"],
+  ["site:done", "product:running", "strategy:waiting", "competitors:waiting", "post_plan:waiting", "brand:waiting", "plan:waiting", "draft:waiting"],
 );
 assert.equal(steps[0]!.label, "Reading your website");
-assert.equal(setupSteps({ ...base, plan: "queued", draft: "failed" }).slice(5).map((s) => s.state).join(), "running,failed");
+assert.equal(setupSteps({ ...base, plan: "queued", draft: "failed" }).slice(6).map((s) => s.state).join(), "running,failed");
 
 // The end: never while the run works or after it failed; at once when the drafts end; after a wait with no plan.
 assert.equal(setupFinished(base, 0), false);
@@ -43,7 +43,7 @@ assert.equal(setupFinished({ ...done, plan: "queued" }, 121_000), true, "a plan 
 assert.equal(setupSteps(base).some((s) => s.id === "scan"), false);
 assert.deepEqual(
   setupSteps({ ...base, scan: "running" }).map((s) => s.id),
-  ["site", "product", "strategy", "competitors", "content_strategy", "scan", "plan", "draft"],
+  ["site", "product", "strategy", "competitors", "post_plan", "brand", "scan", "plan", "draft"],
 );
 assert.equal(setupSteps({ ...base, scan: "queued" }).find((s) => s.id === "scan")!.label, "Finding people who describe the problem");
 

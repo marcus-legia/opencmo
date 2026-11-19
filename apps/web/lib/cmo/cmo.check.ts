@@ -58,7 +58,7 @@ async function main(): Promise<void> {
   assert.deepEqual(product.problems, ["one", "two"]);
   assert.equal(product.pricing, "");
 
-  // Bản giả (CI/E2E) ra đúng schema và đủ bốn document.
+  // The fake (CI/E2E) matches the schema and writes all five documents.
   process.env.OPENCMO_AGENT_FAKE = "1";
   const drafts = await draftDocuments({ url: "https://acme.com/", pages: [page] });
   OnboardingSchema.parse(drafts);
@@ -71,7 +71,7 @@ async function main(): Promise<void> {
   // had no draft (e2e ui-v2-activation, red since 2026-11-12).
   const paylane = await draftDocuments(await readSite("paylane.test"));
   assert.equal(paylane.product.name, "paylane", "a title's tagline after a colon is not the product name");
-  const idea = paylane.content_strategy.pillars[0]!.ideas[0]!;
+  const idea = paylane.post_plan.topics[0]!;
   for (const version of fakePost(idea, paylane.product.name).versions) {
     assert.deepEqual(checkPostFor(version.text, postProfile("X", ["x"]), { avoid: [], known: new Set(), names: [paylane.product.name] }), [],
       `the fake first draft passes the post checks: ${version.text}`);
@@ -94,12 +94,19 @@ async function main(): Promise<void> {
 {
   const before = { competitors: [{ name: "Buffer", difference: "Short.", website: "" }] };
   assert.equal(wasCut(before.competitors, clampDocument("competitors", before).competitors), false, "reordering is not a cut");
-  const long = { cadence: "x".repeat(2000) };
-  assert.equal(wasCut(long.cadence, clampDocument("content_strategy", long).cadence), true, "text over the limit is a cut");
+  const long = { rhythm: "x".repeat(2000) };
+  assert.equal(wasCut(long.rhythm, clampDocument("post_plan", long).rhythm), true, "text over the limit is a cut");
   const many = { features: Array.from({ length: 20 }, (_, i) => `f${i}`) };
   assert.equal(wasCut(many.features, clampDocument("product", many).features), true, "dropped list items are a cut");
   const cadence = "Spend 10 minutes every morning in Approvals. Approve or edit the X post, approve the clips, and send one helpful Reddit reply. Let Ferreto draft; you decide what goes out.";
-  assert.equal(clampDocument("content_strategy", { cadence }).cadence, cadence, "a full weekly rhythm is not cut mid-sentence");
+  assert.equal(clampDocument("post_plan", { rhythm: cadence }).rhythm, cadence, "a full weekly rhythm is not cut mid-sentence");
+  // Documents v2 (wave 3 A4): channels keep only X, LinkedIn and Threads; colours only #rrggbb; samples up to 600 chars.
+  assert.deepEqual(clampDocument("post_plan", { channels: ["x", "tiktok", "x", "threads"] }).channels, ["x", "threads"]);
+  const brand = clampDocument("brand", { voice_samples: ["s".repeat(700), "", "b", "c", "d", "e", "f"], look: { colors: ["#ef4a1a", "red", "#FFF"], logo_url: "http://x.test/l.png" } });
+  assert.equal((brand.voice_samples as string[])[0]!.length, 600);
+  assert.equal((brand.voice_samples as string[]).length, 5);
+  assert.deepEqual((brand.look as { colors: string[] }).colors, ["#ef4a1a"]);
+  assert.equal((brand.look as { logo_url: string }).logo_url, "", "a logo not on https is dropped");
 }
 
 main().catch((error) => {

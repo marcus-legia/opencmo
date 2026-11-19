@@ -15,6 +15,7 @@ import { useState } from "react";
 import { api, jsonBody } from "@/components/clipping/api";
 import { DOCUMENT_KINDS, DOCUMENTS, type DocumentKind, type Field } from "@/lib/cmo/documents";
 import type { CmoState, DocumentRow } from "@/lib/cmo/state";
+import { Choices } from "./DocumentFields";
 
 type Body = Record<string, unknown>;
 
@@ -229,7 +230,17 @@ function ReadFields({ fields, value }: { fields: Field[]; value: Body }) {
             </div>
           );
         }
-        if (field.type === "list") {
+        if (field.type === "object") {
+          return (
+            <div key={field.key} className="cmo-read-row is-wide">
+              <dt>{field.label}</dt>
+              <dd>
+                <ReadFields fields={field.fields} value={v && typeof v === "object" ? (v as Body) : {}} />
+              </dd>
+            </div>
+          );
+        }
+        if (field.type === "list" || field.type === "choices") {
           const items = Array.isArray(v) ? (v as string[]) : [];
           return (
             <div key={field.key} className="cmo-read-row">
@@ -276,6 +287,18 @@ function Fields({ fields, value, onChange, idPrefix }: { fields: Field[]; value:
               ) : null}
             </fieldset>
           );
+        }
+        if (field.type === "object") {
+          const inner = value[field.key] && typeof value[field.key] === "object" ? (value[field.key] as Body) : {};
+          return (
+            <fieldset key={field.key} className="cmo-group">
+              <legend>{field.label}</legend>
+              <Fields fields={field.fields} value={inner} idPrefix={id} onChange={(next) => set(field.key, next)} />
+            </fieldset>
+          );
+        }
+        if (field.type === "choices") {
+          return <Choices key={field.key} field={field} value={value[field.key]} onChange={(next) => set(field.key, next)} />;
         }
         if (field.type === "list") {
           const items = Array.isArray(value[field.key]) ? (value[field.key] as string[]) : [];

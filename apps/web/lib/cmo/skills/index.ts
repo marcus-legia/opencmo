@@ -20,7 +20,7 @@ export const SKILL_NAMES = Object.keys(CMO_SKILLS) as SkillName[];
 
 /** Chuỗi tĩnh (không chèn biến) để thân skill đọc qua tool vẫn y hệt giữa các lượt. */
 export const MARKETING_PREAMBLE = `This is a general marketing playbook written for a different tool. Apply it like this:
-- Product marketing context is the founder's four documents in <documents> (product, strategy, competitors, content strategy). Never look for files such as .agents/product-marketing.md; if something is missing, ask the founder one short question.
+- Product marketing context is the founder's five documents in <documents> (product, strategy, competitors, post plan, brand). Never look for files such as .agents/product-marketing.md; if something is missing, ask the founder one short question.
 - Skip any step about reading or writing files, running command-line tools, installing code, connecting integrations or checking for skill updates. You advise and draft; you do not edit the founder's website or code.
 - For SEO or website reviews, read the live site with read_site, then give a short prioritized list of fixes the founder can make.
 - Everything that goes out (posts, replies, emails, outreach) is a draft the founder approves and sends from their own account. Never suggest automated liking, following or commenting, multiple accounts, or bought engagement.`;

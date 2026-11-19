@@ -93,10 +93,10 @@ function videoPlatformOf(label: string): VideoPlatform | null {
   return id === "tiktok_caption" ? "tiktok" : id === "instagram_caption" ? "instagram" : id === "youtube" ? "youtube" : null;
 }
 
-/** The content strategy's ideas, in order; a stand-in when the strategy has none. */
+/** The Post plan's topics, in order; a stand-in when it has none. */
 function pillarIdeas(docs: Documents | undefined): { idea: string; pillar: string }[] {
-  const pillars = Array.isArray(docs?.content_strategy?.pillars) ? (docs.content_strategy.pillars as { name?: string; ideas?: string[] }[]) : [];
-  const ideas = pillars.flatMap((p) => (p.ideas ?? []).filter((i) => typeof i === "string" && i.trim()).map((idea) => ({ idea, pillar: p.name ?? "your strategy" })));
+  const topics = Array.isArray(docs?.post_plan?.topics) ? (docs.post_plan.topics as unknown[]) : [];
+  const ideas = topics.filter((t): t is string => typeof t === "string" && !!t.trim()).map((t) => ({ idea: t.trim(), pillar: t.trim() }));
   return ideas.length ? ideas : [{ idea: "What we are building this week", pillar: "building in public" }];
 }
 

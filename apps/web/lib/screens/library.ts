@@ -5,6 +5,7 @@
 
 import { z } from "zod";
 
+import { DOCUMENT_KINDS } from "../cmo/documents";
 import { LibraryEntrySchema, LibraryThemeSchema, LIBRARY_LIMITS } from "../cmo/library";
 import { SALES_PLATFORMS } from "../cmo/social/conversations";
 
@@ -12,7 +13,7 @@ import { PlatformSchema, iso } from "./common";
 
 /** Same kinds as `marketing_documents.kind` (`lib/cmo/documents.ts`). */
 export const LibraryDocumentSchema = z.object({
-  kind: z.enum(["product", "strategy", "competitors", "content_strategy"]),
+  kind: z.enum(DOCUMENT_KINDS),
   title: z.string().max(80),
   summary: z.string().max(300),
   fields: z.number().int().min(0),
@@ -88,7 +89,7 @@ export type LibraryThemeView = z.infer<typeof LibraryThemeViewSchema>;
 export const LibraryScreenSchema = z.object({
   /** The site Research read: "Research drafted these from ferreto.io". */
   site: z.string().max(200).nullable(),
-  documents: z.array(LibraryDocumentSchema).max(4),
+  documents: z.array(LibraryDocumentSchema).max(DOCUMENT_KINDS.length),
   brandKits: z.array(LibraryBrandKitSchema),
   voice: z.object({ notes: z.array(VoiceNoteSchema), wordsCut: z.array(z.string().max(40)) }),
   skills: z.object({ writing: z.array(LibrarySkillSchema), video: z.array(LibrarySkillSchema) }),

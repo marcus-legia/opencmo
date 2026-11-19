@@ -30,7 +30,7 @@ export function suggestFixes(docs: Docs, max = 3): Suggestion[] {
   if (docs.strategy && count(docs, "strategy", "pains") < 2) add("List your customers' pains", "strategy");
   if (docs.product && text(docs, "product", "one_liner").length < 25) add("Sharpen your one-liner", "product");
   if (docs.competitors && count(docs, "competitors", "competitors") === 0) add("Add competitors", "competitors");
-  if (docs.strategy && text(docs, "strategy", "voice").length < 20) add("Describe your brand voice", "strategy");
+  if (docs.brand && text(docs, "brand", "voice").length < 20) add("Describe your brand voice", "brand");
   if (docs.product && text(docs, "product", "category") === "") add("Add a category", "product");
   if (docs.product && vague(text(docs, "product", "pricing"))) add("Add your pricing", "product");
   return out.slice(0, max);

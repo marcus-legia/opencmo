@@ -122,7 +122,7 @@ const voice = voiceBlock([
 assert.ok(voice.indexOf("Cuts the last line") < voice.indexOf("Old note"), "heavier notes first");
 assert.match(voice, /- \(LinkedIn, weight 0\.90, 2026-10-20\) Cuts the last line/, "each note says its platform and weight");
 const ctx: WriterContext = {
-  documents: { product: { name: "Paylane", pricing: "$12/month" }, strategy: { avoid: ["revolutionary"] } },
+  documents: { product: { name: "Paylane", pricing: "$12/month" }, brand: { avoid: ["revolutionary"] } },
   corrections: ["Never end with a summary line."],
   voiceNotes: [{ body: "Writes in lowercase", platform: "threads", weight: 1, createdAt: "2026-10-28T00:00:00Z" }],
   recent: [],
@@ -251,9 +251,9 @@ async function postChecks() {
 
   // A Threads item: its own agent, the <platform> block first, X's prefix. The model is stubbed to read each request.
   process.env.OPENCMO_AGENT_FAKE = "1";
-  const docs = { product: { name: "Paylane", pricing: "$12/month" }, strategy: { avoid: ["revolutionary"] }, content_strategy: { pillars: [{ name: "Getting paid", ideas: ["The 3-7-14 reminder rule"] }] } };
+  const docs = { product: { name: "Paylane", pricing: "$12/month" }, brand: { avoid: ["revolutionary"] }, post_plan: { topics: ["The 3-7-14 reminder rule"] } };
   // Wave 3 B3: posts are written from the Library, so every store below starts with a few conversations in it.
-  const withLibrary = (m: ReturnType<typeof memoryStore>) => (seedLibrary(m, { ...docs, strategy: { ...docs.strategy, pains: ["late invoices"] } }), m);
+  const withLibrary = (m: ReturnType<typeof memoryStore>) => (seedLibrary(m, { ...docs, strategy: { pains: ["late invoices"] } }), m);
   const item = (platform: string, id: string): ItemRow => ({ id, run_id: null, department: "post", platform, day: isoDay(), idea: "Why reminders on day 3, 7 and 14 get invoices paid", reason: "pillar", status: "planned", priority: "medium", body: {}, final_text: null, external_url: null, decided_at: null, published_at: null, created_at: new Date().toISOString() });
   // A 400-character version fits Threads, and X too since X takes long posts (D6).
   const answer = { versions: [{ text: long, angle: "long" }, { text: "Reminders on day 3, 7 and 14.", angle: "short" }], rationale: "r" };
@@ -332,7 +332,7 @@ async function studioChecks() {
 
   assert.deepEqual([firstLine("Your invoice is late. Paylane sends it."), firstLine("no stop at all"), firstLine("v1.2 shipped today! More soon.")], ["Your invoice is late.", "no stop at all", "v1.2 shipped today!"], "the first sentence said, not a decimal point");
   process.env.OPENCMO_AGENT_FAKE = "1";
-  const docs = { product: { name: "Paylane", pricing: "$12/month" }, strategy: { avoid: ["revolutionary"] } };
+  const docs = { product: { name: "Paylane", pricing: "$12/month" }, brand: { avoid: ["revolutionary"] } };
 
   // write_video_brief: SQL's input → Writer's brief, as Studio takes it.
   const briefRun = memoryStore(docs, []);

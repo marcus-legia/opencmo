@@ -122,7 +122,7 @@ export type VoiceEvent = { id: string; what: string; source: VoiceSource; at: st
 export type VoicePage = {
   /** Active rules, then the ones turned off from this page or by Undo (rules never used stay out). */
   rules: VoiceRule[];
-  /** From the strategy document (`Business` tab): the voice line and the words to avoid. */
+  /** From the Brand document (wave 3 A4): the voice line and the words to avoid. */
   setup: { voice: string | null; avoid: string[] };
   /** Newest first; only the newest event not undone offers Undo. */
   history: VoiceEvent[];
@@ -157,21 +157,21 @@ export function eventLine(e: Pick<EventRow, "correction_id" | "field" | "before"
 }
 
 export async function voicePage(supabase: SupabaseClient): Promise<VoicePage> {
-  const [active, turnedOff, events, strategy] = await Promise.all([
+  const [active, turnedOff, events, brand] = await Promise.all([
     // Every rule the Writer follows (it reads the newest 30; the page shows them all, up to the table's own use).
     supabase.from("cmo_corrections").select("id, rule, status, source").eq("status", "active").order("decided_at", { ascending: false, nullsFirst: false }).limit(200),
     // Rules off now that were on once (turned off here, or undone): a proposal set aside never was.
     supabase.from("cmo_voice_events").select("correction_id").not("correction_id", "is", null).or("before_status.eq.active,after_status.eq.active").order("seq", { ascending: false }).limit(200),
     supabase.from("cmo_voice_events").select("id, seq, correction_id, field, source, before, after, before_status, after_status, undone_at, created_at").order("seq", { ascending: false }).limit(30),
-    supabase.from("marketing_documents").select("body").eq("kind", "strategy").order("version", { ascending: false }).limit(1).maybeSingle<{ body: Record<string, unknown> }>(),
+    supabase.from("marketing_documents").select("body").eq("kind", "brand").order("version", { ascending: false }).limit(1).maybeSingle<{ body: Record<string, unknown> }>(),
   ]);
-  for (const r of [active, turnedOff, events, strategy]) if (r.error) throw new Error(`voice page: ${r.error.message}`);
+  for (const r of [active, turnedOff, events, brand]) if (r.error) throw new Error(`voice page: ${r.error.message}`);
   const offIds = [...new Set(((turnedOff.data ?? []) as { correction_id: string }[]).map((e) => e.correction_id))];
   const off = offIds.length ? await supabase.from("cmo_corrections").select("id, rule, status, source").eq("status", "rejected").in("id", offIds) : { data: [], error: null };
   if (off.error) throw new Error(`voice page: ${off.error.message}`);
   const rows = (events.data ?? []) as EventRow[];
   const latest = rows.find((e) => !e.undone_at)?.id ?? null;
-  const body = strategy.data?.body ?? {};
+  const body = brand.data?.body ?? {};
   return {
     rules: ([...(active.data ?? []), ...(off.data ?? [])] as { id: string; rule: string; status: string; source: string }[])
       .map((r) => ({ id: r.id, rule: r.rule, on: r.status === "active", source: (r.source === "ratings" ? "ratings" : r.source === "founder" ? "you" : "edits") as VoiceSource }))

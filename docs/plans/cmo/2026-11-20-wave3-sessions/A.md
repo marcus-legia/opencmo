@@ -31,7 +31,7 @@ warm; DM ready needs buyer, wants now, fresh, `dmAllowed` and (warm or the post 
   `opportunity_reply_url` or replace it.
 - Allowlist test 182 gets the founder functions. pgTAP for each.
 
-### - [ ] A4. Documents v2
+### - [x] A4. Documents v2
 - `strategy`: add `where_they_ask` (list of communities / places) and `this_week` (one line); move `voice` and
   `avoid` to a new `brand` document kind with `voice_samples` (up to 5 texts, 600 chars each), `intro_line`, `avoid`
   (list), `look` (`logo_url`, `colors` (2–4 hex), `font`, `screenshots` (storage paths), `image_styles`).

@@ -26,15 +26,16 @@ const BrandView = dynamic(() => import("@/components/clipping/web/BrandView").th
 
 /** What used to be the Brain and Library pages, now panes of this drawer (`components/today/panes.tsx`). */
 export type PaneId = "plan" | "learned" | "past" | "voice" | "skills";
-export type DocId = DocumentKind | "brand" | PaneId;
+export type DocId = DocumentKind | PaneId;
 
 /** The five documents of the Context column, with who reads each (Main.dc.html). */
 export const DOC_ROWS: { id: DocId; title: string; readBy: string; readers: string[] }[] = [
   { id: "product", title: "Product", readBy: "Read by every agent", readers: ["Every agent"] },
   { id: "strategy", title: "Strategy", readBy: "Planner, Writer", readers: ["Planner", "Writer", "CMO chat"] },
   { id: "competitors", title: "Competitors", readBy: "Research, Sales", readers: ["Research", "Sales"] },
-  { id: "content_strategy", title: "Content plan", readBy: "Planner, Writer", readers: ["Planner", "Writer"] },
-  { id: "brand", title: "Brand Kit", readBy: "Post images, slideshows", readers: ["Studio"] },
+  { id: "post_plan", title: "Post plan", readBy: "Planner, Writer", readers: ["Planner", "Writer"] },
+  // Wave 3 A4: Brand is a document now (voice and look); the editor's Brand Kit stays in the editor.
+  { id: "brand", title: "Brand", readBy: "Writer, Sales", readers: ["Writer", "Sales"] },
 ];
 
 type Row = { id: DocId; title: string; readBy: string; readers: string[] };
@@ -65,7 +66,7 @@ export const isDocId = (value: string | null): value is DocId => !!value && ROWS
 
 /** The first document nobody has written yet, for the "+" of the Context column and the drawer; null when all are. */
 export function missingDocument(written: Partial<Record<DocumentKind, unknown>>): DocumentKind | null {
-  return (DOC_ROWS.find((r) => r.id !== "brand" && !written[r.id as DocumentKind])?.id as DocumentKind | undefined) ?? null;
+  return (DOC_ROWS.find((r) => !written[r.id as DocumentKind])?.id as DocumentKind | undefined) ?? null;
 }
 
 const DocIcon = ({ current }: { current: boolean }) => (
@@ -143,7 +144,7 @@ export function ContextDrawer({ doc, edit = false, onClose, onOpen }: { doc: Doc
 
   const row = ROWS.find((r) => r.id === doc)!;
   const pane = PANES.has(doc) ? (doc as PaneId) : null;
-  const kind = doc === "brand" || pane ? null : (doc as DocumentKind);
+  const kind = pane ? null : (doc as DocumentKind);
   const written = kind ? state?.documents[kind] : undefined;
   const missing = state ? missingDocument(state.documents) : null;
   // Another document or pane while the form holds changes: ask before they are dropped.

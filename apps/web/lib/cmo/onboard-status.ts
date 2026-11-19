@@ -28,13 +28,14 @@ const LABELS: Record<string, string> = {
   product: "Writing your Product document",
   strategy: "Writing your Strategy",
   competitors: "Writing your Competitors",
-  content_strategy: "Writing your Content plan",
+  post_plan: "Writing your Post plan",
+  brand: "Writing your Brand",
   scan: "Finding people who describe the problem",
   plan: "Planning your week",
   draft: "Drafting today's posts",
 };
 
-const ORDER = ["site", "product", "strategy", "competitors", "content_strategy", "scan", "plan", "draft"] as const;
+const ORDER = ["site", "product", "strategy", "competitors", "post_plan", "brand", "scan", "plan", "draft"] as const;
 
 const runStep = (state: RunState | null): SetupStep["state"] => (state === "done" ? "done" : state === "failed" ? "failed" : state === "running" || state === "queued" ? "running" : "waiting");
 

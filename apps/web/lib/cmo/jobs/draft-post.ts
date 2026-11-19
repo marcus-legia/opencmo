@@ -188,7 +188,7 @@ export async function draftPost(ctx: JobContext): Promise<JobOutput> {
       fake: () => fakePost(idea, product),
       agent,
       system: SYSTEM,
-      prompt: `${context}\n\n${idea ? `Today's calendar item: "${idea}"${due?.reason ? ` (why: ${due.reason})` : ""}` : sources.length ? "No calendar item is due. Write about what the people in <sources> struggle with." : "No calendar item is due. Pick the most useful post from the content strategy."}${briefNote ? `\n${briefNote}` : ""}\n\nWrite three versions. Do not repeat the recent posts.`,
+      prompt: `${context}\n\n${idea ? `Today's calendar item: "${idea}"${due?.reason ? ` (why: ${due.reason})` : ""}` : sources.length ? "No calendar item is due. Write about what the people in <sources> struggle with." : "No calendar item is due. Pick the most useful post from the Post plan."}${briefNote ? `\n${briefNote}` : ""}\n\nWrite three versions. Do not repeat the recent posts.`,
       schema: DraftSchema,
       onUsage: noteModel,
       label: "draft_post",

@@ -44,7 +44,7 @@ const CMO_READABLE: string[] = SKILL_NAMES.filter((name) => (CMO_SKILLS[name].ag
 export const CMO_TOOL_SPECS: ToolSpec[] = [
   {
     name: "read_doc",
-    description: "Read one of the user's marketing documents in full: product, strategy, competitors or content_strategy.",
+    description: "Read one of the user's marketing documents in full: product, strategy, competitors, post_plan or brand.",
     schema: {
       type: "object",
       properties: { kind: { type: "string", enum: [...DOCUMENT_KINDS] } },
@@ -360,7 +360,7 @@ async function runTool(supabase: SupabaseClient, name: string, input: unknown, t
   switch (name) {
     case "read_doc": {
       const parsed = readInput.safeParse(input);
-      if (!parsed.success) return invalid("kind must be product, strategy, competitors or content_strategy.");
+      if (!parsed.success) return invalid("kind must be product, strategy, competitors, post_plan or brand.");
       const { data: row, error } = await supabase.from("marketing_documents_latest").select("body, created_by, version").eq("kind", parsed.data.kind).maybeSingle();
       if (error) return readFailed;
       if (!row) return { ok: true, content: JSON.stringify({ missing: true }), summary: `No ${DOCUMENTS[parsed.data.kind].title} yet` };

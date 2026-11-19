@@ -745,7 +745,7 @@ function cmoScript(history: StoredMessage[]): unknown[] {
     return [use("set_week_goal", { week: "this", goal: ask.replace(/^.*?goal:?\s*/i, "").trim().slice(0, 300) || ask.trim(), metric, target: Number(/\d+/.exec(lower)?.[0] ?? 5) })];
   }
   if (/\bupdate\b/.test(lower) && /\bdoc/.test(lower)) {
-    const kind = /strategy/.test(lower) ? "strategy" : /competitor/.test(lower) ? "competitors" : /content/.test(lower) ? "content_strategy" : "product";
+    const kind = /strategy/.test(lower) ? "strategy" : /competitor/.test(lower) ? "competitors" : /content|post plan/.test(lower) ? "post_plan" : /brand|voice/.test(lower) ? "brand" : "product";
     return [text("Reading the document first."), use("read_doc", { kind })];
   }
   const site = /\bread\b/.test(lower) ? /\b([a-z0-9-]+\.[a-z]{2,}(?:\.[a-z]{2,})?)\b/.exec(lower)?.[1] : undefined;
@@ -754,8 +754,8 @@ function cmoScript(history: StoredMessage[]): unknown[] {
   if (/\b(editor|captions)\b/.test(lower)) return [text("Finding your video."), use("list_projects", {})];
   if (/clip|video|script/.test(lower)) return [text("Ordering a script for the video you record."), use("create_task", { agent: "video", brief: "A 30 second demo of how you onboard a new client" })];
   if (/reddit/.test(lower)) return [text("Scanning Reddit for people who need this."), use("create_task", { agent: "sales", brief: "People who struggle with the problem we solve", when: "now" })];
-  if (/plan/.test(lower)) return [text("Planning your week."), use("create_task", { agent: "planner", brief: "A balanced week from the content strategy", when: "now" })];
-  if (/draft|post/.test(lower)) return [text("Drafting a post for X."), use("create_task", { agent: "x_writer", brief: "A post from the content strategy", when: "now" })];
+  if (/plan/.test(lower)) return [text("Planning your week."), use("create_task", { agent: "planner", brief: "A balanced week from the Post plan", when: "now" })];
+  if (/draft|post/.test(lower)) return [text("Drafting a post for X."), use("create_task", { agent: "x_writer", brief: "A post from the Post plan", when: "now" })];
   if (/calendar/.test(lower)) return [use("list_calendar", {})];
   return [text("I know your product from your documents. Ask me to plan the week or draft a post for X.")];
 }

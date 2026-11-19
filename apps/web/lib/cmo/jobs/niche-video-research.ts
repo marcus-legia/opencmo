@@ -55,12 +55,12 @@ ${NO_AI_SLOP}`;
 
 const clip = (text: string, max: number) => text.replace(/\s+/g, " ").trim().slice(0, max);
 
-/** Topics to search: the chat's, or the strategy's content pillars, then its pains. */
+/** Topics to search: the chat's, or the Post plan's topics, then the strategy's pains. */
 export function nicheTopics(docs: Documents, input: Record<string, unknown>): string[] {
   const strings = (value: unknown) => (Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : []);
   const pillar = (value: unknown) => (typeof value === "string" ? value : value && typeof value === "object" && typeof (value as { name?: unknown }).name === "string" ? (value as { name: string }).name : "");
   const fromDocs = [
-    ...(Array.isArray(docs.content_strategy?.pillars) ? (docs.content_strategy!.pillars as unknown[]).map(pillar) : []),
+    ...(Array.isArray(docs.post_plan?.topics) ? (docs.post_plan!.topics as unknown[]).map(pillar) : []),
     ...strings(docs.strategy?.pains),
   ];
   const seen = new Set<string>();
@@ -109,7 +109,7 @@ export async function nicheVideoResearch(ctx: JobContext): Promise<JobOutput> {
   const { store, run } = ctx;
   const docs = await ctx.step("read_doc", "Read your strategy", () => store.documents(run.user_id));
   const topics = nicheTopics(docs, run.input);
-  if (!topics.length) throw new LlmError("Add content pillars to your Content Strategy first, then run research again.");
+  if (!topics.length) throw new LlmError("Add topics to your Post plan first, then run research again.");
 
   const budget = new ScBudget(NICHE_LOOKUPS);
   const standouts: Outlier[] = [];
@@ -169,7 +169,7 @@ export async function nicheVideoResearch(ctx: JobContext): Promise<JobOutput> {
       }),
       agent: "research",
       system: SYSTEM,
-      prompt: `${documentsBlock({ product: docs.product, strategy: docs.strategy, content_strategy: docs.content_strategy })}\n\n<videos>\n${videos}\n</videos>\n\nName the standout videos worth learning from, with their hook and format.`,
+      prompt: `${documentsBlock({ product: docs.product, strategy: docs.strategy, post_plan: docs.post_plan })}\n\n<videos>\n${videos}\n</videos>\n\nName the standout videos worth learning from, with their hook and format.`,
       schema: NicheSchema,
       label: "niche_video_research",
       failure: "Could not analyse the niche's videos this time. Your credits were refunded.",

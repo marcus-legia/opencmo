@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { requireUiV2 } from "@/lib/screens/flag";
 
 const PANE: Record<string, string> = { business: "product", brand: "brand", voice: "voice", skills: "skills" };
-const DOCUMENTS = new Set(["product", "strategy", "competitors", "content_strategy"]);
+const DOCUMENTS = new Set(["product", "strategy", "competitors", "post_plan", "brand"]);
 
 /**
  * Library's parts are panes of the Context drawer over the feed now (owner, 2026-11-10: fewer page jumps): the four

@@ -36,7 +36,7 @@ async function main() {
   // Onboarding code tier: invented numbers, a made-up price and hidden text are caught.
   const site = SITES.find((s) => s.name === "tallybook")!;
   const drafts = (over: Partial<OnboardingDrafts["product"]>) =>
-    ({ product: { name: "Tallybook", one_liner: "", description: "", audience: "", problems: [], features: [], pricing: "Not listed", category: "", ...over }, strategy: { icp: "", pains: [], positioning: "", value_props: [], voice: "", avoid: [] }, competitors: { competitors: [] }, content_strategy: { pillars: [], x: "", reddit: "", short_video: "", cadence: "" } }) as OnboardingDrafts;
+    ({ product: { name: "Tallybook", one_liner: "", description: "", audience: "", problems: [], features: [], pricing: "Not listed", category: "", ...over }, strategy: { icp: "", pains: [], where_they_ask: [], positioning: "", value_props: [], this_week: "" }, competitors: { competitors: [] }, post_plan: { topics: [], channels: [], rhythm: "" }, brand: { voice: "", voice_samples: [], intro_line: "", avoid: [], look: { logo_url: "", colors: [], font: "", screenshots: [], image_styles: [] } } }) as OnboardingDrafts;
   assert.deepEqual(onboardingIssues(site, drafts({}), { prices: true }), []);
   assert.ok(onboardingIssues(site, drafts({ pricing: "$19/month" }), { prices: true }).some((i) => i.includes("invents a price")));
   assert.ok(onboardingIssues(site, drafts({ description: "Trusted by 4,000 sellers" }), { prices: true }).some((i) => i.includes("4000")));

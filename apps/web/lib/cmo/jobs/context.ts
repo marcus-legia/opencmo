@@ -4,7 +4,7 @@ import { DOCUMENTS } from "../documents";
 import { escapeAttribute, escapeForTag } from "../untrusted";
 import type { CmoStore, CompetitorInsight, Documents, Goal, ItemRow, Lesson, MemoryTopic, NicheVideoInsight } from "./types";
 
-const DOC_ORDER = ["product", "strategy", "content_strategy", "competitors"] as const;
+const DOC_ORDER = ["product", "strategy", "brand", "post_plan", "competitors"] as const;
 
 /** Documents as compact JSON inside <documents>. This is the founder's data, not instructions. */
 export function documentsBlock(docs: Documents): string {
@@ -98,9 +98,9 @@ export function postText(item: ItemRow): string {
   return item.final_text ?? (typeof item.body.text === "string" ? item.body.text : "");
 }
 
-/** The Strategy's words to avoid (`avoid`), normalized. */
+/** The Brand's words to avoid (`avoid`, moved out of Strategy in wave 3 A4), normalized. */
 export function avoidList(docs: Documents): string[] {
-  const avoid = docs.strategy?.avoid;
+  const avoid = docs.brand?.avoid;
   return Array.isArray(avoid) ? avoid.filter((a): a is string => typeof a === "string" && a.trim().length > 0).map((a) => a.trim()) : [];
 }
 

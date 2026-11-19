@@ -3865,9 +3865,7 @@ CREATE FUNCTION public.cmo_apply_onboarding_answers(p_user uuid, p_handle_given 
 declare
   v_profile public.profiles;
   v_doc public.marketing_documents;
-  v_line text;
-  v_cadence text;
-  v_next text;
+  v_channels jsonb;
 begin
   select * into v_profile from public.profiles where id = p_user;
   if not found then
@@ -3886,21 +3884,12 @@ begin
   end if;
 
   if v_profile.post_platforms is not null then
-    perform pg_advisory_xact_lock(hashtextextended(p_user::text || ':doc:content_strategy', 1713));
-    select * into v_doc from public.marketing_documents where user_id = p_user and kind = 'content_strategy' order by version desc limit 1;
-    if found then
-      v_line := 'The founder posts on ' || (
-        select string_agg(case p when 'x' then 'X' when 'threads' then 'Threads' else 'LinkedIn' end, ', ' order by array_position(array['x', 'threads', 'linkedin'], p))
-        from unnest(v_profile.post_platforms) p
-      ) || case when v_profile.post_platforms = array['x'] then ' only.' else '.' end;
-      v_cadence := coalesce(v_doc.body->>'cadence', '');
-      -- One such sentence, always first: the earlier answer is replaced, the founder's own words are kept.
-      -- concat, not ||: an empty rhythm must leave the sentence alone, never make the whole value null.
-      v_next := btrim(concat(v_line, ' ', btrim(regexp_replace(v_cadence, 'The founder posts on [^.]*\.\s*', '', 'g'))));
-      if v_next is distinct from v_cadence then
-        insert into public.marketing_documents (user_id, kind, version, body, created_by)
-        values (p_user, 'content_strategy', v_doc.version + 1, v_doc.body || jsonb_build_object('cadence', v_next), 'user');
-      end if;
+    perform pg_advisory_xact_lock(hashtextextended(p_user::text || ':doc:post_plan', 1713));
+    select * into v_doc from public.marketing_documents where user_id = p_user and kind = 'post_plan' order by version desc limit 1;
+    v_channels := public.documents_v2_channels(v_profile.post_platforms);
+    if found and jsonb_array_length(v_channels) > 0 and v_doc.body->'channels' is distinct from v_channels then
+      insert into public.marketing_documents (user_id, kind, version, body, created_by)
+      values (p_user, 'post_plan', v_doc.version + 1, v_doc.body || jsonb_build_object('channels', v_channels), 'user');
     end if;
   end if;
 end;
@@ -3941,7 +3930,7 @@ CREATE TABLE public.marketing_documents (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT marketing_documents_body_check CHECK (((jsonb_typeof(body) = 'object'::text) AND (octet_length((body)::text) <= 65536))),
     CONSTRAINT marketing_documents_created_by_check CHECK ((created_by = ANY (ARRAY['agent'::text, 'user'::text]))),
-    CONSTRAINT marketing_documents_kind_check CHECK ((kind = ANY (ARRAY['product'::text, 'strategy'::text, 'competitors'::text, 'content_strategy'::text, 'calendar'::text]))),
+    CONSTRAINT marketing_documents_kind_check CHECK ((kind = ANY (ARRAY['product'::text, 'strategy'::text, 'competitors'::text, 'post_plan'::text, 'brand'::text, 'calendar'::text, 'content_strategy'::text]))),
     CONSTRAINT marketing_documents_version_check CHECK ((version >= 1))
 );
 
@@ -6911,13 +6900,13 @@ begin
         decided_at = now()
     where id = v_event.correction_id and user_id = v_user;
   else
-    perform pg_advisory_xact_lock(hashtextextended(v_user::text || ':doc:strategy', 1713));
+    perform pg_advisory_xact_lock(hashtextextended(v_user::text || ':doc:brand', 1713));
     select * into v_doc from public.marketing_documents
-    where user_id = v_user and kind = 'strategy' order by version desc limit 1;
+    where user_id = v_user and kind = 'brand' order by version desc limit 1;
     if found then
       insert into public.marketing_documents (user_id, kind, version, body, created_by)
-      values (v_user, 'strategy', v_doc.version + 1,
-        -- The document keeps both fields (StrategySchema): one that had no value before is emptied, not removed.
+      values (v_user, 'brand', v_doc.version + 1,
+        -- The document keeps both fields (BrandSchema): one that had no value before is emptied, not removed.
         jsonb_set(v_doc.body, array[v_event.field],
           coalesce(v_event.before, case v_event.field when 'avoid' then '[]'::jsonb else '""'::jsonb end)), 'user');
     end if;
@@ -8812,6 +8801,72 @@ $$;
 
 
 --
+-- Name: documents_v2_channels(text[]); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.documents_v2_channels(p_platforms text[]) RETURNS jsonb
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO ''
+    AS $$
+  select coalesce(jsonb_agg(c order by array_position(array['x', 'linkedin', 'threads'], c)), '[]'::jsonb)
+  from (select distinct c from unnest(coalesce(p_platforms, '{}')) c where c in ('x', 'linkedin', 'threads')) s;
+$$;
+
+
+--
+-- Name: documents_v2_migrate(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.documents_v2_migrate() RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_count integer := 0;
+  v_n integer;
+begin
+  -- Post plan: the pillars' names become topics, the weekly rhythm stays, the rest is kept under `legacy`.
+  update public.marketing_documents d set
+    kind = 'post_plan',
+    body = jsonb_build_object(
+      'topics', coalesce((
+        select jsonb_agg(left(btrim(p->>'name'), 300)) from (
+          select p from jsonb_array_elements(case when jsonb_typeof(d.body->'pillars') = 'array' then d.body->'pillars' else '[]'::jsonb end) p
+          where jsonb_typeof(p) = 'object' and btrim(coalesce(p->>'name', '')) <> '' limit 12
+        ) s), '[]'::jsonb),
+      'channels', public.documents_v2_channels((select pr.post_platforms from public.profiles pr where pr.id = d.user_id)),
+      'rhythm', left(coalesce(d.body->>'cadence', ''), 1500),
+      'legacy', d.body)
+  where d.kind = 'content_strategy'
+    and not exists (select 1 from public.marketing_documents x where x.user_id = d.user_id and x.kind = 'post_plan' and x.version = d.version);
+  get diagnostics v_n = row_count;
+  v_count := v_count + v_n;
+
+  -- Brand: one first version per founder with a Strategy, from its newest voice and words to avoid. The voice history
+  -- trigger is told to stay quiet: nothing changed for the founder.
+  perform set_config('opencmo.voice_undo', 'on', true);
+  insert into public.marketing_documents (user_id, kind, version, body, created_by)
+  select s.user_id, 'brand', 1, jsonb_build_object(
+      'voice', coalesce(case when jsonb_typeof(s.body->'voice') = 'string' then s.body->>'voice' end, ''),
+      'voice_samples', '[]'::jsonb,
+      'intro_line', '',
+      'avoid', case when jsonb_typeof(s.body->'avoid') = 'array' then s.body->'avoid' else '[]'::jsonb end,
+      'look', jsonb_build_object('logo_url', '', 'colors', '[]'::jsonb, 'font', '', 'screenshots', '[]'::jsonb, 'image_styles', '[]'::jsonb)),
+    s.created_by
+  from (
+    select distinct on (m.user_id) m.user_id, m.body, m.created_by
+    from public.marketing_documents m where m.kind = 'strategy'
+    order by m.user_id, m.version desc
+  ) s
+  where not exists (select 1 from public.marketing_documents b where b.user_id = s.user_id and b.kind = 'brand');
+  get diagnostics v_n = row_count;
+  perform set_config('opencmo.voice_undo', '', true);
+  return v_count + v_n;
+end;
+$$;
+
+
+--
 -- Name: editor_document_hash(jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -10015,7 +10070,7 @@ declare
   v_prev jsonb;
   v_field text;
 begin
-  if new.kind <> 'strategy' or coalesce(current_setting('opencmo.voice_undo', true), '') = 'on' then
+  if new.kind <> 'brand' or coalesce(current_setting('opencmo.voice_undo', true), '') = 'on' then
     return new;
   end if;
   if tg_op = 'UPDATE' then
@@ -10026,7 +10081,7 @@ begin
   end if;
   begin
     select body into v_prev from public.marketing_documents
-    where user_id = new.user_id and kind = 'strategy' and version < new.version
+    where user_id = new.user_id and kind = 'brand' and version < new.version
     order by version desc limit 1;
     foreach v_field in array array['voice', 'avoid'] loop
       continue when (v_prev->v_field) is not distinct from (new.body->v_field);
@@ -15131,7 +15186,7 @@ declare
   v_by text := 'user';
   v_row public.marketing_documents;
 begin
-  if p_kind is null or p_kind not in ('product', 'strategy', 'competitors', 'content_strategy', 'calendar') then
+  if p_kind is null or p_kind not in ('product', 'strategy', 'competitors', 'post_plan', 'brand', 'calendar') then
     raise exception 'Unknown document.' using errcode = '22023';
   end if;
   if p_body is null or jsonb_typeof(p_body) <> 'object' then

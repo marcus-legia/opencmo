@@ -33,8 +33,9 @@ export const MEMORY_WRITES = new Set(["remember", "update_document", "set_week_g
 
 export const CMO_DOCS: Documents = {
   product: { name: "Duely", one_liner: "Invoice reminders that get freelancers paid without chasing.", pricing: "$12/month" },
-  strategy: { icp: "Freelancers and small studios who invoice 3 to 20 clients a month", voice: "Plain, practical, a bit dry.", avoid: ["revolutionary"] },
-  content_strategy: { pillars: [{ name: "Getting paid", why: "The core pain.", ideas: ["The 3-7-14 reminder rule"] }] },
+  strategy: { icp: "Freelancers and small studios who invoice 3 to 20 clients a month" },
+  post_plan: { topics: ["Getting paid", "The 3-7-14 reminder rule"], channels: ["x"], rhythm: "" },
+  brand: { voice: "Plain, practical, a bit dry.", avoid: ["revolutionary"] },
 };
 
 export const CMO_TASKS: CmoEvalTask[] = [

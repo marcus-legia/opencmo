@@ -497,9 +497,9 @@ async function voiceNotes(supabase: SupabaseClient, limit: number): Promise<Voic
   return rows.map((r) => ({ ...r, weight: Math.min(1, Math.max(0, Number(r.weight))) }));
 }
 
-/** The words the strategy says to avoid: what Writer cuts from every draft. */
+/** The words the Brand says to avoid: what Writer cuts from every draft. */
 async function wordsCut(supabase: SupabaseClient): Promise<string[]> {
-  const r = await supabase.from("marketing_documents_latest").select("body").eq("kind", "strategy").maybeSingle();
+  const r = await supabase.from("marketing_documents_latest").select("body").eq("kind", "brand").maybeSingle();
   if (r.error) throw new Error(`marketing_documents_latest: ${r.error.message}`);
   const avoid = (r.data as { body?: { avoid?: unknown } } | null)?.body?.avoid;
   return Array.isArray(avoid)
