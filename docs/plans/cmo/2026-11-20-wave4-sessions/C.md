@@ -56,3 +56,12 @@ code outside the editor and history docs. Open "Wave 4b: delete and extend". Do 
   (`waitingCards` in `lib/screens/load.ts`), absent when the opportunity could not be read: show nothing then. Labels
   for the level: `REACH_LEVEL_LABEL` in `lib/cmo/reach.ts` (same words as `SalesReach.tsx`). `reason` is one line, at
   most 200 characters.
+- **Từ A (A1 xong, cho C2):** `supabase.rpc("my_usage_state")` (founder, chỉ đọc, migration `20270202010000`, pgTAP
+  347) trả jsonb; đọc bằng `parseUsageState` trong `lib/billing/usage.ts` (kiểu `UsageState`, mặc định
+  `OPEN_USAGE_STATE` khi RPC lỗi: không khoá gì). Các trường: số của thanh (`plan`, `interval`, `used`, `allowance`,
+  `percent`, `resetsAt`, `paused`, giống `parsePlanUsage`), cộng `blocked`, `reason` (`"allowance_used"` cho tài khoản
+  trả phí ở 100%, tới `resetsAt`; `"free_scan_used"` cho tài khoản free sau free scan, không có ngày reset, lối ra là
+  "See plans"), `stopped` và `stillWorks` (id cố định: `read`, `edit`, `copy_drafts`, `post_drafts`, `reply_drafts`,
+  `sales_scan`, `research`; màn hình tự viết chữ), `freeScan` (chỉ free: `not_ready` | `available` | `running` |
+  `used`). Ở 100%: dừng `sales_scan`, `research`; draft vẫn chạy. Free sau scan: dừng `sales_scan`, `reply_drafts`, và
+  `post_drafts` khi draft free đầu tiên đã dùng. Thông báo lỗi thật vẫn do SQL (`cmo_usage_paused_check`) nói.
