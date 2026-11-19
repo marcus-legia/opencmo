@@ -126,7 +126,9 @@ insert into allowed values
   ('my_published_items(timestamp with time zone)'),
   ('normalize_capture_url(text)'),
   ('notify_settings_save(boolean,boolean)'),
+  ('opportunity_mark_replied(uuid,text)'),  -- wave 3 A3
   ('opportunity_reply_url(uuid,text)'),
+  ('opportunity_set_status(uuid,text)'),  -- wave 3 A3
   ('purge_in_progress()'),
   ('push_subscribe(text,text,text,text)'),
   ('push_unsubscribe(text)'),

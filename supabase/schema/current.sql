@@ -4159,16 +4159,32 @@ CREATE TABLE public.opportunities (
     rule_why text,
     min_karma integer,
     min_account_age_days integer,
+    person_status text DEFAULT 'found'::text NOT NULL,
+    status_at timestamp with time zone,
+    reply_url text,
+    replied_at timestamp with time zone,
+    reach_level text DEFAULT 'reply_first'::text NOT NULL,
+    reach jsonb DEFAULT '{}'::jsonb NOT NULL,
+    dm_draft text,
+    dm_drafted_at timestamp with time zone,
+    nudge_draft text,
+    nudge_drafted_at timestamp with time zone,
     CONSTRAINT opportunities_author_check CHECK ((char_length(author) <= 100)),
     CONSTRAINT opportunities_comments_check CHECK ((comments >= 0)),
     CONSTRAINT opportunities_community_check CHECK ((char_length(community) <= 100)),
+    CONSTRAINT opportunities_dm_draft_check CHECK ((char_length(dm_draft) <= 1000)),
     CONSTRAINT opportunities_gen_check CHECK (((jsonb_typeof(gen) = 'object'::text) AND (octet_length((gen)::text) <= 256))),
     CONSTRAINT opportunities_min_account_age_days_check CHECK (((min_account_age_days >= 0) AND (min_account_age_days <= 3650))),
     CONSTRAINT opportunities_min_karma_check CHECK (((min_karma >= 0) AND (min_karma <= 1000000))),
+    CONSTRAINT opportunities_nudge_draft_check CHECK ((char_length(nudge_draft) <= 1000)),
+    CONSTRAINT opportunities_person_status_check CHECK ((person_status = ANY (ARRAY['found'::text, 'replied'::text, 'answered_back'::text, 'talking'::text, 'signed_up'::text, 'customer'::text, 'not_interested'::text]))),
     CONSTRAINT opportunities_platform_check CHECK ((platform = ANY (ARRAY['reddit'::text, 'hn'::text, 'facebook'::text, 'threads'::text]))),
     CONSTRAINT opportunities_priority_check CHECK ((priority = ANY (ARRAY['high'::text, 'medium'::text, 'low'::text]))),
+    CONSTRAINT opportunities_reach_check CHECK (((jsonb_typeof(reach) = 'object'::text) AND (octet_length((reach)::text) <= 2048))),
+    CONSTRAINT opportunities_reach_level_check CHECK ((reach_level = ANY (ARRAY['reply_first'::text, 'dm_ready'::text, 'email_ready'::text]))),
     CONSTRAINT opportunities_reply_check CHECK ((char_length(reply) <= 3000)),
     CONSTRAINT opportunities_reply_or_skip CHECK (((reply IS NOT NULL) OR (rule = 'skip'::text))),
+    CONSTRAINT opportunities_reply_url_check CHECK ((char_length(reply_url) <= 500)),
     CONSTRAINT opportunities_rule_check CHECK ((rule = ANY (ARRAY['safe'::text, 'requires_disclosure'::text, 'no_product_mention'::text, 'not_verified'::text, 'skip'::text, 'mention_ok'::text, 'help_only'::text]))),
     CONSTRAINT opportunities_rule_why_check CHECK ((char_length(rule_why) <= 200)),
     CONSTRAINT opportunities_score_check CHECK (((score >= 0) AND (score <= 100))),
@@ -4892,6 +4908,22 @@ CREATE FUNCTION public.cmo_library_theme_names(p_user uuid, p_limit integer DEFA
   group by t.id, t.name
   order by count(e.opportunity_id) desc, t.name
   limit least(greatest(coalesce(p_limit, 30), 1), 100);
+$$;
+
+
+--
+-- Name: cmo_mark_answered_back(uuid, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_mark_answered_back(p_user uuid, p_id uuid) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+begin
+  update public.opportunities o set person_status = 'answered_back', status_at = now()
+  where o.id = p_id and o.user_id = p_user and o.person_status = 'replied';
+  return found;
+end;
 $$;
 
 
@@ -6159,6 +6191,31 @@ $$;
 
 
 --
+-- Name: cmo_save_nudge(uuid, uuid, uuid, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_save_nudge(p_user uuid, p_run uuid, p_id uuid, p_text text) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_text text := left(nullif(btrim(coalesce(p_text, '')), ''), 1000);
+begin
+  if not exists (select 1 from public.cmo_runs r where r.id = p_run and r.user_id = p_user) then
+    raise exception 'Run not found.' using errcode = 'P0002';
+  end if;
+  if v_text is null then
+    return false;
+  end if;
+  update public.opportunities o set nudge_draft = v_text, nudge_drafted_at = now()
+  where o.id = p_id and o.user_id = p_user and o.person_status = 'replied' and o.nudge_draft is null
+    and o.replied_at < now() - interval '4 days';
+  return found;
+end;
+$$;
+
+
+--
 -- Name: cmo_save_opportunities(uuid, uuid, jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -6311,6 +6368,83 @@ begin
   return v_row;
 end;
 $$;
+
+
+--
+-- Name: cmo_save_reach(uuid, uuid, jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_save_reach(p_user uuid, p_run uuid, p_items jsonb) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $_$
+declare
+  v_item jsonb;
+  v_r jsonb;
+  v_opp public.opportunities;
+  v_dm boolean;
+  v_email text;
+  v_level text;
+  v_reach jsonb;
+  v_text text;
+  v_today integer;
+  v_count integer := 0;
+begin
+  if not exists (
+    select 1 from public.cmo_runs r where r.id = p_run and r.user_id = p_user and r.kind in ('sales_scan', 'sales_reply_drafts')
+  ) then
+    raise exception 'Run not found.' using errcode = 'P0002';
+  end if;
+  if p_items is null or jsonb_typeof(p_items) <> 'array' or jsonb_array_length(p_items) > 50 then
+    raise exception 'These reach checks are not valid.' using errcode = '22023';
+  end if;
+  select count(*)::integer into v_today from public.opportunities o
+  where o.user_id = p_user and o.dm_drafted_at > now() - interval '1 day';
+
+  for v_item in select * from jsonb_array_elements(p_items) loop
+    continue when jsonb_typeof(v_item) <> 'object' or jsonb_typeof(v_item->'reach') <> 'object';
+    select * into v_opp from public.opportunities o where o.user_id = p_user and o.url = v_item->>'url';
+    continue when not found;
+    v_r := v_item->'reach';
+    v_email := nullif(btrim(coalesce(v_r->>'emailFound', '')), '');
+    if v_email is not null and (char_length(v_email) > 254 or v_email !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$') then
+      v_email := null;
+    end if;
+    v_reach := jsonb_build_object(
+      'buyer', coalesce(v_r->'buyer' = 'true'::jsonb, false),
+      'wantsNow', coalesce(v_r->'wantsNow' = 'true'::jsonb, false),
+      'warm', coalesce(v_r->'warm' = 'true'::jsonb, false),
+      'fresh', coalesce(v_r->'fresh' = 'true'::jsonb, false),
+      'dmAllowed', coalesce(v_r->'dmAllowed' = 'true'::jsonb, false) and v_opp.platform <> 'hn',
+      'asksForTools', coalesce(v_r->'asksForTools' = 'true'::jsonb, false),
+      'emailFound', v_email,
+      'reasons', coalesce((
+        select jsonb_agg(left(btrim(x), 160)) from (
+          select x from jsonb_array_elements_text(case when jsonb_typeof(v_r->'reasons') = 'array' then v_r->'reasons' else '[]'::jsonb end) x
+          where btrim(x) <> '' limit 8
+        ) s), '[]'::jsonb));
+    v_dm := (v_reach->>'buyer')::boolean and (v_reach->>'wantsNow')::boolean and (v_reach->>'fresh')::boolean
+      and (v_reach->>'dmAllowed')::boolean and ((v_reach->>'warm')::boolean or (v_reach->>'asksForTools')::boolean);
+    v_level := case when not v_dm then 'reply_first'
+      when v_email is not null and (v_reach->>'warm')::boolean then 'email_ready' else 'dm_ready' end;
+    v_text := left(nullif(btrim(coalesce(v_item->>'dm', '')), ''), 1000);
+    if v_text is not null and (not v_dm or v_today >= 20 or v_opp.dm_draft is not null) then
+      v_text := null;
+    end if;
+    update public.opportunities o set
+      reach = v_reach,
+      reach_level = v_level,
+      dm_draft = coalesce(v_text, o.dm_draft),
+      dm_drafted_at = case when v_text is not null then now() else o.dm_drafted_at end
+    where o.id = v_opp.id;
+    if v_text is not null then
+      v_today := v_today + 1;
+    end if;
+    v_count := v_count + 1;
+  end loop;
+  return v_count;
+end;
+$_$;
 
 
 --
@@ -10114,34 +10248,114 @@ $$;
 
 
 --
+-- Name: opportunities_person_replied(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.opportunities_person_replied() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO ''
+    AS $$
+begin
+  if new.status = 'replied' and old.status is distinct from 'replied' and new.person_status = 'found' then
+    new.person_status := 'replied';
+    new.replied_at := coalesce(new.replied_at, now());
+    new.status_at := now();
+  end if;
+  return new;
+end;
+$$;
+
+
+--
+-- Name: opportunity_mark_replied(uuid, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.opportunity_mark_replied(p_id uuid, p_url text) RETURNS public.opportunities
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_opp public.opportunities;
+  v_url text := btrim(coalesce(p_url, ''));
+begin
+  select * into v_opp from public.opportunities o where o.id = p_id and o.user_id = v_user;
+  if not found then
+    raise exception 'Conversation not found.' using errcode = 'P0002';
+  end if;
+  if v_opp.status = 'dismissed' then
+    raise exception 'You dismissed this conversation.' using errcode = 'P0001';
+  end if;
+  if not public.reply_url_fits(v_opp.platform, v_opp.url, v_url) then
+    raise exception 'Paste the link to your reply in this thread.' using errcode = '22023';
+  end if;
+  if v_opp.status = 'in_review' then
+    perform public.cmo_decide_opportunity(p_id, 'replied');
+  end if;
+  update public.opportunities o set
+    reply_url = v_url,
+    replied_at = coalesce(o.replied_at, now()),
+    person_status = case when o.person_status = 'found' then 'replied' else o.person_status end,
+    status_at = case when o.person_status = 'found' then now() else o.status_at end
+  where o.id = p_id
+  returning * into v_opp;
+  update public.cmo_draft_outcomes d set outcome_url = v_url
+  where d.user_id = v_user and d.department = 'sales' and d.item_id = p_id and d.action = 'replied';
+  return v_opp;
+end;
+$$;
+
+
+--
 -- Name: opportunity_reply_url(uuid, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.opportunity_reply_url(p_id uuid, p_url text) RETURNS void
     LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public'
-    AS $_$
+    SET search_path TO ''
+    AS $$
+begin
+  if not exists (
+    select 1 from public.opportunities o where o.id = p_id and o.user_id = public.require_user() and o.status = 'replied'
+  ) then
+    raise exception 'Conversation not found.' using errcode = 'P0002';
+  end if;
+  perform public.opportunity_mark_replied(p_id, p_url);
+end;
+$$;
+
+
+--
+-- Name: opportunity_set_status(uuid, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.opportunity_set_status(p_id uuid, p_status text) RETURNS public.opportunities
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
 declare
   v_user uuid := public.require_user();
   v_opp public.opportunities;
-  v_url text := trim(coalesce(p_url, ''));
-  v_base text;
 begin
-  select * into v_opp from public.opportunities where id = p_id and user_id = v_user and status = 'replied';
+  if p_status is null or p_status not in ('found', 'replied', 'answered_back', 'talking', 'signed_up', 'customer', 'not_interested') then
+    raise exception 'Unknown status.' using errcode = '22023';
+  end if;
+  select * into v_opp from public.opportunities o where o.id = p_id and o.user_id = v_user;
   if not found then
     raise exception 'Conversation not found.' using errcode = 'P0002';
   end if;
-  v_base := regexp_replace(v_opp.url, '^https://(www\.|old\.)?reddit\.com', '');
-  if char_length(v_url) > 500
-     or not ((v_opp.platform = 'hn' and v_url ~ '^https://news\.ycombinator\.com/item\?id=[0-9]{1,12}$')
-          or (v_opp.platform = 'reddit' and v_url ~ '^https://(www\.|old\.)?reddit\.com/r/'
-              and position(rtrim(v_base, '/') || '/' in regexp_replace(v_url, '^https://(www\.|old\.)?reddit\.com', '')) = 1)) then
-    raise exception 'Paste the link to your reply in this thread.' using errcode = '22023';
+  if p_status not in ('found', 'not_interested') and v_opp.status <> 'replied' then
+    raise exception 'Mark that you replied first.' using errcode = 'P0001';
   end if;
-  update public.cmo_draft_outcomes set outcome_url = v_url
-  where user_id = v_user and department = 'sales' and item_id = p_id and action = 'replied';
+  update public.opportunities o set person_status = p_status, status_at = now()
+  where o.id = p_id and o.person_status is distinct from p_status
+  returning * into v_opp;
+  if not found then
+    select * into v_opp from public.opportunities o where o.id = p_id;
+  end if;
+  return v_opp;
 end;
-$_$;
+$$;
 
 
 --
@@ -13600,6 +13814,28 @@ begin
   return v_job;
 end;
 $$;
+
+
+--
+-- Name: reply_url_fits(text, text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.reply_url_fits(p_platform text, p_thread text, p_url text) RETURNS boolean
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO ''
+    AS $_$
+  select char_length(p_url) <= 500 and p_url !~ '\s' and case p_platform
+    when 'reddit' then p_url ~ '^https://(www\.|old\.)?reddit\.com/r/'
+      and position(rtrim(regexp_replace(p_thread, '^https://(www\.|old\.)?reddit\.com', ''), '/') || '/'
+                   in regexp_replace(p_url, '^https://(www\.|old\.)?reddit\.com', '')) = 1
+    when 'hn' then p_url ~ '^https://news\.ycombinator\.com/item\?id=[0-9]{1,12}$'
+    when 'facebook' then p_url ~ '^https://www\.facebook\.com/groups/'
+      and split_part(regexp_replace(p_url, '^https://www\.facebook\.com/groups/', ''), '/', 1)
+        = split_part(regexp_replace(p_thread, '^https://www\.facebook\.com/groups/', ''), '/', 1)
+    when 'threads' then p_url ~ '^https://www\.threads\.com/@[A-Za-z0-9._]{1,30}/post/[A-Za-z0-9_-]{1,40}/?$'
+    else false
+  end;
+$_$;
 
 
 --
@@ -19768,6 +20004,7 @@ CREATE TABLE public.subreddit_rules (
     min_karma integer,
     min_account_age_days integer,
     megathread boolean DEFAULT false NOT NULL,
+    no_dms boolean DEFAULT false NOT NULL,
     CONSTRAINT subreddit_rules_min_account_age_days_check CHECK (((min_account_age_days >= 0) AND (min_account_age_days <= 3650))),
     CONSTRAINT subreddit_rules_min_karma_check CHECK (((min_karma >= 0) AND (min_karma <= 1000000))),
     CONSTRAINT subreddit_rules_subreddit_check CHECK ((subreddit ~ '^[a-z0-9_]{2,21}$'::text)),
@@ -21607,6 +21844,13 @@ CREATE INDEX opportunities_run_id_idx ON public.opportunities USING btree (run_i
 
 
 --
+-- Name: opportunities_user_person_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX opportunities_user_person_idx ON public.opportunities USING btree (user_id, person_status, status_at DESC);
+
+
+--
 -- Name: opportunities_user_status_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -22234,6 +22478,13 @@ CREATE TRIGGER marketing_documents_write_budget BEFORE INSERT ON public.marketin
 --
 
 CREATE TRIGGER media_assets_record_storage_deletions BEFORE DELETE ON public.media_assets FOR EACH ROW EXECUTE FUNCTION public.record_media_storage_deletions();
+
+
+--
+-- Name: opportunities opportunities_person_replied; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER opportunities_person_replied BEFORE UPDATE OF status ON public.opportunities FOR EACH ROW EXECUTE FUNCTION public.opportunities_person_replied();
 
 
 --

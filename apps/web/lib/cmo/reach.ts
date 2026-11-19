@@ -78,3 +78,6 @@ export function isFresh(postedAt: string | null, now: Date = new Date()): boolea
 export function platformHasDms(platform: SalesPlatform): boolean {
   return DM_PLATFORMS.includes(platform);
 }
+
+/** One reach check the scan hands `cmo_save_reach`, keyed by the thread's url; `dm` only for a DM-ready person. */
+export type ReachSaveItem = { url: string; level: ReachLevel; reach: ReachCheck; dm?: string };

@@ -4,6 +4,7 @@
  */
 
 import type { LibrarySaveItem } from "../library";
+import { reachLevel, type ReachCheck, type ReachLevel } from "../reach";
 import type { VideoSource } from "../writer/types";
 import { latestPerTopic } from "./context";
 import { isoDay, type CmoStore, type DraftRating, type CompetitorInsight, type ConnectedAccountRow, type ReplyOutcomeDue, type MetricRow, type ZernioPostRow, type NicheVideoInsight, type SalesSettings, type SubredditRule, type Documents, type Goal, type ItemRow, type Lesson, type MemoryEvent, type Opportunity, type QueuedRun, type Step, type VoiceNoteRow, type WeekResults } from "./types";
@@ -31,6 +32,13 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
   const opps: Opportunity[] = [];
   /** Library lines by conversation url, as `cmo_save_library` keeps them (one per conversation, themes by name). */
   const library = new Map<string, LibrarySaveItem & { theme: string }>();
+  /** People by conversation url (the memory store uses the url as the opportunity id), as A3's columns keep them. */
+  const people = new Map<string, { level: ReachLevel; reach: ReachCheck; dm: string | null; dmAt: number | null; nudge: string | null; status: string; repliedAt: number | null }>();
+  const person = (url: string) => {
+    let p = people.get(url);
+    if (!p) people.set(url, (p = { level: "reply_first", reach: {} as ReachCheck, dm: null, dmAt: null, nudge: null, status: "found", repliedAt: null }));
+    return p;
+  };
   /** URLs of cards the founder already decided (replied or dismissed): no reply is written for them. */
   const decided = new Set<string>();
   const rules = new Map<string, SubredditRule>();
@@ -212,6 +220,35 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
       for (const e of library.values()) counts.set(e.theme, (counts.get(e.theme) ?? 0) + 1);
       return [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, limit).map(([name]) => name);
     },
+    async saveReach(_u, runId, list) {
+      if (!runs.some((r) => r.id === runId && (r.kind === "sales_scan" || r.kind === "sales_reply_drafts"))) throw new Error("cmo_save_reach: Run not found.");
+      let saved = 0;
+      for (const item of list) {
+        const opp = opps.find((o) => o.url === item.url);
+        if (!opp) continue;
+        const p = person(item.url);
+        const reach = { ...item.reach, dmAllowed: item.reach.dmAllowed && (opp.platform ?? "reddit") !== "hn" };
+        p.reach = reach;
+        p.level = reachLevel(reach);
+        const today = [...people.values()].filter((x) => x.dmAt !== null && Date.now() - x.dmAt < 86_400_000).length;
+        if (item.dm?.trim() && p.level !== "reply_first" && !p.dm && today < 20) Object.assign(p, { dm: item.dm.trim().slice(0, 1000), dmAt: Date.now() });
+        saved += 1;
+      }
+      return saved;
+    },
+    async saveNudge(_u, runId, id, text) {
+      if (!runs.some((r) => r.id === runId)) throw new Error("cmo_save_nudge: Run not found.");
+      const p = people.get(id);
+      if (!p || !text.trim() || p.status !== "replied" || p.nudge || !p.repliedAt || Date.now() - p.repliedAt < 4 * 86_400_000) return false;
+      p.nudge = text.trim().slice(0, 1000);
+      return true;
+    },
+    async markAnsweredBack(_u, id) {
+      const p = people.get(id);
+      if (!p || p.status !== "replied") return false;
+      p.status = "answered_back";
+      return true;
+    },
     async saveLibrary(_u, runId, list) {
       if (!runs.some((r) => r.id === runId && r.kind === "sales_scan")) throw new Error("cmo_save_library: Run not found.");
       let saved = 0;
@@ -279,5 +316,5 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
     runs.push(run);
     return run;
   };
-  return { store, posting, runs, items, opps, library, decided, rules, salesSettings, mentions, account, insights, niche, metrics, zernio, replies, lessons, goals, results, enqueue, voice, videos, captions, variants, photoCaptions, ratings, ratingRules };
+  return { store, posting, runs, items, opps, library, people, decided, rules, salesSettings, mentions, account, insights, niche, metrics, zernio, replies, lessons, goals, results, enqueue, voice, videos, captions, variants, photoCaptions, ratings, ratingRules };
 }

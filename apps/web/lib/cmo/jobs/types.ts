@@ -9,6 +9,7 @@ import type { VideoSource } from "../writer/types";
 import type { AccountMetricRow } from "./metrics-source";
 import type { SalesPlatform } from "../social/conversations";
 import type { LibrarySaveItem } from "../library";
+import type { ReachSaveItem } from "../reach";
 
 export type CmoJobKind =
   | "plan_week"
@@ -254,6 +255,8 @@ export type SubredditRule = {
   min_karma?: number | null;
   min_account_age_days?: number | null;
   megathread?: boolean;
+  /** Wave 3: the rules forbid DMs or soliciting, so nobody there is DM ready. */
+  no_dms?: boolean;
 };
 /**
  * Free scan (docs/plans/cmo/2026-11-18-free-scan-plan.md): what a Sales scan returns. `queries` and `scanned` let the
@@ -337,6 +340,15 @@ export interface CmoStore {
   saveLibrary(userId: string, runId: string, items: LibrarySaveItem[]): Promise<number>;
   /** The founder's Library theme names, most used first (`cmo_library_theme_names`), for the scan to reuse. */
   libraryThemeNames(userId: string, limit?: number): Promise<string[]>;
+  /**
+   * Wave 3 A3: the scan's reach checks (`cmo_save_reach`). SQL works the level out from the checks (Hacker News never
+   * has DMs) and keeps a `dm` draft only for a DM-ready person without one, at most 20 a day.
+   */
+  saveReach(userId: string, runId: string, items: ReachSaveItem[]): Promise<number>;
+  /** One nudge for a person replied to 4+ days ago with no answer (`cmo_save_nudge`); false when not due. */
+  saveNudge(userId: string, runId: string, opportunityId: string, text: string): Promise<boolean>;
+  /** `reply-outcomes` saw an answer: replied → answered back (`cmo_mark_answered_back`), never backwards. */
+  markAnsweredBack(userId: string, opportunityId: string): Promise<boolean>;
   /** Free scan A5: the founder's cards still in review with no reply yet (`reply = ''`, not skipped), newest first. */
   undraftedOpportunities(userId: string, limit: number): Promise<UndraftedOpportunity[]>;
   /** Fills one undrafted card's reply (`cmo_save_opportunity_reply`); `rule` may only tighten it to help only. */

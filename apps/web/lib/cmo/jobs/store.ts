@@ -243,10 +243,13 @@ export function supabaseStore(admin: BaseClient): CmoStore {
     saveOpportunities: (userId, runId, items) => rpc<number>("cmo_save_opportunities", { p_user: userId, p_run: runId, p_items: items }),
     saveLibrary: (userId, runId, items) => rpc<number>("cmo_save_library", { p_user: userId, p_run: runId, p_items: items }),
     libraryThemeNames: (userId, limit = 30) => rpc<string[]>("cmo_library_theme_names", { p_user: userId, p_limit: limit }),
+    saveReach: (userId, runId, items) => rpc<number>("cmo_save_reach", { p_user: userId, p_run: runId, p_items: items }),
+    saveNudge: (userId, runId, id, text) => rpc<boolean>("cmo_save_nudge", { p_user: userId, p_run: runId, p_id: id, p_text: text }),
+    markAnsweredBack: (userId, id) => rpc<boolean>("cmo_mark_answered_back", { p_user: userId, p_id: id }),
     async subredditRule(subreddit) {
       const { data, error } = await admin
         .from("subreddit_rules")
-        .select("subreddit, verdict, summary, read_at, min_karma, min_account_age_days, megathread")
+        .select("subreddit, verdict, summary, read_at, min_karma, min_account_age_days, megathread, no_dms")
         .eq("subreddit", subreddit.toLowerCase())
         .maybeSingle();
       if (error) throw new Error(`subreddit_rules: ${error.message}`);
@@ -263,6 +266,7 @@ export function supabaseStore(admin: BaseClient): CmoStore {
           min_karma: rule.min_karma ?? null,
           min_account_age_days: rule.min_account_age_days ?? null,
           megathread: rule.megathread ?? false,
+          no_dms: rule.no_dms ?? false,
           read_at: new Date().toISOString(),
         });
       if (error) throw new Error(`subreddit_rules: ${error.message}`);

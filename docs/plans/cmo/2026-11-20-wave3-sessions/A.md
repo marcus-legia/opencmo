@@ -23,7 +23,7 @@ warm; DM ready needs buyer, wants now, fresh, `dmAllowed` and (warm or the post 
   and up to 3 entries each; `library_delete_entry(p_url)` for removal on request (service role).
 - pgTAP: ownership, a run of another user refused, counts, the weekly trend.
 
-### - [ ] A3. People: status, reply link, reach, DM draft
+### - [x] A3. People: status, reply link, reach, DM draft
 - `opportunities`: `person_status` (plan's `PersonStatus`, default `found`), `reply_url`, `replied_at`,
   `reach_level`, `reach jsonb`, `dm_draft text`, `nudge_draft text`, `status_at`.
 - RPCs (founder): `opportunity_mark_replied(p_id, p_url)` (URL must be on the thread's host), `opportunity_set_status
