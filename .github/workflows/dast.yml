@@ -19,7 +19,7 @@ concurrency:
 jobs:
   zap:
     name: zap baseline
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 40
     env:
       NEXT_PUBLIC_OPENCMO_UI: v2

@@ -29,7 +29,7 @@ jobs:
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (github.event.deployment_status.state == 'success' && startsWith(github.event.deployment.environment, 'Production'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     # Job-level, so the skipped runs for previews and pending states never cancel a production check in flight. A newer
     # production deploy does cancel the older check: the domain no longer serves it.
