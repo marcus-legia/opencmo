@@ -43,7 +43,7 @@ the site with the existing site reader and calls `competitor_add`). Left panel l
 Left panel "This week" (found, replied, answered back, signed up) and Analytics "From a thread to a customer" with the
 per-source table. Settings › Sales scans: cadence select.
 
-### - [ ] C8. Research chat, states, tracking (after B7, A5)
+### - [x] C8. Research chat, states, tracking (after B7, A5)
 Research page: its own chat panel (canvas board Research) using B7's tool, with Add buttons. Sales: the first-scan
 progress for a paid account with "while you wait", the banners for a source that did not answer, a failed scan and
 Sales not set up (canvas "Scan problems"). Settings › Tracking: the founder's `?ref=ferreto&src=…` links with Copy,
@@ -70,7 +70,7 @@ question (`/cmo/onboarding/answers` takes `sells_to`, 1 to 160 chars; `GET /cmo/
 Local e2e works in this container with `E2E_SUPABASE_EXCLUDE=logflare,vector,studio,imgproxy,edge-runtime,postgres-meta`
 (logflare fails to start here).
 
-### - [ ] C7. e2e, look, review
+### - [x] C7. e2e, look, review
 Specs for Library, post sources, reach out and I replied, Following up, Research add, funnel. Screenshots at 1440 and
 390. Review the whole wave against the plan. Open the wave 3 PR from `claude/launch`. Do not merge.
 
