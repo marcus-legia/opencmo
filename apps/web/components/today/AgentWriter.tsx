@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 
+import { AllowanceBanner, FreeLockedCard, useUsageState } from "@/components/billing/UsageNotice";
 import { ApprovalCard } from "@/components/cards/ApprovalCard";
 import { ApiError, api, jsonBody } from "@/components/clipping/api";
 import { openScript } from "@/components/cards/open-script";
@@ -75,6 +76,7 @@ function SourceList({ sources }: { sources: readonly Source[] }) {
 export function AgentWriter() {
   const [state, reload] = useScreen("writer");
   const [dash, reloadCards] = useScreen("dashboard");
+  const usageState = useUsageState();
   const { focusChat, toast } = useShellState();
   const [showing, setShowing] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("week");
@@ -247,6 +249,9 @@ export function AgentWriter() {
             </div>
           </div>
         </div>
+
+        <AllowanceBanner state={usageState} />
+        <FreeLockedCard state={usageState} where="post" />
 
         <form
           className="ask"

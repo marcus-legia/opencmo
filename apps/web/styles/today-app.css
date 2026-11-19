@@ -521,3 +521,23 @@ html:not([data-theme="dark"]) .k { --ok: #16744c; --warn: #8f5a0e; }
 @media (max-width: 420px) {
   .td-viewsbar:has(.td-autopilot) .td-project-name { display: none !important; }
 }
+
+/* ---- 100% used and free scan used (wave 4 C2, components/billing/UsageNotice.tsx) ---- */
+.td-frame .td-usage-notice { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 14px 0; padding: 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+.td-frame .td-usage-notice b { font-weight: 600; }
+.td-frame .td-usage-notice .meta { margin-top: 2px; line-height: 1.5; }
+.td-frame .td-usage-notice[data-testid="usage-allowance-used"], .td-frame .td-usage-notice[data-testid="sales-paused"] { border-color: var(--warn); background: var(--warn-wash, color-mix(in srgb, var(--warn) 12%, var(--panel))); }
+.td-frame .td-usage-notice:is([data-testid="usage-allowance-used"], [data-testid="sales-paused"]) .meta { color: var(--muted); }
+.td-frame .td-locked { border-style: dashed; }
+.td-frame .td-lock { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 32px; height: 32px; border-radius: 8px; background: var(--raised); color: var(--muted); }
+.td-frame .td-reach { margin-right: 4px; color: var(--ok); white-space: nowrap; flex: none; }
+.td-frame .item.inv .td-reach { background: transparent; color: var(--inv-text); border-color: var(--inv-muted); }
+@media (max-width: 640px) {
+  .td-frame .td-usage-notice > :is(a, button) { min-height: 44px; flex: 1 1 100%; justify-content: center; }
+}
+@media (max-width: 640px) {
+  /* The share used is in the chip's words; its little bar gives way so the account keeps the first row. */
+  .td-frame .top .td-usage-meter { display: none; }
+  .pg-settings .nav :is(a, button) { min-height: 44px; }
+  .pg-settings .bd > .ghost, .pg-settings [data-testid="billing-usage"] .ghost { min-height: 44px; }
+}

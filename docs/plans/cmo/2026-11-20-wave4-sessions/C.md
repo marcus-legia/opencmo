@@ -14,7 +14,7 @@ Canvas "Sales on a phone": one column; the list, then the open person full width
 width, actions in one row. Check at 390 and 360: no sideways scroll, 44 px targets. Keep `/app/sales` inside its JS
 budget.
 
-### - [ ] C2. Missing states (after A1, B3)
+### - [x] C2. Missing states (after A1, B3)
 - 100% used (from `my_usage_state`): a banner on Sales, Post and Feed saying what stopped, what still works, the reset
   date and "See plans"; Billing's bar at 100%.
 - A free account after its free scan, on Post and Feed: one locked card each with the reason and the plan.

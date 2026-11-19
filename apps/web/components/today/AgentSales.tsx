@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { Logs } from "@/app/api/v1/logs/route";
 import { PlanSheet, isPlanRequired } from "@/components/billing/PlanSheet";
+import { AllowanceBanner, useUsageState } from "@/components/billing/UsageNotice";
 import { api, jsonBody } from "@/components/clipping/api";
 import { useLive } from "@/components/clipping/useLive";
 import { useScreen } from "@/components/screens/useScreen";
@@ -714,6 +715,7 @@ export function AgentSales() {
   const name = ws.name ?? "your product";
   // Fair use (wave 2): at 100% new scans wait for the reset; `cmo_enqueue` refuses them on its own as well.
   const usage = useOptionalShellState()?.usage;
+  const usageState = useUsageState();
   const paused = usage?.paused ? (usage.resetsAt ? new Date(usage.resetsAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "the next reset") : null;
 
   // The banner's way to the settings: the tab, then the cursor on its heading, so the founder lands where to act.
@@ -802,19 +804,8 @@ export function AgentSales() {
             action={{ label: "Where Sales looks", onClick: openSettings }}
           />
         ) : null}
-        {paused ? (
-          <div className="card" role="status" data-testid="sales-paused" style={{ marginTop: "14px", display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
-            <div style={{ flex: "1 1 260px", minWidth: "0" }}>
-              <b>You used this month&apos;s allowance</b>
-              <div className="meta">
-                New scans start again on {paused}. The people already found, your drafts and your posts keep working.
-              </div>
-            </div>
-            <a href="/app/billing" className="ghost" style={{ textDecoration: "none" }}>
-              Plan and billing
-            </a>
-          </div>
-        ) : null}
+        {/* 100% used (wave 4 C2): what stopped, until when, what still works. The shell's bar still disables Scan now. */}
+        <AllowanceBanner state={usageState} testId="sales-paused" />
 
         <div className="tabs" role="tablist" aria-label="Sales">
           {(
