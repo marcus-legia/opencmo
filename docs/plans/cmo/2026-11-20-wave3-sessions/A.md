@@ -86,3 +86,11 @@ competitor per week from `opportunities` text (counted in SQL view `my_competito
   optional `answeredBack` (or SQL reads `p_replies > 0` on a `found` outcome) and sets `person_status =
   'answered_back'`, `status_at = now()` when the person is still `found` or `replied` (never moving a later status
   back). The memory store does the same, so the check and the evals see it.
+
+- **From B (B2 nudges):** a read for who is due a nudge, as a store method: `nudgesDue(userId, limit = 10):
+  Promise<{ opportunity_id, url, platform, community, title, snippet, reply, posted_at }[]>` for opportunities with
+  `person_status = 'replied'`, `replied_at < now() - 4 days`, `nudge_draft is null` (oldest reply first), and a count
+  for the loop: please add `nudgesDue?: number` to what the CMO cron fills in `LoopState` (`app/api/cron/cmo`), from
+  the same condition. B drafts the nudges in `pull_metrics` after the re-reads (so an answer found that day stops
+  the nudge) and saves each with `saveNudge`; `loops.ts` runs `pull_metrics` when `nudgesDue > 0`. In the memory store,
+  `repliedAt` on `people` is enough.
