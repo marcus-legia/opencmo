@@ -116,8 +116,15 @@ export async function sidewaysOverflow(page: Page): Promise<{ width: number; cul
  * matches `text` (its "Review" button, or the row itself for the inverted first row) and returns the card.
  */
 export async function openFeedCard(page: Page, text: string | RegExp): Promise<Locator> {
-  const row = page.getByTestId("approval-queue").locator('[data-testid="feed-row"][data-card-id]').filter({ hasText: text }).first();
-  await expect(row).toBeVisible({ timeout: 60_000 });
+  const queue = page.getByTestId("approval-queue");
+  const row = queue.locator('[data-testid="feed-row"][data-card-id]').filter({ hasText: text }).first();
+  // Today keeps five rows and people first (wave 3): a post may sit under "Show N more".
+  await expect(async () => {
+    if (await row.isVisible()) return;
+    const more = queue.getByRole("button", { name: /^Show \d+ more$/ });
+    if (await more.isVisible()) await more.click();
+    await expect(row).toBeVisible({ timeout: 2_000 });
+  }).toPass({ timeout: 60_000 });
   const card = row.getByTestId("approval-card");
   if (!(await card.isVisible())) {
     const review = row.getByRole("button", { name: "Review" });

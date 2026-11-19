@@ -44,6 +44,9 @@ test("a finished draft comes back to the chat and lands on the feed; Open goes t
   await expect(up).toHaveAttribute("aria-pressed", "true");
   expect((await saved).ok()).toBe(true);
   await page.reload();
+  // Off the feed a fresh page folds the chat to its "Ask" rail (wave 2, C4): open it again.
+  const rail = page.getByRole("button", { name: "Open the chat" });
+  if (await rail.isVisible()) await rail.click();
   await expect(chat.getByTestId("run-line")).toContainText("Draft ready to review");
   await expect(chat.getByRole("button", { name: "Good answer" }).last()).toHaveAttribute("aria-pressed", "true");
 

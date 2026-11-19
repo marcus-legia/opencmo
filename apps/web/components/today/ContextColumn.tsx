@@ -187,7 +187,7 @@ export function ContextColumn({ goal }: { goal: { text: string | null; done: num
           ).map(([label, n]) => (
             <div key={label} data-testid="context-funnel-step" style={{ display: "flex", flexDirection: "column", padding: "6px 0", borderRadius: "7px", background: "var(--hover)" }}>
               <b style={{ fontSize: "16px", fontWeight: "600" }}>{n ?? "–"}</b>
-              <span className="meta" style={{ fontSize: "11px", lineHeight: "1.25" }}>
+              <span style={{ fontSize: "11px", lineHeight: "1.25", color: "var(--text)" }}>
                 {label}
               </span>
             </div>

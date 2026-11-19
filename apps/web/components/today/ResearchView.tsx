@@ -10,7 +10,8 @@ import type { CompetitorView } from "@/lib/screens/research";
 import { ResearchChat } from "./ResearchChat";
 
 /** The colour squares of the competitors' marks, in order (the canvas draws each in its own colour). */
-export const MARKS = ["#1f8a5b", "#ff6b35", "#0075dd", "#2d3e50", "#1c6ef2", "#e42527", "#8a63d2", "#c9a227"];
+// Every mark holds white text at 4.5:1 or more (axe color-contrast, WCAG AA).
+export const MARKS = ["#17724b", "#c2410c", "#0067c2", "#2d3e50", "#1a5fd6", "#c81e1e", "#7a4fc4", "#8a6d0f"];
 
 /** "Invoice Ninja" → "IN", "Bonsai" → "B". */
 export function markOf(name: string): string {

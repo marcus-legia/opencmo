@@ -29,7 +29,7 @@ each planned post carries `PostSource[]`. `post_draft` writes from those sources
 item. No Library entries: no automatic post (the week plan says so in one line). A chat brief still drafts.
 Eval: every draft cites at least one source; no invented numbers.
 *Done:* `jobs/library-sources.ts`; an item planned before sources (or while `cmo_plan_week` drops them, A request)
-takes the Library theme closest to its idea. The onboarding plan waits up to 6 minutes for the free scan's Library.
+takes the Library theme closest to its idea. The first week from onboarding is the one exception: it plans and drafts posts before Sales has found anyone (owner, 2026-11-19: a free account sees its week plan and first drafts), from the Library when it has entries.
 
 ### - [x] B4. Onboarding writes documents v2; voice in prompts (after A4)
 Onboarding asks "who do you sell to?" while it reads the site (the answer goes into the Strategy and the first

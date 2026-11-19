@@ -140,7 +140,8 @@ export async function draftPost(ctx: JobContext): Promise<JobOutput> {
   const planned = storedSources(due?.body);
   const closest = planned.length || fromFounder ? null : closestTheme(idea, library);
   const sources: PostSource[] = planned.length ? planned : closest ? themeSources(closest.name, libraryRefs(library)) : [];
-  if (!fromFounder && !sources.length) {
+  // The first week's drafts (onboarding) are the one exception: they are written before Sales has found anyone.
+  if (!fromFounder && !sources.length && run.input.source !== "onboarding") {
     await ctx.step("library", NO_LIBRARY, async () => 0);
     return { refund: true, reason: NO_LIBRARY };
   }

@@ -119,16 +119,15 @@ async function main() {
     assert.equal(bare.status, "done", `an empty Library is not an error (${bare.error})`);
     assert.equal(empty.items.filter((i) => i.department === "post").length, 0, "no post without the Library");
     assert.ok(bare.steps.some((s) => s.tool === "library"), "the plan says why in one line");
-    // Onboarding: the plan waits for the free scan to fill the Library, then plans posts from it.
-    const waiting = memoryStore(docs);
-    const first = waiting.enqueue("plan_week", { source: "onboarding", wait_for_scan: true, queued_at: new Date().toISOString() });
-    await drainCmoQueue(waiting.store, { runId: first.id });
-    assert.equal(first.status, "queued", "an empty Library defers the onboarding plan");
-    assert.equal(waiting.items.length, 0, "and writes nothing yet");
-    const late = memoryStore(docs);
-    const old = late.enqueue("plan_week", { source: "onboarding", wait_for_scan: true, queued_at: new Date(Date.now() - 10 * 60_000).toISOString() });
-    await drainCmoQueue(late.store, { runId: old.id });
-    assert.equal(old.status, "done", "past the wait it plans anyway, with no posts");
+    // Onboarding: the first week plans posts even with an empty Library (a new founder sees first drafts).
+    const first = memoryStore(docs);
+    const onboarding = first.enqueue("plan_week", { source: "onboarding" });
+    await drainCmoQueue(first.store, { runId: onboarding.id });
+    assert.equal(onboarding.status, "done", `the onboarding plan is done (${onboarding.error})`);
+    assert.ok(first.items.some((i) => i.department === "post"), "the first week has posts without the Library");
+    const firstDraft = first.enqueue("post_draft", { source: "onboarding" });
+    await drainCmoQueue(first.store, { runId: firstDraft.id });
+    assert.ok(first.items.some((i) => i.status === "in_review"), "and its first draft is written");
     const briefed = memoryStore(docs);
     briefed.enqueue("plan_week", { brief: "a week about our launch" });
     await drainCmoQueue(briefed.store);

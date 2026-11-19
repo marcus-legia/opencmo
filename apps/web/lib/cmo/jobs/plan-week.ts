@@ -15,7 +15,7 @@ import { mondayOf } from "./summarize-memory";
 import { profileIdOf, profileOf } from "../platforms";
 import { VIDEO_PLATFORMS, dayTargets, type PostingPlan, type VideoPlatform } from "../posting-plan";
 import { NO_AI_SLOP, skillText } from "../skills";
-import { Deferred, type JobContext, type JobOutput } from "./runner";
+import type { JobContext, JobOutput } from "./runner";
 import { isoDay, type Documents, type PlanItem, type PostSource } from "./types";
 import type { LibraryTopTheme } from "../library";
 import { libraryBlock, libraryRefs, NO_LIBRARY, sourcesFor, themeSources, type SourceRef } from "./library-sources";
@@ -66,9 +66,6 @@ ${NO_AI_SLOP}`;
 /** Posts a week that get an image (C3): the Post image squad builds one when the founder approves the post. */
 export const MAX_IMAGES = 2;
 
-/** How long the onboarding plan waits for the free scan to fill the Library, and how often it looks again. */
-export const SCAN_WAIT_MS = 6 * 60_000;
-const SCAN_WAIT_STEP_S = 60;
 
 /** The calendar label of each video platform's script (`platform_profile_id` maps them back). */
 export const VIDEO_LABEL: Readonly<Record<VideoPlatform, string>> = { tiktok: "TikTok", instagram: "Reels", youtube: "Shorts" };
@@ -291,13 +288,6 @@ export async function planWeek(ctx: JobContext): Promise<JobOutput> {
     },
   );
 
-  // Onboarding queued the free scan first: while the Library is still empty, wait for it a few minutes rather than plan
-  // a week with no posts. Past the wait, the plan goes on and says why it has none.
-  const queuedAt = typeof run.input.queued_at === "string" ? Date.parse(run.input.queued_at) : NaN;
-  if (run.input.wait_for_scan === true && !library.length && Number.isFinite(queuedAt) && ctx.now.getTime() - queuedAt < SCAN_WAIT_MS) {
-    throw new Deferred(SCAN_WAIT_STEP_S);
-  }
-
   const plan = await ctx.step("plan_items", "Planning the week", async () => {
     const lastWeek = recent.length
       ? recent.map((i) => `- ${i.day} ${i.department}: ${i.status} "${i.idea}"`).join("\n")
@@ -315,8 +305,10 @@ export async function planWeek(ctx: JobContext): Promise<JobOutput> {
   }, (p) => `${p.items.length} items planned`);
 
   // Stage fit before the skeleton is filled, so a dropped idea's slot is filled from the pillars rather than left empty.
-  // A week brief the founder wrote in the chat is the one way to posts without the Library; the schedule's is not.
-  const fromBrief = run.input.source !== "schedule" && typeof run.input.brief === "string" && run.input.brief.trim().length > 0;
+  // Posts without the Library: a week brief the founder wrote in the chat (the schedule's is not), and the first week
+  // from onboarding, which a new founder sees before Sales has found anyone (owner, 2026-11-19: a free account sees
+  // its week plan and first drafts). From the next week on, posts come from the Library only.
+  const fromBrief = run.input.source === "onboarding" || (run.input.source !== "schedule" && typeof run.input.brief === "string" && run.input.brief.trim().length > 0);
   const items = toPlanItems({ items: fitStage(plan.items, docs) }, posting, { today: new Date(), docs, library, fromBrief });
   const noPosts = !items.some((i) => i.department === "post") && postSlots(posting).length > 0;
   if (noPosts) await ctx.step("library", NO_LIBRARY, async () => 0);
