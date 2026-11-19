@@ -9,7 +9,7 @@ Plan: [`../2026-11-20-wave4-plan.md`](../2026-11-20-wave4-plan.md). Branch `clau
 
 ## 4a
 
-### - [ ] A1. Usage state (push first)
+### - [x] A1. Usage state (push first)
 A read the screens can use: `my_usage_state()` (founder) returns the plan, the share used this period (0–100), whether
 included work is stopped (`blocked`), what still works when blocked (reading, editing, copying drafts), and when the
 period resets. Built on the existing usage / credit functions, no new money path. pgTAP: free, paid under, paid at

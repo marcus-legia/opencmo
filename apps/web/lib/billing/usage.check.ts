@@ -5,7 +5,7 @@
  */
 import assert from "node:assert/strict";
 
-import { FREE_USAGE, parsePlanUsage } from "./usage";
+import { FREE_USAGE, OPEN_USAGE_STATE, parsePlanUsage, parseUsageState } from "./usage";
 
 // 1. A paid row from Postgres (snake_case, numbers as strings from numeric columns).
 {
@@ -60,6 +60,53 @@ for (const row of [null, undefined, [], "x", { plan: "free", used: 50, allowance
   assert.equal(bad.allowance, 0);
   assert.equal(bad.interval, null);
   assert.equal(bad.resetsAt, null);
+}
+
+// 5. `my_usage_state()`: a paid account at 100%.
+{
+  const state = parseUsageState({
+    plan: "pro",
+    interval: "month",
+    used: 100,
+    allowance: 100,
+    percent: 100,
+    resets_at: "2026-12-18T00:00:00+00:00",
+    blocked: true,
+    reason: "allowance_used",
+    stopped: ["sales_scan", "research"],
+    still_works: ["read", "edit", "copy_drafts", "post_drafts", "reply_drafts", "unknown"],
+    free_scan: null,
+  });
+  assert.equal(state.blocked, true);
+  assert.equal(state.paused, true);
+  assert.equal(state.reason, "allowance_used");
+  assert.deepEqual(state.stopped, ["sales_scan", "research"]);
+  assert.deepEqual(state.stillWorks, ["read", "edit", "copy_drafts", "post_drafts", "reply_drafts"]);
+  assert.equal(state.resetsAt, "2026-12-18T00:00:00+00:00");
+}
+
+// 6. A free account after its free scan; then nothing readable.
+{
+  const state = parseUsageState({
+    plan: "free",
+    used: 0,
+    allowance: 0,
+    percent: 0,
+    resets_at: null,
+    blocked: true,
+    reason: "free_scan_used",
+    stopped: ["sales_scan", "reply_drafts", "post_drafts"],
+    still_works: ["read", "edit", "copy_drafts"],
+    free_scan: "used",
+  });
+  assert.equal(state.plan, "free");
+  assert.equal(state.reason, "free_scan_used");
+  assert.equal(state.freeScan, "used");
+  assert.deepEqual(state.stopped, ["sales_scan", "reply_drafts", "post_drafts"]);
+  // A reason that does not fit the plan is not a block.
+  assert.equal(parseUsageState({ plan: "free", blocked: true, reason: "allowance_used" }).blocked, false);
+  assert.deepEqual(parseUsageState(null), OPEN_USAGE_STATE);
+  assert.deepEqual(parseUsageState([1]), OPEN_USAGE_STATE);
 }
 
 console.log("billing/usage.check: ok");

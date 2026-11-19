@@ -49,3 +49,78 @@ export function parsePlanUsage(row: unknown): PlanUsage {
   const resetsAt = typeof rawReset === "string" && !Number.isNaN(Date.parse(rawReset)) ? rawReset : null;
   return { plan: "pro", interval, used, allowance, percent, resetsAt, paused: allowance > 0 && used >= allowance };
 }
+
+/** Work `my_usage_state()` names in `stopped` / `still_works`; the screens write the words. */
+export type UsageWork =
+  | "read"
+  | "edit"
+  | "copy_drafts"
+  | "post_drafts"
+  | "reply_drafts"
+  | "sales_scan"
+  | "research";
+
+const USAGE_WORK: readonly UsageWork[] = [
+  "read",
+  "edit",
+  "copy_drafts",
+  "post_drafts",
+  "reply_drafts",
+  "sales_scan",
+  "research",
+];
+
+/**
+ * The state the "100% used" and "free scan used" screens read, from `my_usage_state()` (wave 4 A1). `blocked` means
+ * included work is stopped: at 100% of a paid plan (`allowance_used`, until `resetsAt`), or after a free account's
+ * free scan (`free_scan_used`, until it takes a plan). The refusals stay in SQL; this only says what they will say.
+ */
+export type UsageState = PlanUsage & {
+  blocked: boolean;
+  reason: "allowance_used" | "free_scan_used" | null;
+  stopped: UsageWork[];
+  stillWorks: UsageWork[];
+  /** Free accounts only: where their free scan stands. */
+  freeScan: "not_ready" | "available" | "running" | "used" | null;
+};
+
+/** What a screen shows when the RPC has not answered: nothing stopped, so nothing is hidden behind a lock. */
+export const OPEN_USAGE_STATE: UsageState = {
+  ...FREE_USAGE,
+  blocked: false,
+  reason: null,
+  stopped: [],
+  stillWorks: ["read", "edit", "copy_drafts"],
+  freeScan: null,
+};
+
+function works(value: unknown): UsageWork[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((v): v is UsageWork => USAGE_WORK.includes(v as UsageWork));
+}
+
+/** Reads the `my_usage_state()` jsonb. The bar's numbers go through {@link parsePlanUsage}, so both reads agree. */
+export function parseUsageState(value: unknown): UsageState {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return { ...OPEN_USAGE_STATE };
+  const o = value as Record<string, unknown>;
+  const usage = parsePlanUsage(o);
+  const reason =
+    usage.plan === "pro" && o.reason === "allowance_used"
+      ? "allowance_used"
+      : usage.plan === "free" && o.reason === "free_scan_used"
+        ? "free_scan_used"
+        : null;
+  const freeScan =
+    usage.plan === "free" &&
+    (o.free_scan === "not_ready" || o.free_scan === "available" || o.free_scan === "running" || o.free_scan === "used")
+      ? o.free_scan
+      : null;
+  return {
+    ...usage,
+    blocked: o.blocked === true && reason !== null,
+    reason: o.blocked === true ? reason : null,
+    stopped: o.blocked === true && reason !== null ? works(o.stopped) : [],
+    stillWorks: works(o.still_works),
+    freeScan,
+  };
+}
