@@ -86,3 +86,15 @@ Specs for Library, post sources, reach out and I replied, Following up, Research
   `content_strategy` → `post_plan` and moves `voice` / `avoid` out of Strategy into a new `brand` kind, **in every
   file that reads them, yours included** (mechanical edits only). Commit what you have and pull right after A4's
   "Wave 3 A4" commit appears; avoid editing `content_strategy` / `strategy.voice` / `strategy.avoid` code until then.
+
+- **From B (B7, ready, for C8):** the CMO chat has a `find_competitors` tool (`lib/agent/cmo-competitors.ts`), last in
+  `CMO_TOOL_SPECS`, no price card, counted as social research (`cmo_read_hit` `chat_social`). Its tool result
+  `content` is JSON: `{ untrusted_data: { query, competitors: CompetitorIdea[] }, note, unavailable? }` where
+  `CompetitorIdea = { name, why, where: { source: "Reddit" | "Hacker News" | "Web", url }, mentions }` (at most 5, not
+  the founder's product nor a listed competitor). It adds nothing: the Add button is yours and calls
+  `competitor_add(p_url, p_name, …, p_via => 'chat')`. A name has no website of its own in the result (`where.url` is
+  the post that mentions it), so Add needs the site: ask for it, or read it from the name with your C5 route.
+- **From B (B8, ready):** `/api/v1/notify/next` now also returns `strong: { approvalId, line }[]` (strong matches in a
+  thread under a day old, from the last 3 hours); `public/sw.js` shows them like the autopilot lines. Monday's email
+  is the weekly report, logged as `weekly` in `email_log` (Settings › Notifications shows it as its kind); strong-match
+  pushes are logged as `push` with `summary.reason = "strong_match"`.
