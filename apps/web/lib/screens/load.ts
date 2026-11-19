@@ -980,6 +980,25 @@ async function research({ supabase }: LoadContext): Promise<Partial<ResearchScre
       const body = ((r.data as { body?: unknown } | null)?.body ?? {}) as { hooks?: { url?: unknown }[]; formats?: unknown[]; ideas?: unknown[] };
       return (body.hooks ?? []).filter((h) => !isHttps(h.url)).length + (body.formats ?? []).length + (body.ideas ?? []).length;
     },
+    competitors: async () => {
+      const since = new Date(now.getTime() - 8 * 7 * 86_400_000).toISOString().slice(0, 10);
+      const [rows, mentions] = await Promise.all([
+        supabase.from("competitors").select("id, name, site, logo_url, price, offer, added_via").order("created_at", { ascending: false }).limit(20),
+        supabase.from("my_competitor_mentions").select("competitor_id, week, mentions").gte("week", since).order("week").limit(200),
+      ]);
+      const list = must(rows, "competitors") as { id: string; name: string; site: string; logo_url: string | null; price: string | null; offer: string | null; added_via: "url" | "chat" }[];
+      const counts = must(mentions, "my_competitor_mentions") as { competitor_id: string; week: string; mentions: number }[];
+      return list.map((c) => ({
+        id: c.id,
+        name: c.name,
+        site: c.site,
+        logoUrl: isHttps(c.logo_url) ? c.logo_url : null,
+        price: c.price,
+        offer: c.offer,
+        addedVia: c.added_via,
+        mentions: counts.filter((m) => m.competitor_id === c.id).slice(-8).map((m) => ({ week: m.week, count: m.mentions })),
+      }));
+    },
     results: async () => {
       const metrics = must(await supabase.from("post_metrics").select("item_id, views, replies, measured_at").order("measured_at", { ascending: false }).limit(100), "post_metrics") as {
         item_id: string;

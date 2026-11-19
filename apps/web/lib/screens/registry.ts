@@ -75,7 +75,8 @@ export const SCREENS = {
     schema: ResearchScreenSchema,
     fixture: researchFixture,
     empty: researchEmpty,
-    live: ["lastRunAt", "nextRunAt", "insights", "dropped", "results"],
+    // Wave 3 A6: `competitors`, released once Research (C5) shows them.
+    live: ["lastRunAt", "nextRunAt", "insights", "dropped", "results", "competitors"],
     release: ["lastRunAt", "insights", "results"],
   }),
   // Drafts per platform (posts, captions, briefs for Studio) and the voice Writer reads (P3 A3).

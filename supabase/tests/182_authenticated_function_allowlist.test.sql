@@ -123,6 +123,8 @@ insert into allowed values
   ('mcp_grant_record(text)'),
   ('mcp_grant_revoke(text)'),
   ('my_library(text)'),  -- wave 3 A2
+  ('competitor_add(text,text,text,text,text,text)'),  -- wave 3 A6
+  ('competitor_remove(uuid)'),  -- wave 3 A6
   ('my_funnel(integer)'),  -- wave 3 A5
   ('my_published_items(timestamp with time zone)'),
   ('normalize_capture_url(text)'),

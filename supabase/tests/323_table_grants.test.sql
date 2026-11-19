@@ -59,6 +59,8 @@ insert into expected values
     ('jobs', 'authenticated', 'SELECT'),
     ('library_entries', 'authenticated', 'SELECT'),
     ('library_themes', 'authenticated', 'SELECT'),
+    ('competitors', 'authenticated', 'SELECT'),
+    ('my_competitor_mentions', 'authenticated', 'SELECT'),
     ('marketing_documents', 'authenticated', 'SELECT'),
     ('marketing_documents_latest', 'authenticated', 'SELECT'),
     ('mcp_grants', 'authenticated', 'SELECT'),

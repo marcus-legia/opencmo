@@ -15,6 +15,18 @@ export const researchFixture: ResearchScreen = {
     { id: "r-2", title: "Editor first", platform: "linkedin", views: 710, replies: 4 },
     { id: "r-3", title: "Reply · r/SaaS", platform: "reddit", views: null, replies: 3 },
   ],
+  competitors: [
+    {
+      id: "00000000-0000-4000-8000-0000000000c1",
+      name: "Invoice Ninja",
+      site: "invoiceninja.com",
+      logoUrl: null,
+      price: "From $10 a month",
+      offer: "Invoices, quotes and payments for freelancers",
+      addedVia: "url",
+      mentions: [{ week: "2026-11-09", count: 3 }, { week: "2026-11-16", count: 5 }],
+    },
+  ],
 };
 
-export const researchEmpty: ResearchScreen = { lastRunAt: null, nextRunAt: null, insights: [], dropped: 0, results: [] };
+export const researchEmpty: ResearchScreen = { lastRunAt: null, nextRunAt: null, insights: [], dropped: 0, results: [], competitors: [] };

@@ -45,7 +45,7 @@ warm; DM ready needs buyer, wants now, fresh, `dmAllowed` and (warm or the post 
 - RPC `my_funnel(p_days int default 7)`: found, replied, answered back, signed up, by source; reads `opportunities`
   statuses and `cmo_draft_outcomes`.
 
-### - [ ] A6. Competitors by URL
+### - [x] A6. Competitors by URL
 RPC `competitor_add(p_url)` (founder) storing name, site, logo URL, price text and offer read by B or C's route (A
 gives the table and RPC; reading the site is a route in C5 that calls the existing site reader). Mentions per
 competitor per week from `opportunities` text (counted in SQL view `my_competitor_mentions`).

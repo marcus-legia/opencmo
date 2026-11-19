@@ -6944,6 +6944,93 @@ $$;
 
 
 --
+-- Name: competitors; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.competitors (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    site text NOT NULL,
+    name text NOT NULL,
+    logo_url text,
+    price text,
+    offer text,
+    added_via text DEFAULT 'url'::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT competitors_added_via_check CHECK ((added_via = ANY (ARRAY['url'::text, 'chat'::text]))),
+    CONSTRAINT competitors_logo_url_check CHECK (((char_length(logo_url) <= 500) AND (logo_url ~ '^https://'::text))),
+    CONSTRAINT competitors_name_check CHECK (((char_length(name) >= 1) AND (char_length(name) <= 80))),
+    CONSTRAINT competitors_offer_check CHECK ((char_length(offer) <= 300)),
+    CONSTRAINT competitors_price_check CHECK ((char_length(price) <= 200)),
+    CONSTRAINT competitors_site_check CHECK (((site ~ '^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$'::text) AND (char_length(site) <= 253)))
+);
+
+
+--
+-- Name: competitor_add(text, text, text, text, text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.competitor_add(p_url text, p_name text DEFAULT NULL::text, p_logo_url text DEFAULT NULL::text, p_price text DEFAULT NULL::text, p_offer text DEFAULT NULL::text, p_via text DEFAULT 'url'::text) RETURNS public.competitors
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $_$
+declare
+  v_user uuid := public.require_user();
+  v_url text := lower(btrim(coalesce(p_url, '')));
+  v_site text;
+  v_name text;
+  v_row public.competitors;
+begin
+  if v_url !~ '^https?://' then
+    v_url := 'https://' || v_url;
+  end if;
+  v_site := regexp_replace(split_part(split_part(split_part(regexp_replace(v_url, '^https?://', ''), '/', 1), '?', 1), '#', 1), '^www\.', '');
+  v_site := split_part(v_site, ':', 1);
+  if char_length(v_url) > 500 or v_site !~ '^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$'
+     or char_length(v_site) > 253 or v_site ~ '^[0-9.]+$' or v_site ~ '(^|\.)(localhost|local|internal)$' then
+    raise exception 'Paste the competitor''s website, like example.com.' using errcode = '22023';
+  end if;
+  if coalesce(p_via, 'url') not in ('url', 'chat') then
+    raise exception 'Unknown source.' using errcode = '22023';
+  end if;
+  if (select count(*) from public.competitors c where c.user_id = v_user and c.site <> v_site) >= 20 then
+    raise exception 'Keep at most 20 competitors.' using errcode = 'P0001';
+  end if;
+  v_name := left(nullif(btrim(coalesce(p_name, '')), ''), 80);
+  insert into public.competitors (user_id, site, name, logo_url, price, offer, added_via)
+  values (v_user, v_site, coalesce(v_name, v_site),
+    case when btrim(coalesce(p_logo_url, '')) ~ '^https://' and char_length(btrim(p_logo_url)) <= 500 then btrim(p_logo_url) end,
+    left(nullif(btrim(coalesce(p_price, '')), ''), 200), left(nullif(btrim(coalesce(p_offer, '')), ''), 300),
+    coalesce(p_via, 'url'))
+  on conflict (user_id, site) do update set
+    name = coalesce(v_name, public.competitors.name),
+    logo_url = coalesce(excluded.logo_url, public.competitors.logo_url),
+    price = coalesce(excluded.price, public.competitors.price),
+    offer = coalesce(excluded.offer, public.competitors.offer),
+    updated_at = now()
+  returning * into v_row;
+  return v_row;
+end;
+$_$;
+
+
+--
+-- Name: competitor_remove(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.competitor_remove(p_id uuid) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+begin
+  delete from public.competitors c where c.id = p_id and c.user_id = public.require_user();
+  return found;
+end;
+$$;
+
+
+--
 -- Name: complete_caption_translation(uuid, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -19778,6 +19865,21 @@ CREATE TABLE public.media_transcripts (
 
 
 --
+-- Name: my_competitor_mentions; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW public.my_competitor_mentions WITH (security_invoker='true') AS
+ SELECT c.id AS competitor_id,
+    c.name,
+    (date_trunc('week'::text, o.created_at))::date AS week,
+    (count(*))::integer AS mentions
+   FROM (public.competitors c
+     JOIN public.opportunities o ON (((o.user_id = c.user_id) AND (((o.title || ' '::text) || o.snippet) ~* (('\m'::text || regexp_replace(c.name, '([.^$*+?()\[\]{}|\\-])'::text, '\\\1'::text, 'g'::text)) || '\M'::text)))))
+  WHERE ((c.user_id = ( SELECT auth.uid() AS uid)) AND (char_length(c.name) >= 3))
+  GROUP BY c.id, c.name, (date_trunc('week'::text, o.created_at));
+
+
+--
 -- Name: operation_log; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -20549,6 +20651,22 @@ ALTER TABLE ONLY public.cmo_runs
 
 ALTER TABLE ONLY public.cmo_voice_events
     ADD CONSTRAINT cmo_voice_events_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: competitors competitors_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.competitors
+    ADD CONSTRAINT competitors_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: competitors competitors_user_id_site_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.competitors
+    ADD CONSTRAINT competitors_user_id_site_key UNIQUE (user_id, site);
 
 
 --
@@ -23038,6 +23156,14 @@ ALTER TABLE ONLY public.cmo_voice_events
 
 
 --
+-- Name: competitors competitors_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.competitors
+    ADD CONSTRAINT competitors_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
 -- Name: content_items content_items_clip_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -24005,6 +24131,12 @@ ALTER TABLE public.cmo_runs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.cmo_voice_events ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: competitors; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.competitors ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: content_items; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -24298,6 +24430,13 @@ CREATE POLICY "read own best slots" ON public.best_slots FOR SELECT TO authentic
 --
 
 CREATE POLICY "read own card budget" ON public.card_budget FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
+
+
+--
+-- Name: competitors read own competitors; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "read own competitors" ON public.competitors FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
 
 
 --
