@@ -32,7 +32,7 @@ function landingLd(faq: { q: string; a: string }[], plans: SellablePlan[]) {
       "@id": `${SITE_URL}/#organization`,
       name: SITE_NAME,
       url: SITE_URL,
-      logo: absoluteUrl("/icon.svg"),
+      logo: absoluteUrl("/icon-512.png"),
     },
     {
       "@context": "https://schema.org",

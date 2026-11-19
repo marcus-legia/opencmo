@@ -1,14 +1,13 @@
 import { SOCIAL, type SocialKey } from "./icons";
 
 /** Logo "Open O": vòng hở 76° + chấm terracotta, dựng trên lưới 64. */
+/** Con chồn gõ laptop (`public/logo.svg`, có chuyển động). `size` là chiều cao; ảnh rộng gấp ~1.8. */
 export function LogoMark({ size = 28 }: { size?: number }) {
-  return (
-    <svg viewBox="0 0 64 64" width={size} height={size} aria-hidden="true" className="lv-logo">
-      <path d="M44.97 43.70A19 19 0 1 1 44.97 20.30" fill="none" stroke="currentColor" strokeWidth="8" />
-      <circle cx="49" cy="32" r="5" fill="#E2704A" />
-    </svg>
-  );
+  // SVG gains nothing from the image optimizer, so it stays a plain <img>.
+  return <img src="/logo.svg" width={Math.round(size * LOGO_RATIO)} height={size} alt="" className="lv-logo" />;
 }
+
+const LOGO_RATIO = 236 / 132;
 
 /** Logo nền tảng trắng trên ô màu của hãng. `size` là cạnh ô; logo bằng nửa cạnh. */
 export function SocialTile({ k, size, radius, title = true }: { k: SocialKey; size: number; radius: number; title?: boolean }) {

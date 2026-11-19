@@ -5,7 +5,7 @@ export function Brand() {
   return (
     <span className="brand-lockup">
       {/* SVG gains nothing from the image optimizer, so it stays a plain <img>. */}
-      <img src="/icon.svg" width="32" height="32" alt="" />
+      <img src="/logo.svg" width="57" height="32" alt="" />
       <span>Ferreto</span>
     </span>
   );

@@ -72,7 +72,7 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
       author: author.type === "Organization"
         ? { "@type": "Organization", name: author.name, url: author.url }
         : { "@type": "Person", name: author.name, jobTitle: author.role, url: author.url },
-      publisher: { "@type": "Organization", "@id": `${SITE_URL}/#organization`, name: SITE_NAME, logo: absoluteUrl("/icon.svg") },
+      publisher: { "@type": "Organization", "@id": `${SITE_URL}/#organization`, name: SITE_NAME, logo: absoluteUrl("/icon-512.png") },
       articleSection: category.name,
       keywords: post.keywords.join(", "),
       wordCount: post.words,
