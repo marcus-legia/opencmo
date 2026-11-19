@@ -66,6 +66,7 @@ question (`/cmo/onboarding/answers` takes `sells_to`, 1 to 160 chars; `GET /cmo/
   links and Copy, and the honest line that sign-ups are marked by hand in Sales › Following up (no tracking script in
   wave 3); a `SettingsFrame` entry.
 - e2e for the Research chat (fake provider) and the states above; then C7.
+**Taken over by session B (owner's ask, 2026-11-19):** the rest of C8, then C7.
 Local e2e works in this container with `E2E_SUPABASE_EXCLUDE=logflare,vector,studio,imgproxy,edge-runtime,postgres-meta`
 (logflare fails to start here).
 
