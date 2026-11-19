@@ -30,8 +30,9 @@ Brand (Voice: paste samples, intro line, words to avoid; Look: colours, font, lo
 website again" asks before overwriting edits.
 
 ### - [ ] C4. Sales: reach out, Following up, I replied (after A3, B1, B2)
-Per person: "Ready to reach out" with the five checks and their reasons; tabs Public reply · DM · Email (Email: Copy
-only, locked tabs say why: "Reply in public first"). "I replied" asks for the link (skippable). Following up tab with
+Per person: "Ready to reach out" with the five checks and their reasons; tabs Public reply · DM · Email (DM: "Copy and
+open" the platform's chat; Email: Copy only; locked tabs say why: "Reply in public first"); "I sent it" moves the
+person to Following up. "I replied" asks for the link (skippable). Following up tab with
 statuses, the nudge, and the status select. Copy through `no-ai-slop`.
 
 ### - [ ] C5. Research (after A6)
@@ -41,6 +42,12 @@ the site with the existing site reader and calls `competitor_add`). Left panel l
 ### - [ ] C6. Funnel (after A5)
 Left panel "This week" (found, replied, answered back, signed up) and Analytics "From a thread to a customer" with the
 per-source table. Settings › Sales scans: cadence select.
+
+### - [ ] C8. Research chat, states, tracking (after B7, A5)
+Research page: its own chat panel (canvas board Research) using B7's tool, with Add buttons. Sales: the first-scan
+progress for a paid account with "while you wait", the banners for a source that did not answer, a failed scan and
+Sales not set up (canvas "Scan problems"). Settings › Tracking: the founder's `?ref=ferreto&src=…` links with Copy,
+and how "Signed up" is counted. Onboarding: the "who do you sell to?" chips while the site is read.
 
 ### - [ ] C7. e2e, look, review
 Specs for Library, post sources, reach out and I replied, Following up, Research add, funnel. Screenshots at 1440 and

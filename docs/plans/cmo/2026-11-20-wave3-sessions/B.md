@@ -19,7 +19,8 @@ Save via `cmo_save_library` and `cmo_save_reach`. No profile reads. Eval: summar
 not a buyer; HN is never DM ready.
 
 ### - [ ] B2. DM drafts and nudges (after B1)
-For DM-ready people, draft one DM (short, refers to the public reply, says the product is theirs, asks before linking).
+For DM-ready people, draft one DM (short, refers to the public reply, says the product is theirs, asks before linking),
+at most 20 a day per founder.
 For replied people with no answer after 4 days, draft one nudge. Saved by A3's RPCs; founder sends. Eval cases.
 
 ### - [ ] B3. Posts from the Library (after A2, A4)
@@ -29,7 +30,8 @@ item. No Library entries: no automatic post (the week plan says so in one line).
 Eval: every draft cites at least one source; no invented numbers.
 
 ### - [ ] B4. Onboarding writes documents v2; voice in prompts (after A4)
-Onboarding fills `strategy.where_they_ask` and `this_week`, `brand.look` (colours, font, logo from the site),
+Onboarding asks "who do you sell to?" while it reads the site (the answer goes into the Strategy and the first
+scan), and fills `strategy.where_they_ask` and `this_week`, `brand.look` (colours, font, logo from the site),
 `post_plan` (channels default X, LinkedIn, Threads). Reply, DM, nudge and post prompts read `brand.voice_samples`,
 `intro_line` and `avoid`. Update the document eval.
 
@@ -42,6 +44,17 @@ above posts; the "nothing posted for N days" reason drops below them. Checks upd
 `reply-outcomes` uses `reply_url` when present, sets `person_status = answered_back` when someone answered the
 founder, and adds Threads and Facebook groups where the social reader returns comments; where it cannot, it leaves
 the status to the founder. Check updated.
+
+### - [ ] B7. Research chat (after A6)
+The CMO chat scoped to Research gets a `find_competitors` tool: it searches Reddit, HN and the web through the same
+Lurk reader Sales uses, returns up to 5 names people mention that the founder does not have yet, each with one line of
+why and where, and adds one only when the founder presses Add (`competitor_add`). Included in the plan (no price).
+Eval with the fake reader.
+
+### - [ ] B8. Weekly report and the strong-match push (after A5)
+Mondays: the weekly report replaces that day's morning email (found, replied, answered back, signed up; what worked;
+the theme people mentioned most; posts that went out), logged as `weekly`. Right after a scan: one push for a Strong
+match in a thread under a day old (once per card, logged as `push`). Template through `no-ai-slop`; checks.
 
 ## Requests
 
