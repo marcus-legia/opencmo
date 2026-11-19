@@ -32,7 +32,8 @@ import { SKILL_READERS, type LibraryScreen } from "./library";
 import type { RailStatus } from "./rail";
 import type { ResearchScreen } from "./research";
 import type { SalesScan, SalesScreen } from "./sales";
-import { SALES_PLATFORMS } from "../cmo/social/conversations";
+import { SALES_PLATFORMS, type SalesPlatform } from "../cmo/social/conversations";
+import { LibraryEntrySchema } from "../cmo/library";
 import type { ScreenData, ScreenName } from "./registry";
 import type { ScheduleScreen } from "./schedule";
 import { AUTOPILOT_HOURS, AUTOPILOT_PLATFORMS, type SettingsScreen } from "./settings";
@@ -516,8 +517,33 @@ function readersOf(agents: readonly string[]): LibraryScreen["skills"]["writing"
   return [...new Set(agents.map(name).filter((r): r is (typeof SKILL_READERS)[number] => r !== null))];
 }
 
-async function library({ supabase }: LoadContext): Promise<Partial<LibraryScreen>> {
+/** The `?source=` filter of the Library page; anything else reads every source. */
+function librarySource(params: URLSearchParams): SalesPlatform | null {
+  const v = params.get("source");
+  return v && (SALES_PLATFORMS as readonly string[]).includes(v) ? (v as SalesPlatform) : null;
+}
+
+async function library({ supabase, params }: LoadContext): Promise<Partial<LibraryScreen>> {
+  const source = librarySource(params);
   return parts<LibraryScreen>("library", {
+    source: async () => source,
+    themes: async () => {
+      const rows = must(await supabase.rpc("my_library", { p_source: source }), "my_library") as {
+        id: string; name: string; count: number; this_week: number; used_in_posts: number; entries: unknown;
+      }[];
+      return rows.map((r) => ({
+        id: r.id,
+        name: r.name,
+        count: r.count,
+        thisWeek: r.this_week,
+        usedInPosts: r.used_in_posts,
+        // Stored by `cmo_save_library` within the schema's limits; a row that does not parse is left out, not shown broken.
+        entries: (Array.isArray(r.entries) ? r.entries : []).flatMap((e) => {
+          const parsed = LibraryEntrySchema.safeParse(e && typeof e === "object" ? { ...e, postedAt: iso((e as { postedAt?: string | null }).postedAt) } : e);
+          return parsed.success ? [parsed.data] : [];
+        }),
+      }));
+    },
     voice: async () => {
       const [notes, words] = await Promise.all([voiceNotes(supabase, 40), wordsCut(supabase)]);
       return {

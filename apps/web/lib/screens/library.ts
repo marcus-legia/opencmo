@@ -5,6 +5,9 @@
 
 import { z } from "zod";
 
+import { LibraryEntrySchema, LibraryThemeSchema, LIBRARY_LIMITS } from "../cmo/library";
+import { SALES_PLATFORMS } from "../cmo/social/conversations";
+
 import { PlatformSchema, iso } from "./common";
 
 /** Same kinds as `marketing_documents.kind` (`lib/cmo/documents.ts`). */
@@ -76,6 +79,12 @@ export const LibrarySkillSchema = z.object({
   readBy: z.array(z.enum(SKILL_READERS)).min(1),
 });
 
+/** One Library theme with its newest entries (wave 3 A2, `my_library`). */
+export const LibraryThemeViewSchema = LibraryThemeSchema.extend({
+  entries: z.array(LibraryEntrySchema).max(LIBRARY_LIMITS.entriesPerTheme),
+});
+export type LibraryThemeView = z.infer<typeof LibraryThemeViewSchema>;
+
 export const LibraryScreenSchema = z.object({
   /** The site Research read: "Research drafted these from ferreto.io". */
   site: z.string().max(200).nullable(),
@@ -83,5 +92,11 @@ export const LibraryScreenSchema = z.object({
   brandKits: z.array(LibraryBrandKitSchema),
   voice: z.object({ notes: z.array(VoiceNoteSchema), wordsCut: z.array(z.string().max(40)) }),
   skills: z.object({ writing: z.array(LibrarySkillSchema), video: z.array(LibrarySkillSchema) }),
+  /**
+   * What people said, by theme, most quoted first (wave 3). Optional until the page (C1) and its fixtures use it;
+   * `source` is the filter it was read with (`?source=reddit`), null for every source.
+   */
+  themes: z.array(LibraryThemeViewSchema).optional(),
+  source: z.enum(SALES_PLATFORMS).nullable().optional(),
 });
 export type LibraryScreen = z.infer<typeof LibraryScreenSchema>;

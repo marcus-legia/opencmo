@@ -57,6 +57,8 @@ insert into expected values
     ('editor_transcripts', 'authenticated', 'SELECT'),
     ('generations', 'authenticated', 'SELECT'),
     ('jobs', 'authenticated', 'SELECT'),
+    ('library_entries', 'authenticated', 'SELECT'),
+    ('library_themes', 'authenticated', 'SELECT'),
     ('marketing_documents', 'authenticated', 'SELECT'),
     ('marketing_documents_latest', 'authenticated', 'SELECT'),
     ('mcp_grants', 'authenticated', 'SELECT'),

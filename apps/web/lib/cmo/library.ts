@@ -64,3 +64,15 @@ const _entrySame: Same<z.infer<typeof LibraryEntrySchema>, LibraryEntry> = true;
 const _themeSame: Same<z.infer<typeof LibraryThemeSchema>, LibraryTheme> = true;
 void _entrySame;
 void _themeSame;
+
+/**
+ * One line the scan hands `cmo_save_library`, keyed by the conversation's url (the opportunity the same scan saved, or
+ * an earlier one). An empty theme files it under "Other".
+ */
+export const LibrarySaveItemSchema = z.object({
+  url: z.string().max(500),
+  theme: z.string().trim().max(LIBRARY_LIMITS.themeNameChars),
+  summary: z.string().trim().min(1).max(LIBRARY_LIMITS.summaryChars),
+  quotes: z.array(LibraryQuoteSchema).max(LIBRARY_LIMITS.quotesPerEntry),
+});
+export type LibrarySaveItem = z.infer<typeof LibrarySaveItemSchema>;

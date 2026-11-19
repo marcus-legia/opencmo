@@ -4879,6 +4879,23 @@ $$;
 
 
 --
+-- Name: cmo_library_theme_names(uuid, integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_library_theme_names(p_user uuid, p_limit integer DEFAULT 30) RETURNS SETOF text
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select t.name from public.library_themes t
+  left join public.library_entries e on e.theme_id = t.id
+  where t.user_id = p_user
+  group by t.id, t.name
+  order by count(e.opportunity_id) desc, t.name
+  limit least(greatest(coalesce(p_limit, 30), 1), 100);
+$$;
+
+
+--
 -- Name: cmo_mark_opportunity_skip(uuid, uuid, uuid, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -6026,6 +6043,68 @@ begin
   end loop;
   -- Keep a year of lessons; older weeks no longer describe the business.
   delete from public.cmo_lessons where user_id = p_user and week < p_week - 364;
+  return v_count;
+end;
+$$;
+
+
+--
+-- Name: cmo_save_library(uuid, uuid, jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_save_library(p_user uuid, p_run uuid, p_items jsonb) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_item jsonb;
+  v_opp public.opportunities;
+  v_theme uuid;
+  v_name text;
+  v_summary text;
+  v_quotes jsonb;
+  v_count integer := 0;
+begin
+  if not exists (
+    select 1 from public.cmo_runs r where r.id = p_run and r.user_id = p_user and r.kind = 'sales_scan'
+  ) then
+    raise exception 'Run not found.' using errcode = 'P0002';
+  end if;
+  if p_items is null or jsonb_typeof(p_items) <> 'array' or jsonb_array_length(p_items) > 50 then
+    raise exception 'These Library entries are not valid.' using errcode = '22023';
+  end if;
+  for v_item in select * from jsonb_array_elements(p_items) loop
+    continue when jsonb_typeof(v_item) <> 'object';
+    v_summary := left(btrim(coalesce(v_item->>'summary', '')), 200);
+    continue when v_summary = '';
+    select * into v_opp from public.opportunities o where o.user_id = p_user and o.url = v_item->>'url';
+    continue when not found;
+
+    v_name := left(btrim(regexp_replace(coalesce(v_item->>'theme', ''), '\s+', ' ', 'g')), 80);
+    if v_name = '' then
+      v_name := 'Other';
+    end if;
+    insert into public.library_themes (user_id, name) values (p_user, v_name)
+    on conflict (user_id, lower(name)) do nothing
+    returning id into v_theme;
+    if v_theme is null then
+      select t.id into v_theme from public.library_themes t where t.user_id = p_user and lower(t.name) = lower(v_name);
+    end if;
+
+    select coalesce(jsonb_agg(jsonb_build_object('kind', q->>'kind', 'text', left(btrim(q->>'text'), 280))), '[]'::jsonb)
+    into v_quotes
+    from (
+      select q from jsonb_array_elements(case when jsonb_typeof(v_item->'quotes') = 'array' then v_item->'quotes' else '[]'::jsonb end) q
+      where jsonb_typeof(q) = 'object' and q->>'kind' in ('pain', 'evidence') and btrim(coalesce(q->>'text', '')) <> ''
+      limit 4
+    ) s;
+
+    insert into public.library_entries (opportunity_id, user_id, theme_id, summary, quotes, platform, community, posted_at)
+    values (v_opp.id, p_user, v_theme, v_summary, v_quotes, v_opp.platform, v_opp.community, v_opp.posted_at)
+    on conflict (opportunity_id) do update set
+      theme_id = excluded.theme_id, summary = excluded.summary, quotes = excluded.quotes;
+    v_count := v_count + 1;
+  end loop;
   return v_count;
 end;
 $$;
@@ -9323,6 +9402,26 @@ CREATE FUNCTION public.job_hold_credits() RETURNS integer
 
 
 --
+-- Name: library_delete_entry(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.library_delete_entry(p_url text) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_count integer;
+begin
+  delete from public.library_entries le
+  using public.opportunities o
+  where o.id = le.opportunity_id and o.url = btrim(coalesce(p_url, ''));
+  get diagnostics v_count = row_count;
+  return v_count;
+end;
+$$;
+
+
+--
 -- Name: list_projects(timestamp with time zone, uuid, text, integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -9816,6 +9915,49 @@ begin
     where l.user_id = v_user and l.status in ('sent', 'skipped') and l.created_at > now() - interval '14 days'
     order by l.created_at desc
     limit p_limit;
+end;
+$$;
+
+
+--
+-- Name: my_library(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.my_library(p_source text DEFAULT NULL::text) RETURNS TABLE(id uuid, name text, count integer, this_week integer, used_in_posts integer, entries jsonb)
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_user uuid := public.require_user();
+begin
+  if p_source is not null and p_source not in ('reddit', 'hn', 'facebook', 'threads') then
+    raise exception 'Pick Reddit, Hacker News, Facebook groups or Threads.' using errcode = '22023';
+  end if;
+  return query
+  with e as (
+    select le.* from public.library_entries le
+    where le.user_id = v_user and le.theme_id is not null and (p_source is null or le.platform = p_source)
+  )
+  select t.id, t.name,
+    (select count(*)::integer from e where e.theme_id = t.id),
+    (select count(*)::integer from e where e.theme_id = t.id and e.created_at > now() - interval '7 days'),
+    (select count(*)::integer from public.content_items ci
+      where ci.user_id = v_user and jsonb_typeof(ci.body->'sources') = 'array'
+        and exists (
+          select 1 from jsonb_array_elements(ci.body->'sources') s
+          join e on e.theme_id = t.id and e.opportunity_id::text = s->>'opportunityId'
+        )),
+    (select coalesce(jsonb_agg(x.j order by x.ord), '[]'::jsonb) from (
+      select jsonb_build_object(
+        'opportunityId', e.opportunity_id, 'platform', e.platform, 'community', e.community,
+        'postedAt', e.posted_at, 'summary', e.summary, 'quotes', e.quotes, 'themeId', e.theme_id
+      ) j, row_number() over (order by e.posted_at desc nulls last, e.created_at desc) ord
+      from e where e.theme_id = t.id
+      order by ord limit 3
+    ) x)
+  from public.library_themes t
+  where t.user_id = v_user and exists (select 1 from e where e.theme_id = t.id)
+  order by 3 desc, t.name;
 end;
 $$;
 
@@ -19231,6 +19373,40 @@ CREATE TABLE public.generations (
 
 
 --
+-- Name: library_entries; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.library_entries (
+    opportunity_id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    theme_id uuid,
+    summary text NOT NULL,
+    quotes jsonb DEFAULT '[]'::jsonb NOT NULL,
+    platform text NOT NULL,
+    community text DEFAULT ''::text NOT NULL,
+    posted_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT library_entries_community_check CHECK ((char_length(community) <= 100)),
+    CONSTRAINT library_entries_platform_check CHECK ((platform = ANY (ARRAY['reddit'::text, 'hn'::text, 'facebook'::text, 'threads'::text]))),
+    CONSTRAINT library_entries_quotes_check CHECK (((jsonb_typeof(quotes) = 'array'::text) AND (jsonb_array_length(quotes) <= 4) AND (octet_length((quotes)::text) <= 2048))),
+    CONSTRAINT library_entries_summary_check CHECK (((char_length(summary) >= 1) AND (char_length(summary) <= 200)))
+);
+
+
+--
+-- Name: library_themes; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.library_themes (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    name text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT library_themes_name_check CHECK (((char_length(name) >= 1) AND (char_length(name) <= 80)))
+);
+
+
+--
 -- Name: marketing_documents_latest; Type: VIEW; Schema: public; Owner: -
 --
 
@@ -20220,6 +20396,22 @@ ALTER TABLE ONLY public.generations
 
 ALTER TABLE ONLY public.jobs
     ADD CONSTRAINT jobs_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: library_entries library_entries_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.library_entries
+    ADD CONSTRAINT library_entries_pkey PRIMARY KEY (opportunity_id);
+
+
+--
+-- Name: library_themes library_themes_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.library_themes
+    ADD CONSTRAINT library_themes_pkey PRIMARY KEY (id);
 
 
 --
@@ -21314,6 +21506,20 @@ CREATE INDEX jobs_user_keyset_idx ON public.jobs USING btree (user_id, created_a
 --
 
 CREATE INDEX jobs_warnings_finished_idx ON public.jobs USING btree (finished_at) WHERE ((status = 'done'::public.job_status) AND (media_manifest ? 'warnings'::text));
+
+
+--
+-- Name: library_entries_user_theme_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX library_entries_user_theme_idx ON public.library_entries USING btree (user_id, theme_id, created_at DESC);
+
+
+--
+-- Name: library_themes_user_name_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX library_themes_user_name_idx ON public.library_themes USING btree (user_id, lower(name));
 
 
 --
@@ -22737,6 +22943,38 @@ ALTER TABLE ONLY public.jobs
 
 
 --
+-- Name: library_entries library_entries_opportunity_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.library_entries
+    ADD CONSTRAINT library_entries_opportunity_id_fkey FOREIGN KEY (opportunity_id) REFERENCES public.opportunities(id) ON DELETE CASCADE;
+
+
+--
+-- Name: library_entries library_entries_theme_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.library_entries
+    ADD CONSTRAINT library_entries_theme_id_fkey FOREIGN KEY (theme_id) REFERENCES public.library_themes(id) ON DELETE SET NULL;
+
+
+--
+-- Name: library_entries library_entries_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.library_entries
+    ADD CONSTRAINT library_entries_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: library_themes library_themes_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.library_themes
+    ADD CONSTRAINT library_themes_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
 -- Name: look_checks look_checks_order_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -23543,6 +23781,18 @@ ALTER TABLE public.generations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.jobs ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: library_entries; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.library_entries ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: library_themes; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.library_themes ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: look_checks; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -23756,6 +24006,20 @@ CREATE POLICY "read own draft ratings" ON public.cmo_draft_ratings FOR SELECT TO
 --
 
 CREATE POLICY "read own email log" ON public.email_log FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
+
+
+--
+-- Name: library_entries read own library entries; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "read own library entries" ON public.library_entries FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
+
+
+--
+-- Name: library_themes read own library themes; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "read own library themes" ON public.library_themes FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
 
 
 --

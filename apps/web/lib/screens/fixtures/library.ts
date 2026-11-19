@@ -41,6 +41,27 @@ export const libraryFixture: LibraryScreen = {
       { id: "s-demo", name: "Ferreto demo cut", origin: "yours", note: "Saved from the editor Assistant", readBy: ["Editor Assistant"] },
     ],
   },
+  themes: [
+    {
+      id: "00000000-0000-4000-8000-0000000000e1",
+      name: "Chasing late invoices",
+      count: 18,
+      thisWeek: 5,
+      usedInPosts: 2,
+      entries: [
+        {
+          opportunityId: "00000000-0000-4000-8000-0000000000f1",
+          platform: "reddit",
+          community: "freelance",
+          postedAt: at("2026-11-18", "09:00"),
+          summary: "Chases three clients a month by hand and dreads every Friday",
+          quotes: [{ kind: "pain", text: "I spend every Friday chasing invoices instead of working" }],
+          themeId: "00000000-0000-4000-8000-0000000000e1",
+        },
+      ],
+    },
+  ],
+  source: null,
 };
 
 export const libraryEmpty: LibraryScreen = {
@@ -49,4 +70,6 @@ export const libraryEmpty: LibraryScreen = {
   brandKits: [],
   voice: { notes: [], wordsCut: [] },
   skills: { writing: [], video: [] },
+  themes: [],
+  source: null,
 };

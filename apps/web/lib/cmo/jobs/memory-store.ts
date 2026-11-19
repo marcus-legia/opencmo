@@ -3,6 +3,7 @@
  * Supabase. Not `server-only`, so `tsx` scripts can import it.
  */
 
+import type { LibrarySaveItem } from "../library";
 import type { VideoSource } from "../writer/types";
 import { latestPerTopic } from "./context";
 import { isoDay, type CmoStore, type DraftRating, type CompetitorInsight, type ConnectedAccountRow, type ReplyOutcomeDue, type MetricRow, type ZernioPostRow, type NicheVideoInsight, type SalesSettings, type SubredditRule, type Documents, type Goal, type ItemRow, type Lesson, type MemoryEvent, type Opportunity, type QueuedRun, type Step, type VoiceNoteRow, type WeekResults } from "./types";
@@ -28,6 +29,8 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
   const runs: RunState[] = [];
   const items: ItemRow[] = [];
   const opps: Opportunity[] = [];
+  /** Library lines by conversation url, as `cmo_save_library` keeps them (one per conversation, themes by name). */
+  const library = new Map<string, LibrarySaveItem & { theme: string }>();
   /** URLs of cards the founder already decided (replied or dismissed): no reply is written for them. */
   const decided = new Set<string>();
   const rules = new Map<string, SubredditRule>();
@@ -204,6 +207,23 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
       Object.assign(card, { rule: "skip", rule_why: why.trim().slice(0, 200) || null });
       return true;
     },
+    async libraryThemeNames(_u, limit = 30) {
+      const counts = new Map<string, number>();
+      for (const e of library.values()) counts.set(e.theme, (counts.get(e.theme) ?? 0) + 1);
+      return [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, limit).map(([name]) => name);
+    },
+    async saveLibrary(_u, runId, list) {
+      if (!runs.some((r) => r.id === runId && r.kind === "sales_scan")) throw new Error("cmo_save_library: Run not found.");
+      let saved = 0;
+      for (const item of list) {
+        if (!item.summary.trim() || !opps.some((o) => o.url === item.url)) continue;
+        const theme = item.theme.trim().replace(/\s+/g, " ").slice(0, 80) || "Other";
+        const known = [...library.values()].find((e) => e.theme.toLowerCase() === theme.toLowerCase())?.theme ?? theme;
+        library.set(item.url, { ...item, theme: known, summary: item.summary.trim().slice(0, 200), quotes: item.quotes.slice(0, 4) });
+        saved += 1;
+      }
+      return saved;
+    },
     async saveOpportunities(_u, runId, list) {
       // As `cmo_save_opportunities`: a card with no draft is kept only by the account's free scan (priced 0).
       const free = runs.some((r) => r.id === runId && r.kind === "sales_scan" && r.credits === 0);
@@ -259,5 +279,5 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
     runs.push(run);
     return run;
   };
-  return { store, posting, runs, items, opps, decided, rules, salesSettings, mentions, account, insights, niche, metrics, zernio, replies, lessons, goals, results, enqueue, voice, videos, captions, variants, photoCaptions, ratings, ratingRules };
+  return { store, posting, runs, items, opps, library, decided, rules, salesSettings, mentions, account, insights, niche, metrics, zernio, replies, lessons, goals, results, enqueue, voice, videos, captions, variants, photoCaptions, ratings, ratingRules };
 }

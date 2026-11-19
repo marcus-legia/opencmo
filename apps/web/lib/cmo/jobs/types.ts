@@ -8,6 +8,7 @@ import type { DocumentKind } from "../documents";
 import type { VideoSource } from "../writer/types";
 import type { AccountMetricRow } from "./metrics-source";
 import type { SalesPlatform } from "../social/conversations";
+import type { LibrarySaveItem } from "../library";
 
 export type CmoJobKind =
   | "plan_week"
@@ -332,6 +333,10 @@ export interface CmoStore {
   /** Thread links that already became cards (dismissed ones too): W4 never offers them again. */
   seenUrls(userId: string): Promise<Set<string>>;
   saveOpportunities(userId: string, runId: string, items: Opportunity[]): Promise<number>;
+  /** Wave 3 A2: the scan's Library lines (`cmo_save_library`); returns how many were saved or updated. */
+  saveLibrary(userId: string, runId: string, items: LibrarySaveItem[]): Promise<number>;
+  /** The founder's Library theme names, most used first (`cmo_library_theme_names`), for the scan to reuse. */
+  libraryThemeNames(userId: string, limit?: number): Promise<string[]>;
   /** Free scan A5: the founder's cards still in review with no reply yet (`reply = ''`, not skipped), newest first. */
   undraftedOpportunities(userId: string, limit: number): Promise<UndraftedOpportunity[]>;
   /** Fills one undrafted card's reply (`cmo_save_opportunity_reply`); `rule` may only tighten it to help only. */

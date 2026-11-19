@@ -15,7 +15,7 @@ Create `lib/cmo/library.ts` and `lib/cmo/reach.ts` with the plan's types and zod
 `lib/cmo/jobs/types.ts`. A `reachLevel(check)` helper with its check: email ready needs DM ready + `emailFound` +
 warm; DM ready needs buyer, wants now, fresh, `dmAllowed` and (warm or the post asks for tools). Commit and push.
 
-### - [ ] A2. Library tables
+### - [x] A2. Library tables
 - `library_themes (id, user_id, name, created_at)`, `library_entries (opportunity_id pk → opportunities, user_id,
   theme_id, summary, quotes jsonb, platform, community, posted_at, created_at)`; RLS read own; writes by RPC
   `cmo_save_library(p_user, p_run, p_items jsonb)` (service role, from a `sales_scan` run of that user).

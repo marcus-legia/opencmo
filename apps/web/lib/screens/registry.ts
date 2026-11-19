@@ -67,7 +67,8 @@ export const SCREENS = {
     schema: LibraryScreenSchema,
     fixture: libraryFixture,
     empty: libraryEmpty,
-    live: ["site", "documents", "brandKits", "voice", "skills"],
+    // Wave 3 A2: `themes` and `source` from `my_library`; released once the Library page (C1) shows them.
+    live: ["site", "documents", "brandKits", "voice", "skills", "themes", "source"],
     release: ["site", "documents", "brandKits", "voice", "skills"],
   }),
   research: entry({

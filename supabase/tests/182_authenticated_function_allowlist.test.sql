@@ -122,6 +122,7 @@ insert into allowed values
   ('mcp_confirm_use(uuid)'),
   ('mcp_grant_record(text)'),
   ('mcp_grant_revoke(text)'),
+  ('my_library(text)'),  -- wave 3 A2
   ('my_published_items(timestamp with time zone)'),
   ('normalize_capture_url(text)'),
   ('notify_settings_save(boolean,boolean)'),
