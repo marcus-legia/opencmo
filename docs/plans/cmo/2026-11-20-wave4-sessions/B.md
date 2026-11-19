@@ -20,7 +20,7 @@ its queries or scoring before launch, with an eval case for the fix. Spend stays
 finished, queue depth, oldest queued run age. Confirm a failed Sales scan reaches the owner's failure alert like
 other jobs (`lib/ops/failure-alerts.ts`); add it if not. Checks.
 
-### - [ ] B3. Feed card reach level (data)
+### - [x] B3. Feed card reach level (data)
 The Sales card on the Feed (`lib/screens/cards.ts`, `reply` kind) carries the person's `reach_level` and the one-line
 reason, like Sales. C shows it. Check updated.
 

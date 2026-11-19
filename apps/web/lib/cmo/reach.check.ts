@@ -8,7 +8,7 @@
 import assert from "node:assert/strict";
 
 import { LibraryEntrySchema } from "./library";
-import { ReachCheckSchema, isFresh, platformHasDms, reachLevel, type ReachCheck } from "./reach";
+import { ReachCheckSchema, isFresh, platformHasDms, reachLevel, reachReason, type ReachCheck } from "./reach";
 
 const failures: string[] = [];
 function check(label: string, run: () => void): void {
@@ -64,6 +64,23 @@ check("a Library entry keeps quotes short", () => {
   };
   assert.equal(LibraryEntrySchema.safeParse(entry).success, true);
   assert.equal(LibraryEntrySchema.safeParse({ ...entry, quotes: [{ kind: "pain", text: "x".repeat(281) }] }).success, false);
+});
+
+// Wave 4 B3: the one line a Feed card shows beside its level.
+const reasons = ["Runs a 3-person agency.", "Needs it before Friday.", "Answered your reply.", "Posted 2 days ago.", "r/SaaS allows DMs.", "Address on their site."];
+check("reach line: email ready names the address line", () =>
+  assert.equal(reachReason("email_ready", { ...ready, emailFound: "sam@studio.example", reasons }), "Address on their site."));
+check("reach line: DM ready and warm gives the warm line", () => assert.equal(reachReason("dm_ready", { ...ready, reasons }), "Answered your reply."));
+check("reach line: DM ready from a post asking for tools says so", () =>
+  assert.equal(reachReason("dm_ready", { ...ready, warm: false, asksForTools: true, reasons }), "The post asks for tools or recommendations."));
+check("reach line: Reply first gives the first check that failed", () => {
+  assert.equal(reachReason("reply_first", { ...ready, fresh: false, dmAllowed: false, reasons }), "Posted 2 days ago.");
+  assert.equal(reachReason("reply_first", { ...ready, buyer: false, reasons }), "Runs a 3-person agency.");
+});
+check("reach line: no reason written falls back to a plain line", () => {
+  assert.equal(reachReason("reply_first", { ...ready, fresh: false }), "Posted more than 7 days ago.");
+  assert.equal(reachReason("reply_first", { ...ready, warm: false }), "Not warm yet: reply in public first.");
+  assert.equal(reachReason("reply_first", null), "Reply in public first.");
 });
 
 if (failures.length) {

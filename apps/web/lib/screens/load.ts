@@ -24,7 +24,7 @@ import { buildAnalytics, buildResults, type AccountDayIn, type AccountIn, type P
 import type { ApprovalCard } from "./approval-card";
 import type { BrainScreen, OrderRow, OrderState } from "./brain";
 import { buildMeasures, type WeekCounts } from "./brain-measures";
-import { APPROVAL_COLUMNS, approvalToCard, type ApprovalRow } from "./cards";
+import { APPROVAL_COLUMNS, REACH_COLUMNS, approvalToCard, replyOpportunityIds, withReach, type ApprovalRow, type ReachRow } from "./cards";
 import { enrichScheduleCards } from "./schedule-enrich";
 import { signStudioCards } from "./studio-sign";
 import { DEPARTMENTS, TEAM, salesNeeds, salesRuleKind, type CmoState, type Department } from "./common";
@@ -88,7 +88,19 @@ async function waitingCards(supabase: SupabaseClient, userId: string): Promise<A
     "approvals",
   ) as ApprovalRow[];
   const cards = await signStudioCards(supabase, rows.map((row) => approvalToCard(row)).filter((c): c is ApprovalCard => c !== null), rows);
-  return enrichScheduleCards(supabase, userId, cards);
+  return withReach(await enrichScheduleCards(supabase, userId, cards), rows, await replyReach(supabase, rows));
+}
+
+/** Wave 4 B3: the reach of the people the waiting reply cards are about. Not read means no reach on the card, never no queue. */
+async function replyReach(supabase: SupabaseClient, rows: ApprovalRow[]): Promise<ReachRow[]> {
+  const ids = replyOpportunityIds(rows);
+  if (!ids.length) return [];
+  const r = await supabase.from("opportunities").select(REACH_COLUMNS).in("id", ids);
+  if (r.error) {
+    console.warn("[screens] reply reach not loaded", r.error.message);
+    return [];
+  }
+  return (r.data ?? []) as unknown as ReachRow[];
 }
 
 type OrderDb = OrderLedgerRow & { user_id: string; root_id: string | null; week: string; created_at: string; done_reason: string | null };

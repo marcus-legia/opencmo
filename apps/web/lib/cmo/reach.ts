@@ -65,6 +65,31 @@ export function reachLevel(check: ReachCheck): ReachLevel {
   return check.emailFound && check.warm ? "email_ready" : "dm_ready";
 }
 
+export const REACH_LEVEL_LABEL: Record<ReachLevel, string> = { reply_first: "Reply first", dm_ready: "DM ready", email_ready: "Email ready" };
+
+/**
+ * The one line a card shows beside its level (wave 4 B3). It is the scan's own reason for the check that decided it:
+ * for Reply first, the first check that failed; for DM ready, what made it warm enough (an answer, or a post asking
+ * for tools); for Email ready, the address. Reasons are in `checksOf`'s order: buyer, wants it now, warm, fresh, DMs,
+ * email. No reason written means the level's own plain line.
+ */
+export function reachReason(level: ReachLevel, check: ReachCheck | null): string {
+  const r = check?.reasons ?? [];
+  const pick = (i: number, fallback: string) => (r[i]?.trim() ? r[i]!.trim() : fallback);
+  if (!check) return "Reply in public first.";
+  if (level === "email_ready") return pick(5, "They published an address and answered you.");
+  if (level === "dm_ready") return check.warm ? pick(2, "They answered you.") : "The post asks for tools or recommendations.";
+  const failed: [boolean, number, string][] = [
+    [check.buyer, 0, "Not clearly a buyer like your customers."],
+    [check.wantsNow, 1, "No sign they want it now."],
+    [check.fresh, 3, `Posted more than ${FRESH_DAYS} days ago.`],
+    [check.dmAllowed, 4, "No private messages here."],
+    [check.warm || check.asksForTools, 2, "Not warm yet: reply in public first."],
+  ];
+  const first = failed.find(([ok]) => !ok);
+  return first ? pick(first[1], first[2]) : "Reply in public first.";
+}
+
 /** Whether a thread posted at `postedAt` is still fresh at `now`. An unknown date is not fresh. */
 export function isFresh(postedAt: string | null, now: Date = new Date()): boolean {
   if (!postedAt) return false;
