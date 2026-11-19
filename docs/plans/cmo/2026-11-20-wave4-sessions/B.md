@@ -15,6 +15,12 @@ real pain in their words, fresh (under 7 days), a reply worth posting. Write `do
 (Vietnamese) with per-source numbers and the worst five cards with why. Any source under half "worth a reply": fix
 its queries or scoring before launch, with an eval case for the fix. Spend stays under $10; stop and ask if not.
 
+Status (B, 2026-11-19): **blocked on keys and network.** The harness is ready: `lib/cmo/jobs/eval/scan-quality.ts`
+(reads the site, drafts the documents, runs a free and a paid scan on an in-memory store, writes `cards.json` and a
+sheet to score by hand; stops at `--max-usd`). The cloud session cannot run it: no Claude API key, no Lurk or
+ScrapeCreators key, and its network denies `hn.algolia.com`, `api.lurkapi.com`, `api.scrapecreators.com` and the
+sites. Run it on the owner's machine with `.env.local`, or in a session that has them.
+
 ### - [x] B2. Health and alerts
 `GET /api/health/cmo` (no auth, no personal data): reader configured and last success per platform, last scan
 finished, queue depth, oldest queued run age. Confirm a failed Sales scan reaches the owner's failure alert like
