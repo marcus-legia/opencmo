@@ -5,6 +5,7 @@ import { useEffect, useState, type ReactNode } from "react";
 
 import { api } from "@/components/clipping/api";
 import { useShellState } from "@/components/shell-v2/ShellState";
+import type { FunnelRow } from "@/lib/cmo/funnel-view";
 
 import { DOCUMENT_KINDS, type DocumentKind } from "@/lib/cmo/documents";
 
@@ -23,6 +24,25 @@ const DocIcon = () => (
 );
 
 const isToday = (iso: string | undefined) => (iso ? new Date(iso).toDateString() === new Date().toDateString() : false);
+
+/** Found, replied, answered back and signed up over the last 7 days, all sources; null until read. */
+function useFunnelWeek(): FunnelRow | null {
+  const [row, setRow] = useState<FunnelRow | null>(null);
+  const { workVersion } = useShellState();
+  const pathname = usePathname();
+  useEffect(() => {
+    let alive = true;
+    api<{ rows: FunnelRow[] }>("/sales/funnel?days=7")
+      .then((r) => alive && setRow(r.rows.find((x) => x.source === "all") ?? null))
+      .catch(() => {
+        // The tiles show a dash until a read works.
+      });
+    return () => {
+      alive = false;
+    };
+  }, [workVersion, pathname]);
+  return row;
+}
 
 /** The competitors kept in Research, read once per change of work (an Add in Research reloads the shell's version). */
 function useKeptCompetitors(): { id: string; name: string; site: string }[] | null {
@@ -62,6 +82,7 @@ export function ContextColumn({ goal }: { goal: { text: string | null; done: num
   const docCount = DOC_ROWS.length;
   const library = useLibraryCounts();
   const kept = useKeptCompetitors();
+  const week = useFunnelWeek();
   // The competitors the founder keeps in Research (wave 3); before any, the ones the Competitors document names.
   const rivals = kept?.length
     ? kept.map((c) => ({ key: c.id, name: c.name }))
@@ -147,16 +168,41 @@ export function ContextColumn({ goal }: { goal: { text: string | null; done: num
         ) : null}
       </a>
 
-      <div style={{ borderTop: "1px solid var(--line)", paddingTop: "12px", marginTop: "10px" }}>
+      {/* The funnel of the week (wave 3): people, not posts. The week's goal stays under it. */}
+      <div style={{ borderTop: "1px solid var(--line)", paddingTop: "12px", marginTop: "10px" }} data-testid="context-funnel">
         <div className="sec" style={{ padding: "0 6px" }}>
-          <h2>Goal this week</h2>
-          <span className="meta">{goal ? `${goal.done} / ${goal.total}` : ""}</span>
+          <h2>This week</h2>
+          <a href="/app/analytics" className="meta" style={{ color: "var(--accent)", textDecoration: "none" }}>
+            Analytics
+          </a>
         </div>
-        <div style={{ padding: "0 6px" }}>
-          <div style={{ fontSize: "13.5px", marginBottom: "6px" }}>{goal?.text ?? "No goal yet. It comes with the week's plan."}</div>
-          <div style={{ height: "4px", borderRadius: "4px", background: "var(--line-2)" }}>
-            <div style={{ width: `${pct}%`, height: "4px", borderRadius: "4px", background: "var(--accent)" }}></div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: "6px", padding: "0 6px", textAlign: "center" }}>
+          {(
+            [
+              ["Found", week?.found],
+              ["Replied", week?.replied],
+              ["Answered back", week?.answeredBack],
+              ["Signed up", week?.signedUp],
+            ] as const
+          ).map(([label, n]) => (
+            <div key={label} data-testid="context-funnel-step" style={{ display: "flex", flexDirection: "column", padding: "6px 0", borderRadius: "7px", background: "var(--hover)" }}>
+              <b style={{ fontSize: "16px", fontWeight: "600" }}>{n ?? "–"}</b>
+              <span className="meta" style={{ fontSize: "11px", lineHeight: "1.25" }}>
+                {label}
+              </span>
+            </div>
+          ))}
+        </div>
+        <div style={{ padding: "8px 6px 0" }}>
+          <div className="meta" style={{ marginBottom: "4px" }}>
+            {goal?.text ? `Goal: ${goal.text}` : "No goal yet. It comes with the week's plan."}
+            {goal && goal.total > 0 ? ` · ${goal.done} / ${goal.total}` : ""}
           </div>
+          {goal && goal.total > 0 ? (
+            <div style={{ height: "4px", borderRadius: "4px", background: "var(--line-2)" }}>
+              <div style={{ width: `${pct}%`, height: "4px", borderRadius: "4px", background: "var(--accent)" }}></div>
+            </div>
+          ) : null}
         </div>
       </div>
 

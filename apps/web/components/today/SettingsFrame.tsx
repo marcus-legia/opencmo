@@ -7,6 +7,7 @@ import type { ReactNode } from "react";
 const NAV = [
   { id: "general", label: "General", href: "/app/settings#settings-your-cmo" },
   { id: "accounts", label: "Accounts", href: "/app/settings#settings-connected-accounts" },
+  { id: "sales", label: "Sales scans", href: "/app/settings#settings-sales-scans" },
   { id: "notifications", label: "Notifications", href: "/app/settings#settings-notify" },
   { id: "brand", label: "Brand", href: "/app/business?d=brand" },
   { id: "billing", label: "Billing", href: "/app/billing" },

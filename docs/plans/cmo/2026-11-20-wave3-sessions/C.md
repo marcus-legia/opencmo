@@ -39,7 +39,7 @@ statuses, the nudge, and the status select. Copy through `no-ai-slop`.
 Competitors display page: logo, site, price, offer, a recent quote, mentions this week; Add by URL (a route that reads
 the site with the existing site reader and calls `competitor_add`). Left panel logos (8 + "N more").
 
-### - [ ] C6. Funnel (after A5)
+### - [x] C6. Funnel (after A5)
 Left panel "This week" (found, replied, answered back, signed up) and Analytics "From a thread to a customer" with the
 per-source table. Settings › Sales scans: cadence select.
 

@@ -1,8 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
+import { api } from "@/components/clipping/api";
 import { fillChat } from "@/components/dashboard/TodayBlock";
+import { rate, type FunnelRow } from "@/lib/cmo/funnel-view";
 import { useShellState } from "@/components/shell-v2/ShellState";
 import { useScreen } from "@/components/screens/useScreen";
 import { BEST_HOURS, type Range } from "@/lib/screens/analytics";
@@ -24,6 +26,93 @@ const postDay = (iso: string | undefined) => (iso ? new Intl.DateTimeFormat("en-
  * competitors' outliers. Numbers come from the connected accounts (`/screens/analytics`), the goal from the feed, the
  * replies from Sales and the outliers from Research; a block without data says so instead of drawing zeros.
  */
+const SOURCE_LABEL: Record<FunnelRow["source"], string> = { all: "All sources", reddit: "Reddit", hn: "Hacker News", facebook: "Facebook groups", threads: "Threads" };
+
+/**
+ * From a thread to a customer (wave 3, canvas board Analytics): found → replied → answered back → signed up over the
+ * range, then the same per source. Rates are shown only where there is something to divide by.
+ */
+function FunnelSection({ days }: { days: number }) {
+  const [rows, setRows] = useState<FunnelRow[] | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    setFailed(false);
+    api<{ rows: FunnelRow[] }>(`/sales/funnel?days=${days}`)
+      .then((r) => alive && setRows(r.rows))
+      .catch(() => alive && setFailed(true));
+    return () => {
+      alive = false;
+    };
+  }, [days]);
+  const all = rows?.find((r) => r.source === "all") ?? null;
+  const steps = all
+    ? [
+        { label: "People found", n: all.found, of: null as string | null },
+        { label: "You replied", n: all.replied, of: rate(all.replied, all.found) && `${rate(all.replied, all.found)} of found` },
+        { label: "Answered back", n: all.answeredBack, of: rate(all.answeredBack, all.replied) && `${rate(all.answeredBack, all.replied)} of replies` },
+        { label: "Signed up", n: all.signedUp, of: all.signedUp ? "marked by you" : null },
+      ]
+    : [];
+  const top = Math.max(1, all?.found ?? 0);
+  const sources = (rows ?? []).filter((r) => r.source !== "all" && (r.found || r.replied || r.answeredBack || r.signedUp));
+  return (
+    <section className="card" style={{ marginBottom: "12px" }} aria-labelledby="funnel-title" data-testid="analytics-funnel">
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "8px", flexWrap: "wrap" }}>
+        <h2 id="funnel-title">From a thread to a customer</h2>
+        <span className="meta">people, not posts · last {days} days</span>
+      </div>
+      {failed ? <p className="meta">The funnel could not be read. It comes back on the next visit.</p> : null}
+      {!rows && !failed ? <p className="meta">Loading…</p> : null}
+      {all ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: "10px" }}>
+          {steps.map((s) => (
+            <div key={s.label} data-testid="analytics-funnel-step" style={{ display: "grid", gridTemplateColumns: "minmax(0,140px) minmax(0,1fr) minmax(0,180px)", gap: "10px", alignItems: "center" }}>
+              <span style={{ fontSize: "13.5px" }}>{s.label}</span>
+              <span style={{ height: "10px", borderRadius: "5px", background: "var(--line-2)" }}>
+                <span style={{ display: "block", width: `${Math.round((s.n / top) * 100)}%`, height: "10px", borderRadius: "5px", background: "var(--accent)" }}></span>
+              </span>
+              <span style={{ fontSize: "13.5px" }}>
+                <b>{s.n}</b> {s.of ? <span className="meta">· {s.of}</span> : null}
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {sources.length ? (
+        <div style={{ overflowX: "auto", marginTop: "14px" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13.5px" }} data-testid="analytics-funnel-sources">
+            <thead>
+              <tr className="meta" style={{ textAlign: "left" }}>
+                <th style={{ fontWeight: "500", padding: "4px 0" }}>Source</th>
+                <th style={{ fontWeight: "500", textAlign: "right" }}>Found</th>
+                <th style={{ fontWeight: "500", textAlign: "right" }}>Replied</th>
+                <th style={{ fontWeight: "500", textAlign: "right" }}>Answered back</th>
+                <th style={{ fontWeight: "500", textAlign: "right" }}>Signed up</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sources.map((r) => (
+                <tr key={r.source} style={{ borderTop: "1px solid var(--line)" }}>
+                  <td style={{ padding: "6px 0" }}>{SOURCE_LABEL[r.source]}</td>
+                  <td style={{ textAlign: "right" }}>{r.found}</td>
+                  <td style={{ textAlign: "right" }}>{r.replied}</td>
+                  <td style={{ textAlign: "right" }}>{r.answeredBack}</td>
+                  <td style={{ textAlign: "right" }}>{r.signedUp}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : all && all.found === 0 ? (
+        <p className="meta" style={{ marginTop: "8px" }}>
+          No one found yet in this range. Sales scans on the days set in Settings › Sales scans, or when you press Scan now.
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
 export function AnalyticsView() {
   const [range, setRange] = useState<Range>(7);
   const [state] = useScreen("analytics", { range: String(range) });
@@ -70,6 +159,8 @@ export function AnalyticsView() {
           ))}
         </div>
       </div>
+
+      <FunnelSection days={range} />
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: "12px", marginBottom: "12px" }} className="td-kpis" role="region" aria-label="Totals">
         <div className="card">
