@@ -94,3 +94,10 @@ competitor per week from `opportunities` text (counted in SQL view `my_competito
   the same condition. B drafts the nudges in `pull_metrics` after the re-reads (so an answer found that day stops
   the nudge) and saves each with `saveNudge`; `loops.ts` runs `pull_metrics` when `nudgesDue > 0`. In the memory store,
   `repliedAt` on `people` is enough.
+
+- **From B (B3, sources on posts):** `PlanItem` gains `sources?: PostSource[]` (`types.ts`), and `cmo_plan_week`
+  keeps them in the planned post's `body.sources` (today it builds `body` from targets and slot only, so they are
+  dropped). Please validate there and in `cmo_save_draft` (which keeps `p_body` whole, so a draft's `body.sources` is
+  already saved): at most 5, each `opportunityId` an opportunity of `p_user`, `summary` 1–200 chars, `platform` a
+  Sales platform, `community` ≤ 120; drop the invalid ones rather than fail the plan. The memory store keeps them the
+  same way. `post_draft` reads `due.body.sources` and writes `body.sources` on the draft.
