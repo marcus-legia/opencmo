@@ -15,6 +15,7 @@ import { PLATFORM_LABEL, SALES_PLATFORMS, type SalesPlatform } from "@/lib/cmo/s
 import type { SalesScreen } from "@/lib/screens/sales";
 import { createClient } from "@/lib/supabase/client";
 
+import { usePhone } from "./phone";
 import { useWorkspace } from "./workspace";
 
 // Reaching out, Following up and the settings tab open after the list: their code loads when first shown, which keeps
@@ -382,7 +383,11 @@ function NoOneAsked({ scan, onEdit }: { scan: NonNullable<SalesScreen["lastScan"
   );
 }
 
-function ThreadRow({ t, free, open, onToggle, onPlan, onDecide, onSent }: { t: Thread; free: boolean; open: boolean; onToggle: () => void; onPlan: (action: string) => void; onDecide: (t: Thread, action: "replied" | "dismissed", reason?: string, text?: string) => Promise<void>; onSent: (t: Thread, via: "dm" | "email") => Promise<void> }) {
+/**
+ * One thread: a row that opens in place, or, on a phone (`onBack`), the open person full width with a way back to the
+ * list and its actions held at the bottom of the screen (canvas board "Sales on a phone").
+ */
+function ThreadRow({ t, free, open, onToggle, onBack, onPlan, onDecide, onSent }: { t: Thread; free: boolean; open: boolean; onToggle: () => void; onBack?: () => void; onPlan: (action: string) => void; onDecide: (t: Thread, action: "replied" | "dismissed", reason?: string, text?: string) => Promise<void>; onSent: (t: Thread, via: "dm" | "email") => Promise<void> }) {
   const [draft, setDraft] = useState(t.draft ?? "");
   const [copied, setCopied] = useState(false);
   const [dismissing, setDismissing] = useState(false);
@@ -413,8 +418,24 @@ function ThreadRow({ t, free, open, onToggle, onPlan, onDecide, onSent }: { t: T
   }
 
   return (
-    <div className="th" data-open={open} role="listitem">
-      <button type="button" className="row" onClick={onToggle} aria-expanded={open}>
+    <div className={onBack ? "th th-person" : "th"} data-open={open} data-thread={t.id} role={onBack ? undefined : "listitem"}>
+      {onBack ? (
+        <>
+          <div className="th-phonehead">
+            <button type="button" className="ib th-back" aria-label="Back to people" onClick={onBack}>
+              <svg className="i" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m15 18-6-6 6-6" />
+              </svg>
+            </button>
+            <span className="meta" style={{ flex: "1 1 auto", minWidth: "0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {[t.community !== PLATFORM_LABEL[t.platform] ? t.community : PLATFORM_LABEL[t.platform], t.postedAt ? ago(t.postedAt) : null].filter(Boolean).join(" · ")}
+            </span>
+            <span className={tone(t.score)}>{matchLabel(t.score)}</span>
+          </div>
+          <h1 className="th-title">{t.title}</h1>
+        </>
+      ) : null}
+      <button type="button" className="row" onClick={onToggle} aria-expanded={open} hidden={Boolean(onBack)}>
         <span className={tone(t.score)}>{matchLabel(t.score)}</span>
         <span style={{ flex: "1 1 auto", minWidth: "0" }}>
           <span style={{ display: "block", fontSize: "14.5px", fontWeight: "500", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: done ? "var(--muted)" : undefined }}>{t.title}</span>
@@ -497,7 +518,7 @@ function ThreadRow({ t, free, open, onToggle, onPlan, onDecide, onSent }: { t: T
               </a>
             </div>
           ) : (
-            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "flex-end", alignItems: "center" }}>
+            <div className="th-actions" style={{ display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "flex-end", alignItems: "center" }}>
               {dismissing ? (
                 <>
                   <label className="meta" htmlFor={`why-${t.id}`}>
@@ -567,13 +588,15 @@ export function AgentSales() {
   const free = data?.free ?? false;
   // The plan sheet, titled with what the founder tried ("reply to these people", "scan again").
   const [planFor, setPlanFor] = useState<string | null>(null);
+  // On a phone the list comes first and a thread opens full width (wave 4 C1); on a wide screen the first opens in place.
+  const phone = usePhone();
 
   useEffect(() => {
     if (!data) return;
     setThreads([...data.threads].sort((a, b) => b.score - a.score));
     setWeek(data.week);
-    setOpen((was) => was ?? data.threads.find((t) => t.status === "open")?.id ?? null);
-  }, [data]);
+    if (!phone) setOpen((was) => was ?? data.threads.find((t) => t.status === "open")?.id ?? null);
+  }, [data, phone]);
 
   const loadRuns = useCallback(() => {
     void api<Logs>("/logs")
@@ -669,7 +692,9 @@ export function AgentSales() {
       );
       if (action === "replied" && ask) setAskLink(t);
       setWeek((w) => (w ? (action === "replied" ? { ...w, replied: w.replied + 1 } : { ...w, dismissed: w.dismissed + 1 }) : w));
-      setOpen((threads ?? []).find((x) => x.id !== t.id && x.status === "open")?.id ?? null);
+      // On a phone a decision goes back to the list, where "Where did you post it?" waits on top.
+      setOpen(phone ? null : ((threads ?? []).find((x) => x.id !== t.id && x.status === "open")?.id ?? null));
+      if (phone) window.scrollTo(0, 0);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save that. Please try again.");
     }
@@ -692,13 +717,38 @@ export function AgentSales() {
   const paused = usage?.paused ? (usage.resetsAt ? new Date(usage.resetsAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "the next reset") : null;
 
   // The banner's way to the settings: the tab, then the cursor on its heading, so the founder lands where to act.
+  // The person open full width on a phone: the page shows that thread alone, with a way back to where the list was.
+  const person = phone && tab === "threads" ? (list.find((t) => t.id === open) ?? null) : null;
+  const backTo = useRef<string | null>(null);
+  useEffect(() => {
+    if (person) {
+      backTo.current = person.id;
+      window.scrollTo(0, 0);
+    } else if (backTo.current) {
+      document.querySelector(`[data-thread="${CSS.escape(backTo.current)}"]`)?.scrollIntoView({ block: "center" });
+      backTo.current = null;
+    }
+  }, [person]);
+
   const openSettings = () => {
     setTab("settings");
     requestAnimationFrame(() => document.getElementById("sales-settings-title")?.focus());
   };
 
+  if (person) {
+    return (
+      <div className="sales-phone" data-testid="v2-sales" data-person="open">
+        <main>
+          {error ? <div className="meta" style={{ margin: "0 0 10px", color: "var(--warn)" }}>{error}</div> : null}
+          <ThreadRow key={person.id} t={person} free={free} open onToggle={() => setOpen(null)} onBack={() => setOpen(null)} onPlan={setPlanFor} onDecide={decide} onSent={(x, via) => decide(x, "replied", undefined, undefined, false, via)} />
+        </main>
+        <PlanSheet open={planFor !== null} onClose={() => setPlanFor(null)} action={planFor ?? undefined} />
+      </div>
+    );
+  }
+
   return (
-    <div style={{ display: "flex", flexWrap: "wrap", maxWidth: "1320px", margin: "0 auto", padding: "22px 24px 40px", gap: "24px" }} data-testid="v2-sales">
+    <div className="sales-page" style={{ display: "flex", flexWrap: "wrap", maxWidth: "1320px", margin: "0 auto", padding: "22px 24px 40px", gap: "24px" }} data-testid="v2-sales">
       <main style={{ flex: "999 1 600px", minWidth: "0" }}>
         <div style={{ display: "flex", alignItems: "flex-start", gap: "14px", flexWrap: "wrap" }}>
           <span className="tile">

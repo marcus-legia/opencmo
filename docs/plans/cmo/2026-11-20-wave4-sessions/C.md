@@ -8,7 +8,7 @@ these screens need, `app/app/*` pages, e2e specs, `e2e/ui-v2-look.spec.ts`, styl
 
 ## 4a
 
-### - [ ] C1. Phone layout for Sales and Feed
+### - [x] C1. Phone layout for Sales and Feed
 Canvas "Sales on a phone": one column; the list, then the open person full width; reach tabs as a segmented control;
 "Copy and open" sticky at the bottom; the Context column becomes a sheet opened from the top bar; Feed cards full
 width, actions in one row. Check at 390 and 360: no sideways scroll, 44 px targets. Keep `/app/sales` inside its JS

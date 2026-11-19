@@ -206,6 +206,8 @@ export function TopBar({
   logsOpen,
   onLogs,
   onChat,
+  contextOpen = false,
+  onContext,
 }: {
   variant: TopVariant;
   usage: PlanUsage;
@@ -213,6 +215,9 @@ export function TopBar({
   logsOpen: boolean;
   onLogs: () => void;
   onChat: () => void;
+  /** Phone only (wave 4 C1): the Context column is a sheet, opened from here. */
+  contextOpen?: boolean;
+  onContext?: () => void;
 }) {
   // Feed, Calendar and Analytics share one bar (owner, 2026-11-10): the business and its accounts on the left, the three
   // views in the middle as links (prefetched, so a switch is instant), credits, Logs and the chat on the right. On the
@@ -284,6 +289,15 @@ export function TopBar({
         <div style={{ flex: "1 1 auto" }}></div>
         <AutopilotSwitch />
         <UsageChip usage={usage} />
+        {onContext ? (
+          <button type="button" className="pill td-ctxbtn" aria-expanded={contextOpen} aria-controls="td-context" onClick={onContext}>
+            <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
+              <rect width="18" height="18" x="3" y="3" rx="2" />
+              <path d="M9 3v18" />
+            </svg>
+            <span className="td-pill-label">Context</span>
+          </button>
+        ) : null}
         <button type="button" className="pill" aria-pressed={logsOpen} onClick={onLogs}>
           <LogsIcon />
           <span className="td-pill-label">Logs</span>
