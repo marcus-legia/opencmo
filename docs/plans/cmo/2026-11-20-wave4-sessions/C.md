@@ -29,7 +29,7 @@ Every wave 3 and wave 4 screen read once with `no-ai-slop` beside the canvas: Sa
 Library, Your business, Research and its chat, the funnel, Settings › Sales scans and Tracking, the emails' templates.
 Fix only words.
 
-### - [ ] C5. e2e, look, the 4a PR
+### - [x] C5. e2e, look, the 4a PR
 Specs for C1–C3; `ui-v2-look` screenshots at 1440, 390 and 360 for Sales, Feed, Billing, Settings with seeded data
 (no "Loading…" in a screenshot). Review 4a against the plan. Open the PR "Launch 30/11 · wave 4a" from
 `claude/launch`; list the migrations and say they add only. Do not merge.
