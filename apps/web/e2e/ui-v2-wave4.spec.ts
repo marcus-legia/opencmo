@@ -196,7 +196,7 @@ test("C1: Sales on a phone, list then the person full width, sticky Copy and ope
 
     // The Context column is a sheet opened from the top bar.
     await expect(page.locator("#td-context")).toBeHidden();
-    const open = page.getByRole("button", { name: "Context" });
+    const open = page.getByRole("button", { name: "Context", exact: true });
     await open.click();
     await expect(open).toHaveAttribute("aria-expanded", "true");
     const sheet = page.locator("#td-context");
@@ -219,7 +219,7 @@ test("C1: Sales on a phone, list then the person full width, sticky Copy and ope
   await page.goto("/app/sales");
   await expect(page.getByTestId("sales-reach")).toBeVisible();
   await expect(page.locator("#td-context")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Context" })).toBeHidden();
+  await expect(page.getByRole("button", { name: "Context", exact: true })).toBeHidden();
 });
 
 test("C1 + C2: the Feed on a phone, actions in one row, and the Sales card's reach level", async ({ page }) => {

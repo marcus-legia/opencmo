@@ -121,7 +121,7 @@ test("reach out: five checks, DM open or locked with why, I sent it, I replied w
   await ask.getByLabel("Link to your reply").fill(link);
   await ask.getByRole("button", { name: "Save and follow up" }).click();
   await expect(ask).toHaveCount(0);
-  expect((await db.from("opportunities").select("reply_url").eq("id", s.plain).single()).data!.reply_url).toBe(link);
+  expect((await db.from("opportunities").select("reply_url").eq("id", s.plain).single()).data!.reply_url).toBe(link.replace(/\/$/, "")); // stored without the trailing slash (#239)
 
   // Following up: everyone replied to, the nudge, and the status select.
   await page.getByRole("tab", { name: /Following up/ }).click();
