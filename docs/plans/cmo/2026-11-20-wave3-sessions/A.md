@@ -101,3 +101,9 @@ competitor per week from `opportunities` text (counted in SQL view `my_competito
   already saved): at most 5, each `opportunityId` an opportunity of `p_user`, `summary` 1–200 chars, `platform` a
   Sales platform, `community` ≤ 120; drop the invalid ones rather than fail the plan. The memory store keeps them the
   same way. `post_draft` reads `due.body.sources` and writes `body.sources` on the draft.
+
+- **From B (B4, "who do you sell to?"):** please let `cmo_onboarding_answers` take `sells_to` (text, 1–160 chars, the
+  founder's own words or a chip's label; C8 draws the chips), store it on `profiles.sells_to`, and in
+  `cmo_apply_onboarding_answers` write it into the newest Strategy's `icp` (a new version, the founder's words win
+  over the website's guess). `onboard.ts` also reads `profiles.sells_to` right before the documents are drafted, so
+  an answer given while the site is read reaches the prompt; until the column exists that read is skipped.
