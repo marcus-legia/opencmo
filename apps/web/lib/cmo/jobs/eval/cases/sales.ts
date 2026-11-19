@@ -15,7 +15,7 @@ import type { ConversationThread } from "../../../social/conversations";
 import type { RedditThread } from "../../../social/reddit";
 import { cascade } from "../../judge";
 import { memoryStore } from "../../memory-store";
-import { quoteIn, REPLY_MAX_WORDS } from "../../sales-scan";
+import { librarySummary, quoteIn, reachFor, REPLY_MAX_WORDS, sameAsTitle, scoreThread, themeName, type RuleRead } from "../../sales-scan";
 import type { Documents, Opportunity } from "../../types";
 import invoicing from "../fixtures/reddit/invoicing.json";
 import { registerCases, type EvalCase, type EvalEnv } from "../types";
@@ -205,6 +205,69 @@ async function runFree(fixture: RedditFixture, env: EvalEnv): Promise<CaseResult
   return freeResults;
 }
 
+/**
+ * Wave 3 B1: what the scan writes for the Library and the reach check, graded in code. The summary is never the title;
+ * a vendor is never a buyer; Hacker News is never DM ready (it has no DMs); a community that forbids DMs keeps
+ * everyone at Reply first; an email counts only when the person wrote it in the post.
+ */
+function runReach(env: EvalEnv): CaseResult[] {
+  const now = new Date();
+  const id = (output: string) => `w4:reach:${output}`;
+  const at = (hours: number) => new Date(now.getTime() - hours * 3_600_000).toISOString();
+  const base: ConversationThread = {
+    platform: "reddit",
+    url: "https://www.reddit.com/r/freelance/comments/abc123/late/",
+    community: "freelance",
+    title: "How do you chase clients who pay 60 days late?",
+    author: "pixelpusher",
+    text: "I'm a freelance designer with about ten clients. Three of them are over 60 days late. Is there a tool people actually use for this? Happy to try one, DM me.",
+    comments: 6,
+    postedAt: at(6),
+  };
+  const scored = (thread: ConversationThread, over: Partial<{ buyer: string; invite: string; asks: boolean; exclude: boolean }> = {}) => ({
+    index: 0,
+    exclude: over.exclude ?? false,
+    pain: { score: 22, quote: "Three of them are over 60 days late" },
+    fit: { score: 21, why: "Fits." },
+    evidence: { score: 12, quote: thread.text.includes("Is there a tool") ? "Is there a tool people actually use for this?" : "" },
+    buyer: { quote: over.buyer ?? "I'm a freelance designer with about ten clients" },
+    asksForTools: over.asks ?? true,
+    invites: { quote: over.invite ?? "DM me" },
+  });
+  const safe: RuleRead = { verdict: "safe", summary: "ok" };
+  const check = (thread: ConversationThread, over: Parameters<typeof scored>[1] = {}, rule: RuleRead = safe) => {
+    const s = scored(thread, over);
+    const parts = scoreThread(thread, s, now.getTime())?.parts ?? [];
+    return reachFor(thread, s, parts, rule, now);
+  };
+  const result = (name: string, pass: boolean, notes: string[] = []): CaseResult => ({ id: id(name), epoch: env.epoch, pass, decided_by: "code", notes });
+
+  const ready = check(base);
+  const vendor = check({ ...base, text: "I built ReminderPro, launching today with 50% off. Is there a tool people actually use for this? DM me." }, { buyer: "I built ReminderPro, launching today" });
+  const hn = check({ ...base, platform: "hn", url: "https://news.ycombinator.com/item?id=123", community: "Hacker News" });
+  const noDms = check(base, {}, { verdict: "safe", summary: "ok", noDms: true });
+  const old = check({ ...base, postedAt: at(24 * 9) });
+  const cold = check({ ...base, text: base.text.replace(" Happy to try one, DM me.", "") }, { invite: "" });
+  const emailed = check({ ...base, text: `${base.text} Or email me at dana@studio-dana.com` });
+  const invented = check(base, { buyer: "I run a ten-person agency" });
+
+  return [
+    result("summary-not-title", sameAsTitle("How do you chase clients who pay 60 days late", base.title) && librarySummary(base.title, base) === null
+      && librarySummary("A designer with ten clients has three invoices over 60 days late and wants a tool to chase them.", base) !== null),
+    result("summary-no-author", librarySummary("pixelpusher wants a tool to chase late invoices from three clients", base) === null),
+    result("theme-reuses-name", themeName("chasing late invoices.", ["Chasing late invoices", "Pricing"]) === "Chasing late invoices"),
+    result("dm-ready", ready.level === "dm_ready" && ready.reach.buyer && ready.reach.warm && ready.reach.reasons.length >= 5, [ready.level, ...ready.reach.reasons]),
+    result("vendor-not-buyer", !vendor.reach.buyer && vendor.level === "reply_first", [vendor.level]),
+    result("hn-never-dm", !hn.reach.dmAllowed && hn.level === "reply_first" && hn.reach.reasons.includes("Hacker News has no DMs"), [hn.level, ...hn.reach.reasons]),
+    result("rules-forbid-dms", noDms.level === "reply_first" && noDms.reach.reasons.includes("This community's rules forbid DMs"), [noDms.level]),
+    result("stale-reply-first", !old.reach.fresh && old.level === "reply_first", [old.level]),
+    // Asking for tools stands in for warm for a DM (A1), never for an email.
+    result("asks-for-tools-dm", cold.level === "dm_ready" && !cold.reach.warm, [cold.level]),
+    result("email-ready", emailed.level === "email_ready" && emailed.reach.emailFound === "dana@studio-dana.com", [emailed.level, String(emailed.reach.emailFound)]),
+    result("buyer-quote-must-hold", !invented.reach.buyer && invented.level === "reply_first", [invented.level]),
+  ];
+}
+
 export const salesCase: EvalCase = {
   job: "w4",
   once: true,
@@ -213,6 +276,7 @@ export const salesCase: EvalCase = {
     for (const fixture of REDDIT_FIXTURES) results.push(...(await runFixture(fixture, env)));
     results.push(...(await runSocial(REDDIT_FIXTURES[0]!, env)));
     results.push(...(await runFree(REDDIT_FIXTURES[0]!, env)));
+    results.push(...runReach(env));
     return results;
   },
 };
