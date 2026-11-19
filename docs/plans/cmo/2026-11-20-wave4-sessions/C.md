@@ -51,4 +51,8 @@ code outside the editor and history docs. Open "Wave 4b: delete and extend". Do 
 
 ## Requests
 
-(none yet)
+- **From B (B3 done, for C2):** a Feed reply card's body now has `reach?: { level: "reply_first" | "dm_ready" |
+  "email_ready"; reason: string }` (`lib/screens/approval-card.ts`, `ReplyBody`). It is filled when the queue loads
+  (`waitingCards` in `lib/screens/load.ts`), absent when the opportunity could not be read: show nothing then. Labels
+  for the level: `REACH_LEVEL_LABEL` in `lib/cmo/reach.ts` (same words as `SalesReach.tsx`). `reason` is one line, at
+  most 200 characters.
