@@ -1,12 +1,16 @@
 /**
  * What the founder's replies got (P6 A3, R3; `research-sales.md` §6). Three days after "replied", the thread is read
- * again: Reddit through the social reader, Hacker News through Algolia (free). The founder's reply is found by its
- * text (the link they pasted narrows a Hacker News read to that comment), and its votes and replies are stored on the
- * outcome. SQL writes the memory line from our own numbers; nothing the thread says reaches memory or a prompt.
+ * again: Reddit through the social reader, Hacker News through Algolia (free), and Threads through the social reader
+ * (wave 3 B6). The founder's reply is found by its text; the link they pasted ("I replied", `reply_url`) narrows a
+ * Hacker News read to that comment and is the only way into a Threads reply's own answers. Its votes and replies are
+ * stored on the outcome, and a reply someone answered is `answeredBack` (SQL moves the person to "answered back").
+ * Facebook groups have no reader that lists a post's comments, so the founder marks those. SQL writes the memory line
+ * from our own numbers; nothing the thread says reaches memory or a prompt.
  */
 
 import { HnBudget, HnReadError, hnItem, type HnComment } from "../social/hn";
 import { redditThread } from "../social/research";
+import { readThreadsPost, THREADS_POST } from "../social/threads-search";
 import { ScBudget, SocialReadError, socialReaderReady, type RedditComment } from "../social/scrapecreators";
 import type { JobContext } from "./runner";
 import type { ReplyOutcomeDue } from "./types";
@@ -40,6 +44,8 @@ export function findReply<C extends { text: string }>(reply: string, comments: C
 export type ReplyReaders = {
   reddit: (url: string) => Promise<{ gone: boolean; comments: RedditComment[] }>;
   hn: (url: string) => Promise<HnComment[] | null>;
+  /** A Threads post's first replies (`readThreadsPost`); unset leaves Threads replies to the founder. */
+  threads?: (url: string) => Promise<{ author: string; text: string }[]>;
 };
 
 export function defaultReaders(): ReplyReaders {
@@ -51,10 +57,20 @@ export function defaultReaders(): ReplyReaders {
       return { gone: !read.post, comments: read.comments };
     },
     hn: (url) => hnItem(url, hn),
+    threads: async (url) => (await readThreadsPost(url, sc)).replies,
   };
 }
 
-export type ReplyCheck = { status: "found" | "not_found" | "gone"; votes: number | null; replies: number | null };
+export type ReplyCheck = {
+  status: "found" | "not_found" | "gone";
+  votes: number | null;
+  replies: number | null;
+  /** Someone answered the founder's reply: the person moves to "answered back" (wave 3 B6). */
+  answeredBack?: boolean;
+};
+
+/** A found reply with answers under it is an answer back; a count we could not read is not. */
+const withAnswer = (check: ReplyCheck): ReplyCheck => ({ ...check, answeredBack: check.status === "found" && (check.replies ?? 0) > 0 });
 
 /** Reads one reply's thread; a read that fails (reader down, limit hit) is null, so it is tried again tomorrow. */
 export async function checkReply(due: ReplyOutcomeDue, readers: ReplyReaders): Promise<ReplyCheck | null> {
@@ -64,12 +80,24 @@ export async function checkReply(due: ReplyOutcomeDue, readers: ReplyReaders): P
       const comments = await readers.hn(due.outcome_url ?? due.url);
       if (!comments) return { status: "gone", votes: null, replies: null };
       const mine = findReply(due.reply, comments);
-      return mine ? { status: "found", votes: null, replies: mine.replies } : { status: "not_found", votes: null, replies: null };
+      return withAnswer(mine ? { status: "found", votes: null, replies: mine.replies } : { status: "not_found", votes: null, replies: null });
     }
+    if (due.platform === "threads") {
+      if (!readers.threads) return null;
+      // On Threads a reply is a post of its own: its link reads the answers under it. Without the link, the post's
+      // first replies say only whether the founder's reply is there.
+      if (due.outcome_url && THREADS_POST.test(due.outcome_url)) {
+        const answers = await readers.threads(due.outcome_url);
+        return withAnswer({ status: "found", votes: null, replies: answers.length });
+      }
+      const replies = await readers.threads(due.url);
+      return findReply(due.reply, replies) ? { status: "found", votes: null, replies: null, answeredBack: false } : { status: "not_found", votes: null, replies: null };
+    }
+    if (due.platform !== "reddit") return null;
     const read = await readers.reddit(due.url);
     if (read.gone) return { status: "gone", votes: null, replies: null };
     const mine = findReply(due.reply, read.comments);
-    return mine ? { status: "found", votes: mine.score, replies: mine.replies ?? null } : { status: "not_found", votes: null, replies: null };
+    return withAnswer(mine ? { status: "found", votes: mine.score, replies: mine.replies ?? null } : { status: "not_found", votes: null, replies: null });
   } catch (error) {
     // A removed or deleted Reddit thread is gone for good: reading it again every day would cost a lookup each time.
     if (error instanceof SocialReadError && error.kind === "not_found") return { status: "gone", votes: null, replies: null };
@@ -79,12 +107,12 @@ export async function checkReply(due: ReplyOutcomeDue, readers: ReplyReaders): P
 }
 
 /** The `pull_metrics` step: every reply due, checked once. Reddit replies wait while the reader is not set up. */
-export async function checkReplies(ctx: JobContext, readers: ReplyReaders = defaultReaders()): Promise<{ checked: number; found: number }> {
+export async function checkReplies(ctx: JobContext, readers: ReplyReaders = defaultReaders()): Promise<{ checked: number; found: number; answered?: number }> {
   const { store, run } = ctx;
-  // Facebook groups and Threads have no reader that lists a post's comments by text yet (Sales finder v1): their
-  // outcomes stay unchecked instead of being read as Reddit threads and marked gone.
+  // Facebook groups have no reader that lists a post's comments: their outcomes stay unchecked (the founder marks
+  // them) instead of being read as another platform and marked gone. Reddit and Threads wait for the social reader.
   const due = (await store.replyOutcomesDue(run.user_id, MAX_REPLY_CHECKS)).filter(
-    (d) => d.platform === "hn" || (d.platform === "reddit" && socialReaderReady()),
+    (d) => d.platform === "hn" || ((d.platform === "reddit" || d.platform === "threads") && socialReaderReady()),
   );
   if (!due.length) return { checked: 0, found: 0 };
   return ctx.step(
@@ -93,16 +121,18 @@ export async function checkReplies(ctx: JobContext, readers: ReplyReaders = defa
     async () => {
       let checked = 0;
       let found = 0;
+      let answered = 0;
       for (const d of due) {
         const result = await checkReply(d, readers);
         if (!result) continue;
         if (await store.saveReplyOutcome(run.user_id, d.outcome_id, result)) {
           checked += 1;
           if (result.status === "found") found += 1;
+          if (result.answeredBack) answered += 1;
         }
       }
-      return { checked, found };
+      return { checked, found, answered };
     },
-    (r) => `${r.checked} replies checked, ${r.found} found`,
+    (r) => `${r.checked} replies checked, ${r.found} found${r.answered ? `, ${r.answered} answered back` : ""}`,
   );
 }

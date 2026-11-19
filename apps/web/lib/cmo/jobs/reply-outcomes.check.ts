@@ -37,19 +37,31 @@ async function main() {
     { id: "44", author: "", text: "How?", replies: 0 },
   ]);
 
-  const due = (platform: "reddit" | "hn", extra: Partial<ReplyOutcomeDue> = {}): ReplyOutcomeDue => ({
+  const due = (platform: "reddit" | "hn" | "threads" | "facebook", extra: Partial<ReplyOutcomeDue> = {}): ReplyOutcomeDue => ({
     outcome_id: `o-${platform}`, opportunity_id: `p-${platform}`, platform, community: "r/SaaS", reply: REPLY, outcome_url: null,
-    url: platform === "hn" ? "https://news.ycombinator.com/item?id=42" : "https://www.reddit.com/r/SaaS/comments/abc/x/", ...extra,
+    url: platform === "hn" ? "https://news.ycombinator.com/item?id=42" : platform === "threads" ? "https://www.threads.com/@dana/post/C9xYz" : "https://www.reddit.com/r/SaaS/comments/abc/x/", ...extra,
   });
   const seen: string[] = [];
   const readers: ReplyReaders = {
     reddit: async (url) => (seen.push(url), { gone: false, comments }),
     hn: async (url) => (seen.push(url), [{ id: "9", author: "me", text: REPLY, replies: 3 }]),
+    threads: async (url) => (seen.push(url), url.endsWith("/C9xYz") ? [{ author: "me", text: REPLY }] : url.endsWith("/MyReply") ? [{ author: "dana", text: "Thanks, how do you set the fee?" }] : []),
   };
-  assert.deepEqual(await checkReply(due("reddit"), readers), { status: "found", votes: 12, replies: 4 });
-  assert.deepEqual(await checkReply(due("hn", { outcome_url: "https://news.ycombinator.com/item?id=9" }), readers), { status: "found", votes: null, replies: 3 });
+  // A found reply with answers under it is an answer back (wave 3 B6).
+  assert.deepEqual(await checkReply(due("reddit"), readers), { status: "found", votes: 12, replies: 4, answeredBack: true });
+  assert.deepEqual(await checkReply(due("hn", { outcome_url: "https://news.ycombinator.com/item?id=9" }), readers), { status: "found", votes: null, replies: 3, answeredBack: true });
   assert.equal(seen.at(-1), "https://news.ycombinator.com/item?id=9", "a pasted HN link is read alone");
-  assert.deepEqual(await checkReply(due("reddit", { reply: "Something else entirely about pricing pages." }), readers), { status: "not_found", votes: null, replies: null });
+  assert.deepEqual(await checkReply(due("reddit", { reply: "Something else entirely about pricing pages." }), readers), { status: "not_found", votes: null, replies: null, answeredBack: false });
+  assert.equal((await checkReply(due("reddit"), { ...readers, reddit: async () => ({ gone: false, comments: comments.map((c) => ({ ...c, replies: 0 })) }) }))!.answeredBack, false, "no answers, no answer back");
+
+  // Threads: the founder's reply link reads the answers under it; without it, only whether the reply is there.
+  assert.deepEqual(await checkReply(due("threads", { outcome_url: "https://www.threads.com/@me/post/MyReply" }), readers), { status: "found", votes: null, replies: 1, answeredBack: true });
+  assert.equal(seen.at(-1), "https://www.threads.com/@me/post/MyReply", "the reply's own post is read");
+  assert.deepEqual(await checkReply(due("threads"), readers), { status: "found", votes: null, replies: null, answeredBack: false });
+  assert.deepEqual(await checkReply(due("threads", { reply: "Something else entirely about pricing pages." }), readers), { status: "not_found", votes: null, replies: null });
+  assert.equal(await checkReply(due("threads"), { reddit: readers.reddit, hn: readers.hn }), null, "no Threads reader: the founder marks it");
+  // Facebook groups: no reader lists a post's comments, so the founder marks it.
+  assert.equal(await checkReply(due("facebook"), readers), null);
   assert.deepEqual(await checkReply(due("reddit"), { ...readers, reddit: async () => ({ gone: true, comments: [] }) }), { status: "gone", votes: null, replies: null });
   assert.equal(await checkReply(due("hn"), { ...readers, hn: async () => { throw new HnReadError("busy"); } }), null, "a failed read is tried again tomorrow");
   await assert.rejects(checkReply(due("hn"), { ...readers, hn: async () => { throw new Error("bug"); } }), /bug/, "a bug is not swallowed");
