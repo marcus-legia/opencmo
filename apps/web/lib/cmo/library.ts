@@ -76,3 +76,6 @@ export const LibrarySaveItemSchema = z.object({
   quotes: z.array(LibraryQuoteSchema).max(LIBRARY_LIMITS.quotesPerEntry),
 });
 export type LibrarySaveItem = z.infer<typeof LibrarySaveItemSchema>;
+
+/** A theme the week plan and post drafts write from (`cmo_library_top_themes`): recent entries only, newest first. */
+export type LibraryTopTheme = { id: string; name: string; count: number; entries: Omit<LibraryEntry, "themeId">[] };

@@ -13,7 +13,8 @@ import { DEPARTMENTS, type Department } from "@/lib/screens/common";
 import { localDay, localMidnight } from "@/lib/time-zone";
 
 import { cardTitle } from "./digest";
-import { safeZone, todayPlatform, type TodayCard, type TodayFailedSlot, type TodayInput, type TodayPlatform } from "./today";
+import { NUDGE_AFTER_DAYS } from "./reach";
+import { safeZone, todayPlatform, type TodayCard, type TodayFailedSlot, type TodayFollowUp, type TodayInput, type TodayPlatform } from "./today";
 
 /** How far back "the last post per platform" looks: a platform quiet for longer than this is not nagged about. */
 const SILENCE_LOOKBACK_DAYS = 60;
@@ -43,7 +44,8 @@ function check<T>(r: { data: T | null; error: { message: string } | null }, what
   return (r.data ?? ([] as unknown)) as T;
 }
 
-type CardDb = { id: string; kind: string; department: string; snapshot: Record<string, unknown>; created_at: string; expires_at: string | null };
+type CardDb = { id: string; kind: string; department: string; ref_kind: string; ref_id: string; snapshot: Record<string, unknown>; created_at: string; expires_at: string | null };
+type PersonDb = { id: string; community: string; person_status: string; status_at: string | null; replied_at: string | null };
 type SlotDb = { id: string; platform: string; publish_at: string; approval_id: string | null };
 
 /**
@@ -66,8 +68,9 @@ export async function loadTodayInput(
   const since = new Date(now.getTime() - SILENCE_LOOKBACK_DAYS * 86_400_000).toISOString();
   const publishing = publishConfigured(opts.env);
 
-  const [waiting, decidedToday, decidedEver, strategy, failed, published, tomorrow, accounts, rate, coming] = await Promise.all([
-    db.from("approvals").select("id, kind, department, snapshot, created_at, expires_at").eq("user_id", userId).eq("status", "waiting")
+  const nudgeBefore = new Date(now.getTime() - NUDGE_AFTER_DAYS * 86_400_000).toISOString();
+  const [waiting, decidedToday, decidedEver, strategy, failed, published, tomorrow, accounts, rate, coming, following] = await Promise.all([
+    db.from("approvals").select("id, kind, department, ref_kind, ref_id, snapshot, created_at, expires_at").eq("user_id", userId).eq("status", "waiting")
       .order("created_at").limit(100),
     // The rows, not a count: a time approved with its post is a `schedule` card that was born decided, and counting
     // it made one Approve read "2 done".
@@ -93,9 +96,20 @@ export async function loadTodayInput(
     // A post already on its way (now to the end of tomorrow): its platform is not silent.
     db.from("schedule_slots").select("platform").eq("user_id", userId).in("status", ["proposed", "waiting", "due", "reminded", "publishing"])
       .gte("publish_at", now.toISOString()).lt("publish_at", startOfDayAfter).limit(50),
+    // Wave 3 Following up: people who answered back, and people with no answer after the nudge delay and a nudge drafted.
+    db.from("opportunities").select("id, community, person_status, status_at, replied_at").eq("user_id", userId)
+      .or(`person_status.eq.answered_back,and(person_status.eq.replied,replied_at.lt.${nudgeBefore},nudge_draft.not.is.null)`)
+      .order("status_at", { ascending: false, nullsFirst: false }).limit(20),
   ]);
 
   const cardRows = check(waiting, "approvals") as CardDb[];
+  // A reply card's thread date, for the hot-lead rule (a thread under a day old); the snapshot keeps no date.
+  const oppIds = cardRows.filter((row) => row.kind === "reply" && row.ref_kind === "opportunity").map((row) => row.ref_id);
+  const posted = new Map<string, string | null>();
+  if (oppIds.length) {
+    const rows = check(await db.from("opportunities").select("id, posted_at").eq("user_id", userId).in("id", oppIds), "opportunities") as { id: string; posted_at: string | null }[];
+    for (const row of rows) posted.set(row.id, row.posted_at ? new Date(row.posted_at).toISOString() : null);
+  }
   const cards: TodayCard[] = cardRows.map((row) => ({
     id: row.id,
     kind: row.kind,
@@ -104,7 +118,17 @@ export async function loadTodayInput(
     platform: todayPlatform(row.snapshot.platform),
     raisedAt: new Date(row.created_at).toISOString(),
     expiresAt: row.expires_at ? new Date(row.expires_at).toISOString() : null,
+    ...(row.kind === "reply"
+      ? { score: typeof row.snapshot.score === "number" ? row.snapshot.score : null, postedAt: row.ref_kind === "opportunity" ? (posted.get(row.ref_id) ?? null) : null }
+      : {}),
   }));
+
+  const followUps: TodayFollowUp[] = (check(following, "following") as PersonDb[]).flatMap((p) => {
+    const at = p.person_status === "answered_back" ? p.status_at : p.replied_at;
+    if (!at) return [];
+    // A nudge is a draft on the person, not an approval card, so there is no card to open.
+    return [{ id: p.id, community: p.community, status: p.person_status === "answered_back" ? "answered_back" : "no_answer", at: new Date(at).toISOString(), approvalId: null }];
+  });
   const titles = new Map(cards.map((card) => [card.id, card.title]));
 
   for (const r of [decidedToday, decidedEver, strategy]) if (r.error) throw new Error(`today counts: ${r.error.message}`);
@@ -142,6 +166,7 @@ export async function loadTodayInput(
     lastPosted: [...last.entries()].map(([platform, at]) => ({ platform, at })),
     needsAccount,
     upcoming: [...new Set((check(coming, "upcoming") as { platform: string }[]).flatMap((slot) => todayPlatform(slot.platform) ?? []))],
+    followUps,
     firstRun: { readStrategy: (strategy.count ?? 0) > 0 && (decidedEver.count ?? 0) === 0, rateDrafts: rate },
   };
 }

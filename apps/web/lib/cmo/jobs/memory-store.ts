@@ -3,7 +3,7 @@
  * Supabase. Not `server-only`, so `tsx` scripts can import it.
  */
 
-import type { LibrarySaveItem } from "../library";
+import type { LibrarySaveItem, LibraryTopTheme } from "../library";
 import { reachLevel, type ReachCheck, type ReachLevel } from "../reach";
 import type { VideoSource } from "../writer/types";
 import { latestPerTopic } from "./context";
@@ -248,6 +248,24 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
       if (!p || p.status !== "replied") return false;
       p.status = "answered_back";
       return true;
+    },
+    async libraryTopThemes(_u, days = 14, limit = 5) {
+      // The memory Library keys lines by url; the opportunity id is the url there too (as `saveOpportunityReply`).
+      const since = Date.now() - days * 86_400_000;
+      const byTheme = new Map<string, LibraryTopTheme>();
+      for (const [url, line] of library) {
+        const opp = opps.find((o) => o.url === url);
+        if (!opp || (opp.posted_at && Date.parse(opp.posted_at) <= since)) continue;
+        const theme = byTheme.get(line.theme) ?? { id: `theme-${line.theme}`, name: line.theme, count: 0, entries: [] };
+        theme.count += 1;
+        theme.entries.push({ opportunityId: url, summary: line.summary, platform: opp.platform ?? "reddit", community: opp.community, postedAt: opp.posted_at, quotes: line.quotes });
+        byTheme.set(line.theme, theme);
+      }
+      const newest = (a: { postedAt: string | null }, b: { postedAt: string | null }) => (b.postedAt ?? "").localeCompare(a.postedAt ?? "");
+      return [...byTheme.values()]
+        .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+        .slice(0, limit)
+        .map((t) => ({ ...t, entries: t.entries.sort(newest).slice(0, 5) }));
     },
     async saveLibrary(_u, runId, list) {
       if (!runs.some((r) => r.id === runId && r.kind === "sales_scan")) throw new Error("cmo_save_library: Run not found.");

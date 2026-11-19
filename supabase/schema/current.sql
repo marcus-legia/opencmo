@@ -4912,6 +4912,38 @@ $$;
 
 
 --
+-- Name: cmo_library_top_themes(uuid, integer, integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_library_top_themes(p_user uuid, p_days integer DEFAULT 14, p_limit integer DEFAULT 5) RETURNS jsonb
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  with e as (
+    select le.* from public.library_entries le
+    where le.user_id = p_user and le.theme_id is not null
+      and coalesce(le.posted_at, le.created_at) > now() - make_interval(days => least(greatest(coalesce(p_days, 14), 1), 90))
+  ), t as (
+    select th.id, th.name, count(*)::integer as n
+    from public.library_themes th join e on e.theme_id = th.id
+    where th.user_id = p_user
+    group by th.id, th.name
+    order by n desc, th.name
+    limit least(greatest(coalesce(p_limit, 5), 1), 20)
+  )
+  select coalesce(jsonb_agg(jsonb_build_object('id', t.id, 'name', t.name, 'count', t.n, 'entries', (
+    select coalesce(jsonb_agg(x.j order by x.at desc), '[]'::jsonb) from (
+      select jsonb_build_object('opportunityId', e.opportunity_id, 'summary', e.summary, 'platform', e.platform,
+        'community', e.community, 'postedAt', e.posted_at, 'quotes', e.quotes) j,
+        coalesce(e.posted_at, e.created_at) at
+      from e where e.theme_id = t.id
+      order by coalesce(e.posted_at, e.created_at) desc limit 5
+    ) x)) order by t.n desc, t.name), '[]'::jsonb)
+  from t;
+$$;
+
+
+--
 -- Name: cmo_mark_answered_back(uuid, uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 

@@ -8,7 +8,7 @@ import type { DocumentKind } from "../documents";
 import type { VideoSource } from "../writer/types";
 import type { AccountMetricRow } from "./metrics-source";
 import type { SalesPlatform } from "../social/conversations";
-import type { LibrarySaveItem } from "../library";
+import type { LibrarySaveItem, LibraryTopTheme } from "../library";
 import type { ReachSaveItem } from "../reach";
 
 export type CmoJobKind =
@@ -340,6 +340,8 @@ export interface CmoStore {
   saveLibrary(userId: string, runId: string, items: LibrarySaveItem[]): Promise<number>;
   /** The founder's Library theme names, most used first (`cmo_library_theme_names`), for the scan to reuse. */
   libraryThemeNames(userId: string, limit?: number): Promise<string[]>;
+  /** B3: themes with entries posted (or saved) in the last `days`, most entries first, five newest entries each. */
+  libraryTopThemes(userId: string, days?: number, limit?: number): Promise<LibraryTopTheme[]>;
   /**
    * Wave 3 A3: the scan's reach checks (`cmo_save_reach`). SQL works the level out from the checks (Hacker News never
    * has DMs) and keeps a `dm` draft only for a DM-ready person without one, at most 20 a day.
