@@ -106,3 +106,5 @@ Specs for Library, post sources, reach out and I replied, Following up, Research
   editor's Brand Kit pane; links in `SettingsFrame` / `SettingsScreen` named "Brand Kit" still point there, please
   rename or relink them in C3. Settings › Voice reads the Brand. e2e: `ui-v2-setup` expects the steps `…, post_plan,
   brand` and `post_plan.channels = ["x","linkedin"]`; `cmo.spec` seeds v2 documents. I did not run the browser e2e.
+- **From the owner (PR):** the wave 3 PR is open as a draft: #239. C7 opens no new PR: update #239's description and
+  mark it ready for review when the review is done.
