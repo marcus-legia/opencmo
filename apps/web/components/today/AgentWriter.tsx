@@ -15,6 +15,7 @@ import { PLATFORM_LABEL } from "@/lib/screens/common";
 import type { WriterScreen } from "@/lib/screens/writer";
 
 import { KIND_ICON, PLATFORM_ICON } from "./cards";
+import { PostViewSwitch } from "./TopBar";
 import { useDecide } from "./useDecide";
 import { dayLabel, draftsLeftOver, draftsThisWeek } from "./week";
 
@@ -25,7 +26,6 @@ const KIND_LABEL: Record<Draft["kind"], string> = { post: "post", caption: "Capt
 const BADGE: Record<Draft["column"], [string, string]> = { planned: ["Planned", "badge b-plan"], waiting: ["Waiting", "badge b-wait"], drafting: ["Drafting", "badge b-new"], scheduled: ["Scheduled", "badge b-ok"], posted: ["Posted", "badge b-ok"] };
 const ASK_KINDS = [
   { id: "post", label: "X post", prompt: "Write an X post" },
-  { id: "script", label: "Video script", prompt: "Write a short video script" },
 ] as const;
 
 const when = (d: Draft) => {
@@ -187,16 +187,19 @@ export function AgentWriter() {
           </span>
           <div style={{ flex: "1 1 300px", minWidth: "0" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <h1 style={{ margin: "0", fontSize: "22px", fontWeight: "600", letterSpacing: "-0.4px" }}>Writer</h1>
+              <h1 style={{ margin: "0", fontSize: "22px", fontWeight: "600", letterSpacing: "-0.4px" }}>Posts</h1>
               {thisWeek.length ? (
                 <span className="chip">
                   <span className="live"></span>
                   {thisWeek.length} drafts this week
                 </span>
               ) : null}
+              <span style={{ marginLeft: "auto" }}>
+                <PostViewSwitch current="list" />
+              </span>
             </div>
             <p style={{ margin: "4px 0 8px", color: "var(--muted)", fontSize: "14px", maxWidth: "640px" }}>
-              Writes the week from your strategy: posts, and scripts with storyboards for the videos you film. Nothing is built or posted until you approve the words.
+              Posts for X, LinkedIn and Threads, written from your strategy. Nothing is posted until you approve it.
             </p>
             <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
               <span className="meta">Reads</span>
@@ -313,7 +316,7 @@ export function AgentWriter() {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "4px" }}>
             <h2 style={{ margin: "0", fontSize: "14px", fontWeight: "600" }}>This week</h2>
             <Link href="/app/schedule" style={{ fontSize: "12.5px", textDecoration: "none" }}>
-              Calendar
+              Week view
             </Link>
           </div>
           {week.length === 0 ? <div className="meta">The week's plan lands here on Sunday.</div> : null}

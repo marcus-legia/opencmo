@@ -19,7 +19,6 @@ import { isSample, useScreen } from "../useScreen";
 import { ACCOUNTS_PANEL_ID, AccountsPanel } from "./AccountsPanel";
 import { NotifyPanel } from "./NotifyPanel";
 
-const DIGEST_HOURS = [6, 7, 8, 9, 10, 12, 18];
 
 function zones(current: string): string[] {
   // Every zone the browser knows; the RPC checks the name against Postgres' list on save.
@@ -154,16 +153,15 @@ function AutopilotField({ initial, accounts, live }: { initial: Autopilot; accou
 function SettingsBody({ data, live }: { data: Data; live: Record<keyof Data, boolean> }) {
   const [budget, setBudget] = useState(String(data.weeklyCreditBudget));
   const [timezone, setTimezone] = useState(data.timezone);
-  const [digestHour, setDigestHour] = useState<number | null>(data.digestHour);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pausedAt, setPausedAt] = useState(data.cmo.pausedAt);
   const zoneList = useMemo(() => zones(data.timezone), [data.timezone]);
-  const savesForReal = live.weeklyCreditBudget && live.timezone && live.digestHour;
+  const savesForReal = live.weeklyCreditBudget && live.timezone;
   const budgetNumber = Number(budget);
   const budgetOk = budget.trim() !== "" && Number.isInteger(budgetNumber) && budgetNumber >= BUDGET_MIN && budgetNumber <= BUDGET_MAX;
-  const dirty = budgetNumber !== data.weeklyCreditBudget || timezone !== data.timezone || digestHour !== data.digestHour;
+  const dirty = budgetNumber !== data.weeklyCreditBudget || timezone !== data.timezone;
 
   async function save() {
     if (!budgetOk) return;
@@ -172,7 +170,7 @@ function SettingsBody({ data, live }: { data: Data; live: Record<keyof Data, boo
     setSaved(false);
     try {
       // Sample settings change only on this page; live ones go through `save_cmo_settings` (brain plan W1-1).
-      if (savesForReal) await api("/cmo/settings", jsonBody({ weeklyCreditBudget: budgetNumber, timezone, digestHour }, "PUT"));
+      if (savesForReal) await api("/cmo/settings", jsonBody({ weeklyCreditBudget: budgetNumber, timezone }, "PUT"));
       setSaved(true);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not save your settings.");
@@ -234,27 +232,6 @@ function SettingsBody({ data, live }: { data: Data; live: Record<keyof Data, boo
                 ))}
               </select>
             </label>
-            <label className="v2-field" htmlFor="digest">
-              Morning email
-              <select
-                id="digest"
-                className="v2-input"
-                value={digestHour === null ? "off" : String(digestHour)}
-                onChange={(e) => {
-                  setDigestHour(e.target.value === "off" ? null : Number(e.target.value));
-                  setSaved(false);
-                }}
-              >
-                {[...new Set([...DIGEST_HOURS, ...(digestHour === null ? [] : [digestHour])])]
-                  .sort((a, b) => a - b)
-                  .map((hour) => (
-                    <option key={hour} value={hour}>
-                      {String(hour).padStart(2, "0")}:00 · what waits, what went out, what is stuck
-                    </option>
-                  ))}
-                <option value="off">Off · the digest stays in the app</option>
-              </select>
-            </label>
             <AutopilotField initial={data.autopilot} accounts={data.accounts} live={live.autopilot} />
             {error && <ErrorNote>{error}</ErrorNote>}
             <span className="v2-actions">
@@ -296,7 +273,7 @@ function SettingsBody({ data, live }: { data: Data; live: Record<keyof Data, boo
         </section>
       </div>
 
-      <NotifyPanel />
+      <NotifyPanel digestDays={data.digestDays} digestHour={data.digestHour} emailLog={data.emailLog} timezone={data.timezone} live={live.digestDays && live.digestHour} />
     </>
   );
 }

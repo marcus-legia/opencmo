@@ -65,7 +65,19 @@ html[data-theme="dark"] .k.td-ctx { justify-content: flex-start; overflow: auto;
 .td-scrim { position: fixed; inset: 48px 0 0 0; z-index: 44; background: rgba(25, 24, 22, .28); }
 html[data-theme="dark"] .td-scrim { background: rgba(0, 0, 0, .5); }
 .td-chat-close { position: absolute; top: 8px; right: 8px; z-index: 2; }
-.td-chatdrawer .cmo-chat-head { padding-right: 40px; }
+.td-chatdrawer .cmo-chat-head, .td-chat-close + .td-chatpanel .cmo-chat-head { padding-right: 40px; }
+/* The panel's wrapper keeps the column's flex layout; `hidden` folds it without unmounting the chat. */
+.td-chatpanel { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+.td-chatpanel[hidden] { display: none; }
+/* Off the Feed the chat folds to a 56 px "Ask" rail (wave 2). */
+.td-askrail { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 100%; padding: 14px 0; border: 0; background: transparent; color: var(--muted); font: 500 12.5px Geist, ui-sans-serif, system-ui, sans-serif; cursor: pointer; }
+.td-askrail:hover, .td-askrail:focus-visible { color: var(--text); background: var(--hover); outline: none; }
+@media (min-width: 901px) {
+  .pg-main .cols > .chat[data-folded] { flex: 0 0 56px; min-width: 56px; overflow: hidden; }
+}
+@media (max-width: 900px) {
+  .td-askrail { flex-direction: row; justify-content: center; height: 44px; padding: 0; border-top: 1px solid var(--line); }
+}
 
 /* ChatPanel in the artboard's look (Main.dc.html .chat): 44 px head, plain answers, the founder's lines in a bubble, the
    rounded composer with the dark send button. */
@@ -105,7 +117,7 @@ html[data-theme="dark"] .td-scrim { background: rgba(0, 0, 0, .5); }
 /* The editor's Assistant takes the right column; the CMO chat stays mounted but hidden there. */
 .pg-editor .td-body { display: flex; min-height: 100vh; }
 .td-assistant { flex: 0 0 340px; display: flex; flex-direction: column; border-left: 1px solid var(--line); background: var(--panel); }
-.td-assistant > .cmo-chat { display: none; }
+.td-assistant > .td-chatpanel { display: none; }
 
 @media (max-width: 900px) {
   .pg-main .cols > .chat { max-width: none; }
@@ -415,3 +427,22 @@ html:not([data-theme="dark"]) .k { --ok: #16744c; --warn: #8f5a0e; }
 .td-frame .top .td-autopilot[aria-pressed="true"] { color: var(--text); }
 .td-frame .top .td-autopilot.is-off { color: var(--subtle); border-style: dashed; }
 .td-frame .top .td-autopilot:disabled { opacity: .6; cursor: progress; }
+
+/* The fair-use chip on the top bar (wave 2): a small meter, the plan and the percentage used. */
+.td-usage { gap: 7px; }
+.td-usage-meter { display: inline-block; width: 28px; height: 5px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.td-usage-meter > span { display: block; height: 100%; background: var(--accent); }
+.td-usage[data-paused] .td-usage-meter > span { background: var(--bad, #b4402f); }
+/* Billing's fair-use bar: the same meter, full width. */
+.td-usage-panel { flex: 1 1 260px; border-left: 1px solid var(--line); padding-left: 24px; }
+@media (max-width: 640px) { .td-usage-panel { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); padding-top: 16px; } }
+.td-usage-bar { margin-top: 12px; height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
+.td-usage-bar > span { display: block; height: 100%; background: var(--accent); }
+.td-usage-bar[data-paused] > span { background: var(--bad, #b4402f); }
+
+/* Settings › Notifications: the email log as rows that wrap on a phone (wave 2 C3). */
+.td-emaillog { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; border-top: 1px solid var(--line); }
+.td-emaillog > li { display: flex; flex-direction: column; gap: 2px; padding: 10px 0; border-bottom: 1px solid var(--line); min-width: 0; overflow-wrap: anywhere; }
+.td-emaillog-head { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 13px; color: var(--muted); }
+.td-emaillog-status { margin-left: auto; }
+.td-emaillog > li[data-status="sent"] .td-emaillog-status { color: var(--ok, inherit); }

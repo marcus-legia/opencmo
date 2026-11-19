@@ -144,6 +144,67 @@ async function runSocial(fixture: RedditFixture, env: EvalEnv): Promise<CaseResu
   return results;
 }
 
+/**
+ * Free scan A3: an unpaid account's first scan (priced 0) finds and scores the same threads, saves the cards with no
+ * reply text, and never runs the drafting step. Code tier only: there is no reply to judge.
+ */
+async function runFree(fixture: RedditFixture, env: EvalEnv): Promise<CaseResult[]> {
+  const now = Date.now();
+  const threads = fixture.threads.map((t) => toThread(t, now));
+  const mem = memoryStore(fixture.docs, []);
+  mem.account.paid = false;
+  const run = mem.enqueue("sales_scan", { source: "onboarding" }, 0);
+  await env.drain(mem.store, { runId: run.id, budgetMs: 240_000, searchReddit: async () => threads, searchHn: async () => [] });
+  const state = mem.runs.find((r) => r.id === run.id);
+  const id = (output: string) => `w4:free:${output}`;
+  if (state?.status !== "done") return [{ id: id("run"), epoch: env.epoch, pass: false, decided_by: "error", notes: [state?.error ?? "the scan did not finish"] }];
+  const byUrl = new Map(fixture.threads.map((t) => [t.url, t]));
+  const cards = mem.opps.filter((o) => byUrl.has(o.url) && o.rule !== "skip");
+  const wrong = cards.map((o) => byUrl.get(o.url)!).filter((t) => t.expect === "exclude");
+  const output = state.output as { free?: boolean; verdict?: string; cards?: number };
+  const drafted = state.steps.some((s) => s.tool === "draft_reply");
+  const freeResults: CaseResult[] = [
+    { id: id("run"), epoch: env.epoch, pass: true, decided_by: "code" },
+    {
+      id: id("cards"),
+      epoch: env.epoch,
+      pass: cards.length > 0 && !wrong.length && output.free === true && output.verdict === "found" && output.cards === cards.length,
+      decided_by: "code",
+      notes: [`${cards.length} cards`, `output ${JSON.stringify({ free: output.free, verdict: output.verdict, cards: output.cards })}`, ...wrong.map((t) => `carded an excluded thread: ${t.key}`)],
+    },
+    {
+      id: id("no-drafts"),
+      epoch: env.epoch,
+      pass: !drafted && cards.every((o) => o.reply === "" && !o.gen),
+      decided_by: "code",
+      notes: [...(drafted ? ["ran draft_reply"] : []), ...cards.filter((o) => o.reply !== "").map((o) => `reply text on ${byUrl.get(o.url)!.key}`)],
+    },
+  ];
+
+  // Free scan A5: the founder pays, then "Write the replies" drafts every undrafted card with the scan's own checks.
+  mem.account.paid = true;
+  const write = mem.enqueue("sales_reply_drafts", {}, 1);
+  await env.drain(mem.store, { runId: write.id, budgetMs: 240_000 });
+  const after = mem.runs.find((r) => r.id === write.id);
+  if (after?.status !== "done") return [...freeResults, { id: id("replies:run"), epoch: env.epoch, pass: false, decided_by: "error", notes: [after?.error ?? "the replies run did not finish"] }];
+  const written = (after.output as { drafted?: number }).drafted ?? 0;
+  const mentions = cards.filter((o) => o.rule === "safe" || o.rule === "requires_disclosure").length;
+  freeResults.push({
+    id: id("replies:written"),
+    epoch: env.epoch,
+    pass: written === cards.length && cards.every((o) => o.reply.length > 0 && !!o.gen) && mentions <= 1,
+    decided_by: "code",
+    notes: [`${written} of ${cards.length} written`, `${mentions} may name the product`],
+  });
+  const product = String(fixture.docs.product?.name ?? "");
+  for (const card of cards) {
+    const thread = byUrl.get(card.url)!;
+    const issues = [...replyIssues(thread, card.reply, product), ...quoteIssues(card, toThread(thread, now))];
+    freeResults.push(await cascade(id(`replies:${thread.key}`), env.epoch, issues, env.judge, { job: "w4", docs: fixture.docs, output: card.reply, criteria: [HELPS_FIRST] }));
+  }
+  return freeResults;
+}
+
 export const salesCase: EvalCase = {
   job: "w4",
   once: true,
@@ -151,6 +212,7 @@ export const salesCase: EvalCase = {
     const results: CaseResult[] = [];
     for (const fixture of REDDIT_FIXTURES) results.push(...(await runFixture(fixture, env)));
     results.push(...(await runSocial(REDDIT_FIXTURES[0]!, env)));
+    results.push(...(await runFree(REDDIT_FIXTURES[0]!, env)));
     return results;
   },
 };

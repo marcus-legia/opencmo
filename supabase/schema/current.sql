@@ -2683,6 +2683,24 @@ CREATE FUNCTION public.autopilot_min_window() RETURNS interval
 
 
 --
+-- Name: autopilot_push_due(timestamp with time zone, timestamp with time zone); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.autopilot_push_due(p_now timestamp with time zone, p_until timestamp with time zone) RETURNS TABLE(id uuid, user_id uuid, platform text, auto_at timestamp with time zone)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select a.id, a.user_id, a.snapshot->'proposed'->>'platform', a.auto_at
+  from public.approvals a
+  where a.status = 'waiting' and a.kind = 'post'
+    and a.auto_at > p_now and a.auto_at <= p_until
+    and public.post_autopilot_still_on(a)
+  order by a.auto_at
+  limit 200;
+$$;
+
+
+--
 -- Name: best_slots_refresh(uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -2745,6 +2763,77 @@ CREATE FUNCTION public.best_time_rules() RETURNS jsonb
 
 
 --
+-- Name: billing_catalog; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.billing_catalog (
+    creem_product_id text NOT NULL,
+    slug text NOT NULL,
+    kind text NOT NULL,
+    plan_id text,
+    credits integer NOT NULL,
+    price_cents integer NOT NULL,
+    "interval" text,
+    on_sale boolean DEFAULT true NOT NULL,
+    sort integer DEFAULT 0 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT billing_catalog_credits_check CHECK ((credits > 0)),
+    CONSTRAINT billing_catalog_interval_check CHECK (("interval" = ANY (ARRAY['month'::text, 'year'::text]))),
+    CONSTRAINT billing_catalog_kind_check CHECK ((kind = ANY (ARRAY['plan'::text, 'pack'::text]))),
+    CONSTRAINT billing_catalog_kind_shape CHECK ((((kind = 'plan'::text) AND (plan_id IS NOT NULL) AND ("interval" IS NOT NULL)) OR ((kind = 'pack'::text) AND (plan_id IS NULL) AND ("interval" IS NULL)))),
+    CONSTRAINT billing_catalog_plan_id_check CHECK ((plan_id = ANY (ARRAY['starter'::text, 'creator'::text]))),
+    CONSTRAINT billing_catalog_price_cents_check CHECK ((price_cents > 0))
+);
+
+
+--
+-- Name: billing_catalog_put_annual(text, integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.billing_catalog_put_annual(p_product_id text, p_price_cents integer DEFAULT 69000) RETURNS public.billing_catalog
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $_$
+declare
+  v_row public.billing_catalog;
+  v_credits integer;
+begin
+  if p_product_id is null or p_product_id !~ '^prod_[A-Za-z0-9]{4,64}$' then
+    raise exception 'Give the Creem product id (prod_…).' using errcode = '22023';
+  end if;
+  if p_price_cents is null or p_price_cents < 100 or p_price_cents > 1000000 then
+    raise exception 'The price is in cents, between 100 and 1,000,000.' using errcode = '22023';
+  end if;
+  select * into v_row from public.billing_catalog where creem_product_id = p_product_id;
+  if found then
+    if v_row.kind <> 'plan' or v_row."interval" <> 'year' or v_row.price_cents <> p_price_cents then
+      raise exception 'That product is already listed as something else. A price change needs a new Creem product.'
+        using errcode = '22023';
+    end if;
+    update public.billing_catalog set on_sale = true where creem_product_id = p_product_id returning * into v_row;
+    return v_row;
+  end if;
+
+  select c.credits into v_credits from public.billing_catalog c
+  where c.kind = 'plan' and c."interval" = 'month' and c.on_sale
+  order by c.sort limit 1;
+  if v_credits is null then
+    raise exception 'List the monthly plan first: the annual plan grants the same credits each month.' using errcode = '55000';
+  end if;
+
+  update public.billing_catalog
+  set on_sale = false, slug = left('annual-' || creem_product_id, 100)
+  where kind = 'plan' and "interval" = 'year' and slug = 'annual';
+
+  insert into public.billing_catalog (creem_product_id, slug, kind, plan_id, credits, price_cents, "interval", on_sale, sort)
+  values (p_product_id, 'annual', 'plan', 'creator', v_credits, p_price_cents, 'year', true, 20)
+  returning * into v_row;
+  return v_row;
+end;
+$_$;
+
+
+--
 -- Name: billing_catalog_refuse_delete(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -2754,6 +2843,43 @@ CREATE FUNCTION public.billing_catalog_refuse_delete() RETURNS trigger
     AS $$
 begin
   raise exception 'A billing product cannot be deleted. Set on_sale to false instead.' using errcode = '55000';
+end;
+$$;
+
+
+--
+-- Name: billing_switch_target(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.billing_switch_target(p_slug text) RETURNS TABLE(subscription_id text, product_id text)
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_target public.billing_catalog;
+  v_sub public.creem_subscriptions;
+begin
+  select * into v_target from public.billing_catalog c
+  where c.slug = p_slug and c.kind = 'plan' and c."interval" = 'year' and c.on_sale;
+  if not found then
+    raise exception 'The annual plan is not on sale right now.' using errcode = '22023';
+  end if;
+  select s.* into v_sub from public.creem_subscriptions s
+  where s.user_id = v_user and s.status in ('active', 'trialing', 'scheduled_cancel', 'past_due')
+  order by s.status_priority, s.provider_event_at desc
+  limit 1;
+  if not found then
+    raise exception 'You have no plan to switch. Pick a plan first.' using errcode = 'P0002';
+  end if;
+  if v_sub."interval" = 'year' or v_sub.product_id = v_target.creem_product_id then
+    raise exception 'You are already on the annual plan.' using errcode = '22023';
+  end if;
+  if v_sub.status <> 'active' then
+    -- A trial, a card that failed or a cancellation already scheduled: Creem would charge or revive it mid-state.
+    raise exception 'Your plan cannot be switched right now. Open Manage billing to sort it out first.' using errcode = 'P0001';
+  end if;
+  return query select v_sub.subscription_id, v_target.creem_product_id;
 end;
 $$;
 
@@ -3473,7 +3599,7 @@ CREATE TABLE public.cmo_runs (
     CONSTRAINT cmo_runs_credits_check CHECK ((credits >= 0)),
     CONSTRAINT cmo_runs_error_check CHECK ((char_length(error) <= 500)),
     CONSTRAINT cmo_runs_input_check CHECK (((jsonb_typeof(input) = 'object'::text) AND (octet_length((input)::text) <= 4096))),
-    CONSTRAINT cmo_runs_kind_check CHECK ((kind = ANY (ARRAY['onboard'::text, 'plan_week'::text, 'post_draft'::text, 'sales_scan'::text, 'competitor_research'::text, 'pull_metrics'::text, 'summarize_memory'::text, 'review_week'::text, 'write_caption'::text, 'write_video_brief'::text, 'write_slides'::text, 'publish_post'::text, 'niche_video_research'::text, 'distill_ratings'::text, 'repurpose_post'::text, 'photo_caption'::text]))),
+    CONSTRAINT cmo_runs_kind_check CHECK ((kind = ANY (ARRAY['onboard'::text, 'plan_week'::text, 'post_draft'::text, 'sales_scan'::text, 'competitor_research'::text, 'pull_metrics'::text, 'summarize_memory'::text, 'review_week'::text, 'write_caption'::text, 'write_video_brief'::text, 'write_slides'::text, 'publish_post'::text, 'niche_video_research'::text, 'distill_ratings'::text, 'repurpose_post'::text, 'photo_caption'::text, 'sales_reply_drafts'::text]))),
     CONSTRAINT cmo_runs_output_check CHECK (((output IS NULL) OR ((jsonb_typeof(output) = 'object'::text) AND (octet_length((output)::text) <= 16384)))),
     CONSTRAINT cmo_runs_status_check CHECK ((status = ANY (ARRAY['queued'::text, 'running'::text, 'done'::text, 'failed'::text]))),
     CONSTRAINT cmo_runs_steps_check CHECK (((jsonb_typeof(steps) = 'array'::text) AND (octet_length((steps)::text) <= 16384)))
@@ -4041,7 +4167,7 @@ CREATE TABLE public.opportunities (
     CONSTRAINT opportunities_min_karma_check CHECK (((min_karma >= 0) AND (min_karma <= 1000000))),
     CONSTRAINT opportunities_platform_check CHECK ((platform = ANY (ARRAY['reddit'::text, 'hn'::text, 'facebook'::text, 'threads'::text]))),
     CONSTRAINT opportunities_priority_check CHECK ((priority = ANY (ARRAY['high'::text, 'medium'::text, 'low'::text]))),
-    CONSTRAINT opportunities_reply_check CHECK (((char_length(reply) >= 1) AND (char_length(reply) <= 3000))),
+    CONSTRAINT opportunities_reply_check CHECK ((char_length(reply) <= 3000)),
     CONSTRAINT opportunities_reply_or_skip CHECK (((reply IS NOT NULL) OR (rule = 'skip'::text))),
     CONSTRAINT opportunities_rule_check CHECK ((rule = ANY (ARRAY['safe'::text, 'requires_disclosure'::text, 'no_product_mention'::text, 'not_verified'::text, 'skip'::text, 'mention_ok'::text, 'help_only'::text]))),
     CONSTRAINT opportunities_rule_why_check CHECK ((char_length(rule_why) <= 200)),
@@ -4437,11 +4563,21 @@ begin
     return v_row;
   end if;
 
+  -- Included in the plan but not free: reply drafts are paid work at no extra cost (wave 2).
+  if p_kind = 'sales_reply_drafts' and not public.cmo_paid(p_user) then
+    perform public.cmo_plan_required();
+  end if;
+
   -- Read under the lock above, so two requests at once cannot both be the free one.
   if v_price > 0 and public.cmo_first_run_free(p_user, p_kind) then
     v_price := 0;
   elsif v_price > 0 and not public.cmo_paid(p_user) then
     perform public.cmo_plan_required();
+  end if;
+
+  -- The fair-use pause (wave 2): a used-up allowance stops new searches until the reset, not drafts of work in hand.
+  if v_price > 0 then
+    perform public.cmo_usage_paused_check(p_user, p_kind);
   end if;
 
   if (select count(*) from public.cmo_runs
@@ -4563,11 +4699,27 @@ CREATE FUNCTION public.cmo_first_run_free(p_user uuid, p_kind text) RETURNS bool
     SET search_path TO ''
     AS $$
   select p_user is not null
-    and p_kind in ('plan_week', 'post_draft')
+    and p_kind in ('plan_week', 'post_draft', 'sales_scan')
     and not public.cmo_paid(p_user)
-    and not exists (
-      select 1 from public.cmo_runs r
-      where r.user_id = p_user and r.kind = p_kind and r.status in ('queued', 'running', 'done')
+    -- The free scan searches from the documents onboarding writes: none yet, no free scan.
+    and (p_kind <> 'sales_scan' or exists (
+      select 1 from public.marketing_documents d where d.user_id = p_user and d.kind = 'product'
+    ))
+    and (
+      not exists (
+        select 1 from public.cmo_runs r
+        where r.user_id = p_user and r.kind = p_kind and r.status in ('queued', 'running', 'done')
+      )
+      -- One more free scan after one that found no one (wave 2): the founder edits Strategy and tries again.
+      or (p_kind = 'sales_scan'
+        and not exists (
+          select 1 from public.cmo_runs r
+          where r.user_id = p_user and r.kind = 'sales_scan' and r.status in ('queued', 'running', 'done')
+            -- coalesce: a done scan with no verdict (an older run) is not one that found no one.
+            and not coalesce(r.status = 'done' and r.credits = 0 and r.output->>'verdict' = 'none', false)
+        )
+        and (select count(*) from public.cmo_runs r
+             where r.user_id = p_user and r.kind = 'sales_scan' and r.status = 'done') < 2)
     )
     -- A failed run gives the free run back, at most twice: runs made to fail cannot become free work every day.
     and (select count(*) from public.cmo_runs r where r.user_id = p_user and r.kind = p_kind and r.status = 'failed') < 3;
@@ -4677,6 +4829,7 @@ CREATE FUNCTION public.cmo_job_daily_limit(p_kind text) RETURNS integer
     when 'distill_ratings' then 2
     when 'repurpose_post' then 20
     when 'photo_caption' then 20
+    when 'sales_reply_drafts' then 5
     else 0 end
 $$;
 
@@ -4694,6 +4847,8 @@ CREATE FUNCTION public.cmo_job_price(p_kind text) RETURNS integer
     when 'write_caption' then 1 when 'write_video_brief' then 1 when 'publish_post' then 0 when 'niche_video_research' then 2
     when 'repurpose_post' then 1
     when 'photo_caption' then 1
+    -- Included in the plan (wave 2); `cmo_enqueue` keeps it paid-only.
+    when 'sales_reply_drafts' then 0
     else 0 end
 $$;
 
@@ -4719,6 +4874,29 @@ begin
       classified_at = case when v_mode is not null then now() else classified_at end
   where user_id = p_user and item_id = p_item and department = 'post'
     and (action = 'skip' or edit_mode is distinct from 'NO_MEANINGFUL_EDIT');
+end;
+$$;
+
+
+--
+-- Name: cmo_mark_opportunity_skip(uuid, uuid, uuid, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_mark_opportunity_skip(p_user uuid, p_run uuid, p_id uuid, p_why text) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+begin
+  if not exists (
+    select 1 from public.cmo_runs r where r.id = p_run and r.user_id = p_user and r.kind = 'sales_reply_drafts'
+  ) then
+    raise exception 'Run not found.' using errcode = 'P0002';
+  end if;
+  update public.opportunities o set
+    rule = 'skip',
+    rule_why = left(nullif(btrim(coalesce(p_why, '')), ''), 200)
+  where o.id = p_id and o.user_id = p_user and o.status = 'in_review' and o.reply = '' and o.rule is distinct from 'skip';
+  return found;
 end;
 $$;
 
@@ -5917,6 +6095,10 @@ declare
   v_rule text;
   v_karma integer;
   v_age integer;
+  -- The account's free scan (priced 0, 20270131010000) saves its cards without a draft: '' means not drafted yet.
+  v_free boolean := exists (
+    select 1 from public.cmo_runs r where r.id = p_run and r.user_id = p_user and r.kind = 'sales_scan' and r.credits = 0
+  );
 begin
   if p_items is null or jsonb_typeof(p_items) <> 'array' or jsonb_array_length(p_items) > 10 then
     raise exception 'These conversations are not valid.' using errcode = '22023';
@@ -5932,7 +6114,7 @@ begin
       when 'help_only' then 'no_product_mention'
       else case when v_item->>'rule' in ('safe', 'requires_disclosure', 'no_product_mention', 'not_verified', 'skip') then v_item->>'rule' end
     end;
-    if v_rule is distinct from 'skip' and coalesce(v_item->>'reply', '') = '' then
+    if v_rule is distinct from 'skip' and coalesce(v_item->>'reply', '') = '' and not v_free then
       continue;
     end if;
     if coalesce(v_item->>'platform', 'reddit') not in ('reddit', 'hn', 'facebook', 'threads') then
@@ -5952,7 +6134,7 @@ begin
       left(coalesce(v_item->>'author', ''), 100), left(coalesce(v_item->>'snippet', ''), 1200),
       nullif(v_item->>'posted_at', '')::timestamptz, greatest(0, coalesce((v_item->>'comments')::integer, 0)),
       v_score, coalesce(v_item->'score_parts', '[]'::jsonb),
-      case when v_rule = 'skip' then null else left(v_item->>'reply', 3000) end,
+      case when v_rule = 'skip' then null else left(coalesce(v_item->>'reply', ''), 3000) end,
       case when v_score >= 85 then 'high' when v_score >= 70 then 'medium' else 'low' end,
       v_gen, v_rule, left(nullif(trim(coalesce(v_item->>'rule_why', '')), ''), 200),
       case when v_karma between 0 and 1000000 then v_karma end,
@@ -5966,6 +6148,41 @@ begin
   update public.content_items set status = 'published', published_at = now(), updated_at = now()
   where user_id = p_user and department = 'sales' and status = 'planned' and day <= current_date;
   return v_count;
+end;
+$$;
+
+
+--
+-- Name: cmo_save_opportunity_reply(uuid, uuid, uuid, text, jsonb, text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_save_opportunity_reply(p_user uuid, p_run uuid, p_id uuid, p_reply text, p_gen jsonb, p_rule text DEFAULT NULL::text, p_rule_why text DEFAULT NULL::text) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_reply text := btrim(coalesce(p_reply, ''), E' \t\n\r');
+  v_gen jsonb := case when jsonb_typeof(p_gen) = 'object' then jsonb_strip_nulls(jsonb_build_object(
+    'model', left(p_gen->>'model', 100), 'prompt_version', left(p_gen->>'prompt_version', 40))) else '{}'::jsonb end;
+begin
+  if v_reply = '' or char_length(v_reply) > 3000 then
+    raise exception 'A reply is 1 to 3000 characters.' using errcode = '22023';
+  end if;
+  if p_rule is not null and p_rule <> 'no_product_mention' then
+    raise exception 'A reply''s rule can only become help only.' using errcode = '22023';
+  end if;
+  if not exists (
+    select 1 from public.cmo_runs r where r.id = p_run and r.user_id = p_user and r.kind = 'sales_reply_drafts'
+  ) then
+    raise exception 'Run not found.' using errcode = 'P0002';
+  end if;
+  update public.opportunities o set
+    reply = v_reply,
+    gen = v_gen,
+    rule = coalesce(p_rule, o.rule),
+    rule_why = case when p_rule is null then o.rule_why else left(nullif(btrim(coalesce(p_rule_why, '')), ''), 200) end
+  where o.id = p_id and o.user_id = p_user and o.status = 'in_review' and o.reply = '' and o.rule is distinct from 'skip';
+  return found;
 end;
 $$;
 
@@ -6300,6 +6517,35 @@ begin
     raise exception 'This calendar item is no longer open.' using errcode = 'P0002';
   end if;
   return v_row;
+end;
+$$;
+
+
+--
+-- Name: cmo_usage_paused_check(uuid, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_usage_paused_check(p_user uuid, p_kind text) RETURNS void
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_usage record;
+  v_tz text;
+begin
+  if p_kind not in ('sales_scan', 'competitor_research', 'niche_video_research') then
+    return;
+  end if;
+  select * into v_usage from public.plan_usage_for(p_user);
+  if not coalesce(v_usage.paused, false) then
+    return;
+  end if;
+  select p.timezone into v_tz from public.profiles p where p.id = p_user;
+  if v_tz is null or not exists (select 1 from pg_catalog.pg_timezone_names n where n.name = v_tz) then
+    v_tz := 'UTC';
+  end if;
+  raise exception 'You used this month''s allowance. New scans start again on %.',
+    to_char(v_usage.resets_at at time zone v_tz, 'FMDD Mon') using errcode = 'P0001';
 end;
 $$;
 
@@ -8322,10 +8568,10 @@ $$;
 
 
 --
--- Name: email_log_claim(uuid, text, uuid[]); Type: FUNCTION; Schema: public; Owner: -
+-- Name: email_log_claim(uuid, text, uuid[], text, jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.email_log_claim(p_user uuid, p_kind text, p_approval_ids uuid[]) RETURNS TABLE(log_id uuid, approval_ids uuid[])
+CREATE FUNCTION public.email_log_claim(p_user uuid, p_kind text, p_approval_ids uuid[], p_subject text DEFAULT NULL::text, p_summary jsonb DEFAULT NULL::jsonb) RETURNS TABLE(log_id uuid, approval_ids uuid[])
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
@@ -8334,28 +8580,39 @@ declare
   v_ids uuid[];
   v_id uuid;
 begin
-  if p_kind not in ('digest', 'expiring') then
+  if p_kind not in ('digest', 'weekly', 'push', 'expiring') then
     raise exception 'Unknown email kind.' using errcode = '22023';
   end if;
+  -- The expiring-card email is gone (wave 2): an old caller gets nothing to send, not an error.
+  if p_kind = 'expiring' then
+    return;
+  end if;
+  if p_summary is not null and (jsonb_typeof(p_summary) <> 'object' or octet_length(p_summary::text) > 4096) then
+    raise exception 'An email summary is a small object.' using errcode = '22023';
+  end if;
   perform pg_advisory_xact_lock(hashtextextended('email_log:' || p_user::text, 0));
-  if exists (select 1 from public.notify_settings n where n.user_id = p_user and not n.email_digest) then
+  if p_kind in ('digest', 'weekly') and (
+    exists (select 1 from public.notify_settings n where n.user_id = p_user and not n.email_digest)
+    or exists (select 1 from public.profiles p where p.id = p_user and p.digest_days = 'off')
+  ) then
     return;
   end if;
   -- Only the founder's own cards that still wait.
   select coalesce(array_agg(a.id order by a.created_at), '{}') into v_ids
   from public.approvals a
   where a.id = any(coalesce(p_approval_ids, '{}')) and a.user_id = p_user and a.status = 'waiting';
-  if p_kind = 'expiring' then
+  if p_kind = 'push' then
+    -- One push per card.
     select coalesce(array_agg(i order by i), '{}') into v_ids from unnest(v_ids) i
     where not exists (select 1 from public.email_log l
-                      where l.user_id = p_user and l.kind = 'expiring' and l.status <> 'failed' and i = any(l.approval_ids));
-  end if;
-  if cardinality(v_ids) = 0 then
-    return;
+                      where l.user_id = p_user and l.kind = 'push' and l.status <> 'failed' and i = any(l.approval_ids));
+    if cardinality(v_ids) = 0 then
+      return;
+    end if;
   end if;
   v_ids := v_ids[1:50];
-  insert into public.email_log (user_id, kind, day, approval_ids)
-  values (p_user, p_kind, v_day, v_ids)
+  insert into public.email_log (user_id, kind, day, approval_ids, subject, summary)
+  values (p_user, p_kind, v_day, v_ids, left(nullif(btrim(coalesce(p_subject, '')), ''), 200), p_summary)
   on conflict do nothing
   returning id into v_id;
   if v_id is null then
@@ -8381,6 +8638,32 @@ begin
     update public.email_log set status = 'failed', error = left(p_error, 500) where id = p_log;
     delete from public.email_log where id = p_log and kind = 'digest';
   end if;
+end;
+$$;
+
+
+--
+-- Name: email_log_skip(uuid, text, jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.email_log_skip(p_user uuid, p_kind text, p_summary jsonb DEFAULT NULL::jsonb) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_id uuid;
+begin
+  if p_kind not in ('digest', 'weekly') then
+    raise exception 'Only a digest or weekly email can be skipped.' using errcode = '22023';
+  end if;
+  if p_summary is not null and (jsonb_typeof(p_summary) <> 'object' or octet_length(p_summary::text) > 4096) then
+    raise exception 'An email summary is a small object.' using errcode = '22023';
+  end if;
+  insert into public.email_log (user_id, kind, day, approval_ids, status, summary)
+  values (p_user, p_kind, (now() at time zone public.schedule_timezone(p_user))::date, '{}', 'skipped', p_summary)
+  on conflict do nothing
+  returning id into v_id;
+  return v_id;
 end;
 $$;
 
@@ -9494,6 +9777,50 @@ $$;
 
 
 --
+-- Name: my_autopilot_due(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.my_autopilot_due() RETURNS TABLE(id uuid, platform text, auto_at timestamp with time zone)
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_user uuid := public.require_user();
+begin
+  return query
+    select d.id, d.platform, d.auto_at
+    from public.autopilot_push_due(now(), now() + interval '2 hours') d
+    where d.user_id = v_user
+    limit 5;
+end;
+$$;
+
+
+--
+-- Name: my_email_log(integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.my_email_log(p_limit integer DEFAULT 30) RETURNS TABLE(id uuid, kind text, day date, status text, subject text, summary jsonb, created_at timestamp with time zone, sent_at timestamp with time zone)
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_user uuid := public.require_user();
+begin
+  if p_limit is null or p_limit < 1 or p_limit > 100 then
+    raise exception 'Pick 1 to 100 emails.' using errcode = '22023';
+  end if;
+  return query
+    select l.id, l.kind, l.day, l.status, l.subject, l.summary, l.created_at, l.sent_at
+    from public.email_log l
+    where l.user_id = v_user and l.status in ('sent', 'skipped') and l.created_at > now() - interval '14 days'
+    order by l.created_at desc
+    limit p_limit;
+end;
+$$;
+
+
+--
 -- Name: my_published_items(timestamp with time zone); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -10380,6 +10707,104 @@ CREATE FUNCTION public.plan_snapshot(p_root uuid) RETURNS jsonb
     and c.day between r.week and r.week + 6 and c.status <> 'skipped'
   where r.id = p_root and r.parent_id is null
   group by r.id, r.week, r.title, g.goal
+$$;
+
+
+--
+-- Name: plan_usage(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.plan_usage() RETURNS TABLE(plan text, "interval" text, used integer, allowance integer, percent integer, resets_at timestamp with time zone, paused boolean)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select * from public.plan_usage_for(public.require_user());
+$$;
+
+
+--
+-- Name: plan_usage_for(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.plan_usage_for(p_user uuid) RETURNS TABLE(plan text, "interval" text, used integer, allowance integer, percent integer, resets_at timestamp with time zone, paused boolean)
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_plan text;
+  v_sub public.creem_subscriptions;
+  v_allowance integer;
+  v_start timestamptz;
+  v_reset timestamptz;
+  v_months integer;
+  v_used integer;
+begin
+  select p.plan into v_plan from public.profiles p where p.id = p_user;
+  if v_plan is null or v_plan not in ('starter', 'creator') then
+    -- A free account's runs are its free ones (they cost 0): nothing to measure, nothing to pause.
+    return query select 'free'::text, null::text, 0, 0, 0, null::timestamptz, false;
+    return;
+  end if;
+
+  -- The subscription `recompute_plan` would pick: the best plan still in force.
+  select s.* into v_sub from public.creem_subscriptions s
+  where s.user_id = p_user and s.status in ('active', 'trialing', 'scheduled_cancel', 'past_due')
+  order by case s.plan when 'creator' then 2 else 1 end desc, s.status_priority, s.provider_event_at desc
+  limit 1;
+
+  if v_sub.subscription_id is not null then
+    select c.credits into v_allowance from public.billing_catalog c where c.creem_product_id = v_sub.product_id;
+  end if;
+  if v_allowance is null then
+    -- No subscription row (a plan set by hand) or a product no longer listed: the plan's monthly row on sale.
+    select c.credits into v_allowance from public.billing_catalog c
+    where c.kind = 'plan' and c.plan_id = v_plan and c.on_sale
+    order by (c."interval" = 'month') desc, c.sort limit 1;
+  end if;
+
+  if v_sub."interval" = 'year' and v_sub.grant_anchor is not null then
+    -- Whole months since the year was paid: the current month of the year starts there.
+    v_months := (extract(year from age(now(), v_sub.grant_anchor)) * 12 + extract(month from age(now(), v_sub.grant_anchor)))::integer;
+    v_start := v_sub.grant_anchor + make_interval(months => greatest(v_months, 0));
+    v_reset := v_start + interval '1 month';
+  elsif v_sub."interval" = 'year' and v_sub.current_period_end is not null and v_sub.current_period_end > now() then
+    -- A year not anchored yet: step back from its end, a month at a time, to the month running now.
+    v_reset := v_sub.current_period_end;
+    while v_reset - interval '1 month' > now() loop
+      v_reset := v_reset - interval '1 month';
+    end loop;
+    v_start := v_reset - interval '1 month';
+  elsif v_sub.current_period_end is not null and v_sub.current_period_end > now() then
+    v_reset := v_sub.current_period_end;
+    v_start := v_reset - interval '1 month';
+  else
+    v_start := date_trunc('month', now());
+    v_reset := v_start + interval '1 month';
+  end if;
+
+  -- A credit pack paid this period raises this period's allowance (owner, 2026-11-19): buying one lifts the pause.
+  -- Its credits net of any refund or dispute; a pack bought last month does not carry over.
+  v_allowance := coalesce(v_allowance, 0) + coalesce((
+    select sum(greatest(t.granted_credits - t.clawed_credits, 0))::integer
+    from public.creem_transactions t
+    join public.billing_catalog c on c.creem_product_id = t.product_id and c.kind = 'pack'
+    where t.user_id = p_user and t.paid_at >= v_start), 0);
+
+  -- Debits of work only (`ref_kind` set); grants, packs and claw-backs carry no ref and are not usage.
+  select greatest(coalesce(-sum(l.delta), 0), 0)::integer into v_used
+  from public.credit_ledger l
+  where l.user_id = p_user and l.ref_kind is not null and l.created_at >= v_start;
+
+  v_allowance := coalesce(v_allowance, 0);
+  return query select
+    'pro'::text,
+    coalesce(v_sub."interval", 'month'),
+    v_used,
+    v_allowance,
+    case when v_allowance > 0 then least(100, (v_used * 100) / v_allowance) else 0 end,
+    v_reset,
+    v_allowance > 0 and v_used >= v_allowance;
+end;
 $$;
 
 
@@ -13901,10 +14326,10 @@ $$;
 
 
 --
--- Name: save_cmo_settings(integer, text, smallint); Type: FUNCTION; Schema: public; Owner: -
+-- Name: save_cmo_settings(integer, text, smallint, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.save_cmo_settings(p_weekly_credit_budget integer, p_timezone text, p_digest_hour smallint) RETURNS TABLE(weekly_credit_budget integer, timezone text, digest_hour smallint)
+CREATE FUNCTION public.save_cmo_settings(p_weekly_credit_budget integer, p_timezone text, p_digest_hour smallint, p_digest_days text DEFAULT NULL::text) RETURNS TABLE(weekly_credit_budget integer, timezone text, digest_hour smallint, digest_days text)
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
@@ -13921,14 +14346,74 @@ begin
   if p_digest_hour is not null and (p_digest_hour < 0 or p_digest_hour > 23) then
     raise exception 'The digest hour must be between 0 and 23.' using errcode = '22023';
   end if;
+  if p_digest_days is not null and p_digest_days not in ('weekdays', 'daily', 'monday', 'off') then
+    raise exception 'Choose weekdays, every day, Mondays or off.' using errcode = '22023';
+  end if;
   update public.profiles p
   set weekly_credit_budget = p_weekly_credit_budget, timezone = p_timezone, digest_hour = p_digest_hour,
-      timezone_source = 'founder'
+      digest_days = coalesce(p_digest_days, p.digest_days), timezone_source = 'founder'
   where p.id = v_user;
   if not found then
     raise exception 'Profile not found.' using errcode = 'P0002';
   end if;
-  return query select p.weekly_credit_budget, p.timezone, p.digest_hour from public.profiles p where p.id = v_user;
+  return query select p.weekly_credit_budget, p.timezone, p.digest_hour, p.digest_days from public.profiles p where p.id = v_user;
+end;
+$$;
+
+
+--
+-- Name: save_cmo_settings_patch(jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.save_cmo_settings_patch(p_patch jsonb) RETURNS TABLE(weekly_credit_budget integer, timezone text, digest_hour smallint, digest_days text)
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_budget integer;
+  v_zone text;
+  v_hour smallint;
+  v_days text;
+begin
+  if p_patch is null or jsonb_typeof(p_patch) <> 'object' or p_patch = '{}'::jsonb then
+    raise exception 'Nothing to save.' using errcode = '22023';
+  end if;
+  if p_patch ? 'weekly_credit_budget' then
+    v_budget := (p_patch->>'weekly_credit_budget')::integer;
+    if v_budget is null or v_budget < 0 or v_budget > 10000 then
+      raise exception 'The weekly budget must be between 0 and 10,000 credits.' using errcode = '22023';
+    end if;
+  end if;
+  if p_patch ? 'timezone' then
+    v_zone := p_patch->>'timezone';
+    if v_zone is null or not exists (select 1 from pg_catalog.pg_timezone_names where name = v_zone) then
+      raise exception 'Choose a time zone from the list.' using errcode = '22023';
+    end if;
+  end if;
+  if p_patch ? 'digest_hour' then
+    v_hour := (p_patch->>'digest_hour')::smallint;
+    if v_hour is not null and (v_hour < 0 or v_hour > 23) then
+      raise exception 'The digest hour must be between 0 and 23.' using errcode = '22023';
+    end if;
+  end if;
+  if p_patch ? 'digest_days' then
+    v_days := p_patch->>'digest_days';
+    if v_days is null or v_days not in ('weekdays', 'daily', 'monday', 'off') then
+      raise exception 'Choose weekdays, every day, Mondays or off.' using errcode = '22023';
+    end if;
+  end if;
+  update public.profiles p set
+    weekly_credit_budget = case when p_patch ? 'weekly_credit_budget' then v_budget else p.weekly_credit_budget end,
+    timezone = case when p_patch ? 'timezone' then v_zone else p.timezone end,
+    timezone_source = case when p_patch ? 'timezone' then 'founder' else p.timezone_source end,
+    digest_hour = case when p_patch ? 'digest_hour' then v_hour else p.digest_hour end,
+    digest_days = case when p_patch ? 'digest_days' then v_days else p.digest_days end
+  where p.id = v_user;
+  if not found then
+    raise exception 'Profile not found.' using errcode = 'P0002';
+  end if;
+  return query select p.weekly_credit_budget, p.timezone, p.digest_hour, p.digest_days from public.profiles p where p.id = v_user;
 end;
 $$;
 
@@ -18214,7 +18699,7 @@ CREATE TABLE public.profiles (
     retention_exempt boolean DEFAULT false NOT NULL,
     weekly_credit_budget integer DEFAULT 80 NOT NULL,
     timezone text DEFAULT 'UTC'::text NOT NULL,
-    digest_hour smallint DEFAULT 7,
+    digest_hour smallint DEFAULT 8,
     cmo_paused_at timestamp with time zone,
     timezone_source text DEFAULT 'default'::text NOT NULL,
     creem_customer_id text,
@@ -18227,9 +18712,11 @@ CREATE TABLE public.profiles (
     autopilot_note text,
     posting_plan jsonb,
     autopilot_paused boolean DEFAULT false NOT NULL,
+    digest_days text DEFAULT 'weekdays'::text NOT NULL,
     CONSTRAINT profiles_autopilot_hours_check CHECK ((autopilot_hours = ANY (ARRAY[6, 12, 24]))),
     CONSTRAINT profiles_autopilot_note_check CHECK ((char_length(autopilot_note) <= 200)),
     CONSTRAINT profiles_autopilot_platforms_check CHECK ((autopilot_platforms <@ ARRAY['x'::text, 'threads'::text, 'linkedin'::text])),
+    CONSTRAINT profiles_digest_days_check CHECK ((digest_days = ANY (ARRAY['weekdays'::text, 'daily'::text, 'monday'::text, 'off'::text]))),
     CONSTRAINT profiles_digest_hour_check CHECK (((digest_hour >= 0) AND (digest_hour <= 23))),
     CONSTRAINT profiles_heard_from_check CHECK (((heard_from IS NULL) OR (heard_from = ANY (ARRAY['search'::text, 'x'::text, 'reddit'::text, 'linkedin'::text, 'youtube'::text, 'ai_assistant'::text, 'friend'::text, 'newsletter'::text, 'other'::text])))),
     CONSTRAINT profiles_heard_from_note_check CHECK (((heard_from_note IS NULL) OR (char_length(heard_from_note) <= 100))),
@@ -18373,30 +18860,6 @@ CREATE TABLE public.best_slots (
     CONSTRAINT best_slots_median_views_per_hour_check CHECK ((median_views_per_hour >= (0)::double precision)),
     CONSTRAINT best_slots_platform_check CHECK ((platform = ANY (ARRAY['x'::text, 'threads'::text, 'linkedin'::text, 'facebook'::text, 'tiktok'::text, 'youtube'::text, 'instagram'::text]))),
     CONSTRAINT best_slots_posts_check CHECK ((posts >= 1))
-);
-
-
---
--- Name: billing_catalog; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.billing_catalog (
-    creem_product_id text NOT NULL,
-    slug text NOT NULL,
-    kind text NOT NULL,
-    plan_id text,
-    credits integer NOT NULL,
-    price_cents integer NOT NULL,
-    "interval" text,
-    on_sale boolean DEFAULT true NOT NULL,
-    sort integer DEFAULT 0 NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT billing_catalog_credits_check CHECK ((credits > 0)),
-    CONSTRAINT billing_catalog_interval_check CHECK (("interval" = ANY (ARRAY['month'::text, 'year'::text]))),
-    CONSTRAINT billing_catalog_kind_check CHECK ((kind = ANY (ARRAY['plan'::text, 'pack'::text]))),
-    CONSTRAINT billing_catalog_kind_shape CHECK ((((kind = 'plan'::text) AND (plan_id IS NOT NULL) AND ("interval" IS NOT NULL)) OR ((kind = 'pack'::text) AND (plan_id IS NULL) AND ("interval" IS NULL)))),
-    CONSTRAINT billing_catalog_plan_id_check CHECK ((plan_id = ANY (ARRAY['starter'::text, 'creator'::text]))),
-    CONSTRAINT billing_catalog_price_cents_check CHECK ((price_cents > 0))
 );
 
 
@@ -18720,11 +19183,15 @@ CREATE TABLE public.email_log (
     error text,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     sent_at timestamp with time zone,
-    CONSTRAINT email_log_approval_ids_check CHECK (((cardinality(approval_ids) >= 1) AND (cardinality(approval_ids) <= 50))),
+    subject text,
+    summary jsonb,
+    CONSTRAINT email_log_approval_ids_check CHECK (((cardinality(approval_ids) <= 50) AND ((cardinality(approval_ids) >= 1) OR (kind = ANY (ARRAY['digest'::text, 'weekly'::text]))))),
     CONSTRAINT email_log_error_check CHECK ((char_length(error) <= 500)),
-    CONSTRAINT email_log_kind_check CHECK ((kind = ANY (ARRAY['digest'::text, 'expiring'::text]))),
+    CONSTRAINT email_log_kind_check CHECK ((kind = ANY (ARRAY['digest'::text, 'weekly'::text, 'push'::text, 'expiring'::text]))),
     CONSTRAINT email_log_provider_id_check CHECK ((char_length(provider_id) <= 100)),
-    CONSTRAINT email_log_status_check CHECK ((status = ANY (ARRAY['claimed'::text, 'sent'::text, 'failed'::text])))
+    CONSTRAINT email_log_status_check CHECK ((status = ANY (ARRAY['claimed'::text, 'sent'::text, 'failed'::text, 'skipped'::text]))),
+    CONSTRAINT email_log_subject_check CHECK ((char_length(subject) <= 200)),
+    CONSTRAINT email_log_summary_check CHECK (((jsonb_typeof(summary) = 'object'::text) AND (octet_length((summary)::text) <= 4096)))
 );
 
 
@@ -20721,6 +21188,13 @@ CREATE INDEX editor_transcripts_clip_created_idx ON public.editor_transcripts US
 --
 
 CREATE UNIQUE INDEX email_log_one_digest ON public.email_log USING btree (user_id, day) WHERE (kind = 'digest'::text);
+
+
+--
+-- Name: email_log_one_weekly; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX email_log_one_weekly ON public.email_log USING btree (user_id, day) WHERE (kind = 'weekly'::text);
 
 
 --

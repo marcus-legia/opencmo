@@ -17,6 +17,7 @@
  *      nó đổi: khi tạo job và khi job kết toán.
  */
 
+import type { PlanUsage } from "@/lib/billing/usage";
 import { useRouter, useSearchParams, useSelectedLayoutSegment } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
@@ -82,7 +83,7 @@ export function useShellAccount(): ShellAccountState {
   return value;
 }
 
-export type AccountSummary = { credits: number; plan: string; cmo_pending: number | null };
+export type AccountSummary = { credits: number; plan: string; cmo_pending: number | null; usage?: PlanUsage };
 
 export function WebShell({
   credits,

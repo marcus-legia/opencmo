@@ -1,12 +1,15 @@
 "use client";
 
+import { STRONG_MATCH, matchLabel } from "@/lib/cmo/match";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { Logs } from "@/app/api/v1/logs/route";
+import { PlanSheet, isPlanRequired } from "@/components/billing/PlanSheet";
 import { api, jsonBody } from "@/components/clipping/api";
 import { useLive } from "@/components/clipping/useLive";
 import { SalesSettings } from "@/components/screens/sales/SalesSettings";
 import { useScreen } from "@/components/screens/useScreen";
+import { useOptionalShellState } from "@/components/shell-v2/ShellState";
 import { salesScanCard } from "@/lib/cmo/jobs/price-card";
 import { PLATFORM_LABEL, SALES_PLATFORMS, type SalesPlatform } from "@/lib/cmo/social/conversations";
 import type { SalesScreen } from "@/lib/screens/sales";
@@ -19,9 +22,8 @@ type Tab = "threads" | "runs" | "settings";
 
 const DISMISS_REASONS = ["Not our customer", "Already solved", "Too old", "Wrong community"] as const;
 
-/** The artboard scores out of ten (8.4); Sales scores out of a hundred. */
-const tenth = (score: number) => (score / 10).toFixed(1);
-const tone = (score: number) => (score >= 75 ? "score hi" : score >= 60 ? "score mid" : "score lo");
+/** A word reads faster than a number (owner, 2026-11-19); the number stays in "how it was counted". */
+const tone = (score: number) => (score >= STRONG_MATCH ? "score hi" : score >= 60 ? "score mid" : "score lo");
 
 function ago(iso: string | null): string {
   if (!iso) return "";
@@ -36,9 +38,12 @@ const runTime = (iso: string) => {
 };
 
 type ScanStep = { label: string; status: "running" | "done" | "failed" };
-type Scan = { id: string; status: "queued" | "running" | "done" | "failed"; steps: ScanStep[]; error: string | null; cards: number | null; since: string };
+/** A run the page follows: a scan, or the replies written after paying (`sales_reply_drafts`). */
+type RunKind = "sales_scan" | "sales_reply_drafts";
+type Scan = { id: string; kind: RunKind; status: "queued" | "running" | "done" | "failed"; steps: ScanStep[]; error: string | null; cards: number | null; since: string };
 
-const SCAN_COLUMNS = "id, status, steps, error, output, created_at, started_at";
+const SCAN_COLUMNS = "id, kind, status, steps, error, output, created_at, started_at";
+const RUN_KINDS: RunKind[] = ["sales_scan", "sales_reply_drafts"];
 const scanActive = (scan: Scan | null): scan is Scan => scan !== null && (scan.status === "queued" || scan.status === "running");
 
 /**
@@ -52,13 +57,16 @@ function toScan(row: Record<string, unknown>): Scan {
     if (typeof step.label !== "string") return [];
     return [{ label: step.label.slice(0, 160), status: step.status === "done" || step.status === "failed" ? step.status : "running" }];
   });
-  const output = row.output as { cards?: unknown } | null;
+  const output = row.output as { cards?: unknown; drafted?: unknown } | null;
+  const kind: RunKind = row.kind === "sales_reply_drafts" ? "sales_reply_drafts" : "sales_scan";
+  const count = kind === "sales_reply_drafts" ? output?.drafted : output?.cards;
   return {
     id: String(row.id),
+    kind,
     status,
     steps,
     error: typeof row.error === "string" ? row.error : null,
-    cards: typeof output?.cards === "number" ? output.cards : null,
+    cards: typeof count === "number" ? count : null,
     since: String(row.started_at ?? row.created_at ?? new Date().toISOString()),
   };
 }
@@ -78,16 +86,25 @@ function ScanProgress({ scan, onClose }: { scan: Scan; onClose: () => void }) {
     return () => clearInterval(timer);
   }, [active]);
 
+  const replies = scan.kind === "sales_reply_drafts";
   const title =
     scan.status === "queued"
-      ? "Scan starting…"
+      ? replies
+        ? "Starting on the replies…"
+        : "Scan starting…"
       : scan.status === "running"
-        ? `Scanning · ${clock(now - Date.parse(scan.since))}`
+        ? `${replies ? "Writing the replies" : "Scanning"} · ${clock(now - Date.parse(scan.since))}`
         : scan.status === "failed"
-          ? "The scan did not finish"
-          : scan.cards
-            ? `Scan finished · ${scan.cards} ${scan.cards === 1 ? "thread" : "threads"} to review`
-            : "Scan finished · nothing worth joining this time";
+          ? replies
+            ? "The replies did not finish"
+            : "The scan did not finish"
+          : replies
+            ? scan.cards
+              ? `Replies written · ${scan.cards} to read`
+              : "Replies written"
+            : scan.cards
+              ? `Scan finished · ${scan.cards} ${scan.cards === 1 ? "thread" : "threads"} to review`
+              : "Scan finished · nothing worth joining this time";
 
   return (
     <section className="card" role="status" aria-live="polite" style={{ marginTop: "14px" }}>
@@ -131,8 +148,13 @@ function ScanProgress({ scan, onClose }: { scan: Scan; onClose: () => void }) {
   );
 }
 
-/** Scan now: the same price card as a scan asked in the CMO chat; nothing is held until the founder approves it. */
-function ScanNow({ scanning, platforms, onStarted }: { scanning: boolean; platforms?: SalesPlatform[]; onStarted: (run: { id: string; status: string; created_at: string }) => void }) {
+/**
+ * Scan now: the same card as a scan asked in the CMO chat, with no price (included in the plan's fair use, wave 2);
+ * nothing runs until the founder approves it. An
+ * unpaid account's first scan is free (`cmo_first_run_free`); after it, the button opens the plan sheet instead of
+ * answering with the 402's text.
+ */
+function ScanNow({ scanning, paused, platforms, free, freeLeft, onPlan, onStarted }: { scanning: boolean; paused: boolean; platforms?: SalesPlatform[]; free: boolean; freeLeft: boolean; onPlan: (action: string) => void; onStarted: (run: { id: string; status: string; created_at: string }) => void }) {
   // The card names the places the founder's switches leave on: the scan searches those only.
   const card = salesScanCard(undefined, platforms);
   const [step, setStep] = useState<"idle" | "confirm" | "busy">("idle");
@@ -140,7 +162,8 @@ function ScanNow({ scanning, platforms, onStarted }: { scanning: boolean; platfo
 
   function open() {
     setError(null);
-    setStep("confirm");
+    if (free && !freeLeft) onPlan("scan again");
+    else setStep("confirm");
   }
   async function start() {
     setStep("busy");
@@ -150,6 +173,11 @@ function ScanNow({ scanning, platforms, onStarted }: { scanning: boolean; platfo
       onStarted(await api<{ id: string; status: string; created_at: string }>("/cmo/runs", jsonBody({ kind: "sales_scan" })));
       setStep("idle");
     } catch (err) {
+      if (isPlanRequired(err)) {
+        setStep("idle");
+        onPlan("scan again");
+        return;
+      }
       setError(err instanceof Error ? err.message : "Could not start the scan. Please try again.");
       setStep("confirm");
     }
@@ -165,12 +193,12 @@ function ScanNow({ scanning, platforms, onStarted }: { scanning: boolean; platfo
   if (step === "idle") {
     return (
       <span style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-end", gap: "6px" }}>
-        <button type="button" className="primary" onClick={open}>
+        <button type="button" className="primary" onClick={open} disabled={paused} title={paused ? "New scans wait for the allowance to reset" : undefined}>
           <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
             <circle cx="11" cy="11" r="8" />
             <path d="m21 21-4.3-4.3" />
           </svg>
-          Scan now · {card.credits} credits
+          {freeLeft ? "Scan now · free" : "Scan now"}
         </button>
         {error ? <span className="meta">{error}</span> : null}
       </span>
@@ -179,7 +207,7 @@ function ScanNow({ scanning, platforms, onStarted }: { scanning: boolean; platfo
   return (
     <div className="card" role="group" aria-labelledby="scan-now-title" style={{ maxWidth: "360px" }}>
       <h2 id="scan-now-title" style={{ margin: "0 0 6px", fontSize: "14px", fontWeight: "600" }}>
-        Scan now · {card.credits} credits
+        {freeLeft ? "Your free scan" : "Scan now"}
       </h2>
       <ul style={{ margin: "0 0 10px", paddingLeft: "18px", fontSize: "13.5px", color: "var(--muted)" }}>
         {card.changes.map((line) => (
@@ -192,14 +220,118 @@ function ScanNow({ scanning, platforms, onStarted }: { scanning: boolean; platfo
           Cancel
         </button>
         <button type="button" className="primary" disabled={step === "busy"} onClick={() => void start()}>
-          {step === "busy" ? "Starting…" : `Approve and spend ${card.credits} credits`}
+          {step === "busy" ? "Starting…" : freeLeft ? "Start the free scan" : "Start the scan"}
         </button>
       </div>
     </div>
   );
 }
 
-function ThreadRow({ t, open, onToggle, onDecide }: { t: Thread; open: boolean; onToggle: () => void; onDecide: (t: Thread, action: "replied" | "dismissed", reason?: string, text?: string) => Promise<void> }) {
+/**
+ * Write the replies: after paying, one click drafts the threads the free scan found (`sales_reply_drafts`, included in
+ * the plan since wave 2); nothing runs until the founder approves it, as with a scan.
+ */
+function WriteReplies({ count, busy, onPlan, onStarted }: { count: number; busy: boolean; onPlan: (action: string) => void; onStarted: (run: { id: string; status: string; created_at: string }) => void }) {
+  const [step, setStep] = useState<"idle" | "confirm" | "busy">("idle");
+  const [error, setError] = useState<string | null>(null);
+
+  async function start() {
+    setStep("busy");
+    setError(null);
+    try {
+      onStarted(await api<{ id: string; status: string; created_at: string }>("/cmo/runs", jsonBody({ kind: "sales_reply_drafts" })));
+      setStep("idle");
+    } catch (err) {
+      if (isPlanRequired(err)) {
+        setStep("idle");
+        onPlan("reply to these people");
+        return;
+      }
+      setError(err instanceof Error ? err.message : "Could not start the replies. Please try again.");
+      setStep("confirm");
+    }
+  }
+
+  return (
+    <div className="card" role="group" aria-labelledby="write-replies-title" style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", marginBottom: "10px" }}>
+      <div style={{ flex: "1 1 260px", minWidth: "0" }}>
+        <b id="write-replies-title">
+          {count} {count === 1 ? "thread has" : "threads have"} no reply yet
+        </b>
+        <div className="meta">Sales writes a help-first reply for each, under each community&apos;s rules. You post them yourself.</div>
+        {error ? (
+          <div className="meta" role="alert" style={{ color: "var(--warn)", marginTop: "4px" }}>
+            {error}
+          </div>
+        ) : null}
+      </div>
+      {busy ? (
+        <span className="chip">
+          <span className="live"></span>Writing…
+        </span>
+      ) : step === "idle" ? (
+        <button type="button" className="primary" onClick={() => setStep("confirm")}>
+          Write the replies
+        </button>
+      ) : (
+        <span style={{ display: "inline-flex", gap: "8px" }}>
+          <button type="button" className="skip" disabled={step === "busy"} onClick={() => setStep("idle")}>
+            Cancel
+          </button>
+          <button type="button" className="primary" disabled={step === "busy"} onClick={() => void start()}>
+            {step === "busy" ? "Starting…" : "Write them"}
+          </button>
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** "Reddit, Hacker News and Threads". */
+function places(list: SalesPlatform[]): string {
+  const names = list.map((p) => PLATFORM_LABEL[p]);
+  return names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names.at(-1)}` : (names[0] ?? "");
+}
+
+/**
+ * The scan's verdict when it found no one (free-scan plan B3): a plain answer about the product's fit, with what it
+ * searched and where, so the founder can judge the search. Not an error and not a paywall push.
+ */
+function NoOneAsked({ scan, onEdit }: { scan: NonNullable<SalesScreen["lastScan"]>; onEdit: () => void }) {
+  const answered = scan.platforms.filter((p) => !scan.failed.includes(p));
+  return (
+    <section className="card" data-testid="sales-none" style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "14px" }}>
+      <h2 style={{ margin: "0", fontSize: "16px", fontWeight: "600" }}>No one asked about this in the last 30 days.</h2>
+      {scan.queries.length ? (
+        <div>
+          <div className="meta" style={{ marginBottom: "6px" }}>
+            We searched for:
+          </div>
+          <ul style={{ margin: "0", paddingLeft: "18px", fontSize: "14px", display: "flex", flexDirection: "column", gap: "2px" }}>
+            {scan.queries.map((q) => (
+              <li key={q}>{q}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      <div className="meta">
+        {answered.length ? `Looked on ${places(answered)}` : "No place answered"}
+        {scan.scanned ? `, ${scan.scanned} ${scan.scanned === 1 ? "conversation" : "conversations"} read` : ""}.
+        {scan.failed.length ? ` ${places(scan.failed)} did not answer.` : ""}
+      </div>
+      <p style={{ margin: "0", fontSize: "14px", color: "var(--muted)" }}>
+        Sales searched with the words it took from your website. If your customers describe the problem differently, tell it what to look for.
+      </p>
+      <div>
+        <button type="button" className="ghost" onClick={onEdit}>
+          Edit what Sales looks for
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function ThreadRow({ t, free, open, onToggle, onPlan, onDecide }: { t: Thread; free: boolean; open: boolean; onToggle: () => void; onPlan: (action: string) => void; onDecide: (t: Thread, action: "replied" | "dismissed", reason?: string, text?: string) => Promise<void> }) {
   const [draft, setDraft] = useState(t.draft ?? "");
   const [copied, setCopied] = useState(false);
   const [dismissing, setDismissing] = useState(false);
@@ -207,6 +339,9 @@ function ThreadRow({ t, open, onToggle, onDecide }: { t: Thread; open: boolean; 
   const [busy, setBusy] = useState(false);
   const skipped = t.rule.kind === "skipped";
   const done = t.status !== "open";
+  // Free: the reply is written (or shown) once the founder picks a plan. Until then the thread is still worth reading.
+  const locked = free && !skipped && t.draft === null;
+  const lead = t.quotes[0] ?? null;
 
   async function copyAndOpen() {
     try {
@@ -229,12 +364,17 @@ function ThreadRow({ t, open, onToggle, onDecide }: { t: Thread; open: boolean; 
   return (
     <div className="th" data-open={open} role="listitem">
       <button type="button" className="row" onClick={onToggle} aria-expanded={open}>
-        <span className={tone(t.score)}>{tenth(t.score)}</span>
+        <span className={tone(t.score)}>{matchLabel(t.score)}</span>
         <span style={{ flex: "1 1 auto", minWidth: "0" }}>
           <span style={{ display: "block", fontSize: "14.5px", fontWeight: "500", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: done ? "var(--muted)" : undefined }}>{t.title}</span>
           <span className="meta">
             {[PLATFORM_LABEL[t.platform], t.community !== PLATFORM_LABEL[t.platform] ? t.community : null, t.postedAt ? ago(t.postedAt) : null, t.comments != null ? `${t.comments} comments` : null, done ? (t.status === "replied" ? "you replied" : "dismissed") : null].filter(Boolean).join(" · ")}
           </span>
+          {lead && !open && !done ? (
+            <span className="quote" style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", marginTop: "6px", fontSize: "13.5px" }}>
+              “{lead.text}”
+            </span>
+          ) : null}
         </span>
         <svg className="i s" viewBox="0 0 24 24" aria-hidden="true" style={{ color: "var(--subtle)" }}>
           <path d={open ? "m18 15-6-6-6 6" : "m6 9 6 6 6-6"} />
@@ -245,7 +385,7 @@ function ThreadRow({ t, open, onToggle, onDecide }: { t: Thread; open: boolean; 
           {t.quotes.length ? (
             <div>
               <div className="meta" style={{ marginBottom: "6px" }}>
-                Why it scored {tenth(t.score)}
+                {matchLabel(t.score)} ({t.score}/100): how it was counted
               </div>
               {t.quotes.map((q) => (
                 <p key={q.text} className="quote" style={{ marginBottom: "6px" }}>
@@ -257,8 +397,17 @@ function ThreadRow({ t, open, onToggle, onDecide }: { t: Thread; open: boolean; 
           <div className="meta">{t.rule.text}</div>
           {skipped ? (
             <div className="meta">Sales did not draft a reply. The community&apos;s rules leave no room for one.</div>
+          ) : locked ? (
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }} data-testid="sales-reply-locked">
+              <span className="meta" style={{ flex: "1 1 220px" }}>
+                {t.drafted ? "Your reply is written. You see it once you pick a plan." : "Your reply is written once you pick a plan."}
+              </span>
+              <button type="button" className="primary" onClick={() => onPlan("reply to these people")}>
+                Pick a plan
+              </button>
+            </div>
           ) : t.draft === null ? (
-            <div className="meta">No draft yet. Sales drafts replies for the highest-scored threads first.</div>
+            <div className="meta">No reply yet. Write the replies above, or reply in your own words and mark it replied.</div>
           ) : (
             <div>
               <label className="meta" htmlFor={`reply-${t.id}`} style={{ display: "block", marginBottom: "6px" }}>
@@ -299,7 +448,11 @@ function ThreadRow({ t, open, onToggle, onDecide }: { t: Thread; open: boolean; 
                   Dismiss
                 </button>
               )}
-              {skipped ? null : (
+              {skipped ? null : locked ? (
+                <a href={t.url} target="_blank" rel="noopener noreferrer" className="ghost" style={{ textDecoration: "none" }}>
+                  Open thread
+                </a>
+              ) : (
                 <button type="button" className="ghost" disabled={busy} onClick={() => void run("replied")}>
                   Mark replied
                 </button>
@@ -337,6 +490,9 @@ export function AgentSales() {
   const [runs, setRuns] = useState<{ id: string; at: string; text: string }[]>([]);
   const data = state.status === "ready" ? state.data : null;
   const live = state.status === "ready" && Boolean(state.live.threads);
+  const free = data?.free ?? false;
+  // The plan sheet, titled with what the founder tried ("reply to these people", "scan again").
+  const [planFor, setPlanFor] = useState<string | null>(null);
 
   useEffect(() => {
     if (!data) return;
@@ -377,7 +533,7 @@ export function AgentSales() {
     void createClient()
       .from("cmo_runs")
       .select(SCAN_COLUMNS)
-      .eq("kind", "sales_scan")
+      .in("kind", RUN_KINDS)
       .in("status", ["queued", "running"])
       .order("created_at", { ascending: false })
       .limit(1)
@@ -413,7 +569,16 @@ export function AgentSales() {
   const worth = list.filter((t) => t.status === "open" && t.rule.kind !== "skipped");
   const below = list.length - worth.length;
   const lastScan = runs[0]?.at ?? null;
+  // Paid, and threads the free scan found without a reply: one click writes them.
+  const undrafted = free ? 0 : worth.filter((t) => !t.drafted).length;
+  // The free scan is used once a scan finished (or one is under way); a failed one is given back by SQL. One that found
+  // no one leaves one more (`cmo_first_run_free`, wave 2); if that one was the second, the 402 opens the plan sheet.
+  const freeDone = data?.freeScansDone ?? 0;
+  const freeLeft = free && !scanActive(scan) && (freeDone === 0 || (freeDone === 1 && data?.lastScan?.free === true && data.lastScan.verdict === "none"));
   const name = ws.name ?? "your product";
+  // Fair use (wave 2): at 100% new scans wait for the reset; `cmo_enqueue` refuses them on its own as well.
+  const usage = useOptionalShellState()?.usage;
+  const paused = usage?.paused ? (usage.resetsAt ? new Date(usage.resetsAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "the next reset") : null;
 
   // The banner's way to the settings: the tab, then the cursor on its heading, so the founder lands where to act.
   const openSettings = () => {
@@ -449,9 +614,22 @@ export function AgentSales() {
               <span className="chip">Brand voice</span>
             </div>
           </div>
-          <ScanNow scanning={scanActive(scan)} platforms={data?.settings.platforms} onStarted={startedScan} />
+          <ScanNow scanning={scanActive(scan) && scan.kind === "sales_scan"} paused={paused !== null} platforms={data?.settings.platforms} free={free} freeLeft={freeLeft} onPlan={setPlanFor} onStarted={startedScan} />
         </div>
         {scan ? <ScanProgress scan={scan} onClose={() => setScan(null)} /> : null}
+        {paused ? (
+          <div className="card" role="status" data-testid="sales-paused" style={{ marginTop: "14px", display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+            <div style={{ flex: "1 1 260px", minWidth: "0" }}>
+              <b>You used this month&apos;s allowance</b>
+              <div className="meta">
+                New scans start again on {paused}. The people already found, your drafts and your posts keep working.
+              </div>
+            </div>
+            <a href="/app/billing" className="ghost" style={{ textDecoration: "none" }}>
+              Plan and billing
+            </a>
+          </div>
+        ) : null}
 
         <div className="tabs" role="tablist" aria-label="Sales">
           {(
@@ -481,7 +659,7 @@ export function AgentSales() {
 
         {tab === "threads" && data ? (
           <>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", margin: "14px 0 10px", flexWrap: "wrap" }}>
+            <div style={{ display: list.length === 0 && data.lastScan?.verdict === "none" ? "none" : "flex", alignItems: "center", gap: "8px", margin: "14px 0 10px", flexWrap: "wrap" }}>
               <span style={{ fontWeight: "600" }}>
                 {worth.length} {worth.length === 1 ? "thread" : "threads"} worth a reply
               </span>
@@ -492,10 +670,12 @@ export function AgentSales() {
               <span className="meta">Sort</span>
               <span className="pill">Score</span>
             </div>
-            {list.length === 0 ? <div className="meta">No threads yet. Sales scans the communities your customers use and scores what it finds.</div> : null}
+            {live && undrafted > 0 ? <WriteReplies count={undrafted} busy={scanActive(scan) && scan.kind === "sales_reply_drafts"} onPlan={setPlanFor} onStarted={startedScan} /> : null}
+            {list.length === 0 && data.lastScan?.verdict === "none" ? <NoOneAsked scan={data.lastScan} onEdit={openSettings} /> : null}
+            {list.length === 0 && data.lastScan?.verdict !== "none" ? <div className="meta">No threads yet. Sales scans the communities your customers use and scores what it finds.</div> : null}
             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }} role={list.length ? "list" : undefined} aria-label={list.length ? "Threads" : undefined}>
               {list.map((t) => (
-                <ThreadRow key={t.id} t={t} open={open === t.id} onToggle={() => setOpen(open === t.id ? null : t.id)} onDecide={decide} />
+                <ThreadRow key={t.id} t={t} free={free} open={open === t.id} onToggle={() => setOpen(open === t.id ? null : t.id)} onPlan={setPlanFor} onDecide={decide} />
               ))}
             </div>
           </>
@@ -578,6 +758,7 @@ export function AgentSales() {
           </div>
         </section>
       </aside>
+      <PlanSheet open={planFor !== null} onClose={() => setPlanFor(null)} action={planFor ?? undefined} />
     </div>
   );
 }

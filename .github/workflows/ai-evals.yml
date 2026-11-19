@@ -51,7 +51,7 @@ concurrency:
 jobs:
   eval:
     name: ${{ matrix.suite }} · ${{ matrix.provider }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: ai-evals
     timeout-minutes: 90
     strategy:

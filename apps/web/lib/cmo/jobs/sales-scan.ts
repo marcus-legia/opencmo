@@ -34,7 +34,7 @@ import { safeForSales } from "../sales/ban-risk";
 import { skillText } from "../skills";
 import { fakeAllowed, LlmError } from "./llm";
 import type { JobContext, JobOutput } from "./runner";
-import { mayMention, toVerdict, type Documents, type Opportunity, type SalesSettings, type ScorePart, type SubredditVerdict } from "./types";
+import { mayMention, toVerdict, type Documents, type Opportunity, type SalesScanOutput, type SalesSettings, type ScorePart, type SubredditVerdict } from "./types";
 
 export const PASS_SCORE = 60;
 const MAX_QUERIES = 8;
@@ -357,11 +357,131 @@ function fakeScores(threads: RedditThread[]): Scored[] {
   }));
 }
 
-export async function salesScan(ctx: JobContext): Promise<JobOutput> {
+/**
+ * P5 R1: each community's rules, read as data and cached for a week, decide whether the product may be named. Shared
+ * by the scan and `sales_reply_drafts` (free scan A5), which reads them again only when the cache is stale.
+ */
+export async function readCommunityRules(ctx: JobContext, names: string[]): Promise<Record<string, RuleRead>> {
+  const out = new Map<string, RuleRead>();
+  const unread: { name: string; rules: string }[] = [];
+  // Independent reads: four communities at a time, kept in order so the prompt is the same on a retry.
+  const read = async (name: string) => {
+    const cached = await ctx.store.subredditRule(name);
+    if (cached && ctx.now.getTime() - new Date(cached.read_at).getTime() < RULES_FRESH_MS) return { name, cached };
+    try {
+      const details = await subredditDetails(name);
+      return { name, rules: details.rules || details.description };
+    } catch (error) {
+      if (!(error instanceof SocialReadError)) throw error;
+      return { name, failed: true as const };
+    }
+  };
+  const results: Awaited<ReturnType<typeof read>>[] = [];
+  for (let at = 0; at < names.length; at += 4) results.push(...(await Promise.all(names.slice(at, at + 4).map(read))));
+  for (const r of results) {
+    if ("cached" in r && r.cached) {
+      out.set(r.name, {
+        verdict: r.cached.verdict,
+        summary: r.cached.summary,
+        minKarma: r.cached.min_karma ?? null,
+        minAccountAgeDays: r.cached.min_account_age_days ?? null,
+        megathread: r.cached.megathread ?? false,
+      });
+    }
+    // Rules we could not read are never a reason to name the product: not verified, help only (5.1).
+    else if ("failed" in r) out.set(r.name, { verdict: "not_verified", summary: `r/${r.name}: rules not read, help only` });
+    // An empty rules page is not a permission either.
+    else if ("rules" in r && !(r.rules ?? "").trim()) out.set(r.name, { verdict: "not_verified", summary: `r/${r.name}: no rules published, help only` });
+    else if ("rules" in r) unread.push({ name: r.name, rules: r.rules ?? "" });
+  }
+  if (unread.length) {
+    const read = (
+      await ctx.think({
+        title: `Read the rules of ${unread.length} Reddit ${unread.length === 1 ? "community" : "communities"}`,
+        fake: () => ({
+          rules: unread.map((u, index) => ({ index, verdict: fakeVerdict(u.rules), summary: `r/${u.name}: ${VERDICT_WORDS[fakeVerdict(u.rules)]}`, ...fakeNeeds(u.rules) })),
+        }),
+        agent: "checker",
+        system: RULES_SYSTEM,
+        prompt: `${unread.map((u, i) => `<rules index="${i}" community="r/${escapeAttribute(u.name)}">${escapeForTag(cleanUntrusted(u.rules)) || "(no rules published)"}</rules>`).join("\n")}\n\nSay what each community's rules allow.`,
+        schema: RulesSchema,
+        maxTokens: 2000,
+        label: "check_rules",
+        failure: "We could not read the communities' rules. Try again in a minute.",
+      })
+    ).rules;
+    for (const [index, u] of unread.entries()) {
+      const r = read.find((x) => x.index === index);
+      // No answer for this community: not verified, help only.
+      const megathread = r?.megathread === true;
+      const verdict: SubredditVerdict = r?.verdict ?? "not_verified";
+      const summary = (r?.summary.trim() || `r/${u.name}: ${VERDICT_WORDS[verdict]}`).slice(0, 200);
+      const count = (n: number | null | undefined, max: number) => (typeof n === "number" && Number.isInteger(n) && n > 0 && n <= max ? n : null);
+      const minKarma = count(r?.minKarma, 1_000_000);
+      const minAccountAgeDays = count(r?.minAccountAgeDays, 3650);
+      // The cache is shared by every founder: only Ferreto's own model writes it.
+      await ctx.store.saveSubredditRule({ subreddit: u.name, verdict, summary, min_karma: minKarma, min_account_age_days: minAccountAgeDays, megathread });
+      out.set(u.name, { verdict, summary, minKarma, minAccountAgeDays, megathread });
+    }
+  }
+  return Object.fromEntries(out);
+}
+
+/** One thread to draft for, and the rule its reply is written under. */
+export type DraftTarget = { thread: ScanThread; rule: SubredditVerdict };
+
+/**
+ * The `draft_reply` step, shared by the scan and `sales_reply_drafts` (free scan A5): one model call drafts a reply per
+ * thread, then code checks every draft. One with a link, too long, or naming the product where it may not, gets no
+ * reply. Returns the replies that passed, by the thread's index, and the model and prompt that wrote them.
+ */
+export async function draftReplies(
+  ctx: JobContext,
+  input: { docs: Documents; memories: string; voice: string; threads: DraftTarget[] },
+): Promise<{ replyFor: Map<number, string>; gen: { model: string; prompt_version: string } }> {
+  const { docs, memories, voice, threads: toDraft } = input;
+  let answered: string | null = null;
+  const replies = !toDraft.length ? [] : await ctx.step("draft_reply", `Drafting ${toDraft.length} replies`, async () => {
+    const avoid = avoidList(docs);
+    return (
+      await ctx.think({
+        title: `Draft a helpful reply for each of ${toDraft.length} threads (the founder posts them)`,
+        fake: () => ({
+          replies: toDraft.map((_, index) => ({
+            index,
+            reply: "What helped most people I know: put the due date and the late fee on the invoice itself, then send the same short reminder on day 3, 7 and 14 so it feels like a process, not a personal chase.",
+          })),
+        }),
+        agent: "sales",
+        system: REPLY_SYSTEM,
+        prompt: `${documentsBlock(docs)}\n\n${memories}\n\n${voice ? `${voice}\n\n` : ""}${avoid.length ? `Words to avoid: ${avoid.join(", ")}\n\n` : ""}${toDraft
+          .map((r, i) => threadBlock(r.thread, i).replace(`<thread index="${i}"`, `<thread index="${i}" mention="${mayMention(r.rule) ? "yes" : "no"}"`))
+          .join("\n\n")}\n\nDraft one reply per thread.`,
+        schema: ReplySchema,
+        onUsage: (usage) => {
+          answered = usage.model;
+        },
+        label: "draft_reply",
+        failure: "We could not draft the replies. Try again in a minute.",
+      })
+    ).replies;
+  }, (r) => `${r.length} replies drafted`);
+
+  // Code checks every draft: one with a link, too long, or naming the product where it may not, never reaches a card.
+  const products = productNames(docs);
+  const replyFor = new Map(
+    replies
+      .map((r) => [r.index, r.reply.trim()] as const)
+      .filter(([index, text]) => toDraft[index] && !replyProblems(text, mayMention(toDraft[index]!.rule), products).length),
+  );
+  return { replyFor, gen: { model: genModel(answered, fakeAllowed()), prompt_version: REPLY_VERSION } };
+}
+
+export async function salesScan(ctx: JobContext): Promise<SalesScanOutput & JobOutput> {
   const { store, run } = ctx;
   // A brief from the CMO chat or a Reddit item on the calendar (H3): it steers the searches, not the scoring rules.
   const brief = typeof run.input.brief === "string" ? run.input.brief.slice(0, 300) : "";
-  const { docs, memories, seen, settings, mentionsUsed, mentionsWaiting = 0, voice } = await ctx.step(
+  const { docs, memories, seen, settings, mentionsUsed, mentionsWaiting = 0, voice, paid = true } = await ctx.step(
     "read_doc",
     "Read your product and strategy",
     async () => ({
@@ -373,6 +493,8 @@ export async function salesScan(ctx: JobContext): Promise<JobOutput> {
       settings: await store.salesSettings(run.user_id),
       mentionsUsed: await store.recentMentions(run.user_id),
       mentionsWaiting: await store.waitingMentions(run.user_id),
+      // Free scan A3: read once here, so a retried run decides the same way.
+      paid: await store.paid(run.user_id),
       voice: voiceBlock(
         (await store.voiceNotes(run.user_id, 5))
           .filter((n) => safeForSales(n.body))
@@ -382,6 +504,10 @@ export async function salesScan(ctx: JobContext): Promise<JobOutput> {
   );
 
   // Nowhere to look is the founder's switch, not a failure to read: say which switch, before any search is paid for.
+  // The account's free scan (free scan plan, A3): the run is priced 0 and the account has no plan or credits. It
+  // finds, scores and reads the rules; the replies wait for `sales_reply_drafts` after paying. Read from the run and
+  // the account, never from `input`, which the founder can write.
+  const free = run.credits === 0 && !paid;
   const platforms = scanPlatforms(run.input, settings);
   if (!platforms.length) throw new LlmError(NOWHERE);
   const failed: SalesPlatform[] = [];
@@ -420,6 +546,20 @@ export async function salesScan(ctx: JobContext): Promise<JobOutput> {
     });
     return out.queries.map((q) => q.trim().slice(0, 80)).filter(Boolean);
   }, (q) => `${Math.min(q.length, MAX_QUERIES)} searches from your pains`);
+
+  const searched = queries.slice(0, MAX_QUERIES);
+  const output = (scanned: number, o: { cards: number; skipped?: number; dropped?: number }): SalesScanOutput => ({
+    cards: o.cards,
+    skipped: o.skipped ?? 0,
+    dropped: o.dropped ?? 0,
+    refund: o.cards === 0,
+    platforms,
+    failed,
+    free,
+    queries: searched,
+    scanned,
+    verdict: o.cards > 0 ? "found" : "none",
+  });
 
   const threads: ScanThread[] = !platforms.includes("reddit") ? [] : await ctx.step("reddit_search", "Searching Reddit", async () => {
     const found: ScanThread[] = [];
@@ -521,7 +661,7 @@ export async function salesScan(ctx: JobContext): Promise<JobOutput> {
 
   if (!scanned.length) {
     await ctx.step("create_card", "No conversations worth joining today", async () => 0);
-    return { cards: 0, refund: true, platforms, failed };
+    return output(0, { cards: 0 });
   }
 
   const ranked = await ctx.step("score_thread", "Scoring each thread", async () => {
@@ -548,76 +688,13 @@ export async function salesScan(ctx: JobContext): Promise<JobOutput> {
 
   if (!ranked.length) {
     await ctx.step("create_card", "No conversations worth joining today", async () => 0);
-    return { cards: 0, refund: true, platforms, failed };
+    return output(scanned.length, { cards: 0 });
   }
 
-  // P5 R1: each community's rules, read as data and cached for a week, decide whether the product may be named.
-  const verdicts = await ctx.step("check_rules", "Reading each community's rules", async () => {
-    const names = [...new Set(ranked.filter((r) => r.thread.platform === "reddit").map((r) => subredditOf(r.thread.community)))];
-    const out = new Map<string, RuleRead>();
-    const unread: { name: string; rules: string }[] = [];
-    // Independent reads: four communities at a time, kept in order so the prompt is the same on a retry.
-    const read = async (name: string) => {
-      const cached = await store.subredditRule(name);
-      if (cached && ctx.now.getTime() - new Date(cached.read_at).getTime() < RULES_FRESH_MS) return { name, cached };
-      try {
-        const details = await subredditDetails(name);
-        return { name, rules: details.rules || details.description };
-      } catch (error) {
-        if (!(error instanceof SocialReadError)) throw error;
-        return { name, failed: true as const };
-      }
-    };
-    const results: Awaited<ReturnType<typeof read>>[] = [];
-    for (let at = 0; at < names.length; at += 4) results.push(...(await Promise.all(names.slice(at, at + 4).map(read))));
-    for (const r of results) {
-      if ("cached" in r && r.cached) {
-        out.set(r.name, {
-          verdict: r.cached.verdict,
-          summary: r.cached.summary,
-          minKarma: r.cached.min_karma ?? null,
-          minAccountAgeDays: r.cached.min_account_age_days ?? null,
-          megathread: r.cached.megathread ?? false,
-        });
-      }
-      // Rules we could not read are never a reason to name the product: not verified, help only (5.1).
-      else if ("failed" in r) out.set(r.name, { verdict: "not_verified", summary: `r/${r.name}: rules not read, help only` });
-      // An empty rules page is not a permission either.
-      else if ("rules" in r && !(r.rules ?? "").trim()) out.set(r.name, { verdict: "not_verified", summary: `r/${r.name}: no rules published, help only` });
-      else if ("rules" in r) unread.push({ name: r.name, rules: r.rules ?? "" });
-    }
-    if (unread.length) {
-      const read = (
-        await ctx.think({
-          title: `Read the rules of ${unread.length} Reddit ${unread.length === 1 ? "community" : "communities"}`,
-          fake: () => ({
-            rules: unread.map((u, index) => ({ index, verdict: fakeVerdict(u.rules), summary: `r/${u.name}: ${VERDICT_WORDS[fakeVerdict(u.rules)]}`, ...fakeNeeds(u.rules) })),
-          }),
-          agent: "checker",
-          system: RULES_SYSTEM,
-          prompt: `${unread.map((u, i) => `<rules index="${i}" community="r/${escapeAttribute(u.name)}">${escapeForTag(cleanUntrusted(u.rules)) || "(no rules published)"}</rules>`).join("\n")}\n\nSay what each community's rules allow.`,
-          schema: RulesSchema,
-          maxTokens: 2000,
-          label: "check_rules",
-          failure: "We could not read the communities' rules. Try again in a minute.",
-        })
-      ).rules;
-      for (const [index, u] of unread.entries()) {
-        const r = read.find((x) => x.index === index);
-        // No answer for this community: not verified, help only.
-        const megathread = r?.megathread === true;
-        const verdict: SubredditVerdict = r?.verdict ?? "not_verified";
-        const summary = (r?.summary.trim() || `r/${u.name}: ${VERDICT_WORDS[verdict]}`).slice(0, 200);
-        const count = (n: number | null | undefined, max: number) => (typeof n === "number" && Number.isInteger(n) && n > 0 && n <= max ? n : null);
-        const minKarma = count(r?.minKarma, 1_000_000);
-        const minAccountAgeDays = count(r?.minAccountAgeDays, 3650);
-        // The cache is shared by every founder: only Ferreto's own model writes it.
-        await store.saveSubredditRule({ subreddit: u.name, verdict, summary, min_karma: minKarma, min_account_age_days: minAccountAgeDays, megathread });
-        out.set(u.name, { verdict, summary, minKarma, minAccountAgeDays, megathread });
-      }
-    }
-    return Object.fromEntries(out);
-  }, (v) => `${Object.keys(v).length} ${Object.keys(v).length === 1 ? "community" : "communities"} checked`);
+  // P5 R1: each community's rules decide whether the product may be named.
+  const verdicts = await ctx.step("check_rules", "Reading each community's rules", async () =>
+    readCommunityRules(ctx, [...new Set(ranked.filter((r) => r.thread.platform === "reddit").map((r) => subredditOf(r.thread.community)))]),
+  (v) => `${Object.keys(v).length} ${Object.keys(v).length === 1 ? "community" : "communities"} checked`);
 
   // At most one product mention in the founder's last ten replies: once it is used, every draft is help only. A draft
   // that may name the product and still waits on the founder counts too: posting both would break the rule.
@@ -649,41 +726,9 @@ export async function salesScan(ctx: JobContext): Promise<JobOutput> {
   });
   const toDraft = planned.filter((p) => p.rule !== "skip");
 
-  let answered: string | null = null;
-  const replies = !toDraft.length ? [] : await ctx.step("draft_reply", `Drafting ${toDraft.length} replies`, async () => {
-    const avoid = avoidList(docs);
-    return (
-      await ctx.think({
-        title: `Draft a helpful reply for each of ${toDraft.length} threads (the founder posts them)`,
-        fake: () => ({
-          replies: toDraft.map((_, index) => ({
-            index,
-            reply: "What helped most people I know: put the due date and the late fee on the invoice itself, then send the same short reminder on day 3, 7 and 14 so it feels like a process, not a personal chase.",
-          })),
-        }),
-        agent: "sales",
-        system: REPLY_SYSTEM,
-        prompt: `${documentsBlock(docs)}\n\n${memories}\n\n${voice ? `${voice}\n\n` : ""}${avoid.length ? `Words to avoid: ${avoid.join(", ")}\n\n` : ""}${toDraft
-          .map((r, i) => threadBlock(r.thread, i).replace(`<thread index="${i}"`, `<thread index="${i}" mention="${mayMention(r.rule) ? "yes" : "no"}"`))
-          .join("\n\n")}\n\nDraft one reply per thread.`,
-        schema: ReplySchema,
-        onUsage: (usage) => {
-          answered = usage.model;
-        },
-        label: "draft_reply",
-        failure: "We could not draft the replies. Try again in a minute.",
-      })
-    ).replies;
-  }, (r) => `${r.length} replies drafted`);
-
-  // Code checks every draft: one with a link, too long, or naming the product where it may not, never reaches a card.
-  const products = productNames(docs);
-  const replyFor = new Map(
-    replies
-      .map((r) => [r.index, r.reply.trim()] as const)
-      .filter(([index, text]) => toDraft[index] && !replyProblems(text, mayMention(toDraft[index]!.rule), products).length),
-  );
-  const gen = { model: genModel(answered, fakeAllowed()), prompt_version: REPLY_VERSION };
+  const { replyFor, gen } = free
+    ? { replyFor: new Map<number, string>(), gen: undefined }
+    : await draftReplies(ctx, { docs, memories, voice, threads: toDraft });
   const skipped: Opportunity[] = planned
     .filter((p) => p.rule === "skip")
     .map((r) => ({
@@ -713,14 +758,15 @@ export async function salesScan(ctx: JobContext): Promise<JobOutput> {
       score: r.result.score,
       score_parts: r.result.parts,
       reply: (replyFor.get(i) ?? "").slice(0, 3000),
-      gen,
+      ...(gen ? { gen } : {}),
       rule: r.rule,
       rule_why: r.why.slice(0, 200),
       ...(r.needs.minKarma ? { min_karma: r.needs.minKarma } : {}),
       ...(r.needs.minAccountAgeDays ? { min_account_age_days: r.needs.minAccountAgeDays } : {}),
       ...(r.thread.platform !== "reddit" ? { platform: r.thread.platform } : {}),
     }))
-    .filter((o) => o.reply.length > 0);
+    // A free scan keeps every card undrafted (reply ''); a paid one drops a card whose draft failed its checks.
+    .filter((o) => free || o.reply.length > 0);
 
   const saved = await ctx.step(
     "create_card",
@@ -729,5 +775,5 @@ export async function salesScan(ctx: JobContext): Promise<JobOutput> {
     (n) => `${Math.max(0, n)} ${n === 1 ? "card" : "cards"} in Approvals${skipped.length ? ` · ${skipped.length} skipped by community rules` : ""}`,
   );
   const cards = Math.max(0, saved);
-  return { cards, skipped: skipped.length, dropped: toDraft.length - items.length, refund: cards === 0, platforms, failed };
+  return output(scanned.length, { cards, skipped: skipped.length, dropped: toDraft.length - items.length });
 }

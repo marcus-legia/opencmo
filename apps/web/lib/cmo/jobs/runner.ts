@@ -18,6 +18,7 @@ import { LlmError } from "./llm-error";
 import { planWeek } from "./plan-week";
 import { pullMetrics } from "./pull-metrics";
 import { reviewWeek } from "./review-week";
+import { salesReplyDrafts } from "./sales-reply-drafts";
 import { salesScan, type ConversationSearch } from "./sales-scan";
 import type { HnThread } from "../social/hn";
 import { maxSteps } from "../step-limits";
@@ -91,6 +92,8 @@ export const JOBS: Record<CmoJobKind, Job> = {
   repurpose_post: repurposePost,
   // Daily core drafts D7: only the founder's "Write the caption" on a photo post queues it (SQL `photo_post_caption`).
   photo_caption: photoCaption,
+  // Free scan A5: the founder's "Write the replies" after paying, for the cards their free scan left undrafted.
+  sales_reply_drafts: salesReplyDrafts,
 };
 
 /** The run was claimed again by another worker (its lease ran out): stop quietly and write nothing more. */

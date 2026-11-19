@@ -2,6 +2,8 @@
 
 import { createContext, useContext } from "react";
 
+import type { PlanUsage } from "@/lib/billing/usage";
+
 import type { DepartmentName } from "./nav";
 
 /**
@@ -26,6 +28,8 @@ export type ShellState = {
    * `AssistantPanel` here, so the panel keeps all of the editor's state (playhead, selection, capture tools).
    */
   clipAssistantSlot: HTMLElement | null;
+  /** The fair-use bar the top bar shows; Sales reads `paused` for its banner. Refreshed with the account. */
+  usage: PlanUsage;
 };
 
 export const ShellStateContext = createContext<ShellState | null>(null);

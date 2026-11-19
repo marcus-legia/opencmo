@@ -5,8 +5,8 @@ import { signIn, state } from "./helpers";
 
 /**
  * Setup shows its work (CMO review 3, 3.2), with the fake model (`OPENCMO_AGENT_FAKE=1`/`OPENCMO_AI_FAKE=1`) and a
- * `.test` website. The steps appear in order, the answers are saved, Skip hides the questions, and the end goes to
- * the Dashboard. Screenshots at 1280 px and 390 px: `test-results/setup-*.png`.
+ * `.test` website. `?site=` starts the run at once; the steps appear in order, the answers are saved, Skip hides the
+ * questions, and the end goes to Sales (the free scan) or the Dashboard. Screenshots at 1280 px and 390 px: `test-results/setup-*.png`.
  */
 test.skip(process.env.NEXT_PUBLIC_OPENCMO_UI !== "v2", "v2 UI only: run with npm run test:e2e:v2");
 
@@ -32,23 +32,21 @@ for (const width of [1280, 390]) {
     await page.emulateMedia({ colorScheme: theme });
     await signIn(page, user);
     await page.setViewportSize({ width, height: 900 });
+    // `?site=` from the landing starts reading at once (free-scan B4): no website form, the progress shows.
     await page.goto("/app/setup?site=paylane.test");
-    await expect(page.getByRole("heading", { name: "Start with your website." })).toBeVisible();
-    await page.emulateMedia({ colorScheme: theme === "light" ? "dark" : "light" });
-    await page.reload();
-    await expect(page.getByRole("heading", { name: "Start with your website." })).toBeVisible();
-    await page.screenshot({ path: `test-results/setup-${width}-website-${theme === "light" ? "dark" : "light"}.png` });
-    await page.emulateMedia({ colorScheme: theme });
-    await page.reload();
-    await page.getByRole("button", { name: "Read my website" }).click();
-
+    await expect(page.getByRole("heading", { name: "Start with your website." })).toHaveCount(0);
     const progress = page.getByTestId("setup-progress");
     await expect(progress).toBeVisible();
     const steps = progress.getByTestId("setup-step");
-    await expect(steps).toHaveCount(7);
+    // Seven steps, eight once the free Sales scan is queued.
+    await expect.poll(() => steps.count()).toBeGreaterThanOrEqual(7);
     await expect(steps.first()).toContainText("Reading your website");
     // The fake model can finish before the first 2 s poll, so the shot may show the list before its first step.
     await page.screenshot({ path: `test-results/setup-${width}-${theme}.png` });
+    // The theme follows the system: the other theme, without a reload (a reload would not start a second run).
+    await page.emulateMedia({ colorScheme: theme === "light" ? "dark" : "light" });
+    await page.screenshot({ path: `test-results/setup-${width}-${theme === "light" ? "dark" : "light"}.png` });
+    await page.emulateMedia({ colorScheme: theme });
 
     // Answer while it works: the handle, LinkedIn as well as X, and where they heard of us.
     const questions = page.getByTestId("setup-questions");
@@ -61,7 +59,8 @@ for (const width of [1280, 390]) {
     const { data: profile } = await admin().from("profiles").select("x_handle, post_platforms, heard_from").eq("id", user.id).single();
     expect(profile).toEqual({ x_handle: "paylane_hq", post_platforms: ["linkedin", "x"], heard_from: "reddit" });
 
-    await expect(page).toHaveURL(/\/app$/, { timeout: 180_000 });
+    // Setup ends on Sales while the free scan runs or once it found people, on the Dashboard otherwise.
+    await expect(page).toHaveURL(/\/app(\/sales)?$/, { timeout: 180_000 });
     // The run wrote its real steps, in order (the fake model is quicker than the 2 s poll, so the list is read back).
     const { data: run } = await admin().from("cmo_runs").select("steps").eq("user_id", user.id).eq("kind", "onboard").single();
     expect(run!.steps).toEqual(["site", "product", "strategy", "competitors", "content_strategy"].map((id) => ({ id, status: "done" })));
@@ -69,6 +68,7 @@ for (const width of [1280, 390]) {
     const { data: plan } = await admin().from("marketing_documents_latest").select("body").eq("user_id", user.id).eq("kind", "content_strategy").single();
     expect(String((plan!.body as { cadence?: string }).cadence)).toMatch(/^The founder posts on X, LinkedIn\./);
     // Today opens with the strategy to read.
+    await page.goto("/app");
     await expect(page.getByTestId("approval-queue").getByTestId("feed-row").filter({ hasText: "Ready to read: your marketing strategy" })).toBeVisible();
   });
 }
@@ -78,10 +78,9 @@ test("Skip hides the questions and saves nothing", async ({ page }) => {
   const user = await newFounder();
   await signIn(page, user);
   await page.goto("/app/setup?site=paylane.test");
-  await page.getByRole("button", { name: "Read my website" }).click();
   await page.getByTestId("setup-questions").getByRole("button", { name: "Skip" }).click();
   await expect(page.getByTestId("setup-questions")).toHaveCount(0);
   const { data: profile } = await admin().from("profiles").select("x_handle, post_platforms, heard_from").eq("id", user.id).single();
   expect(profile).toEqual({ x_handle: null, post_platforms: null, heard_from: null });
-  await expect(page).toHaveURL(/\/app$/, { timeout: 180_000 });
+  await expect(page).toHaveURL(/\/app(\/sales)?$/, { timeout: 180_000 });
 });

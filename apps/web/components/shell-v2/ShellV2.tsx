@@ -16,6 +16,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
 import { api } from "@/components/clipping/api";
+import { FREE_USAGE, type PlanUsage } from "@/lib/billing/usage";
 import { useActiveJobs } from "@/components/clipping/ActiveJobs";
 import { Toast } from "@/components/clipping/ui";
 import { ShellAccountContext, WebShell, type AccountSummary } from "@/components/clipping/web/WebShell";
@@ -38,6 +39,7 @@ type Props = {
   email?: string | null;
   userId?: string | null;
   pending?: number | null;
+  usage?: PlanUsage;
   /** False when no CMO chat model is configured: the chat says so itself. */
   chatLive: boolean;
   /** Production: hide every screen whose data is not live. */
@@ -62,18 +64,19 @@ function screenFor(segment: string | null): Screen {
   switch (segment) {
     case null:
       return { page: "main", top: { kind: "home" }, chat: "column" };
+    // Post's week view (the old Calendar tab, owner 2026-11-19: four tabs).
     case "schedule":
-      return { page: "main", view: "calendar", top: { kind: "views", current: "calendar" }, chat: "column" };
-    // Slideshows and carousels (D7, owner 2026-11-13): the founder's photos and a caption, on a page of their own.
+      return { page: "main", view: "calendar", top: { kind: "views", current: "post" }, chat: "column" };
+    // The photo-post page is gone from the bar (B2B channels only, 2026-11-18); its route stays until wave 4 deletes it.
     case "photos":
-      return { page: "main", view: "calendar", top: { kind: "views", current: "photos" }, chat: "column" };
+      return { page: "main", view: "calendar", top: { kind: "views", current: "post" }, chat: "column" };
     case "analytics":
       return { page: "main", view: "analytics", top: { kind: "views", current: "analytics" }, chat: "column" };
     case "sales":
       return { page: "main", view: "agentsales", top: { kind: "views", current: "sales" }, chat: "column" };
-    // Reached from the feed and the business menu, not from a tab: still the same screen, with the centre changed.
+    // Post's list view: the drafts and posts, with a List / Week switch.
     case "writer":
-      return { page: "main", view: "agentwriter", top: { kind: "views", current: null }, chat: "column" };
+      return { page: "main", view: "agentwriter", top: { kind: "views", current: "post" }, chat: "column" };
     case "studio":
     case "projects":
     case "jobs":
@@ -99,7 +102,7 @@ export function ShellV2(props: Props) {
   // landing page) needs the hook, or every artboard's dark tokens never apply and "System" ignores a dark Mac.
   useApplyTheme();
   if (segment !== null && CLASSIC.has(segment)) {
-    const { hideSample: _hideSample, chatLive: _chatLive, ...account } = props;
+    const { hideSample: _hideSample, chatLive: _chatLive, usage: _usage, ...account } = props;
     return <WebShell {...account} />;
   }
   // The prompter fills the phone: no frame around it (cmo-review-3 I2).
@@ -107,9 +110,9 @@ export function ShellV2(props: Props) {
   return <TodayFrame {...props} segment={segment} />;
 }
 
-function TodayFrame({ credits, plan, email, userId, pending, chatLive, children, segment }: Props & { segment: string | null }) {
+function TodayFrame({ credits, plan, email, userId, pending, usage, chatLive, children, segment }: Props & { segment: string | null }) {
   const router = useRouter();
-  const [account, setAccount] = useState({ credits: credits ?? null, plan: plan ?? null, pending: pending ?? null });
+  const [account, setAccount] = useState({ credits: credits ?? null, plan: plan ?? null, pending: pending ?? null, usage: usage ?? FREE_USAGE });
   // The feed's queue, once it has reported one: it wins over the server count so every number on screen agrees.
   const [queue, setQueue] = useState<{ pending: number; stuck: DepartmentName[] } | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -119,7 +122,7 @@ function TodayFrame({ credits, plan, email, userId, pending, chatLive, children,
     if (reading.current) return;
     reading.current = true;
     void api<AccountSummary>("/account")
-      .then((summary) => setAccount({ credits: summary.credits, plan: summary.plan, pending: summary.cmo_pending }))
+      .then((summary) => setAccount((was) => ({ credits: summary.credits, plan: summary.plan, pending: summary.cmo_pending, usage: summary.usage ?? was.usage })))
       .catch(() => {
         // A hint in the frame only: keep the old numbers rather than cover the page's own errors.
       })
@@ -153,11 +156,17 @@ function TodayFrame({ credits, plan, email, userId, pending, chatLive, children,
 
   const screen = screenFor(segment);
   const [chatOpen, setChatOpen] = useState(false);
+  // Off the Feed the chat column starts folded to the "Ask" rail (wave 2, owner 2026-11-19): the view gets the width.
+  // Folding only hides the panel, so its draft and session survive.
+  const foldsByDefault = screen.chat === "column" && segment !== null;
+  const [chatFolded, setChatFolded] = useState(foldsByDefault);
+  const folded = foldsByDefault && chatFolded;
   const [logsOpen, setLogsOpen] = useState(false);
   const chatColumn = useRef<HTMLElement>(null);
   const focusChat = useCallback(() => {
     setLogsOpen(false);
     setChatOpen(true);
+    setChatFolded(false);
     // After the drawer (if any) is shown: a hidden textarea cannot take focus.
     requestAnimationFrame(() =>
       [...(chatColumn.current?.querySelectorAll<HTMLTextAreaElement>("textarea") ?? [])].find((area) => area.offsetParent !== null)?.focus(),
@@ -185,7 +194,10 @@ function TodayFrame({ credits, plan, email, userId, pending, chatLive, children,
   useEffect(() => {
     if (shown.current === segment) return;
     shown.current = segment;
-    setChatOpen(chatTarget.current === window.location.pathname && screen.chat === "drawer");
+    const chatMovedHere = chatTarget.current === window.location.pathname;
+    setChatOpen(chatMovedHere && screen.chat === "drawer");
+    // The chat that opened this screen stays open beside it; any other arrival folds it again.
+    setChatFolded(!chatMovedHere);
     chatTarget.current = null;
     setLogsOpen(false);
   }, [segment, screen.chat]);
@@ -220,8 +232,9 @@ function TodayFrame({ credits, plan, email, userId, pending, chatLive, children,
       workVersion,
       workChanged,
       clipAssistantSlot,
+      usage: account.usage,
     }),
-    [queue, account.pending, reportQueue, focusChat, openLogs, workVersion, workChanged, clipAssistantSlot],
+    [queue, account.pending, reportQueue, focusChat, openLogs, workVersion, workChanged, clipAssistantSlot, account.usage],
   );
 
   const toastText = message ?? jobToast?.text ?? null;
@@ -238,7 +251,7 @@ function TodayFrame({ credits, plan, email, userId, pending, chatLive, children,
         <WorkspaceProvider>
           <div className={`k pg-${screen.page} td-frame`} data-chat={chatOpen ? "open" : undefined} data-screen={screen.page}>
             {screen.top ? (
-              <TopBar variant={screen.top} credits={account.credits} email={email ?? null} logsOpen={logsOpen} onLogs={openLogs} onChat={focusChat} />
+              <TopBar variant={screen.top} usage={account.usage} email={email ?? null} logsOpen={logsOpen} onLogs={openLogs} onChat={focusChat} />
             ) : null}
             <div className={screen.chat === "column" ? "cols" : "td-body"}>
               {screen.chat === "column" ? <WorkspaceSide /> : null}
@@ -249,7 +262,7 @@ function TodayFrame({ credits, plan, email, userId, pending, chatLive, children,
               ) : (
                 children
               )}
-              {screen.chat === "column" ? (
+              {screen.chat === "column" && !folded ? (
                 <Sash
                   label="Resize the chat"
                   controls="v2-chat"
@@ -262,7 +275,23 @@ function TodayFrame({ credits, plan, email, userId, pending, chatLive, children,
                   onReset={() => chatWidth.commit("chat", CHAT.base)}
                 />
               ) : null}
-              <aside className={chatClass} id="v2-chat" aria-label={screen.chat === "assistant" ? "Assistant" : "Chat with your CMO"} data-clip={screen.chat === "assistant" ? "" : undefined} ref={chatColumn}>
+              <aside className={chatClass} id="v2-chat" aria-label={screen.chat === "assistant" ? "Assistant" : "Chat with your CMO"} data-clip={screen.chat === "assistant" ? "" : undefined} data-folded={folded ? "" : undefined} ref={chatColumn}>
+                {folded ? (
+                  <button type="button" className="td-askrail" aria-label="Open the chat" aria-expanded="false" aria-controls="v2-chat-panel" onClick={focusChat}>
+                    <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                    </svg>
+                    <span>Ask</span>
+                  </button>
+                ) : null}
+                {foldsByDefault && !folded ? (
+                  <button type="button" className="ib td-chat-close" aria-label="Fold the chat" aria-expanded="true" aria-controls="v2-chat-panel" onClick={() => setChatFolded(true)}>
+                    <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="m13 17 5-5-5-5" />
+                      <path d="m6 17 5-5-5-5" />
+                    </svg>
+                  </button>
+                ) : null}
                 {screen.chat === "drawer" ? (
                   <button type="button" className="ib td-chat-close" aria-label="Close the chat" onClick={() => setChatOpen(false)}>
                     <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
@@ -272,7 +301,9 @@ function TodayFrame({ credits, plan, email, userId, pending, chatLive, children,
                   </button>
                 ) : null}
                 {/* Hidden, not unmounted, in the editor: the CMO chat keeps its draft for the way back. */}
-                <ChatPanel ws={chatSource} onToast={setMessage} onWorkStarted={() => setWorkVersion((n) => n + 1)} drivesPanel onOpenPanel={onChatOpensPanel} />
+                <div className="td-chatpanel" id="v2-chat-panel" hidden={folded}>
+                  <ChatPanel ws={chatSource} onToast={setMessage} onWorkStarted={() => setWorkVersion((n) => n + 1)} drivesPanel onOpenPanel={onChatOpensPanel} />
+                </div>
                 {screen.chat === "assistant" ? <div className="v2-clip-slot" ref={setClipAssistantSlot} /> : null}
               </aside>
             </div>

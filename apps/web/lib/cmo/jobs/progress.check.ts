@@ -5,7 +5,7 @@
  */
 import assert from "node:assert/strict";
 
-import { buildDigest, localClock } from "../digest";
+import { localClock } from "../digest";
 
 import { readAll, runProgressCheck } from "./progress-run";
 import { classifyOrder, nextCheckAt, progressReport, replanBrief, type OrderLedgerRow } from "./progress";
@@ -71,27 +71,8 @@ assert.equal(progressReport([{ ...sentBack, error: { code: "over_budget", messag
 assert.equal(nextCheckAt(NOW).toISOString(), "2026-10-30T00:05:00.000Z");
 assert.equal(nextCheckAt(new Date("2026-10-29T00:01:00Z")).toISOString(), "2026-10-29T00:05:00.000Z");
 
-// The digest: links open cards, nothing decides, text is escaped.
-const digest = buildDigest({
-  appUrl: "https://ferreto.io/",
-  dateLabel: "Thursday 29 Oct",
-  waiting: [{ id: "card-1", title: "Most AI video tools <stop>", department: "writer" }],
-  wentOut: [{ title: "Cut by words", where: "X" }],
-  stuck: [{ title: "2 Reddit replies", department: "sales", reason: "Over budget." }],
-});
-assert.equal(digest.subject, "1 thing waits on you · Thursday 29 Oct");
-const links = digest.text.match(/https?:\/\/\S+/g) ?? [];
-assert.ok(
-  links.some((link) => {
-    const url = new URL(link);
-    return url.origin === "https://ferreto.io" && url.pathname === "/app/inbox/card-1";
-  }),
-  "links open the card",
-);
-assert.ok(digest.html.includes("&lt;stop&gt;") && !digest.html.includes("<stop>"), "titles are escaped");
-assert.ok(!/approve/i.test(digest.html.replace("until you approve it", "")), "no approve button in an email");
-assert.equal(buildDigest({ appUrl: "x", dateLabel: "d", waiting: [], wentOut: [], stuck: [] }).empty, true);
-assert.deepEqual(localClock(new Date("2026-10-29T00:30:00Z"), "Asia/Ho_Chi_Minh"), { hour: 7, dateLabel: "Thursday 29 Oct" });
+// The digest itself is checked in `lib/cmo/digest.check.ts`; its clock here.
+assert.deepEqual(localClock(new Date("2026-10-29T00:30:00Z"), "Asia/Ho_Chi_Minh"), { hour: 7, weekday: 4, dateLabel: "Thursday 29 Oct" });
 assert.equal(localClock(new Date("2026-10-29T00:30:00Z"), "Not/AZone").hour, 0, "an unknown zone falls back to UTC");
 
 // Paging: every row, pages never overlap (review item 7).

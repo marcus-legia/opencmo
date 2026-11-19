@@ -21,7 +21,7 @@ concurrency:
 jobs:
   engine:
     name: engine (python)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: packages/engine
@@ -50,7 +50,7 @@ jobs:
 
   web:
     name: web (Next.js)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -112,7 +112,7 @@ jobs:
     # Explainer renderer (packages/clip-motion): unit tests, then golden stills rendered by
     # Remotion in the same Chrome Headless Shell build the references were drawn with.
     name: motion (clip-motion)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -141,7 +141,7 @@ jobs:
     # (OPFS, or IndexedDB when createWritable is missing as in Safari 17) on real engines.
     # Needs no Supabase/worker — see apps/web/e2e-compat/compat.spec.ts.
     name: browsers (editor compat)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -161,7 +161,7 @@ jobs:
     # `--phase A3`: every sample, including text and the 7 caption presets. Reference
     # images are in the repo; samples whose reference is known-broken (`oracleBroken`) are skipped.
     name: parity (clip-render vs DS)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -201,7 +201,7 @@ jobs:
 
   database:
     name: database (Supabase)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: supabase/setup-cli@689adcfb80d947100a1eab127289b97d1fb07b13 # v3.2.0

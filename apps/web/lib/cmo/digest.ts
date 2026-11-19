@@ -1,111 +1,242 @@
 /**
- * The morning digest (docs/architecture/approval.md §7; brain plan W1-4): what waits on the founder, what went out,
- * what is stuck. A template, no model call. Links open the card at `/app/inbox/[id]`; the digest never decides
- * anything (mail scanners open links), so there is no approve button in it.
+ * The morning email (wave 2, B1; `docs/plans/cmo/2026-11-19-wave2-plan.md` §4): people asking first, then the
+ * founder's replies someone answered, then one line for posts. A template, no model call. Links only open things
+ * behind login (mail scanners open links), so nothing in it decides.
  *
- * The Dashboard shows it; `lib/notify/send.ts` emails it (P6 C0) with an unsubscribe footer.
+ * `lib/notify/send.ts` emails it. The Dashboard reads `waiting`, `wentOut` and `stuck` from the same loader; the email
+ * itself no longer shows what went out or what is stuck (the founder acts on people, not on our job log).
  */
 
+import { matchLabel, zoneOrUtc } from "./match";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { buildToday, type TodayRow } from "./today";
+import { PLATFORM_LABEL, SALES_PLATFORMS } from "./social/conversations";
 
-/** How many Today rows the email carries; the rest are "N more waiting" (CMO review 3, 1.3). */
-export const DIGEST_TODAY_ROWS = 3;
+/** People rows in the email, strongest first. */
+export const DIGEST_PEOPLE = 3;
+/** Follow-up rows in the email. */
+export const DIGEST_FOLLOW_UPS = 2;
+/** The Sales screen's line between Strong and Good match (`components/today/AgentSales.tsx`). */
+export { STRONG_MATCH } from "./match";
+
+/** A person asking: an open reply card. */
+export type DigestPerson = {
+  approvalId: string;
+  /** The thread's title. */
+  title: string;
+  /** Where: "r/SaaS", "Hacker News". */
+  source: string;
+  score: number;
+  /** Their own words (the Pain or Evidence quote the scan kept), without quote marks. */
+  quote: string | null;
+  /** Found since the last morning email. */
+  isNew: boolean;
+};
+
+/** One of the founder's replies that someone answered (`reply-outcomes`). */
+export type DigestFollowUp = { title: string; source: string; replies: number; url: string };
+
+export type DigestPosts = {
+  /** Post and schedule cards that wait. */
+  waiting: number;
+  /** The card the line links to: the one with the nearest deadline. */
+  firstId: string | null;
+  /** The nearest time something happens to a waiting post (ISO): it expires, or autopilot posts it. */
+  nextAt: string | null;
+  /** That time is autopilot's: the post goes out on its own unless edited or skipped. */
+  autopilot: boolean;
+  /** Where the autopilot post goes ("X"), for the line. */
+  platform: string | null;
+};
 
 export type DigestInput = {
   /** Absolute origin of the app, for links in the email (`https://ferreto.io`). */
   appUrl: string;
   /** The founder's local date, already formatted ("Thursday 29 Oct"). */
   dateLabel: string;
+  /** The founder's time zone, for times in the email. */
+  timezone: string;
+  now: Date;
+  people: DigestPerson[];
+  followUps: DigestFollowUp[];
+  posts: DigestPosts;
+  /** "every weekday at 08:00" (`digestScheduleLabel`). */
+  schedule: string;
+  /** The page that asks before unsubscribing; without it the footer points at Settings. */
+  unsubscribeUrl?: string;
+  /** Every waiting card, for the send's claim and the Dashboard. */
   waiting: { id: string; title: string; department: string }[];
+  /** The Dashboard's: posts published in the last day. Not in the email. */
   wentOut: { title: string; where: string }[];
+  /** The Dashboard's: work that failed in the last day. Not in the email. */
   stuck: { title: string; department: string; reason: string }[];
-  /**
-   * The Dashboard's Today rows (`buildToday`), most urgent first, and how many rows are open in all. When there are
-   * rows, the email starts with the top three and "N more waiting" instead of the whole waiting list.
-   */
-  today?: { rows: TodayRow[]; open: number };
 };
 
-export type Digest = { subject: string; text: string; html: string; empty: boolean };
+export type Digest = {
+  subject: string;
+  /** The inbox preview line: the strongest quote, or what the email is about. */
+  preview: string;
+  text: string;
+  html: string;
+  /** No new person, no follow-up and no post due today: the email is not sent. */
+  empty: boolean;
+  summary: { people: number; followUps: number; posts: number };
+};
+
+export const DIGEST_DAYS = ["weekdays", "daily", "monday", "off"] as const;
+export type DigestDays = (typeof DIGEST_DAYS)[number];
+
+export function digestScheduleLabel(days: DigestDays, hour: number): string {
+  const at = `${String(hour).padStart(2, "0")}:00`;
+  if (days === "off") return "never: it is off";
+  if (days === "weekdays") return `every weekday at ${at}`;
+  if (days === "monday") return `every Monday at ${at}`;
+  return `every morning at ${at}`;
+}
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
-const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
-/** The one HTML escaper of every email (the digest body here, the footer in `lib/notify/email.ts`). */
+/** The one HTML escaper of every email (the digest here, the footer in `lib/notify/email.ts`). */
 export function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 }
 
-/**
- * Where a Today row's link goes in the email. Links only open things (mail scanners open links): a card opens in the
- * inbox, a page opens as it is, and a chat request opens the Dashboard's chat, where the founder sends it themselves.
- */
-function todayHref(row: TodayRow): string {
-  if (row.action.type === "card") return `/app/inbox/${encodeURIComponent(row.action.approvalId)}`;
-  if (row.action.type === "link") return row.action.href;
-  return `/app?ask=1&prompt=${encodeURIComponent(row.action.prompt)}`;
+
+/** Sources in the order they first appear, joined for a sentence: "r/SaaS, r/startups and Hacker News". */
+function sourceList(sources: string[]): string {
+  const unique = [...new Set(sources)].slice(0, 3);
+  return unique.length <= 1 ? (unique[0] ?? "") : `${unique.slice(0, -1).join(", ")} and ${unique.at(-1)}`;
+}
+
+function clockIn(iso: string, timezone: string, now: Date): { time: string; today: boolean } {
+  const zone = zoneOrUtc(timezone);
+  const at = new Date(iso);
+  const day = (d: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: zone }).format(d);
+  const time = new Intl.DateTimeFormat("en-GB", { timeZone: zone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(at);
+  const today = day(at) === day(now);
+  return { time: today ? time : `${new Intl.DateTimeFormat("en-GB", { timeZone: zone, weekday: "short" }).format(at)} ${time}`, today };
 }
 
 export function buildDigest(input: DigestInput): Digest {
-  const { waiting, wentOut, stuck } = input;
   const base = input.appUrl.replace(/\/$/, "");
-  // A card row is shown only if its card is still in `waiting` (the email's claim may have dropped it since the read).
-  const stillWaiting = new Set(waiting.map((w) => w.id));
-  const allRows = input.today?.rows ?? [];
-  const keptRows = allRows.filter((row) => row.action.type !== "card" || stillWaiting.has(row.action.approvalId));
-  const todayRows = keptRows.slice(0, DIGEST_TODAY_ROWS);
-  const more = Math.max(0, (input.today?.open ?? 0) - (allRows.length - keptRows.length) - todayRows.length);
-  const empty = waiting.length === 0 && wentOut.length === 0 && stuck.length === 0 && todayRows.length === 0;
-  const subject = waiting.length
-    ? `${plural(waiting.length, "thing waits", "things wait")} on you · ${input.dateLabel}`
-    : `Your CMO this morning · ${input.dateLabel}`;
-  const link = (id: string) => `${base}/app/inbox/${encodeURIComponent(id)}`;
-  const rowLink = (row: TodayRow) => `${base}${todayHref(row)}`;
-  const moreLine = more > 0 ? `${more} more waiting` : null;
+  const card = (id: string) => `${base}/app/inbox/${encodeURIComponent(id)}`;
+  const people = [...input.people].sort((a, b) => b.score - a.score).slice(0, DIGEST_PEOPLE);
+  const fresh = input.people.filter((p) => p.isNew);
+  const followUps = input.followUps.slice(0, DIGEST_FOLLOW_UPS);
+  const { posts } = input;
+  const next = posts.nextAt ? clockIn(posts.nextAt, input.timezone, input.now) : null;
+  const postDueToday = posts.waiting > 0 && next?.today === true;
+  const empty = fresh.length === 0 && followUps.length === 0 && !postDueToday;
+
+  const postsLine =
+    posts.waiting === 0
+      ? null
+      : `${plural(posts.waiting, "post waits", "posts wait")} for you.` +
+        (next
+          ? posts.autopilot
+            ? ` ${posts.platform ? `The ${posts.platform} post` : "The next one"} goes out at ${next.time} unless you edit or skip it.`
+            : ` The next one needs your OK by ${next.time}.`
+          : "");
+
+  const subject = (
+    fresh.length
+      ? `${plural(fresh.length, "person is", "people are")} asking on ${sourceList(fresh.map((p) => p.source))}`
+      : followUps.length
+        ? `Someone answered your reply on ${followUps[0]!.source}`
+        : posts.waiting
+          ? `${plural(posts.waiting, "post waits", "posts wait")} for you`
+          : `Nothing new this morning`
+  ).slice(0, 150);
+  const strongest = [...fresh].sort((a, b) => b.score - a.score).find((p) => p.quote) ?? people.find((p) => p.quote);
+  const preview = (strongest?.quote ? `“${strongest.quote}”` : (postsLine ?? input.dateLabel)).slice(0, 160);
+
+  const settingsUrl = `${base}/app/settings#notifications`;
+  const stopUrl = input.unsubscribeUrl ?? settingsUrl;
+  const footerLines = [
+    "Replies are never posted for you. You post them yourself, from your own account.",
+    `You get this email ${input.schedule}.`,
+  ];
 
   const text = [
-    subject,
+    preview,
     "",
-    ...(todayRows.length
+    ...(people.length
       ? [
-          "Today:",
-          ...todayRows.map((row) => `- ${row.title}\n  ${rowLink(row)}`),
-          ...(moreLine ? [`${moreLine}: ${base}/app`] : []),
+          "PEOPLE ASKING",
+          ...people.flatMap((p) => [
+            `- ${p.source} · ${matchLabel(p.score)}${p.isNew ? " · new" : ""}`,
+            `  ${p.title}`,
+            ...(p.quote ? [`  “${p.quote}”`] : []),
+            `  ${card(p.approvalId)}`,
+          ]),
+          ...(input.people.length > people.length ? [`${input.people.length - people.length} more in Sales: ${base}/app/sales`] : []),
+          "",
         ]
-      : [waiting.length ? "Waiting on you:" : "Nothing waits on you.", ...waiting.map((w) => `- ${cap(w.department)}: ${w.title}\n  ${link(w.id)}`)]),
-    ...(wentOut.length ? ["", "Went out:", ...wentOut.map((o) => `- ${o.where}: ${o.title}`)] : []),
-    ...(stuck.length ? ["", "Stuck:", ...stuck.map((s) => `- ${cap(s.department)}: ${s.title}. ${s.reason}`)] : []),
-    "",
-    "Open a card to decide it in the app. Nothing goes out until you approve it.",
+      : []),
+    ...(followUps.length
+      ? [
+          "FOLLOW UP",
+          ...followUps.flatMap((f) => [`- ${plural(f.replies, "reply", "replies")} to your answer on ${f.source}`, `  ${f.title}`, `  ${f.url}`]),
+          "",
+        ]
+      : []),
+    ...(postsLine ? ["POSTS", `${postsLine} ${posts.firstId ? card(posts.firstId) : `${base}/app/post`}`, ""] : []),
+    "--",
+    ...footerLines,
+    `Change when it comes: ${settingsUrl}`,
+    `Stop these emails: ${stopUrl}`,
+    `Questions: ${SUPPORT}`,
   ].join("\n");
 
-  const section = (title: string, items: string[]) =>
-    items.length ? `<h2 style="font:600 14px Inter,sans-serif;margin:20px 0 8px">${escapeHtml(title)}</h2><ul style="padding-left:18px;margin:0">${items.join("")}</ul>` : "";
+  const muted = "#69695d";
+  const accent = "#c93a0f";
+  const h2 = (t: string) => `<h2 style="font:600 12px Inter,sans-serif;letter-spacing:.06em;text-transform:uppercase;color:${muted};margin:24px 0 8px">${escapeHtml(t)}</h2>`;
+  const a = (href: string, label: string, color = accent) => `<a href="${escapeHtml(href)}" style="color:${color}">${escapeHtml(label)}</a>`;
   const html = [
     `<div style="font:14px/1.5 Inter,sans-serif;color:#2b2723;max-width:560px">`,
-    `<h1 style="font:600 18px Inter,sans-serif;margin:0 0 8px">${escapeHtml(subject)}</h1>`,
-    todayRows.length
-      ? section("Today", todayRows.map((row) => `<li><a href="${escapeHtml(rowLink(row))}" style="color:#c93a0f">${escapeHtml(row.title)}</a></li>`)) +
-        (moreLine ? `<p style="margin:8px 0 0"><a href="${escapeHtml(`${base}/app`)}" style="color:#69695d">${escapeHtml(moreLine)}</a></p>` : "")
-      : (waiting.length ? "" : `<p>Nothing waits on you.</p>`) +
-        section(
-          "Waiting on you",
-          waiting.map((w) => `<li><a href="${escapeHtml(link(w.id))}" style="color:#c93a0f">${escapeHtml(cap(w.department))}: ${escapeHtml(w.title)}</a></li>`),
-        ),
-    section("Went out", wentOut.map((o) => `<li>${escapeHtml(o.where)}: ${escapeHtml(o.title)}</li>`)),
-    section("Stuck", stuck.map((s) => `<li>${escapeHtml(cap(s.department))}: ${escapeHtml(s.title)}. ${escapeHtml(s.reason)}</li>`)),
-    `<p style="color:#69695d;margin-top:20px">Open a card to decide it in the app. Nothing goes out until you approve it.</p>`,
+    // The preheader: mail clients show it after the subject; hidden in the body.
+    `<div style="display:none;max-height:0;overflow:hidden">${escapeHtml(preview)}</div>`,
+    `<h1 style="font:600 18px Inter,sans-serif;margin:0 0 4px">${escapeHtml(subject)}</h1>`,
+    `<p style="color:${muted};margin:0">${escapeHtml(input.dateLabel)}</p>`,
+    people.length
+      ? h2("People asking") +
+        people
+          .map(
+            (p) =>
+              `<div style="margin:0 0 14px">` +
+              `<div style="color:${muted};font-size:12px">${escapeHtml(p.source)} · ${escapeHtml(matchLabel(p.score))}${p.isNew ? " · new" : ""}</div>` +
+              `<div>${a(card(p.approvalId), p.title)}</div>` +
+              (p.quote ? `<div style="border-left:2px solid #e3e1da;padding-left:10px;margin-top:4px">“${escapeHtml(p.quote)}”</div>` : "") +
+              `</div>`,
+          )
+          .join("") +
+        (input.people.length > people.length ? `<p style="margin:0">${a(`${base}/app/sales`, `${input.people.length - people.length} more in Sales`, muted)}</p>` : "")
+      : "",
+    followUps.length
+      ? h2("Follow up") +
+        followUps
+          .map(
+            (f) =>
+              `<div style="margin:0 0 14px"><div style="color:${muted};font-size:12px">${escapeHtml(plural(f.replies, "reply", "replies"))} to your answer on ${escapeHtml(f.source)}</div>` +
+              `<div>${a(f.url, f.title)}</div></div>`,
+          )
+          .join("")
+      : "",
+    postsLine ? h2("Posts") + `<p style="margin:0">${a(posts.firstId ? card(posts.firstId) : `${base}/app/post`, postsLine, "#2b2723")}</p>` : "",
+    `<p style="font:12px/1.5 Inter,sans-serif;color:${muted};margin-top:28px;border-top:1px solid #e3e1da;padding-top:12px">` +
+      footerLines.map(escapeHtml).join(" ") +
+      ` ${a(settingsUrl, "Change when it comes", muted)} · ${a(stopUrl, "Stop these emails", muted)} · ${a(`mailto:${SUPPORT}`, SUPPORT, muted)}</p>`,
     `</div>`,
   ].join("");
-  return { subject, text, html, empty };
+  return { subject, preview, text, html, empty, summary: { people: people.length, followUps: followUps.length, posts: posts.waiting } };
 }
 
-/** Reads one founder's digest content. Works with the founder's session (RLS) or the service role. */
+// The same address `lib/notify/email.ts` sends from; kept here so this module stays importable by pure checks.
+const SUPPORT = "support@ferreto.io";
+
 /**
- * What a card is, in one line of at most 120 characters: the digest and the expiring-card email both name cards with
- * it (review follow-up S3). One line, because a post's own newlines would land in an email's Subject header.
+ * What a card is, in one line of at most 120 characters: the digest and Today both name cards with it (review
+ * follow-up S3). One line, because a post's own newlines would land in an email's Subject header.
  */
 export function cardTitle(snapshot: Record<string, unknown>): string {
   const s = snapshot;
@@ -116,39 +247,126 @@ export function cardTitle(snapshot: Record<string, unknown>): string {
     : s.kind === "reply" ? str(s.title)
     : s.kind === "goal" ? str(s.goal)
     : s.kind === "correction" ? str(s.rule)
-    : s.kind === "schedule" ? [str(s.text) ?? str(s.title) ?? "A post", str(s.platform) ? (String(s.platform) === "x" ? "X" : String(s.platform)) : null].filter(Boolean).join(" · ")
+    : s.kind === "schedule" ? [str(s.text) ?? str(s.title) ?? "A post", platformName(s.platform)].filter(Boolean).join(" · ")
     : (str(s.title) ?? str(s.text));
   return (pick ?? "A card waits for you").replace(/\s+/g, " ").trim().slice(0, 120);
 }
 
+function platformName(p: unknown): string | null {
+  if (typeof p !== "string" || !p) return null;
+  return p === "x" ? "X" : p.charAt(0).toUpperCase() + p.slice(1);
+}
+
+/** "r/SaaS" or the platform's name, for a sales thread. */
+function sourceOf(platform: string | null, community: string | null): string {
+  const known = SALES_PLATFORMS.find((p) => p === platform) ?? "reddit";
+  const c = (community ?? "").trim();
+  return (c || PLATFORM_LABEL[known]).slice(0, 60);
+}
+
+/** The thread's own words: Pain first, then Evidence, as the scan stored them (with curly quotes). */
+export function personQuote(parts: unknown): string | null {
+  if (!Array.isArray(parts)) return null;
+  for (const label of ["Pain", "Evidence"]) {
+    const part = parts.find((p) => (p as { label?: unknown })?.label === label) as { evidence?: unknown; score?: unknown } | undefined;
+    const ev = typeof part?.evidence === "string" ? part.evidence.trim() : "";
+    // Only a quote: the scan writes "No clear pain in their words" when it found none.
+    if (!/^[“"]/.test(ev) || (typeof part?.score === "number" && part.score <= 0)) continue;
+    const words = ev.replace(/^[“"]+|[”"]+$/g, "").replace(/\s+/g, " ").trim();
+    if (words) return words.length > 220 ? `${words.slice(0, 217).trimEnd()}...` : words;
+  }
+  return null;
+}
+
 /**
- * `today: false` skips the Today rows (the Dashboard has its own block). The rows read published posts through
- * `my_published_items` under the founder's session and `published_items` under the service role: the email cron
- * passes `asService: true` and the founder's zone.
+ * Reads one founder's digest content. Works with the founder's session (RLS) or the service role. `since` is when the
+ * last morning email went out: people found after it are new, and follow-ups checked after it are shown.
  */
 export async function loadDigestInput(
   db: SupabaseClient,
   userId: string,
-  opts: { appUrl: string; dateLabel: string; now?: Date; today?: boolean; timezone?: string; asService?: boolean },
+  opts: { appUrl: string; dateLabel: string; now?: Date; timezone?: string; since?: string | null; schedule?: string; unsubscribeUrl?: string; emailOnly?: boolean },
 ): Promise<DigestInput> {
-  const since = new Date((opts.now ?? new Date()).getTime() - 24 * 3_600_000).toISOString();
-  const [waiting, out, stuck] = await Promise.all([
-    // As many as Today reads (100), so a recent urgent card Today ranks first is in the email's list and its claim.
-    db.from("approvals").select("id, kind, department, snapshot").eq("user_id", userId).eq("status", "waiting").order("created_at").limit(100),
-    db.from("content_items").select("idea, platform, final_text").eq("user_id", userId).eq("status", "published").gte("published_at", since).limit(20),
-    db.from("work_orders").select("title, department, error").eq("user_id", userId).eq("status", "failed").gte("updated_at", since).limit(20),
+  // The Dashboard reads only waiting, went out and stuck: `emailOnly: false` skips the email's follow-up and thread reads,
+  // so a failure there never drops the Dashboard's block (review of #238).
+  const emailParts = opts.emailOnly !== false;
+  const now = opts.now ?? new Date();
+  const dayAgo = new Date(now.getTime() - 24 * 3_600_000).toISOString();
+  const since = opts.since ?? dayAgo;
+  const [waiting, out, stuck, answered] = await Promise.all([
+    db.from("approvals").select("id, kind, department, ref_kind, ref_id, snapshot, expires_at, auto_at, post_at").eq("user_id", userId).eq("status", "waiting").order("created_at").limit(100),
+    db.from("content_items").select("idea, platform, final_text").eq("user_id", userId).eq("status", "published").gte("published_at", dayAgo).limit(20),
+    db.from("work_orders").select("title, department, error").eq("user_id", userId).eq("status", "failed").gte("updated_at", dayAgo).limit(20),
+    !emailParts
+      ? Promise.resolve({ data: [], error: null })
+      : db
+      .from("cmo_draft_outcomes")
+      .select("item_id, outcome_replies, outcome_url")
+      .eq("user_id", userId)
+      .eq("department", "sales")
+      .eq("outcome_status", "found")
+      .gt("outcome_replies", 0)
+      .gte("outcome_checked_at", since)
+      .order("outcome_checked_at", { ascending: false })
+      .limit(DIGEST_FOLLOW_UPS),
   ]);
-  for (const r of [waiting, out, stuck]) if (r.error) throw new Error(`digest: ${r.error.message}`);
-  const today = opts.today === false ? undefined : await digestToday(db, userId, opts);
+  for (const r of [waiting, out, stuck, answered]) if (r.error) throw new Error(`digest: ${r.error.message}`);
+  type Card = { id: string; kind: string; department: string; ref_kind: string; ref_id: string; snapshot: Record<string, unknown>; expires_at: string | null; auto_at: string | null; post_at: string | null };
+  const cards = (waiting.data ?? []) as Card[];
+  const replyCards = cards.filter((c) => c.kind === "reply" && c.ref_kind === "opportunity");
+  const outcomes = (answered.data ?? []) as { item_id: string; outcome_replies: number; outcome_url: string | null }[];
+  const threadIds = [...new Set([...replyCards.map((c) => c.ref_id), ...outcomes.map((o) => o.item_id)])];
+  type Thread = { id: string; platform: string | null; community: string | null; title: string; url: string; score: number; score_parts: unknown; created_at: string };
+  let threads = new Map<string, Thread>();
+  if (emailParts && threadIds.length) {
+    const r = await db.from("opportunities").select("id, platform, community, title, url, score, score_parts, created_at").eq("user_id", userId).in("id", threadIds);
+    if (r.error) throw new Error(`digest: ${r.error.message}`);
+    threads = new Map(((r.data ?? []) as Thread[]).map((t) => [t.id, t]));
+  }
+
+  const people = replyCards.flatMap((c): DigestPerson[] => {
+    const t = threads.get(c.ref_id);
+    if (!t) return [];
+    return [{
+      approvalId: c.id,
+      title: t.title.replace(/\s+/g, " ").trim().slice(0, 200) || cardTitle(c.snapshot),
+      source: sourceOf(t.platform, t.community),
+      score: Math.max(0, Math.min(100, Math.round(Number(t.score) || 0))),
+      quote: personQuote(t.score_parts),
+      isNew: Date.parse(t.created_at) > Date.parse(since),
+    }];
+  });
+  const followUps = outcomes.flatMap((o): DigestFollowUp[] => {
+    const t = threads.get(o.item_id);
+    if (!t) return [];
+    return [{ title: t.title.replace(/\s+/g, " ").trim().slice(0, 200), source: sourceOf(t.platform, t.community), replies: o.outcome_replies, url: o.outcome_url || t.url }];
+  });
+  // A post's deadline: autopilot's time, the time its card expires, or the time it is set to go out. The nearest leads.
+  const postCards = cards
+    .filter((c) => c.kind === "post" || c.kind === "schedule")
+    // Compared as instants: the database writes "+00:00", not "Z".
+    .map((c) => ({ c, at: [c.auto_at, c.expires_at, c.post_at].filter((x): x is string => !!x).sort((a, b) => Date.parse(a) - Date.parse(b))[0] ?? null }))
+    .sort((a, b) => (a.at ? Date.parse(a.at) : Infinity) - (b.at ? Date.parse(b.at) : Infinity));
+  const first = postCards[0];
+  const posts: DigestPosts = {
+    waiting: postCards.length,
+    firstId: first?.c.id ?? null,
+    nextAt: first?.at ?? null,
+    autopilot: !!first?.c.auto_at && first.at === first.c.auto_at,
+    platform: first?.c.auto_at ? platformName(first.c.snapshot.platform) : null,
+  };
+
   return {
-    ...(today ? { today } : {}),
     appUrl: opts.appUrl,
     dateLabel: opts.dateLabel,
-    waiting: ((waiting.data ?? []) as { id: string; kind: string; department: string; snapshot: Record<string, unknown> }[]).map((r) => ({
-      id: r.id,
-      title: cardTitle(r.snapshot),
-      department: r.department,
-    })),
+    timezone: opts.timezone ?? "UTC",
+    now,
+    people,
+    followUps,
+    posts,
+    schedule: opts.schedule ?? "every morning",
+    ...(opts.unsubscribeUrl ? { unsubscribeUrl: opts.unsubscribeUrl } : {}),
+    waiting: cards.map((r) => ({ id: r.id, title: cardTitle(r.snapshot), department: r.department })),
     wentOut: ((out.data ?? []) as { idea: string; platform: string; final_text: string | null }[]).map((r) => ({
       title: (r.final_text ?? r.idea).slice(0, 120),
       where: r.platform.toUpperCase() === "X" ? "X" : r.platform,
@@ -161,41 +379,23 @@ export async function loadDigestInput(
   };
 }
 
-/** Today's rows for the email: the same `buildToday` the Dashboard runs. A failure leaves the email as it was. */
-async function digestToday(
-  db: SupabaseClient,
-  userId: string,
-  opts: { now?: Date; timezone?: string; asService?: boolean },
-): Promise<DigestInput["today"]> {
-  try {
-    // Loaded here, not at the top: the reader is server-only, and this module is also used by pure checks.
-    const { loadTodayInput } = await import("./today-input");
-    const now = opts.now ?? new Date();
-    let timezone = opts.timezone;
-    if (!timezone) {
-      const { data } = await db.from("profiles").select("timezone").eq("id", userId).maybeSingle<{ timezone: string | null }>();
-      timezone = data?.timezone || "UTC";
-    }
-    const input = await loadTodayInput(db, userId, { now, timezone, asService: opts.asService === true });
-    const today = buildToday(input);
-    return { rows: today.rows, open: today.total - today.done };
-  } catch (error) {
-    console.warn("[digest] Today rows not read", error instanceof Error ? error.message : error);
-    return undefined;
-  }
+/** The founder's local hour, weekday (0 Sunday to 6 Saturday) and date label in their time zone (unknown zone: UTC). */
+export function localClock(now: Date, timezone: string): { hour: number; weekday: number; dateLabel: string } {
+  const zone = zoneOrUtc(timezone);
+  const hour = Number(new Intl.DateTimeFormat("en-GB", { timeZone: zone, hour: "2-digit", hourCycle: "h23" }).format(now));
+  const short = new Intl.DateTimeFormat("en-US", { timeZone: zone, weekday: "short" }).format(now);
+  const weekday = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(short);
+  const dateLabel = new Intl.DateTimeFormat("en-GB", { timeZone: zone, weekday: "long", day: "numeric", month: "short" }).format(now);
+  return { hour, weekday, dateLabel };
 }
 
-/** The founder's local hour and date label in their time zone (an unknown zone falls back to UTC). */
-export function localClock(now: Date, timezone: string): { hour: number; dateLabel: string } {
-  const zone = (() => {
-    try {
-      new Intl.DateTimeFormat("en-GB", { timeZone: timezone });
-      return timezone;
-    } catch {
-      return "UTC";
-    }
-  })();
-  const hour = Number(new Intl.DateTimeFormat("en-GB", { timeZone: zone, hour: "2-digit", hourCycle: "h23" }).format(now));
-  const dateLabel = new Intl.DateTimeFormat("en-GB", { timeZone: zone, weekday: "long", day: "numeric", month: "short" }).format(now);
-  return { hour, dateLabel };
+/** Whether the morning email may go out on this local weekday. */
+export function digestDayAllowed(days: DigestDays, weekday: number): boolean {
+  if (days === "off") return false;
+  if (days === "weekdays") return weekday >= 1 && weekday <= 5;
+  if (days === "monday") return weekday === 1;
+  return true;
 }
+
+/** What a skipped morning's log row says. */
+export const DIGEST_SKIPPED_NOTE = "Nothing new: no person, follow-up or post due";

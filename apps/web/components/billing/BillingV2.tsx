@@ -1,27 +1,30 @@
-import Link from "next/link";
-
-import { BalanceV2 } from "@/components/billing/BalanceV2";
 import { BillingButton } from "@/components/billing/BillingButton";
-import { AccountUsageLoader } from "@/components/clipping/web/AccountUsage";
+import { SwitchAnnual } from "@/components/billing/SwitchAnnual";
 import { LocalTime } from "@/components/LocalTime";
 import { SettingsFrame } from "@/components/today/SettingsFrame";
 import type { SellablePlan } from "@/lib/billing-catalog";
+import type { PlanUsage } from "@/lib/billing/usage";
 import type { LedgerEntry } from "@/lib/types";
 
 type Pack = { slug: string; credits: number; price_cents: number };
 
+/** "18 Dec": the reset date the way the pause message says it. */
+function day(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+}
+
 /**
- * Billing (Settings.dc.html › Billing). The same data and rules as the classic page: prices only from the catalogue rows
- * (no row, no number), packs only for paid plans, checkout and the portal through Creem, the usage rows and the
- * watermark note. Only the layout is the artboard's.
+ * Billing (Settings.dc.html › Billing). Prices only from the catalogue rows (no row, no number), packs only for paid
+ * plans, checkout and the portal through Creem. A paid plan shows one fair-use bar (wave 2) instead of a balance: what the
+ * founder reads is how much of this month is used and when it resets, not credits per click.
  */
 export function BillingV2({
   planId,
   paid,
   plans,
   packs,
-  planCredit,
   ledger,
+  usage,
   hasPortal,
   justPaid,
   start,
@@ -33,14 +36,16 @@ export function BillingV2({
   packs: Pack[];
   planCredit: SellablePlan | undefined;
   ledger: LedgerEntry[];
+  usage: PlanUsage;
   hasPortal: boolean;
   justPaid: boolean;
   start: boolean;
   site?: string;
 }) {
   const current = plans.find((plan) => plan.id === planId);
+  // Only a paid monthly founder, and only while the annual row is on sale (A7).
+  const annual = paid && usage.interval === "month" ? plans.find((plan) => plan.interval === "year" && plan.slug) : undefined;
   const shown = plans.filter((plan) => plan.id === "free" || plan.slug || plan.id === planId);
-  const spentThisMonth = ledger.filter((r) => r.delta < 0 && new Date(r.created_at).getMonth() === new Date().getMonth()).reduce((sum, r) => sum - r.delta, 0);
   return (
     <SettingsFrame current="billing">
       <div data-testid="v2-billing" style={{ display: "contents" }}>
@@ -52,65 +57,77 @@ export function BillingV2({
         ) : null}
         {start && !paid ? (
           <p className="meta" role="status" data-testid="billing-start">
-            Your first plan and drafts are free. Pick a plan to approve and post them.
+            Your first scan is free: the people asking, in their own words. Pick a plan to get the replies written and to approve and post your drafts.
           </p>
         ) : null}
 
-        <section className="card">
+        <section className="card" data-testid="billing-plan">
           <div className="bd" style={{ display: "flex", gap: "24px", flexWrap: "wrap", alignItems: "flex-start" }}>
             <div style={{ flex: "1 1 260px" }}>
               <div className="meta" style={{ marginBottom: "6px" }}>
                 Your plan
               </div>
               <div style={{ display: "flex", alignItems: "baseline", gap: "8px" }}>
-                <span style={{ fontSize: "20px", fontWeight: "600" }}>{current?.name ?? planId}</span>
+                <span style={{ fontSize: "20px", fontWeight: "600" }}>{paid ? "Pro" : "Free"}</span>
                 {paid ? <span className="badge">Active</span> : null}
               </div>
-              {current && (current.id === "free" || current.slug) ? (
+              {paid ? (
                 <div style={{ marginTop: "6px", color: "var(--muted)" }}>
-                  ${current.price} a month
-                  {current.watermark ? " · free clips carry a watermark" : ""}
+                  {[
+                    // A price only from its catalogue row: no row, no number (cmo-review-2 S2.7).
+                    current?.slug ? (current.interval === "year" ? `$${current.billedPrice} a year` : `$${current.price} a month`) : null,
+                    usage.interval === "month" && usage.resetsAt ? `renews on ${day(usage.resetsAt)}` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
                 </div>
               ) : null}
+              {!paid ? (
+                <div style={{ marginTop: "6px", color: "var(--muted)" }}>Your first scan is free. A plan writes the replies and the week of posts.</div>
+              ) : null}
               <div style={{ display: "flex", gap: "8px", marginTop: "14px", flexWrap: "wrap" }}>
-                <a href="#billing-plans" className="ghost" style={{ textDecoration: "none" }}>
-                  Change plan
-                </a>
+                {!paid ? (
+                  <a href="#billing-plans" className="ghost" style={{ textDecoration: "none" }}>
+                    See plans
+                  </a>
+                ) : null}
+                {annual ? <SwitchAnnual billed={annual.billedPrice} /> : null}
                 {hasPortal ? <BillingButton path="/api/v1/billing/portal" label="Invoices and payment method" className="ghost" /> : null}
+                {paid && hasPortal ? <BillingButton path="/api/v1/billing/portal" label="Cancel plan" className="ghost" /> : null}
               </div>
               <div className="meta" style={{ marginTop: "8px" }}>
                 Payments, invoices and cancelling are handled by Creem, our merchant of record.
               </div>
             </div>
-            <div style={{ flex: "0 1 220px", borderLeft: "1px solid var(--line)", paddingLeft: "24px" }}>
-              <div className="meta" style={{ marginBottom: "6px" }}>
-                Credits left
+            {paid ? (
+              <div className="td-usage-panel" data-testid="billing-usage">
+                <div className="meta" style={{ marginBottom: "6px" }}>
+                  {usage.interval === "year" ? "This month of your year" : "This month"}
+                </div>
+                <div style={{ display: "flex", alignItems: "baseline", gap: "8px", flexWrap: "wrap" }}>
+                  <span style={{ fontSize: "32px", fontWeight: "600", letterSpacing: "-0.8px", lineHeight: "1" }}>{usage.percent}%</span>
+                  <span className="meta">of the fair-use allowance used</span>
+                </div>
+                <div
+                  className="td-usage-bar"
+                  role="meter"
+                  aria-label="Fair-use allowance used"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={usage.percent}
+                  data-paused={usage.paused ? "" : undefined}
+                >
+                  <span style={{ width: `${usage.percent}%` }} />
+                </div>
+                <div className="meta" style={{ marginTop: "8px" }}>
+                  {usage.paused
+                    ? `New scans pause until ${usage.resetsAt ? day(usage.resetsAt) : "the allowance resets"}. Your drafts and posts keep working.`
+                    : usage.resetsAt
+                      ? `Resets on ${day(usage.resetsAt)}.`
+                      : "Resets each month."}
+                </div>
               </div>
-              <div style={{ fontSize: "32px", fontWeight: "600", letterSpacing: "-0.8px", lineHeight: "1" }}>
-                <BalanceV2 />
-              </div>
-              {paid && packs.length ? (
-                <a href="#billing-packs" className="ghost" style={{ marginTop: "12px", textDecoration: "none" }}>
-                  Buy credits
-                </a>
-              ) : null}
-            </div>
-          </div>
-        </section>
-
-        <section className="card">
-          <div className="hd">
-            <h2>Spent this month</h2>
-            <span className="meta">{spentThisMonth} credits</span>
-            <div style={{ flex: "1 1 auto" }}></div>
-            <Link href="/app?logs=1" style={{ fontSize: "13px", textDecoration: "none" }}>
-              Open Logs
-            </Link>
-          </div>
-          <div className="bd td-v2host">
-            {/* The classic page's usage rows (held per video, exports left today, when quotas reset). The balance is the
-                "Credits left" above: shown again here, unlabelled under "Spent this month", it read as what was spent. */}
-            <AccountUsageLoader hideCredits />
+            ) : null}
           </div>
         </section>
 
@@ -157,7 +174,7 @@ export function BillingV2({
         {paid && packs.length > 0 ? (
           <section className="card" id="billing-packs">
             <div className="hd">
-              <h2>Credit packs</h2>
+              <h2>More this month</h2>
               <span className="meta">one-time, for paid plans</span>
             </div>
             <div className="bd">
@@ -166,15 +183,14 @@ export function BillingV2({
                   <div key={pack.slug} className="pack">
                     <span style={{ fontWeight: "600" }}>{pack.credits} credits</span>
                     <span className="meta">
-                      ${pack.price_cents / 100} · ${(pack.price_cents / 100 / pack.credits).toFixed(3)} per credit
-                      {planCredit ? `. Your plan: $${(planCredit.billedPrice / planCredit.credits).toFixed(3)}` : ""}
+                      ${pack.price_cents / 100} · adds {pack.credits} credits to this month&apos;s allowance
                     </span>
                     <BillingButton path="/api/v1/billing/checkout" product={pack.slug} label="Buy" className="ghost" />
                   </div>
                 ))}
               </div>
               <div className="meta" style={{ marginTop: "10px" }}>
-                A pack credit costs more than a plan credit; upgrading is the cheaper way to get more each month.
+                For a month with more searches than usual. A pack costs more per credit than the plan.
               </div>
             </div>
           </section>

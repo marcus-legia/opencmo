@@ -50,8 +50,8 @@ export const PLANS: Plan[] = [
     // `free` is not a tier to use: it is the state before buying. There is no signup gift (20260921150000); what it
     // gets is the free first run (CMO review 3, 3.1), so the list says exactly that.
     features: [
-      "Your first plan and drafts, free",
-      "No monthly credits: pick a plan to approve, post and keep going",
+      "Your first scan, free: the people asking, in their own words",
+      "No monthly credits: pick a plan for the replies, posting and more",
       "Auto captions",
       "Watermarked exports",
       "Account deleted 30 days after sign-up unless you buy a plan",

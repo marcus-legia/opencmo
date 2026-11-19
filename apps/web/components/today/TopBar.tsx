@@ -7,6 +7,7 @@ import type { ReactNode } from "react";
 import { ApiError, api, jsonBody } from "@/components/clipping/api";
 import { prefetchScreen, useScreen } from "@/components/screens/useScreen";
 import { useOptionalShellState } from "@/components/shell-v2/ShellState";
+import type { PlanUsage } from "@/lib/billing/usage";
 import type { ScreenName } from "@/lib/screens/registry";
 import type { Autopilot } from "@/lib/screens/settings";
 
@@ -17,7 +18,7 @@ import { siteLabel, useWorkspace } from "./workspace";
 /** What each view reads: hovering or focusing its link reads it ahead, so the click lands on data, not "Loading…". */
 const VIEW_SCREENS: Record<string, ScreenName[]> = {
   feed: ["schedule"],
-  calendar: ["schedule", "dashboard"],
+  post: ["writer", "schedule"],
   sales: ["sales"],
   analytics: ["analytics", "dashboard", "research", "sales"],
 };
@@ -92,7 +93,7 @@ function AutopilotSwitch() {
  */
 export type TopVariant =
   | { kind: "home" }
-  | { kind: "views"; current: "feed" | "calendar" | "photos" | "sales" | "analytics" | null }
+  | { kind: "views"; current: "feed" | "post" | "sales" | "analytics" | null }
   | { kind: "crumbs"; trail: { label: string; href?: string }[]; logs?: boolean; chat?: boolean; credits?: boolean; back?: boolean };
 
 const Chevron = () => (
@@ -114,14 +115,38 @@ const LogsIcon = () => (
   </svg>
 );
 
-/** The business switcher: the product's initial and name, a menu with what has no other place in the frame. */
-const CoinIcon = () => (
-  <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
-    <circle cx="12" cy="12" r="9" />
-    <path d="M12 7v10M9 9.5h4.5a2 2 0 0 1 0 4H10a2 2 0 0 0 0 4h5" />
-  </svg>
-);
+/**
+ * The fair-use chip (wave 2): the plan and how much of this period's allowance is used, never a credit balance. Free
+ * accounts get the way to the plans. On a phone the plan's name goes; the link keeps the whole sentence for readers.
+ */
+function UsageChip({ usage }: { usage: PlanUsage }) {
+  if (usage.plan !== "pro") {
+    return (
+      <Link href="/app/billing" className="pill td-usage" aria-label="Free plan: see plans" data-testid="usage-chip" style={{ textDecoration: "none" }}>
+        <span className="td-pill-more">Free · </span>
+        <span>See plans</span>
+      </Link>
+    );
+  }
+  return (
+    <Link
+      href="/app/billing"
+      className="pill td-usage"
+      aria-label={`Pro plan: ${usage.percent}% of this month's allowance used`}
+      data-testid="usage-chip"
+      data-paused={usage.paused ? "" : undefined}
+      style={{ textDecoration: "none" }}
+    >
+      <span className="td-usage-meter" aria-hidden="true">
+        <span style={{ width: `${usage.percent}%` }} />
+      </span>
+      <span className="td-pill-more">Pro · </span>
+      <span>{usage.percent}% used</span>
+    </Link>
+  );
+}
 
+/** The business switcher: the product's initial and name, a menu with what has no other place in the frame. */
 function Project({ menu }: { menu: ReactNode }) {
   const ws = useWorkspace();
   const name = ws.name ?? siteLabel(ws.site) ?? "Your business";
@@ -152,6 +177,7 @@ function Avatar({ email }: { email: string | null }) {
       </summary>
       <div className="td-menu">
         <span className="td-menu-note">{email ?? "Signed in"}</span>
+        <a href="/app/studio" target="_blank" rel="noopener">Editor ↗</a>
         <Link href="/app/settings">Settings</Link>
         <Link href="/app/billing">Billing</Link>
         <form action="/auth/signout" method="post">
@@ -166,37 +192,28 @@ function Avatar({ email }: { email: string | null }) {
 const MORE = (
   <>
     <Link href="/app?doc=product">Documents and Brand Kit</Link>
-    <Link href="/app/research">Research</Link>
+    <Link href="/app/research">Research: competitors</Link>
     <Link href="/app?doc=plan">Plan and orders</Link>
     <Link href="/app?doc=voice">Voice and skills</Link>
-    <Link href="/app/studio">Projects</Link>
     <Link href="/app/settings">Settings</Link>
   </>
 );
 
 export function TopBar({
   variant,
-  credits,
+  usage,
   email,
   logsOpen,
   onLogs,
   onChat,
 }: {
   variant: TopVariant;
-  credits: number | null;
+  usage: PlanUsage;
   email: string | null;
   logsOpen: boolean;
   onLogs: () => void;
   onChat: () => void;
 }) {
-  // On a phone the word goes (the coin and the number stay; the link keeps "credits" for screen readers).
-  const creditsLabel = (
-    <span>
-      {credits ?? "–"}
-      <span className="td-pill-more"> credits</span>
-    </span>
-  );
-
   // Feed, Calendar and Analytics share one bar (owner, 2026-11-10): the business and its accounts on the left, the three
   // views in the middle as links (prefetched, so a switch is instant), credits, Logs and the chat on the right. On the
   // feed the chat is a column, so its button is not needed there.
@@ -215,37 +232,26 @@ export function TopBar({
         ),
       },
       {
-        id: "calendar",
-        label: "Calendar",
-        href: "/app/schedule",
-        icon: (
-          <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
-            <rect width="18" height="18" x="3" y="4" rx="2" />
-            <path d="M16 2v4" />
-            <path d="M8 2v4" />
-            <path d="M3 10h18" />
-          </svg>
-        ),
-      },
-      {
-        id: "photos",
-        label: "Photos",
-        href: "/app/photos",
-        icon: (
-          <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
-            <rect width="18" height="18" x="3" y="3" rx="2" />
-            <circle cx="9" cy="9" r="2" />
-            <path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21" />
-          </svg>
-        ),
-      },
-      {
         id: "sales",
         label: "Sales",
         href: "/app/sales",
         icon: (
           <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
             <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
+          </svg>
+        ),
+      },
+      {
+        id: "post",
+        label: "Post",
+        // The list of posts; its List / Week switch leads to the week view (the old Calendar).
+        href: "/app/writer",
+        icon: (
+          <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
+            <rect width="18" height="18" x="3" y="4" rx="2" />
+            <path d="M16 2v4" />
+            <path d="M8 2v4" />
+            <path d="M3 10h18" />
           </svg>
         ),
       },
@@ -277,22 +283,11 @@ export function TopBar({
         </nav>
         <div style={{ flex: "1 1 auto" }}></div>
         <AutopilotSwitch />
-        <Link href="/app/billing" className="pill" style={{ textDecoration: "none" }}>
-          <CoinIcon />
-          {creditsLabel}
-        </Link>
+        <UsageChip usage={usage} />
         <button type="button" className="pill" aria-pressed={logsOpen} onClick={onLogs}>
           <LogsIcon />
           <span className="td-pill-label">Logs</span>
         </button>
-        <Link href="/app/studio" className="ib" aria-label="Open the editor">
-          <svg className="i" viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M20.2 6 3 11l-.9-2.4c-.3-1.1.3-2.2 1.3-2.5l13.5-4c1.1-.3 2.2.3 2.5 1.3Z" />
-            <path d="m6.2 5.3 3.1 3.9" />
-            <path d="m12.4 3.4 3.1 4" />
-            <path d="M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />
-          </svg>
-        </Link>
         <Avatar email={email} />
       </header>
     );
@@ -314,12 +309,7 @@ export function TopBar({
         </span>
       ))}
       <div style={{ flex: "1 1 auto" }}></div>
-      {variant.credits ? (
-        <Link href="/app/billing" className="pill" style={{ textDecoration: "none" }}>
-          <CoinIcon />
-          {creditsLabel}
-        </Link>
-      ) : null}
+      {variant.credits ? <UsageChip usage={usage} /> : null}
       {variant.logs ? (
         <button type="button" className="pill" aria-pressed={logsOpen} onClick={onLogs}>
           <LogsIcon />
@@ -341,5 +331,25 @@ export function TopBar({
       ) : null}
       <Avatar email={email} />
     </header>
+  );
+}
+
+/** Post's two views (owner, 2026-11-19): the list of drafts and posts, and the week. */
+export function PostViewSwitch({ current }: { current: "list" | "week" }) {
+  const item = (id: "list" | "week", label: string, href: string) => (
+    <Link
+      href={href}
+      aria-current={current === id ? "page" : undefined}
+      className="pill"
+      style={{ textDecoration: "none", ...(current === id ? { background: "var(--line-2)", color: "var(--text)", fontWeight: "600" } : { color: "var(--muted)" }) }}
+    >
+      {label}
+    </Link>
+  );
+  return (
+    <nav aria-label="Post view" style={{ display: "inline-flex", gap: "4px" }} data-testid="post-view-switch">
+      {item("list", "List", "/app/writer")}
+      {item("week", "Week", "/app/schedule")}
+    </nav>
   );
 }

@@ -72,7 +72,7 @@ export function PlanSheet({ open, onClose, action = "approve and post" }: { open
         <h2 id="plan-sheet-title" className="v2-dialog-title">
           Pick a plan to {action}
         </h2>
-        <p className="v2-muted">Your first plan and drafts were free, and they stay here. With a plan, your CMO posts them and keeps going.</p>
+        <p className="v2-muted">What your CMO found and wrote for free stays here. With a plan, it writes the replies, posts what you approve and keeps going.</p>
         {plans === null && !failed ? <p className="v2-mono is-muted">Loading plans…</p> : null}
         {failed || (plans && plans.length === 0) ? (
           <p className="v2-muted">

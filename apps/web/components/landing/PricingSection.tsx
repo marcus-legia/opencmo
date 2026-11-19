@@ -68,7 +68,7 @@ export function PricingSection({ prices, action }: { prices: Prices; action: str
                 <input id="price-site" name="site" type="text" inputMode="url" autoComplete="url" required placeholder="yourcompany.com" />
                 <button type="submit" className="lv-btn-terra">See who&apos;s asking</button>
               </form>
-              <small>Your first plan and drafts are free. Pick a plan to approve and post them. Cancel anytime. Nothing is posted until you approve it.</small>
+              <small>Your first scan is free: the people asking, in their own words. Replies are written once you pick a plan. Cancel anytime. Nothing is posted until you approve it.</small>
             </div>
           </article>
         </div>

@@ -16,10 +16,10 @@ const CREDITS_PER_MONTH = 580;
 
 /** `slug` is what the checkout route accepts from a client. Prices are in cents. */
 const CATALOG = [
-  { slug: "monthly", name: "OpenCMO Monthly", kind: "plan", plan_id: "starter", interval: "month", billing_type: "recurring", billing_period: "every-month", price_cents: 6900, credits: CREDITS_PER_MONTH, sort: 10 },
-  { slug: "annual", name: "OpenCMO Annual", kind: "plan", plan_id: "creator", interval: "year", billing_type: "recurring", billing_period: "every-year", price_cents: 69000, credits: CREDITS_PER_MONTH, sort: 20 },
-  { slug: "credits-200", name: "OpenCMO 200 credits", kind: "pack", plan_id: null, interval: null, billing_type: "onetime", billing_period: "once", price_cents: 2500, credits: 200, sort: 30 },
-  { slug: "credits-400", name: "OpenCMO 400 credits", kind: "pack", plan_id: null, interval: null, billing_type: "onetime", billing_period: "once", price_cents: 5000, credits: 400, sort: 40 },
+  { slug: "monthly", name: "Ferreto Monthly", kind: "plan", plan_id: "starter", interval: "month", billing_type: "recurring", billing_period: "every-month", price_cents: 6900, credits: CREDITS_PER_MONTH, sort: 10 },
+  { slug: "annual", name: "Ferreto Annual", kind: "plan", plan_id: "creator", interval: "year", billing_type: "recurring", billing_period: "every-year", price_cents: 69000, credits: CREDITS_PER_MONTH, sort: 20 },
+  { slug: "credits-200", name: "Ferreto 200 credits", kind: "pack", plan_id: null, interval: null, billing_type: "onetime", billing_period: "once", price_cents: 2500, credits: 200, sort: 30 },
+  { slug: "credits-400", name: "Ferreto 400 credits", kind: "pack", plan_id: null, interval: null, billing_type: "onetime", billing_period: "once", price_cents: 5000, credits: 400, sort: 40 },
 ];
 
 const die = (message) => {
@@ -39,7 +39,7 @@ function ensureProduct(item, existing) {
   // billing period. A one-time product must leave the period out; "once" gets that same misleading refusal.
   const created = creem(
     "products", "create",
-    "--idempotency-key", `opencmo-test-${item.slug}`,
+    "--idempotency-key", `ferreto-test-${item.slug}`,
     "--data", JSON.stringify({
       name: item.name,
       description: item.kind === "plan" ? `${item.credits} credits per month` : `${item.credits} credits, one time`,

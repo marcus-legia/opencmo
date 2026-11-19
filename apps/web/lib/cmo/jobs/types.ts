@@ -26,8 +26,10 @@ export type CmoJobKind =
   /** Daily core drafts D4: the founder's "Rewrite for <platform>" on a post card (`repurpose_post` in SQL queues it). */
   | "repurpose_post"
   /** Daily core drafts D7: the caption of the founder's own photo post (`photo_post_caption` in SQL queues it). */
-  | "photo_caption";
-export const CMO_JOB_KINDS: CmoJobKind[] = ["plan_week", "post_draft", "sales_scan", "competitor_research", "pull_metrics", "summarize_memory", "review_week", "write_video_brief", "write_caption", "publish_post", "niche_video_research", "distill_ratings", "repurpose_post", "photo_caption"];
+  | "photo_caption"
+  /** Free scan A5: the reply drafts of the cards a free scan saved without one, after the founder pays. */
+  | "sales_reply_drafts";
+export const CMO_JOB_KINDS: CmoJobKind[] = ["plan_week", "post_draft", "sales_scan", "competitor_research", "pull_metrics", "summarize_memory", "review_week", "write_video_brief", "write_caption", "publish_post", "niche_video_research", "distill_ratings", "repurpose_post", "photo_caption", "sales_reply_drafts"];
 
 /** What a weekly goal counts. Only things the product can measure itself. */
 export type GoalMetric = "posts" | "replies" | "views";
@@ -141,6 +143,8 @@ export type QueuedRun = {
   kind: CmoJobKind;
   input: Record<string, unknown>;
   attempt: number;
+  /** What the run holds (`cmo_runs.credits`); 0 for a free run. Unset in older stores: not free. */
+  credits?: number;
 };
 
 export type ItemStatus = "planned" | "drafting" | "in_review" | "approved" | "published" | "skipped" | "failed";
@@ -200,6 +204,21 @@ export type Opportunity = {
   platform?: SalesPlatform;
 };
 
+/** A card the free scan saved without a reply (free scan A5). */
+export type UndraftedOpportunity = {
+  id: string;
+  url: string;
+  platform: SalesPlatform;
+  community: string;
+  title: string;
+  author: string;
+  snippet: string;
+  posted_at: string | null;
+  comments: number;
+  rule: SubredditVerdict;
+  rule_why: string | null;
+};
+
 /**
  * What a subreddit's rules allow (P5 R1, widened in 5.1): name the product (`safe`), name it only with the relation
  * stated (`requires_disclosure`), help only (`no_product_mention`), help only because the rules could not be read
@@ -229,6 +248,28 @@ export type SubredditRule = {
   min_account_age_days?: number | null;
   megathread?: boolean;
 };
+/**
+ * Free scan (docs/plans/cmo/2026-11-18-free-scan-plan.md): what a Sales scan returns. `queries` and `scanned` let the
+ * screen say what was searched when nothing was found, so "none" reads as a product-fit answer, not an error.
+ */
+export type SalesScanVerdict = "found" | "none";
+export type SalesScanOutput = {
+  cards: number;
+  skipped: number;
+  dropped: number;
+  refund: boolean;
+  platforms: SalesPlatform[];
+  failed: SalesPlatform[];
+  /** Ran as the account's free scan: no drafts were written. */
+  free: boolean;
+  /** What it searched, shown when nothing was found. */
+  queries: string[];
+  /** Threads read after the filters. */
+  scanned: number;
+  /** "none" when cards === 0. */
+  verdict: SalesScanVerdict;
+};
+
 /** The founder's Sales settings (`sales_settings`). */
 /** The founder's Sales settings; `platforms` are the places Sales may look (at least one, `sales_settings.platforms`). */
 export type SalesSettings = { excluded: string[]; pairs: [string, string][]; platforms: SalesPlatform[] };
@@ -285,10 +326,25 @@ export interface CmoStore {
   /** Thread links that already became cards (dismissed ones too): W4 never offers them again. */
   seenUrls(userId: string): Promise<Set<string>>;
   saveOpportunities(userId: string, runId: string, items: Opportunity[]): Promise<number>;
+  /** Free scan A5: the founder's cards still in review with no reply yet (`reply = ''`, not skipped), newest first. */
+  undraftedOpportunities(userId: string, limit: number): Promise<UndraftedOpportunity[]>;
+  /** Fills one undrafted card's reply (`cmo_save_opportunity_reply`); `rule` may only tighten it to help only. */
+  saveOpportunityReply(
+    userId: string,
+    runId: string,
+    id: string,
+    reply: string,
+    gen: { model: string; prompt_version: string },
+    rule?: { rule: "no_product_mention"; why: string },
+  ): Promise<boolean>;
+  /** An undrafted card whose community now says stay out becomes `skip` (`cmo_mark_opportunity_skip`). */
+  markOpportunitySkip(userId: string, runId: string, id: string, why: string): Promise<boolean>;
   /** P5 R1: a subreddit's cached verdict (any age; the scan decides what is fresh), and saving a new one. */
   subredditRule(subreddit: string): Promise<SubredditRule | null>;
   saveSubredditRule(rule: Omit<SubredditRule, "read_at">): Promise<void>;
   salesSettings(userId: string): Promise<SalesSettings>;
+  /** The account has a plan or credits left (SQL `cmo_paid`): a free scan of an unpaid account writes no drafts. */
+  paid(userId: string): Promise<boolean>;
   /** Product mentions in the founder's last ten posted replies (SQL `sales_mention_count_for`). */
   recentMentions(userId: string): Promise<number>;
   /** Drafts already handed out that may name the product and still wait on the founder: they count toward the rule. */

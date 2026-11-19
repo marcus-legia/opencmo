@@ -323,7 +323,7 @@ export function ChatPanel({
       } catch (error) {
         // The free first run is over (CMO review 3, 3.1): the chat answers with the plan sheet, not an error.
         if (isPlanRequired(error)) {
-          append("Your first plan and drafts were free. Pick a plan to keep talking to your CMO.");
+          append("What your CMO found and wrote for free stays here. Pick a plan to keep talking to your CMO.");
           setPlanSheet(true);
         } else append(error instanceof ApiError ? error.message : "Connection lost. Check your internet and try again.");
       } finally {
@@ -560,7 +560,8 @@ export function ChatPanel({
                   <li key={i}>{line}</li>
                 ))}
               </ul>
-              {card.credits ? <p className="cmo-muted">{card.credits} {card.credits === 1 ? "credit" : "credits"}</p> : null}
+              {/* Scans and research are included work (wave 2: one fair-use bar, no price per click). */}
+              {card.credits && card.name !== "create_task" ? <p className="cmo-muted">{card.credits} {card.credits === 1 ? "credit" : "credits"}</p> : null}
             </div>
           ))}
           <div className="cmo-confirm-actions">

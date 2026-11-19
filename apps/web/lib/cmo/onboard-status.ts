@@ -1,6 +1,7 @@
 /**
- * What Setup shows while onboarding runs (CMO review 3, 3.2): the run's real steps, then the first plan and the first
- * drafts, which are runs of their own. Pure types and wording, shared by the route and the screen.
+ * What Setup shows while onboarding runs (CMO review 3, 3.2): the run's real steps, then the free Sales scan (free-scan
+ * plan, A4), the first plan and the first drafts, which are runs of their own. Pure types and wording, shared by the
+ * route and the screen.
  */
 
 export type RunState = "queued" | "running" | "done" | "failed";
@@ -9,7 +10,10 @@ export type StepState = "running" | "done" | "failed";
 export type OnboardingStatus = {
   /** The latest onboarding run, or null before the first one. */
   run: { id: string; status: "running" | "done" | "failed"; error: string | null; steps: { id: string; status: StepState }[]; createdAt: string } | null;
-  /** The first week's plan and drafts started after that run; null when none has started. */
+  /** The free Sales scan, the first week's plan and drafts started after that run; null when none has started. */
+  scan: RunState | null;
+  /** Threads the scan found, once it is done. */
+  scanCards: number | null;
   plan: RunState | null;
   draft: RunState | null;
   answers: { xHandle: string | null; platforms: string[] | null; heardFrom: string | null };
@@ -25,19 +29,20 @@ const LABELS: Record<string, string> = {
   strategy: "Writing your Strategy",
   competitors: "Writing your Competitors",
   content_strategy: "Writing your Content plan",
+  scan: "Finding people who describe the problem",
   plan: "Planning your week",
   draft: "Drafting today's posts",
 };
 
-const ORDER = ["site", "product", "strategy", "competitors", "content_strategy", "plan", "draft"] as const;
+const ORDER = ["site", "product", "strategy", "competitors", "content_strategy", "scan", "plan", "draft"] as const;
 
 const runStep = (state: RunState | null): SetupStep["state"] => (state === "done" ? "done" : state === "failed" ? "failed" : state === "running" || state === "queued" ? "running" : "waiting");
 
-/** The seven steps Setup lists, each in its real state. */
+/** The steps Setup lists, each in its real state. The scan's step shows only when the run queued one. */
 export function setupSteps(status: OnboardingStatus): SetupStep[] {
   const fromRun = new Map((status.run?.steps ?? []).map((step) => [step.id, step.status]));
-  return ORDER.map((id) => {
-    const state: SetupStep["state"] = id === "plan" ? runStep(status.plan) : id === "draft" ? runStep(status.draft) : (fromRun.get(id) ?? "waiting");
+  return ORDER.filter((id) => id !== "scan" || status.scan !== null).map((id) => {
+    const state: SetupStep["state"] = id === "scan" ? runStep(status.scan) : id === "plan" ? runStep(status.plan) : id === "draft" ? runStep(status.draft) : (fromRun.get(id) ?? "waiting");
     return { id, label: LABELS[id]!, state };
   });
 }
@@ -55,10 +60,22 @@ export function setupFinished(status: OnboardingStatus, settledMs: number): bool
   // The documents are saved; whatever is still on its way (a slow sweep, a plan still running)
   // shows on the Dashboard. Setup never keeps the founder longer than this.
   if (settledMs > SETUP_MAX_WAIT_MS) return true;
+  // With the free scan, the people asking are what Setup leads to: it ends with the scan; the week's plan and drafts
+  // keep going and wait in the feed.
+  if (status.scan !== null) return status.scan === "done" || status.scan === "failed";
   if (status.draft === "done" || status.draft === "failed") return true;
   if (status.plan === "failed") return true;
   // The draft is queued when the plan is done (`cmo_runs_first_draft`); give the sweep a moment before leaving.
   return status.plan === null ? settledMs > 15_000 : status.plan === "done" && status.draft === null && settledMs > 60_000;
+}
+
+/**
+ * Where Setup goes when it ends: Sales while the free scan runs or once it found threads, the Dashboard otherwise (no
+ * scan, a failed one, or one that found no one: the posts are then the useful next thing).
+ */
+export function setupDestination(status: OnboardingStatus): "/app/sales" | "/app" {
+  if (status.scan === "queued" || status.scan === "running") return "/app/sales";
+  return status.scan === "done" && (status.scanCards ?? 0) > 0 ? "/app/sales" : "/app";
 }
 
 export const HEARD_FROM = [

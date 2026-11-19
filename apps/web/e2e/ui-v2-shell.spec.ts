@@ -9,7 +9,7 @@ import { ensureOnboarded } from "./ui-v2-seed";
 
 /**
  * The Today frame (docs/design/today-canvas, PR #189): no rail and no tab strip. Each screen wears its artboard's top
- * bar; the CMO chat is the feed's right column and a drawer elsewhere, one chat that lives across screens; Logs open
+ * bar; the CMO chat is the feed's right column, folded to an "Ask" rail on the other views, one chat that lives across screens; Logs open
  * over any screen; the editor's Assistant takes the right column. Runs with `npm run test:e2e:v2`.
  */
 test.skip(process.env.NEXT_PUBLIC_OPENCMO_UI !== "v2", "v2 UI only: run with npm run test:e2e:v2");
@@ -17,7 +17,7 @@ test.beforeAll(ensureOnboarded);
 
 const OUT = join(__dirname, "..", "..", "..", "docs", "plans", "cmo", "2026-10-30-three-column-shell-shots");
 
-test("the top bars move between views and agent pages; the chat is a column on the feed and a drawer elsewhere", async ({ page }) => {
+test("the top bars move between views and agent pages; the chat is open on the feed and folds elsewhere", async ({ page }) => {
   await signIn(page, state().users.a);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/app?sample=1");
@@ -25,18 +25,28 @@ test("the top bars move between views and agent pages; the chat is a column on t
   await expect(page.getByTestId("v2-dashboard")).toBeVisible();
   await expect(chat.getByLabel("Ask your CMO")).toBeVisible();
 
-  // Feed → Calendar → Analytics through the one bar the three views share.
+  // Feed → Post (list, then week) → Analytics through the one bar the four views share.
   const views = page.getByRole("banner").getByRole("navigation", { name: "View" });
   await expect(views.getByRole("link", { name: "Feed" })).toHaveAttribute("aria-current", "page");
-  await views.getByRole("link", { name: "Calendar" }).click();
+  await views.getByRole("link", { name: "Post" }).click();
+  await expect(page).toHaveURL(/\/app\/writer/);
+  // Off the Feed the chat folds to the "Ask" rail; it opens on demand and folds again.
+  const rail = chat.getByRole("button", { name: "Open the chat" });
+  await expect(rail).toBeVisible();
+  await expect(chat.getByLabel("Ask your CMO")).toBeHidden();
+  await expect(page.getByRole("separator", { name: "Resize the chat" })).toHaveCount(0);
+  await rail.click();
+  await expect(chat.getByLabel("Ask your CMO")).toBeFocused();
+  await chat.getByRole("button", { name: "Fold the chat" }).click();
+  await expect(rail).toBeVisible();
+  await expect(views.getByRole("link", { name: "Post" })).toHaveAttribute("aria-current", "page");
+  await page.getByTestId("post-view-switch").getByRole("link", { name: "Week" }).click();
   await expect(page).toHaveURL(/\/app\/schedule/);
-  // One working screen: the chat stays a column beside every view.
-  await expect(chat.getByLabel("Ask your CMO")).toBeVisible();
-  await expect(views.getByRole("link", { name: "Calendar" })).toHaveAttribute("aria-current", "page");
+  await expect(views.getByRole("link", { name: "Post" })).toHaveAttribute("aria-current", "page");
   await views.getByRole("link", { name: "Analytics" }).click();
   await expect(page).toHaveURL(/\/app\/analytics/);
 
-  await expect(chat.getByLabel("Ask your CMO")).toBeVisible();
+  await expect(rail).toBeVisible();
 
   // Sales is the fourth view of the same bar, and Feed leads back.
   await views.getByRole("link", { name: "Sales" }).click();
@@ -107,8 +117,10 @@ test("the chat keeps its draft across screens, and ?ask=1 puts the cursor in it"
   const chat = page.locator("#v2-chat");
   const input = chat.getByLabel("Ask your CMO");
   await input.fill("Plan a launch week");
-  await page.getByRole("region", { name: "Your team" }).getByRole("link", { name: /^Writer/ }).click();
+  await page.getByRole("banner").getByRole("navigation", { name: "View" }).getByRole("link", { name: "Post" }).click();
   await expect(page).toHaveURL(/\/app\/writer/);
+  // Folded, not unmounted: opening the rail shows the same draft.
+  await chat.getByRole("button", { name: "Open the chat" }).click();
   await expect(input).toHaveValue("Plan a launch week");
 
   await page.goto("/app?ask=1&sample=1");
@@ -138,6 +150,7 @@ test("look: the frame at 1440, 1280, 1024 and 390, with no serious axe violation
   }
   await page.setViewportSize({ width: 1024, height: 768 });
   await page.goto("/app/writer?sample=1");
+  await page.locator("#v2-chat").getByRole("button", { name: "Open the chat" }).click();
   await expect(page.locator("#v2-chat").getByLabel("Ask your CMO")).toBeVisible();
   await page.screenshot({ path: join(OUT, "writer-1024-chat.png") });
 

@@ -76,14 +76,13 @@ test("a photo added on the post card goes out with the post on every platform", 
   await waiting.screenshot({ path: testInfo.outputPath("schedule-card-photo.png") });
 });
 
-test("a slideshow or carousel has its own page; the Calendar points to it", async ({ page }, testInfo) => {
+test("the photo-post page still works by its address (hidden from the bar since 2026-11-18)", async ({ page }, testInfo) => {
   const { user } = await seedCoreDraft();
   await signIn(page, user);
   await page.goto("/app/schedule");
   await expect(page.getByTestId("v2-schedule")).toBeVisible();
   await expect(page.getByTestId("photo-post")).toHaveCount(0);
-  await page.getByTestId("calendar-photos-link").getByRole("link", { name: "Photos" }).click();
-  await expect(page).toHaveURL(/\/app\/photos$/);
+  await page.goto("/app/photos");
   await expect(page.getByRole("heading", { name: "Slideshows and carousels" })).toBeVisible();
   await expect(page.getByTestId("photo-post")).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("photos-page.png") });
@@ -95,12 +94,12 @@ test("a slideshow or carousel has its own page; the Calendar points to it", asyn
   await panel.locator('input[type="file"]').setInputFiles({ name: "desk.png", mimeType: "image/png", buffer: png() });
   await expect(panel.getByRole("img", { name: "Photo 1: desk.png" })).toHaveAttribute("src", /^http/, { timeout: 30_000 });
 
-  // Five views in the bar: on a phone the row scrolls inside itself, never the page.
+  // Four views in the bar: on a phone the row fits, never the page scrolling sideways.
   await page.setViewportSize({ width: 390, height: 844 });
   for (const path of ["/app", "/app/schedule", "/app/photos"]) {
     await page.goto(path);
     await expect(page.locator(".td-views")).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth), `no sideways scroll on ${path}`).toBeLessThanOrEqual(390);
   }
-  await expect(page.getByRole("link", { name: "Photos" }).first()).toBeVisible();
+  await expect(page.locator(".td-views").getByRole("link", { name: "Photos" })).toHaveCount(0);
 });

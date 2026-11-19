@@ -16,55 +16,59 @@ export default function TermsPage() {
           heading: "1. What Ferreto is",
           body: (
             <>
-              <p>Ferreto is software. It analyses information you give it (such as your website), prepares a marketing plan, and drafts content: short videos made from recordings you upload, posts, and replies to public conversations. It is not an agency and does not provide human marketing services.</p>
-              <p>Ferreto does not publish anything on its own. Content is published only after you approve it, and only to accounts you have connected yourself. Replies to public conversations are drafted for you to post yourself.</p>
+              <p>Ferreto is software. It reads the website you give it, finds public conversations where people describe the problem your product solves, and drafts replies and posts for you. It is not an agency and does not provide human marketing or sales services.</p>
+              <p>Ferreto does not post, reply or message anyone on its own. You post replies yourself, from your own accounts. Posts are published only after you approve them, and only to accounts you have connected yourself.</p>
             </>
           ),
         },
         {
           heading: "2. Your account",
-          body: <p>You must be at least 18 years old and give accurate information. You are responsible for activity under your account and for keeping the Google account you sign in with secure. Tell us at {SUPPORT_EMAIL} if you believe your account was used without permission. Accounts that never make a purchase are deleted, with all their projects and files, 30 days after sign-up; the app shows the date.</p>,
+          body: <p>You must be at least 18 years old and give accurate information. You are responsible for activity under your account and for keeping the account you sign in with secure. Tell us at {SUPPORT_EMAIL} if you believe your account was used without permission. Accounts that never make a purchase are deleted, with all their content, 30 days after sign-up; the app shows the date.</p>,
         },
         {
           heading: "3. Your content and your rights",
           body: (
             <>
-              <p>You keep all rights to the content you upload or connect (“Your Content”) and to the output Ferreto creates from it. You give us a limited licence to process Your Content only to provide the service to you.</p>
-              <p>You confirm that you own Your Content or have permission from its owner to edit and republish it. When you import a video by link, Ferreto asks you to confirm this and records your confirmation. Do not use Ferreto with content you do not have rights to.</p>
+              <p>You keep all rights to the content you give Ferreto (“Your Content”) and to the drafts Ferreto creates for you. You give us a limited licence to process Your Content only to provide the service to you.</p>
+              <p>You confirm that you own Your Content or have permission to use it. Do not upload content you do not have rights to.</p>
             </>
           ),
         },
         {
-          heading: "4. Acceptable use",
-          body: <p>You must follow our <Link href="/acceptable-use">Acceptable Use Policy</Link> and the rules of every platform you publish to. We may suspend or remove content or accounts that break it.</p>,
+          heading: "4. Public conversations and community rules",
+          body: <p>Ferreto shows you publicly available posts and suggests how to reply. Those posts belong to their authors and platforms. When you reply, you do so as yourself and must follow each community’s rules, including rules about mentioning your own product. Ferreto points out the rules it can read, but you remain responsible for what you post.</p>,
         },
         {
-          heading: "5. AI output",
-          body: <p>Drafts are generated with AI and can be wrong or incomplete. Review every draft before you approve it; you are responsible for what you publish.</p>,
+          heading: "5. Acceptable use",
+          body: <p>You must follow our <Link href="/acceptable-use">Acceptable Use Policy</Link> and the rules of every platform you use. We may suspend or remove content or accounts that break it.</p>,
         },
         {
-          heading: "6. Plans, credits and payment",
+          heading: "6. AI output",
+          body: <p>Drafts are generated with AI and can be wrong or incomplete. Review every draft before you post or approve it; you are responsible for what you publish.</p>,
+        },
+        {
+          heading: "7. Plans and payment",
           body: (
             <>
-              <p>Paid plans are monthly subscriptions that include a bundle of credits. Work done by Ferreto uses credits as shown on our pricing section. Unused credits do not carry over unless the plan says so.</p>
-              <p>Payments are processed by our payment provider acting as merchant of record (currently Creem), which also handles sales tax and invoices. You can cancel at any time from your billing page. Your plan ends when the cancellation reaches us from our payment provider, which can be at once rather than at the end of the paid period; credits already in your account stay usable. Refunds follow our <Link href="/refund">Refund Policy</Link>.</p>
+              <p>Paid plans are subscriptions billed monthly or yearly. Each plan includes a fair-use allowance shown in the app; when it runs out, new searches pause until the next period. Free accounts get a limited first use, as described in the app.</p>
+              <p>Payments are processed by our payment provider acting as merchant of record, which also handles sales tax and invoices. You can cancel at any time from Settings. Refunds follow our <Link href="/refund">Refund Policy</Link>.</p>
             </>
           ),
         },
         {
-          heading: "7. Third-party services",
-          body: <p>Ferreto connects to services such as social networks and AI model providers. Your use of those services is governed by their own terms. Ferreto is independent and not affiliated with TikTok, YouTube, Meta, X or Reddit.</p>,
+          heading: "8. Third-party services",
+          body: <p>Ferreto works with third-party services such as social networks, data providers and AI model providers. Their availability can change, and your use of them is governed by their own terms. Ferreto is independent and not affiliated with or endorsed by any social network it works with.</p>,
         },
         {
-          heading: "8. Changes and termination",
+          heading: "9. Changes and termination",
           body: <p>We may change Ferreto or these terms; we will tell you about material changes by email or in the app. You may stop using Ferreto at any time. We may suspend accounts that break these terms or put other users or platforms at risk.</p>,
         },
         {
-          heading: "9. Disclaimers and liability",
-          body: <p>Ferreto is provided “as is”. We do not guarantee any particular result, such as reach, followers or sales. To the extent permitted by law, our total liability is limited to the amount you paid us in the 12 months before the claim.</p>,
+          heading: "10. Disclaimers and liability",
+          body: <p>Ferreto is provided “as is”. We do not guarantee any particular result, such as replies, customers, reach or sales. To the extent permitted by law, our total liability is limited to the amount you paid us in the 12 months before the claim.</p>,
         },
         {
-          heading: "10. Contact",
+          heading: "11. Contact",
           body: <p>Questions about these terms: <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>.</p>,
         },
       ]}
