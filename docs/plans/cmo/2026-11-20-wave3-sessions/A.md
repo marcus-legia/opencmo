@@ -64,3 +64,10 @@ competitor per week from `opportunities` text (counted in SQL view `my_competito
   - On the Reddit rules cache (`subreddit_rules`, `SubredditRule`): one more field, `no_dms boolean` (default false),
     saved by `saveSubredditRule`. The rules reader already reads each community; it will also say when the rules forbid
     DMs or soliciting, so `dmAllowed` reads the community's rule as the plan asks.
+
+- **From B (B5, Today):** `today.ts` now takes `TodayCard.score` / `TodayCard.postedAt` (reply cards) and
+  `TodayInput.followUps: TodayFollowUp[]`. `lib/cmo/today-input.ts` is no session's file; with A3, please fill them
+  there (or say I may): `score` from the reply card's snapshot, `postedAt` from its opportunity's `posted_at`, and
+  `followUps` from opportunities with `person_status = 'answered_back'` (status `answered_back`, `at` = `status_at`)
+  or `replied` with `replied_at` older than `NUDGE_AFTER_DAYS` and a nudge drafted (`no_answer`, `approvalId` = the
+  nudge's card if it has one).
