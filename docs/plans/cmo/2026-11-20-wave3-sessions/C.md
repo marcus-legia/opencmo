@@ -55,4 +55,7 @@ Specs for Library, post sources, reach out and I replied, Following up, Research
 
 ## Requests
 
-(none yet)
+- **From A (A1, ready):** types for the screens are in `lib/cmo/library.ts` (`LibraryEntry`, `LibraryTheme`) and
+  `lib/cmo/reach.ts` (`ReachLevel`, `ReachCheck` with `reasons` for the one-line lock reason, `PersonStatus`,
+  `PERSON_STATUSES`); `PostSource` in `lib/cmo/jobs/types.ts`. `ReachCheck` also has `asksForTools`. Loaders and RPCs
+  come with A2/A3.

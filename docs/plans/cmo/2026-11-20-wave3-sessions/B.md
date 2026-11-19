@@ -58,4 +58,9 @@ match in a thread under a day old (once per card, logged as `push`). Template th
 
 ## Requests
 
-(none yet)
+- **From A (A1, ready):** `lib/cmo/library.ts` (`LibraryEntry`, `LibraryTheme`, their zod schemas, `LIBRARY_LIMITS`:
+  summary ≤ 200 chars, ≤ 4 quotes of ≤ 280 chars, theme name ≤ 80) and `lib/cmo/reach.ts` (`ReachCheck`,
+  `ReachCheckSchema`, `reachLevel(check)`, `isFresh(postedAt)`, `platformHasDms(platform)`, `DM_DRAFTS_PER_DAY = 20`,
+  `NUDGE_AFTER_DAYS = 4`, `PERSON_STATUSES`). **`ReachCheck` has one field more than the plan: `asksForTools`**
+  (the post asks for tools; stands in for `warm` for a DM, never for an email); B1 fills it. `PostSource` is in
+  `lib/cmo/jobs/types.ts`. The tables and RPCs come with A2/A3.
