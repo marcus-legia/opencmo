@@ -20,7 +20,7 @@ answers saved, Skip saves nothing, Approve asks for a plan). Run them, push, and
 "What people said": themes with count, this week's trend, posts that used it, 2–3 quotes each, "Write a post from
 this"; filter by source. Left panel link with the quote count.
 
-### - [ ] C2. Post sources (after B3)
+### - [x] C2. Post sources (after B3)
 Each draft in the Post list shows "Based on N conversations · sources"; the draft view lists each source's summary
 and platform. Date and time editable next to Approve (already there or add). "Make an image" stays a small link.
 

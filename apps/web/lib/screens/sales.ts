@@ -5,6 +5,7 @@
 import { z } from "zod";
 
 import type { SalesScanOutput } from "../cmo/jobs/types";
+import { PERSON_STATUSES, REACH_LEVELS, ReachCheckSchema } from "../cmo/reach";
 import { SALES_PLATFORMS } from "../cmo/social/conversations";
 import { QuoteSchema, SalesRuleSchema, ScorePartSchema, iso } from "./common";
 
@@ -30,6 +31,23 @@ export const ThreadSchema = z.object({
   draftChecks: z.string().max(200).nullable(),
   status: z.enum(["open", "replied", "dismissed"]),
   approvalId: z.string().nullable(),
+  /**
+   * Wave 3 (A3): where the person stands after the founder reached out, the reply's link, the reach check and its level
+   * (Reply first by default), and the DM and nudge drafts (null for an unpaid account, like the reply). Optional so
+   * older samples still parse.
+   */
+  person: z
+    .object({
+      status: z.enum(PERSON_STATUSES),
+      statusAt: iso.nullable(),
+      replyUrl: z.url().nullable(),
+      repliedAt: iso.nullable(),
+      reachLevel: z.enum(REACH_LEVELS),
+      reach: ReachCheckSchema.nullable(),
+      dmDraft: z.string().max(1000).nullable(),
+      nudgeDraft: z.string().max(1000).nullable(),
+    })
+    .optional(),
 });
 
 /**
