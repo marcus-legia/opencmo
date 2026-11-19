@@ -65,3 +65,11 @@ code outside the editor and history docs. Open "Wave 4b: delete and extend". Do 
   `sales_scan`, `research`; màn hình tự viết chữ), `freeScan` (chỉ free: `not_ready` | `available` | `running` |
   `used`). Ở 100%: dừng `sales_scan`, `research`; draft vẫn chạy. Free sau scan: dừng `sales_scan`, `reply_drafts`, và
   `post_drafts` khi draft free đầu tiên đã dùng. Thông báo lỗi thật vẫn do SQL (`cmo_usage_paused_check`) nói.
+- **Từ A (A2 xong, cho C3):** `supabase.rpc("account_delete", { p_email })` (founder, migration `20270202020000`,
+  pgTAP 348). Trả `{ user_id, files }`. Lỗi (gửi nguyên văn cho người dùng): `22023` "The email you typed is not the
+  one on this account."; `P0001` "Cancel your plan first, on the Billing page. Then you can delete your account."
+  (hiện link Billing cạnh câu này); `P0001` "A video is still being processed. Try again when it is done.". Gói đã
+  đặt huỷ cuối kỳ (`scheduled_cancel`) không chặn. RPC không xoá auth user: route (của C) gọi RPC bằng client của
+  người dùng, rồi `createAdminClient().auth.admin.deleteUser(user_id)` (giống `purgeUnpaidAccounts` trong
+  `app/api/cron/cleanup/route.ts`), rồi đăng xuất và về landing. Nếu `deleteUser` lỗi thì vẫn trả thành công cho
+  người dùng: cron cleanup hằng ngày xoá lại (yêu cầu đã nằm trong `account_deletions`). Gọi RPC hai lần không sao.
