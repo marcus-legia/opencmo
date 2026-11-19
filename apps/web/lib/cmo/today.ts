@@ -13,17 +13,24 @@ import { localDay } from "@/lib/time-zone";
 
 import type { Department } from "@/lib/screens/common";
 
+import { STRONG_MATCH } from "./match";
+
 /** At most this many rows; the rest are counted as "N more waiting". */
 export const TODAY_MAX_ROWS = 5;
 /** Days without a post on a platform the founder posts on: High from 2, Critical from 7. */
 export const SILENT_HIGH_DAYS = 2;
 export const SILENT_CRITICAL_DAYS = 7;
+/** A reply card is a hot lead when its thread is younger than this, or it is a Strong match (wave 3, item 4). */
+export const HOT_LEAD_HOURS = 24;
+/** Hot leads and follow-ups shown at most, so a big scan still leaves room for the day's posts. */
+export const HOT_LEADS_MAX = 3;
+export const FOLLOW_UPS_MAX = 2;
 
 /** Platforms a Today row can name: the ones the founder posts on by hand or through publishing. */
 export const TODAY_PLATFORMS = ["x", "threads", "linkedin", "facebook", "tiktok", "youtube", "instagram"] as const;
 export type TodayPlatform = (typeof TODAY_PLATFORMS)[number];
 
-export const TODAY_REASONS = ["failed_post", "silent", "expiring", "setup", "first_run", "waiting"] as const;
+export const TODAY_REASONS = ["hot_lead", "follow_up", "failed_post", "silent", "expiring", "setup", "first_run", "waiting"] as const;
 export type TodayReason = (typeof TODAY_REASONS)[number];
 
 export type TodayAction =
@@ -66,6 +73,22 @@ export type TodayCard = {
   platform: TodayPlatform | null;
   raisedAt: string;
   expiresAt: string | null;
+  /** Reply cards: the thread's score and when it was posted, for the hot-lead row. */
+  score?: number | null;
+  postedAt?: string | null;
+};
+
+/**
+ * A person the founder already replied to who needs the next step (wave 3, Following up): they answered back, or a
+ * nudge is drafted after days with no answer. `approvalId` is the nudge's card when there is one.
+ */
+export type TodayFollowUp = {
+  id: string;
+  community: string;
+  status: "answered_back" | "no_answer";
+  /** When the founder replied (no answer) or when they answered back. */
+  at: string;
+  approvalId?: string | null;
 };
 
 /** A slot of today that failed and has a waiting Retry card (still inside its window). */
@@ -91,6 +114,8 @@ export type TodayInput = {
    * configured: without it, posting by intent works and there is nothing to connect.
    */
   needsAccount: TodayPlatform[];
+  /** People in Following up who need the founder (wave 3); unset reads as none. */
+  followUps?: TodayFollowUp[];
   firstRun: {
     /** The strategy document exists and the founder has not decided a card yet. */
     readStrategy: boolean;
@@ -187,7 +212,9 @@ function cardRow(card: TodayCard, reason: TodayReason, detail: string | null): T
 const byAge = (a: TodayCard, b: TodayCard) => a.raisedAt.localeCompare(b.raisedAt) || a.id.localeCompare(b.id);
 
 /**
- * The day's list. Ranking (plan §3, 1.1):
+ * The day's list. People first (wave 3, item 4), then posts (plan §3, 1.1):
+ *   0a. hot leads: a reply card that is a Strong match or on a thread under a day old, best first (at most 3);
+ *   0b. follow-ups: someone answered the founder back, or a nudge waits (at most 2);
  *   1. a failed post still inside its window;
  *   2. Critical silence (7+ days);
  *   3. a card that expires today;
@@ -212,6 +239,49 @@ export function buildToday(input: TodayInput): Today {
   };
   const cards = [...input.cards].sort(byAge);
   const cardIds = new Set(cards.map((card) => card.id));
+
+  // 0a. Hot leads: the people asking right now outrank every post.
+  const hours = (at: string) => (now.getTime() - Date.parse(at)) / 3_600_000;
+  const hot = cards
+    .filter((card) => card.kind === "reply")
+    .filter((card) => (card.score ?? 0) >= STRONG_MATCH || (card.postedAt != null && hours(card.postedAt) >= 0 && hours(card.postedAt) < HOT_LEAD_HOURS))
+    .sort((a, b) => (b.score ?? 0) - (a.score ?? 0) || byAge(a, b))
+    .slice(0, HOT_LEADS_MAX);
+  for (const card of hot) {
+    const young = card.postedAt != null && hours(card.postedAt) < HOT_LEAD_HOURS;
+    const strong = (card.score ?? 0) >= STRONG_MATCH;
+    push(
+      {
+        ...cardRow(card, "hot_lead", strong && young ? "Strong match, posted in the last day" : strong ? "Strong match" : "Posted in the last day: an early reply gets read"),
+        level: "high",
+        action: { type: "card", approvalId: card.id, label: "Read and reply" },
+      },
+      card.id,
+    );
+  }
+
+  // 0b. Follow-ups: an answer back first (a conversation is waiting), then the oldest nudge.
+  const follow = [...(input.followUps ?? [])]
+    .sort((a, b) => (a.status === b.status ? a.at.localeCompare(b.at) : a.status === "answered_back" ? -1 : 1))
+    .slice(0, FOLLOW_UPS_MAX);
+  for (const person of follow) {
+    const card = person.approvalId && cardIds.has(person.approvalId) ? person.approvalId : null;
+    push(
+      {
+        id: `follow_up:${person.id}`,
+        reason: "follow_up",
+        level: person.status === "answered_back" ? "high" : "normal",
+        title: person.status === "answered_back" ? `Someone in ${person.community} answered you` : `No answer yet in ${person.community}`,
+        detail: person.status === "answered_back" ? "Read their answer and keep the conversation going." : "A short nudge is drafted for you to send.",
+        department: "sales",
+        platform: null,
+        action: card
+          ? { type: "card", approvalId: card, label: "Open the nudge" }
+          : { type: "link", href: "/app/sales?tab=following", label: "Open Following up" },
+      },
+      card ?? undefined,
+    );
+  }
 
   // 1. Failed posts with a Retry card.
   for (const slot of [...input.failedSlots].sort((a, b) => a.at.localeCompare(b.at))) {

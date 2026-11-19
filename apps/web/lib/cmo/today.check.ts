@@ -173,6 +173,46 @@ check("platforms as rows spell them", () => {
   assert.equal(todayPlatform(3), null);
 });
 
+check("people first: hot leads, then follow-ups, then posts and silence", () => {
+  const today = buildToday(
+    input({
+      cards: [
+        card("post", "post", "2026-11-01T08:00:00Z", { platform: "x" }),
+        card("old-lead", "reply", "2026-11-02T08:00:00Z", { score: 64, postedAt: "2026-11-02T07:00:00Z" }),
+        card("strong", "reply", "2026-11-09T08:00:00Z", { score: 82, postedAt: "2026-11-07T08:00:00Z" }),
+        card("young", "reply", "2026-11-10T08:00:00Z", { score: 66, postedAt: "2026-11-10T03:00:00Z" }),
+        card("nudge", "reply", "2026-11-10T06:00:00Z"),
+      ],
+      lastPosted: [{ platform: "linkedin", at: "2026-11-01T10:00:00Z" }], // 9 days: critical
+      followUps: [
+        { id: "p1", community: "r/freelance", status: "no_answer", at: "2026-11-05T09:00:00Z", approvalId: "nudge" },
+        { id: "p2", community: "r/smallbusiness", status: "answered_back", at: "2026-11-09T09:00:00Z" },
+      ],
+    }),
+  );
+  assert.deepEqual(
+    today.rows.map((r) => r.id),
+    ["card:strong", "card:young", "follow_up:p2", "follow_up:p1", "silent:linkedin"],
+  );
+  assert.deepEqual(today.rows.slice(0, 2).map((r) => r.reason), ["hot_lead", "hot_lead"]);
+  assert.equal(today.rows[0]!.detail, "Strong match");
+  assert.equal(today.rows[1]!.detail, "Posted in the last day: an early reply gets read");
+  assert.deepEqual(today.rows[2]!.action, { type: "link", href: "/app/sales?tab=following", label: "Open Following up" });
+  // The nudge's own card opens in place and is not shown again as a waiting reply.
+  assert.deepEqual(today.rows[3]!.action, { type: "card", approvalId: "nudge", label: "Open the nudge" });
+  assert.ok(!today.rows.some((r) => r.id === "card:nudge"));
+  // The old, ordinary lead is not hot: it waits with the rest.
+  assert.equal(today.more, 2);
+  assert.doesNotThrow(() => TodaySchema.parse(today));
+});
+
+check("at most three hot leads", () => {
+  const leads = ["a", "b", "c", "d"].map((id, i) => card(id, "reply", `2026-11-10T0${i}:00:00Z`, { score: 90 - i }));
+  const today = buildToday(input({ cards: leads }));
+  assert.equal(today.rows.filter((r) => r.reason === "hot_lead").length, 3);
+  assert.equal(today.rows[3]!.reason, "waiting");
+});
+
 if (failures.length) {
   console.error(failures.join("\n"));
   process.exit(1);
