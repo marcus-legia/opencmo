@@ -5,7 +5,7 @@ import type { SupabaseClient as BaseClient } from "@supabase/supabase-js";
 import { DOCUMENT_KINDS, type DocumentKind } from "../documents";
 import { latestPerTopic } from "./context";
 import type { LibraryTopTheme } from "../library";
-import type { CmoStore, DraftRating, CompetitorInsight, ConnectedAccountRow, ReplyOutcomeDue, ZernioPostRow, Documents, NicheVideoInsight, SubredditRule, Goal, ItemRow, Lesson, MemoryEvent, QueuedRun, UndraftedOpportunity } from "./types";
+import type { CmoStore, NudgeDue, DraftRating, CompetitorInsight, ConnectedAccountRow, ReplyOutcomeDue, ZernioPostRow, Documents, NicheVideoInsight, SubredditRule, Goal, ItemRow, Lesson, MemoryEvent, QueuedRun, UndraftedOpportunity } from "./types";
 import { SCAN_CADENCES, isoDay, toVerdict } from "./types";
 import { enqueueDueDrafts } from "../schedule";
 import { planOrDefault } from "../posting-plan";
@@ -249,6 +249,7 @@ export function supabaseStore(admin: BaseClient): CmoStore {
     saveReach: (userId, runId, items) => rpc<number>("cmo_save_reach", { p_user: userId, p_run: runId, p_items: items }),
     saveNudge: (userId, runId, id, text) => rpc<boolean>("cmo_save_nudge", { p_user: userId, p_run: runId, p_id: id, p_text: text }),
     markAnsweredBack: (userId, id) => rpc<boolean>("cmo_mark_answered_back", { p_user: userId, p_id: id }),
+    nudgesDue: (userId, limit = 10) => rpc<NudgeDue[]>("cmo_nudges_due", { p_user: userId, p_limit: limit }).then((rows) => rows ?? []),
     async subredditRule(subreddit) {
       const { data, error } = await admin
         .from("subreddit_rules")

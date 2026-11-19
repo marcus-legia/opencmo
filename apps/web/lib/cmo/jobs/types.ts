@@ -134,6 +134,9 @@ export type ReplyOutcomeDue = {
   outcome_url: string | null;
 };
 
+/** A person due a nudge (wave 3 B2): the thread and the founder's reply, nothing about the author. */
+export type NudgeDue = { opportunity_id: string; url: string; platform: SalesPlatform; community: string; title: string; snippet: string; reply: string | null; posted_at: string | null };
+
 export type ConnectedAccountRow = { id: string; platform: AccountMetricRow["platform"]; handle: string; zernio_account_id: string };
 
 export type StepStatus = "running" | "done" | "failed" | "skipped";
@@ -174,7 +177,8 @@ export type ItemRow = {
  * `targets`: posts only, the platform ids one core post goes to (the posting plan's slot); `platform` is the first one's
  * label. `slot`: that slot's index within its day, so saving a new plan retargets each post by it (`save_posting_plan`).
  */
-export type PlanItem = { department: "post" | "sales" | "video"; platform: string; day: string; idea: string; reason: string; image?: boolean; targets?: string[]; slot?: number };
+/** `sources`: posts only, the Library conversations it is written from (B3); `cmo_plan_week` keeps the valid ones. */
+export type PlanItem = { department: "post" | "sales" | "video"; platform: string; day: string; idea: string; reason: string; image?: boolean; targets?: string[]; slot?: number; sources?: PostSource[] };
 
 export type Documents = Partial<Record<DocumentKind, Record<string, unknown>>>;
 
@@ -354,6 +358,8 @@ export interface CmoStore {
   saveNudge(userId: string, runId: string, opportunityId: string, text: string): Promise<boolean>;
   /** `reply-outcomes` saw an answer: replied → answered back (`cmo_mark_answered_back`), never backwards. */
   markAnsweredBack(userId: string, opportunityId: string): Promise<boolean>;
+  /** B2: people replied to 4+ days ago, no answer seen and no nudge yet, oldest reply first (`cmo_nudges_due`). */
+  nudgesDue(userId: string, limit?: number): Promise<NudgeDue[]>;
   /** Free scan A5: the founder's cards still in review with no reply yet (`reply = ''`, not skipped), newest first. */
   undraftedOpportunities(userId: string, limit: number): Promise<UndraftedOpportunity[]>;
   /** Fills one undrafted card's reply (`cmo_save_opportunity_reply`); `rule` may only tighten it to help only. */

@@ -24,6 +24,8 @@ export type LoopState = {
   connectedAccounts?: number;
   /** Replies marked "replied" three or more days ago and not checked yet (P6 A3). */
   repliesDue?: number;
+  /** Wave 3 B2: people replied to 4+ days ago with no answer and no nudge yet (filled by A, `schedule.ts`). */
+  nudgesDue?: number;
   /** The server has a ScrapeCreators key (or the fake). */
   socialReader: boolean;
   /**

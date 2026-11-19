@@ -7,7 +7,7 @@ import type { LibrarySaveItem, LibraryTopTheme } from "../library";
 import { reachLevel, type ReachCheck, type ReachLevel } from "../reach";
 import type { VideoSource } from "../writer/types";
 import { latestPerTopic } from "./context";
-import { isoDay, type CmoStore, type DraftRating, type CompetitorInsight, type ConnectedAccountRow, type ReplyOutcomeDue, type MetricRow, type ZernioPostRow, type NicheVideoInsight, type SalesSettings, type SubredditRule, type Documents, type Goal, type ItemRow, type Lesson, type MemoryEvent, type Opportunity, type QueuedRun, type Step, type VoiceNoteRow, type WeekResults } from "./types";
+import { isoDay, type CmoStore, type DraftRating, type CompetitorInsight, type ConnectedAccountRow, type ReplyOutcomeDue, type MetricRow, type ZernioPostRow, type NicheVideoInsight, type SalesSettings, type SubredditRule, type Documents, type Goal, type ItemRow, type Lesson, type MemoryEvent, type Opportunity, type PostSource, type QueuedRun, type Step, type VoiceNoteRow, type WeekResults } from "./types";
 import type { AccountMetricRow } from "./metrics-source";
 import { defaultPostingPlan, type PostingPlan } from "../posting-plan";
 import { SALES_PLATFORMS } from "../social/conversations";
@@ -61,6 +61,17 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
   const replies: (ReplyOutcomeDue & { check?: { status: string; votes: number | null; replies: number | null } })[] = [];
   /** The founder's saved posting plan; null = never chosen, the default for the connected accounts applies. */
   const posting: { plan: PostingPlan | null } = { plan: null };
+  /** As `post_sources_clean`: at most 5, each the founder's conversation (the memory id is its url), trimmed. */
+  const cleanSources = (value: unknown): PostSource[] | null => {
+    if (!Array.isArray(value)) return null;
+    const kept = value
+      .filter((s): s is PostSource => !!s && typeof s === "object")
+      .filter((s) => opps.some((o) => o.url === s.opportunityId) && typeof s.summary === "string" && s.summary.trim().length >= 1 && s.summary.trim().length <= 200
+        && (SALES_PLATFORMS as readonly string[]).includes(s.platform) && (s.community ?? "").length <= 120)
+      .slice(0, 5)
+      .map((s) => ({ opportunityId: s.opportunityId, summary: s.summary.trim(), platform: s.platform, community: s.community ?? "" }));
+    return kept.length ? kept : null;
+  };
   let seq = 0;
   const id = () => `id-${++seq}`;
   const store: CmoStore = {
@@ -135,9 +146,12 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
     async planWeek(_u, runId, plan) {
       for (let i = items.length - 1; i >= 0; i--) if (items[i].status === "planned") items.splice(i, 1);
       for (const p of plan) {
-        const { targets, slot, ...item } = p;
-        // As `cmo_plan_week` writes it: a post keeps its slot's platforms in `body.targets` and its index in `body.slot`.
-        items.push({ id: id(), run_id: runId, ...item, status: "planned", priority: "medium", body: targets?.length ? { targets, ...(slot === undefined ? {} : { slot }) } : {}, final_text: null, external_url: null, decided_at: null, published_at: null, created_at: new Date().toISOString() });
+        const { targets, slot, sources, ...item } = p;
+        // As `cmo_plan_week` writes it: a post keeps its slot's platforms in `body.targets` and its index in `body.slot`,
+        // and its valid Library sources in `body.sources`.
+        const kept = item.department === "post" ? cleanSources(sources) : null;
+        const body = { ...(targets?.length ? { targets, ...(slot === undefined ? {} : { slot }) } : {}), ...(kept ? { sources: kept } : {}) };
+        items.push({ id: id(), run_id: runId, ...item, status: "planned", priority: "medium", body, final_text: null, external_url: null, decided_at: null, published_at: null, created_at: new Date().toISOString() });
       }
       return plan.length;
     },
@@ -169,7 +183,10 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
       }
       // As `cmo_save_draft`: the draft keeps the planner's targets and slot, so the post still goes to every platform.
       const kept = Object.fromEntries(Object.entries(item.body).filter(([k]) => k === "targets" || k === "slot"));
-      Object.assign(item, { status: "in_review", body: { ...body, ...kept }, priority, run_id: runId });
+      // The draft's own sources win; one that sends none keeps the plan's.
+      const sources = cleanSources(body.sources) ?? cleanSources(item.body.sources);
+      const { sources: _drop, ...rest } = body;
+      Object.assign(item, { status: "in_review", body: { ...rest, ...kept, ...(sources ? { sources } : {}) }, priority, run_id: runId });
       return item;
     },
     seenUrls: async () => new Set(opps.map((o) => o.url)),
@@ -242,6 +259,16 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
       if (!p || !text.trim() || p.status !== "replied" || p.nudge || !p.repliedAt || Date.now() - p.repliedAt < 4 * 86_400_000) return false;
       p.nudge = text.trim().slice(0, 1000);
       return true;
+    },
+    async nudgesDue(_u, limit = 10) {
+      return [...people.entries()]
+        .filter(([, p]) => p.status === "replied" && !p.nudge && p.repliedAt !== null && Date.now() - p.repliedAt > 4 * 86_400_000)
+        .sort((a, b) => a[1].repliedAt! - b[1].repliedAt!)
+        .slice(0, limit)
+        .flatMap(([url]) => {
+          const o = opps.find((x) => x.url === url);
+          return o ? [{ opportunity_id: url, url, platform: o.platform ?? "reddit", community: o.community, title: o.title, snippet: o.snippet, reply: o.reply || null, posted_at: o.posted_at }] : [];
+        });
     },
     async markAnsweredBack(_u, id) {
       const p = people.get(id);

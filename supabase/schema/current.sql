@@ -5078,6 +5078,23 @@ $$;
 
 
 --
+-- Name: cmo_nudges_due(uuid, integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_nudges_due(p_user uuid, p_limit integer DEFAULT 10) RETURNS TABLE(opportunity_id uuid, url text, platform text, community text, title text, snippet text, reply text, posted_at timestamp with time zone)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select o.id, o.url, o.platform, o.community, o.title, o.snippet, o.reply, o.posted_at
+  from public.opportunities o
+  where o.user_id = p_user and o.person_status = 'replied' and o.nudge_draft is null
+    and o.replied_at < now() - interval '4 days'
+  order by o.replied_at
+  limit greatest(1, least(coalesce(p_limit, 10), 50));
+$$;
+
+
+--
 -- Name: cmo_onboard_step(uuid, jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -5290,6 +5307,7 @@ declare
   v_count integer := 0;
   v_day date;
   v_targets jsonb;
+  v_sources jsonb;
 begin
   if p_items is null or jsonb_typeof(p_items) <> 'array' or jsonb_array_length(p_items) > 60 then
     raise exception 'This plan is not valid.' using errcode = '22023';
@@ -5301,17 +5319,18 @@ begin
       continue;
     end if;
     v_targets := case when v_item->>'department' = 'post' then public.posting_plan_targets(v_item->'targets') end;
+    v_sources := case when v_item->>'department' = 'post' then public.post_sources_clean(p_user, v_item->'sources') end;
     insert into public.content_items (user_id, run_id, department, platform, day, idea, reason, wants_image, body)
     values (
       p_user, p_run, v_item->>'department', left(v_item->>'platform', 20), v_day,
       left(v_item->>'idea', 300), left(coalesce(v_item->>'reason', ''), 300),
       coalesce(v_item->>'department' = 'post' and jsonb_typeof(v_item->'image') = 'boolean' and (v_item->>'image')::boolean, false),
-      case
+      (case
         when v_targets is null then '{}'::jsonb
         when jsonb_typeof(v_item->'slot') = 'number' and (v_item->>'slot')::numeric in (0, 1, 2)
           then jsonb_build_object('targets', v_targets, 'slot', (v_item->>'slot')::int)
         else jsonb_build_object('targets', v_targets)
-      end
+      end) || jsonb_strip_nulls(jsonb_build_object('sources', v_sources))
     );
     v_count := v_count + 1;
   end loop;
@@ -5797,14 +5816,14 @@ $$;
 
 CREATE FUNCTION public.cmo_reply_outcomes_due(p_user uuid, p_limit integer) RETURNS TABLE(outcome_id uuid, opportunity_id uuid, platform text, url text, community text, reply text, outcome_url text)
     LANGUAGE sql STABLE SECURITY DEFINER
-    SET search_path TO 'public'
+    SET search_path TO ''
     AS $$
-  select o.id, p.id, p.platform, p.url, p.community, p.reply, o.outcome_url
+  select o.id, p.id, p.platform, p.url, p.community, p.reply, coalesce(p.reply_url, o.outcome_url)
   from public.cmo_draft_outcomes o
   join public.opportunities p on p.id = o.item_id and p.user_id = o.user_id
   where o.user_id = p_user and o.department = 'sales' and o.action = 'replied' and o.outcome_checked_at is null
     and o.decided_at <= now() - interval '3 days' and p.reply is not null
-    and p.platform in ('reddit', 'hn')
+    and p.platform in ('reddit', 'hn', 'threads')
   order by o.decided_at desc
   limit greatest(1, least(coalesce(p_limit, 10), 50));
 $$;
@@ -6018,10 +6037,12 @@ begin
     end if;
   end if;
   if p_item is not null then
+    -- The draft's own sources win; a draft that sends none keeps the ones the plan gave its item.
     update public.content_items
     set status = 'in_review',
-        body = (p_body - 'targets' - 'slot')
-          || jsonb_strip_nulls(jsonb_build_object('targets', body->'targets', 'slot', body->'slot')),
+        body = (p_body - 'targets' - 'slot' - 'sources')
+          || jsonb_strip_nulls(jsonb_build_object('targets', body->'targets', 'slot', body->'slot',
+               'sources', coalesce(public.post_sources_clean(p_user, p_body->'sources'), public.post_sources_clean(p_user, body->'sources')))),
         priority = coalesce(p_priority, 'medium'), run_id = p_run, updated_at = now()
     where id = p_item and user_id = p_user and status in ('planned', 'drafting')
     returning * into v_row;
@@ -6032,7 +6053,9 @@ begin
     insert into public.content_items (user_id, run_id, department, platform, day, idea, status, priority, body)
     values (p_user, p_run, 'post', v_platform, current_date,
             left(coalesce(nullif(p_idea, ''), 'Post for ' || case when v_post then v_profile->>'label' else 'X' end), 300),
-            'in_review', coalesce(p_priority, 'medium'), p_body - 'targets' - 'slot')
+            'in_review', coalesce(p_priority, 'medium'),
+            (p_body - 'targets' - 'slot' - 'sources')
+              || jsonb_strip_nulls(jsonb_build_object('sources', public.post_sources_clean(p_user, p_body->'sources'))))
     returning * into v_row;
   end if;
   return v_row;
@@ -11736,6 +11759,32 @@ CREATE FUNCTION public.post_schedules(p_status text, p_deliverable uuid) RETURNS
   select p_status = 'approved' or (p_status = 'published' and exists (select 1 from public.schedule_slots s
     where s.deliverable_id = p_deliverable and s.status = 'published'))
 $$;
+
+
+--
+-- Name: post_sources_clean(uuid, jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.post_sources_clean(p_user uuid, p_sources jsonb) RETURNS jsonb
+    LANGUAGE sql STABLE
+    SET search_path TO ''
+    AS $_$
+  select nullif(coalesce(jsonb_agg(jsonb_build_object(
+      'opportunityId', s->>'opportunityId', 'summary', btrim(s->>'summary'),
+      'platform', s->>'platform', 'community', coalesce(s->>'community', '')) order by n), '[]'::jsonb), '[]'::jsonb)
+  from (
+    select s, n from jsonb_array_elements(case when jsonb_typeof(p_sources) = 'array' then p_sources else '[]'::jsonb end)
+      with ordinality as x(s, n)
+    where jsonb_typeof(s) = 'object'
+      and coalesce(s->>'opportunityId', '') ~ '^[0-9a-fA-F-]{36}$'
+      and char_length(btrim(coalesce(s->>'summary', ''))) between 1 and 200
+      and s->>'platform' in ('reddit', 'hn', 'facebook', 'threads')
+      and char_length(coalesce(s->>'community', '')) <= 120
+      and exists (select 1 from public.opportunities o where o.id = (s->>'opportunityId')::uuid and o.user_id = p_user)
+    order by n
+    limit 5
+  ) y;
+$_$;
 
 
 --
@@ -22028,6 +22077,13 @@ CREATE INDEX media_transcripts_user_id_idx ON public.media_transcripts USING btr
 --
 
 CREATE INDEX operation_log_user_at_idx ON public.operation_log USING btree (user_id, platform, action, at DESC);
+
+
+--
+-- Name: opportunities_nudges_due_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX opportunities_nudges_due_idx ON public.opportunities USING btree (user_id, replied_at) WHERE ((person_status = 'replied'::text) AND (nudge_draft IS NULL));
 
 
 --
