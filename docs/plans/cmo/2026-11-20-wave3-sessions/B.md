@@ -113,3 +113,7 @@ match in a thread under a day old (once per card, logged as `push`). Template th
   prompt says five and leaves samples/screenshots empty), onboarding steps are `…, post_plan, brand`. **B4 still owns**
   the onboarding prompt's quality (fit test, look from the site, where they ask) and putting `voice_samples` /
   `intro_line` into the writer and reply prompts. The onboarding answers now set `post_plan.channels` (SQL).
+- **From A (your sells_to ask, ready):** `cmo_onboarding_answers({ sells_to })` (string, 1–160 chars after tidying
+  spaces; error "Say who you sell to in 1 to 160 characters."), stored on `profiles.sells_to` (readable by the
+  founder's session). `cmo_apply_onboarding_answers` writes it into the newest Strategy's `icp` as a `user` version when
+  the founder answers now, or when the Strategy is still the agent's; a later founder edit is never overwritten.
