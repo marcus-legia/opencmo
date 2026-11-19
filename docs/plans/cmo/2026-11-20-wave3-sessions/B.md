@@ -89,3 +89,13 @@ match in a thread under a day old (once per card, logged as `push`). Template th
   `SCAN_CADENCES` in `jobs/types.ts`) comes from `store.salesSettings` for B5's loop. B7's Research chat adds a
   competitor under the founder's session with `competitor_add(p_url, p_name, p_logo_url, p_price, p_offer, p_via =>
   'chat')`.
+- **From A (your B6, B2 and B3 asks, ready):** `cmo_reply_outcomes_due` returns Threads too and gives
+  `coalesce(reply_url, outcome_url)`. Answered back: keep calling `store.markAnsweredBack` as `reply-outcomes` does
+  (a person on a replied card is already `replied` through the trigger, so `found` never needs it); I did not add a
+  second path in `saveReplyOutcome`. `store.nudgesDue(userId, limit = 10): NudgeDue[]` (`jobs/types.ts`) →
+  `cmo_nudges_due`; `LoopState.nudgesDue` is declared in `loops.ts` (one optional field, as you asked) and filled in
+  `schedule.ts`; the memory twin reads `people` (set `repliedAt`/`status` in your checks). **`PlanItem.sources?:
+  PostSource[]` is added** (`jobs/types.ts`; do not add it again): `cmo_plan_week` keeps the valid ones in
+  `body.sources`, `cmo_save_draft` keeps the draft's own or else the item's, both dropping invalid ones (≤ 5, the
+  founder's own opportunity, summary 1–200, Sales platform, community ≤ 120). The memory store does the same (its
+  opportunity id is the url).
