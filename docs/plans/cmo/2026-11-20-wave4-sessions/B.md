@@ -15,7 +15,7 @@ real pain in their words, fresh (under 7 days), a reply worth posting. Write `do
 (Vietnamese) with per-source numbers and the worst five cards with why. Any source under half "worth a reply": fix
 its queries or scoring before launch, with an eval case for the fix. Spend stays under $10; stop and ask if not.
 
-### - [ ] B2. Health and alerts
+### - [x] B2. Health and alerts
 `GET /api/health/cmo` (no auth, no personal data): reader configured and last success per platform, last scan
 finished, queue depth, oldest queued run age. Confirm a failed Sales scan reaches the owner's failure alert like
 other jobs (`lib/ops/failure-alerts.ts`); add it if not. Checks.
