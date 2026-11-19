@@ -65,6 +65,29 @@ async function main() {
     assert.equal(await kindOf(402, "insufficient_credits"), "credits");
     assert.equal(await kindOf(429, "rate_limited"), "busy");
     assert.equal(await kindOf(502, "upstream_error"), "unavailable");
+
+    // Both keys (owner, 2026-11-20): Lurk out of credits or down hands the lookup to ScrapeCreators; a post that is
+    // not found is the post's answer and is not asked again.
+    process.env.SCRAPECREATORS_API_KEY = "sc";
+    const hosts: string[] = [];
+    const both = (lurkStatus: number, lurkCode: string) => {
+      hosts.length = 0;
+      globalThis.fetch = (async (url: string | URL) => {
+        const host = new URL(String(url)).host;
+        hosts.push(host);
+        return host === "api.lurkapi.com"
+          ? new Response(JSON.stringify({ success: false, code: lurkCode, credits_charged: 0 }), { status: lurkStatus })
+          : new Response(JSON.stringify({ posts: [{ id: "sc" }] }), { status: 200 });
+      }) as typeof fetch;
+    };
+    both(402, "insufficient_credits");
+    assert.deepEqual(await scGet("/v1/reddit/search", { query: "q" }), { posts: [{ id: "sc" }] }, "Lurk out of credits: ScrapeCreators answers");
+    assert.deepEqual(hosts, ["api.lurkapi.com", "api.scrapecreators.com"]);
+    both(502, "upstream_error");
+    assert.deepEqual(await scGet("/v1/reddit/search", { query: "q" }), { posts: [{ id: "sc" }] }, "Lurk down: ScrapeCreators answers");
+    both(404, "not_found");
+    await assert.rejects(scGet("/v1/reddit/search", { query: "q" }), (e: unknown) => e instanceof SocialReadError && e.kind === "not_found");
+    assert.deepEqual(hosts, ["api.lurkapi.com"], "not found is not asked twice");
   } finally {
     globalThis.fetch = realFetch;
     delete process.env.LURK_API_KEY;

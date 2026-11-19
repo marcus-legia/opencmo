@@ -57,18 +57,31 @@ const LURK_MISSING = new Set(["/v1/google/search", "/v1/twitter/tweet/transcript
 const LURK_PATH: Record<string, string> = { "/v1/credit/balance": "/v1/account/credit-balance" };
 
 type Route = { provider: "scrapecreators" | "lurk"; url: string; key: string };
-/** Where one path goes, or null when no provider that serves it has a key. */
-export function socialRoute(path: string, params: Record<string, string>): Route | null {
+/**
+ * Every provider that serves one path and has a key, in the order to try them: Lurk first (cheaper), ScrapeCreators
+ * second. Two providers (owner, 2026-11-20) mean one that is out of credits, refusing its key or down does not stop
+ * Sales: `scGet` tries the next one.
+ */
+export function socialRoutes(path: string, params: Record<string, string>): Route[] {
+  const routes: Route[] = [];
   const lurk = lurkKey();
   if (lurk && !LURK_MISSING.has(path)) {
     // Lurk trims by default and keeps its own cache times: ScrapeCreators' `trim` and `cache_max_age` are not sent.
     const { trim: _trim, cache_max_age: _age, ...rest } = params;
-    return { provider: "lurk", url: `${LURK_BASE}${LURK_PATH[path] ?? path}?${new URLSearchParams(rest)}`, key: lurk };
+    routes.push({ provider: "lurk", url: `${LURK_BASE}${LURK_PATH[path] ?? path}?${new URLSearchParams(rest)}`, key: lurk });
   }
   const sc = scKey();
-  if (sc) return { provider: "scrapecreators", url: `${SC_BASE}${path}?${new URLSearchParams({ ...params, trim: "true" })}`, key: sc };
-  return null;
+  if (sc) routes.push({ provider: "scrapecreators", url: `${SC_BASE}${path}?${new URLSearchParams({ ...params, trim: "true" })}`, key: sc });
+  return routes;
 }
+
+/** Where one path goes first, or null when no provider that serves it has a key. */
+export function socialRoute(path: string, params: Record<string, string>): Route | null {
+  return socialRoutes(path, params)[0] ?? null;
+}
+
+/** A failure the other provider may not share: its credits, its key, its outage. Not an answer about the post. */
+const PROVIDER_FAULT: ReadonlySet<SocialReadKind> = new Set(["credits", "setup", "busy", "unavailable"]);
 
 /** Đọc được mạng xã hội: có khoá thật, hoặc bản giả (CI/E2E). */
 export function socialReaderReady(): boolean {
@@ -104,8 +117,24 @@ export class ScBudget {
 
 /** Lời gọi thô. `budget` trừ trước khi gọi — lỗi mạng vẫn tính, vì ScrapeCreators có thể đã tính. */
 export async function scGet(path: string, params: Record<string, string>, budget?: ScBudget): Promise<unknown> {
-  const route = socialRoute(path, params);
-  if (!route) throw new SocialReadError("Social research is not set up on this server yet.", "setup");
+  const routes = socialRoutes(path, params);
+  if (!routes.length) throw new SocialReadError("Social research is not set up on this server yet.", "setup");
+  let last: SocialReadError | null = null;
+  for (const route of routes) {
+    try {
+      return await callRoute(route, path, budget);
+    } catch (error) {
+      // "Not found" is the post's answer and the cap is the founder's: neither changes with the provider.
+      if (!(error instanceof SocialReadError) || !PROVIDER_FAULT.has(error.kind)) throw error;
+      if (routes.length > 1) console.warn(`[cmo] social: ${route.provider} failed on ${path} (${error.kind}), trying the next provider`);
+      last = error;
+    }
+  }
+  throw last!;
+}
+
+/** One lookup on one provider. */
+async function callRoute(route: Route, path: string, budget?: ScBudget): Promise<unknown> {
   // The founder's daily provider cap (spend ledger), before the lookup is paid for.
   if (!(await spendAllowed())) throw new SocialReadError(SPEND_CAP_MESSAGE, "cap");
   budget?.take();
