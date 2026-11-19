@@ -21,7 +21,9 @@ const body = z.object({
  * onboarding uses (public pages only, SSRF-checked), and its name, price, offer and logo are stored by
  * `competitor_add`. No model call: what is shown is what the site says.
  */
-export const POST = withApi({ body, rateLimit: { bucket: "onboarding", limit: 20, windowSeconds: 3600 } }, async ({ supabase, body }) => {
+// The CMO runs bucket (an allowlisted tuple in `rate_limit_hit`), not onboarding's: adding competitors must not use up
+// the founder's website reads.
+export const POST = withApi({ body, rateLimit: { bucket: "cmo-runs", limit: 60, windowSeconds: 3600 } }, async ({ supabase, body }) => {
   let site: SiteSnapshot | null = null;
   try {
     site = await readSite(body.url);

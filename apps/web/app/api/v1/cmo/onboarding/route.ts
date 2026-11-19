@@ -3,7 +3,7 @@ import { z } from "zod";
 import { apiErrorFromPostgrest } from "@/lib/api/errors";
 import { withApi } from "@/lib/api/handler";
 import { runOnboarding } from "@/lib/cmo/onboard";
-import type { OnboardingStatus, RunState } from "@/lib/cmo/onboard-status";
+import { buyerChips, type OnboardingStatus, type RunState } from "@/lib/cmo/onboard-status";
 
 export const dynamic = "force-dynamic";
 // Reading a few pages and one model call take 20–60 s; then the first week's plan and draft run in `after()`.
@@ -35,8 +35,8 @@ const stepsOf = (value: unknown): NonNullable<OnboardingStatus["run"]>["steps"] 
 export const GET = withApi({}, async ({ supabase, user }) => {
   const [{ data: onboard, error }, { data: profile }, { data: product }] = await Promise.all([
     supabase.from("cmo_runs").select("id, kind, status, error, steps, created_at").eq("kind", "onboard").order("created_at", { ascending: false }).limit(1).maybeSingle<RunRow>(),
-    supabase.from("profiles").select("x_handle, post_platforms, heard_from").eq("id", user.id).maybeSingle<{ x_handle: string | null; post_platforms: string[] | null; heard_from: string | null }>(),
-    supabase.from("marketing_documents_latest").select("body").eq("kind", "product").maybeSingle<{ body: { x_handle?: unknown } }>(),
+    supabase.from("profiles").select("x_handle, post_platforms, heard_from, sells_to").eq("id", user.id).maybeSingle<{ x_handle: string | null; post_platforms: string[] | null; heard_from: string | null; sells_to: string | null }>(),
+    supabase.from("marketing_documents_latest").select("body").eq("kind", "product").maybeSingle<{ body: { x_handle?: unknown; audience?: unknown } }>(),
   ]);
   if (error) throw apiErrorFromPostgrest(error);
   let plan: RunState | null = null;
@@ -68,8 +68,9 @@ export const GET = withApi({}, async ({ supabase, user }) => {
     scanCards,
     plan,
     draft,
-    answers: { xHandle: profile?.x_handle ?? null, platforms: profile?.post_platforms ?? null, heardFrom: profile?.heard_from ?? null },
+    answers: { xHandle: profile?.x_handle ?? null, platforms: profile?.post_platforms ?? null, heardFrom: profile?.heard_from ?? null, sellsTo: profile?.sells_to ?? null },
     suggestedHandle: /^[A-Za-z0-9_]{1,15}$/.test(handle) ? handle : null,
+    suggestedBuyers: typeof product?.body.audience === "string" ? buyerChips(product.body.audience) : [],
   };
   return status;
 });

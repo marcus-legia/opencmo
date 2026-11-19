@@ -7,5 +7,5 @@ export const metadata: Metadata = { title: "Research" };
 
 export default function ResearchPage() {
   requireUiV2();
-  return <ResearchView />;
+  return <ResearchView withChat />;
 }

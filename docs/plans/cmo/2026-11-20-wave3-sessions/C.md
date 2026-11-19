@@ -49,6 +49,26 @@ progress for a paid account with "while you wait", the banners for a source that
 Sales not set up (canvas "Scan problems"). Settings › Tracking: the founder's `?ref=ferreto&src=…` links with Copy,
 and how "Signed up" is counted. Onboarding: the "who do you sell to?" chips while the site is read.
 
+**C8 handover (session C, 2026-11-19):** done and pushed: Research's own chat panel (`components/today/ResearchChat.tsx`,
+`POST /api/v1/research/find` running B7's `findCompetitors` behind `cmo_read_hit` `chat_social` and the spend ledger;
+Add asks for the site and calls `POST /api/v1/research/competitors` with `via: "chat"`), and the API half of the fit
+question (`/cmo/onboarding/answers` takes `sells_to`, 1 to 160 chars; `GET /cmo/onboarding` returns
+`answers.sellsTo` and `suggestedBuyers`, chips cut from Product's `audience` by `buyerChips`). Left to do:
+- Setup: the "Who do you sell to?" chips in `components/screens/setup/SetupQuestions.tsx` (chips from
+  `status.suggestedBuyers`, "+ Add" free text, joined into `sells_to` on Save; Skip saves nothing), and a check in
+  `ui-v2-setup.spec.ts`.
+- Sales (`components/today/AgentSales.tsx`): "While you wait" during a paid account's first scan (no `lastScan`, scan
+  active: paste writing samples → `/app/business?d=brand`, connect X or LinkedIn → `/app/settings#settings-connected-accounts`,
+  tracking links → `/app/settings#settings-tracking`); banners from canvas "Scan problems": a place that did not answer
+  (`lastScan.failed`), the newest `sales_scan` run failed (read it once on mount; the page only follows active runs), Sales
+  not set up (no Strategy document). No claim about allowance refunds unless checked in SQL.
+- Settings › Tracking: a panel in `components/screens/settings/` with `<site>/?ref=ferreto&src=reddit|x|linkedin|threads`
+  links and Copy, and the honest line that sign-ups are marked by hand in Sales › Following up (no tracking script in
+  wave 3); a `SettingsFrame` entry.
+- e2e for the Research chat (fake provider) and the states above; then C7.
+Local e2e works in this container with `E2E_SUPABASE_EXCLUDE=logflare,vector,studio,imgproxy,edge-runtime,postgres-meta`
+(logflare fails to start here).
+
 ### - [ ] C7. e2e, look, review
 Specs for Library, post sources, reach out and I replied, Following up, Research add, funnel. Screenshots at 1440 and
 390. Review the whole wave against the plan. Open the wave 3 PR from `claude/launch`. Do not merge.

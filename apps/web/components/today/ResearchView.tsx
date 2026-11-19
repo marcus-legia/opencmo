@@ -1,11 +1,13 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 
 import { api, jsonBody } from "@/components/clipping/api";
 import { useScreen } from "@/components/screens/useScreen";
 import { useShellState } from "@/components/shell-v2/ShellState";
 import type { CompetitorView } from "@/lib/screens/research";
+
+import { ResearchChat } from "./ResearchChat";
 
 /** The colour squares of the competitors' marks, in order (the canvas draws each in its own colour). */
 export const MARKS = ["#1f8a5b", "#ff6b35", "#0075dd", "#2d3e50", "#1c6ef2", "#e42527", "#8a63d2", "#c9a227"];
@@ -67,9 +69,9 @@ function CompetitorCard({ c, index, onRemove }: { c: CompetitorView; index: numb
 /**
  * Research (wave 3, canvas board Research): the competitors the founder keeps, from their own sites (name, price,
  * what they sell) and how often Sales conversations mention them. Add one by pasting a website, or ask the chat to find
- * others; nothing is searched on its own (owner, 2026-11-18). `chat` is the page's own chat panel (C8).
+ * others in its own chat panel (C8); nothing is searched on its own (owner, 2026-11-18).
  */
-export function ResearchView({ chat }: { chat?: ReactNode }) {
+export function ResearchView({ withChat = false }: { withChat?: boolean }) {
   const [state, reload] = useScreen("research");
   const { toast, focusChat } = useShellState();
   const [url, setUrl] = useState("");
@@ -126,7 +128,7 @@ export function ResearchView({ chat }: { chat?: ReactNode }) {
           <button type="submit" className="primary" disabled={adding || !url.trim()}>
             {adding ? "Reading their site…" : "Add"}
           </button>
-          {chat ? null : (
+          {withChat ? null : (
             <button type="button" className="ghost" onClick={() => focusChat()}>
               or ask the chat to find them
             </button>
@@ -155,7 +157,7 @@ export function ResearchView({ chat }: { chat?: ReactNode }) {
           </div>
         ) : null}
       </main>
-      {chat}
+      {withChat ? <ResearchChat onAdded={reload} /> : null}
     </div>
   );
 }
