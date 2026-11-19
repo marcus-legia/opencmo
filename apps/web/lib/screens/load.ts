@@ -9,6 +9,7 @@ import { profileIdOf, profileOf, POST_PROFILES } from "@/lib/cmo/platforms";
 import { readyStyles } from "@/lib/agent/styles";
 import { DOCUMENTS, DOCUMENT_KINDS, type DocumentKind } from "@/lib/cmo/documents";
 import { JOB_PRICES, classifyOrder, nextCheckAt, type OrderLedgerRow } from "@/lib/cmo/jobs/progress";
+import { storedSources } from "@/lib/cmo/jobs/library-sources";
 import { mondayOf } from "@/lib/cmo/jobs/summarize-memory";
 import { planOrDefault } from "@/lib/cmo/posting-plan";
 import { localDay, localMidnight, localMonday } from "@/lib/time-zone";
@@ -32,7 +33,9 @@ import { SKILL_READERS, type LibraryScreen } from "./library";
 import type { RailStatus } from "./rail";
 import type { ResearchScreen } from "./research";
 import type { SalesScan, SalesScreen } from "./sales";
-import { SALES_PLATFORMS } from "../cmo/social/conversations";
+import { SALES_PLATFORMS, type SalesPlatform } from "../cmo/social/conversations";
+import { LibraryEntrySchema } from "../cmo/library";
+import { PERSON_STATUSES, REACH_LEVELS, ReachCheckSchema } from "../cmo/reach";
 import type { ScreenData, ScreenName } from "./registry";
 import type { ScheduleScreen } from "./schedule";
 import { AUTOPILOT_HOURS, AUTOPILOT_PLATFORMS, type SettingsScreen } from "./settings";
@@ -496,9 +499,9 @@ async function voiceNotes(supabase: SupabaseClient, limit: number): Promise<Voic
   return rows.map((r) => ({ ...r, weight: Math.min(1, Math.max(0, Number(r.weight))) }));
 }
 
-/** The words the strategy says to avoid: what Writer cuts from every draft. */
+/** The words the Brand says to avoid: what Writer cuts from every draft. */
 async function wordsCut(supabase: SupabaseClient): Promise<string[]> {
-  const r = await supabase.from("marketing_documents_latest").select("body").eq("kind", "strategy").maybeSingle();
+  const r = await supabase.from("marketing_documents_latest").select("body").eq("kind", "brand").maybeSingle();
   if (r.error) throw new Error(`marketing_documents_latest: ${r.error.message}`);
   const avoid = (r.data as { body?: { avoid?: unknown } } | null)?.body?.avoid;
   return Array.isArray(avoid)
@@ -516,8 +519,33 @@ function readersOf(agents: readonly string[]): LibraryScreen["skills"]["writing"
   return [...new Set(agents.map(name).filter((r): r is (typeof SKILL_READERS)[number] => r !== null))];
 }
 
-async function library({ supabase }: LoadContext): Promise<Partial<LibraryScreen>> {
+/** The `?source=` filter of the Library page; anything else reads every source. */
+function librarySource(params: URLSearchParams): SalesPlatform | null {
+  const v = params.get("source");
+  return v && (SALES_PLATFORMS as readonly string[]).includes(v) ? (v as SalesPlatform) : null;
+}
+
+async function library({ supabase, params }: LoadContext): Promise<Partial<LibraryScreen>> {
+  const source = librarySource(params);
   return parts<LibraryScreen>("library", {
+    source: async () => source,
+    themes: async () => {
+      const rows = must(await supabase.rpc("my_library", { p_source: source }), "my_library") as {
+        id: string; name: string; count: number; this_week: number; used_in_posts: number; entries: unknown;
+      }[];
+      return rows.map((r) => ({
+        id: r.id,
+        name: r.name,
+        count: r.count,
+        thisWeek: r.this_week,
+        usedInPosts: r.used_in_posts,
+        // Stored by `cmo_save_library` within the schema's limits; a row that does not parse is left out, not shown broken.
+        entries: (Array.isArray(r.entries) ? r.entries : []).flatMap((e) => {
+          const parsed = LibraryEntrySchema.safeParse(e && typeof e === "object" ? { ...e, postedAt: iso((e as { postedAt?: string | null }).postedAt) } : e);
+          return parsed.success ? [parsed.data] : [];
+        }),
+      }));
+    },
     voice: async () => {
       const [notes, words] = await Promise.all([voiceNotes(supabase, 40), wordsCut(supabase)]);
       return {
@@ -954,6 +982,25 @@ async function research({ supabase }: LoadContext): Promise<Partial<ResearchScre
       const body = ((r.data as { body?: unknown } | null)?.body ?? {}) as { hooks?: { url?: unknown }[]; formats?: unknown[]; ideas?: unknown[] };
       return (body.hooks ?? []).filter((h) => !isHttps(h.url)).length + (body.formats ?? []).length + (body.ideas ?? []).length;
     },
+    competitors: async () => {
+      const since = new Date(now.getTime() - 8 * 7 * 86_400_000).toISOString().slice(0, 10);
+      const [rows, mentions] = await Promise.all([
+        supabase.from("competitors").select("id, name, site, logo_url, price, offer, added_via").order("created_at", { ascending: false }).limit(20),
+        supabase.from("my_competitor_mentions").select("competitor_id, week, mentions").gte("week", since).order("week").limit(200),
+      ]);
+      const list = must(rows, "competitors") as { id: string; name: string; site: string; logo_url: string | null; price: string | null; offer: string | null; added_via: "url" | "chat" }[];
+      const counts = must(mentions, "my_competitor_mentions") as { competitor_id: string; week: string; mentions: number }[];
+      return list.map((c) => ({
+        id: c.id,
+        name: c.name,
+        site: c.site,
+        logoUrl: isHttps(c.logo_url) ? c.logo_url : null,
+        price: c.price,
+        offer: c.offer,
+        addedVia: c.added_via,
+        mentions: counts.filter((m) => m.competitor_id === c.id).slice(-8).map((m) => ({ week: m.week, count: m.mentions })),
+      }));
+    },
     results: async () => {
       const metrics = must(await supabase.from("post_metrics").select("item_id, views, replies, measured_at").order("measured_at", { ascending: false }).limit(100), "post_metrics") as {
         item_id: string;
@@ -1051,6 +1098,7 @@ async function writer({ supabase }: LoadContext): Promise<Partial<WriterScreen>>
           ...cardOf(r.status, cards.get(r.id)),
           ref: { kind: "content_item" as const, id: r.id },
           text: (r.final_text ?? text).slice(0, 5000),
+          sources: storedSources(r.body as Record<string, unknown>),
         };
       });
       type VideoSlot = { platform: string; status: string; publish_at: string; published_at: string | null; approval_id: string | null; error: { message?: string } | null; deliverable: { ref_kind: string; ref_id: string } };
@@ -1428,18 +1476,23 @@ async function sales({ supabase, userId }: LoadContext): Promise<Partial<SalesSc
     },
     threads: async () => {
       const free = !(await paid);
-      const base = "id, platform, url, community, title, posted_at, comments, score, score_parts, status, rule, rule_why, min_karma, min_account_age_days";
-      const columns = free ? base : `${base}, reply`;
+      const base = "id, platform, url, community, title, posted_at, comments, score, score_parts, status, rule, rule_why, min_karma, min_account_age_days, person_status, status_at, reply_url, replied_at, reach_level, reach";
+      // The DM and nudge drafts are written work, like the reply: an unpaid account's rows are read without them.
+      const columns = free ? base : `${base}, reply, dm_draft, nudge_draft`;
       // Free: whether a reply exists is all the screen needs, and the reply itself stays in the database.
-      const [rows, cards, written] = await Promise.all([
+      // The newest threads, and the people already replied to (Following up), who may be older than those.
+      const [newest, followed, cards, written] = await Promise.all([
         supabase.from("opportunities").select(columns).order("created_at", { ascending: false }).limit(30),
+        supabase.from("opportunities").select(columns).eq("status", "replied").order("decided_at", { ascending: false }).limit(30),
         waitingByRef(supabase, "opportunity"),
         free
           ? supabase.from("opportunities").select("id").neq("reply", "").order("created_at", { ascending: false }).limit(30).then((r) => new Set((must(r, "opportunities") as { id: string }[]).map((x) => x.id)))
           : Promise.resolve(null),
       ]);
       type Part = { label?: string; score?: number; max?: number; evidence?: string };
-      return (must(rows, "opportunities") as unknown as { id: string; platform: string | null; url: string; community: string; title: string; posted_at: string | null; comments: number; score: number; score_parts: Part[] | null; reply?: string | null; status: "in_review" | "replied" | "dismissed"; rule: string | null; rule_why: string | null; min_karma: number | null; min_account_age_days: number | null }[])
+      const seen = new Set<string>();
+      const rows = [...(must(newest, "opportunities") as unknown as { id: string }[]), ...(must(followed, "opportunities") as unknown as { id: string }[])].filter((r) => !seen.has(r.id) && seen.add(r.id));
+      return (rows as unknown as { id: string; platform: string | null; url: string; community: string; title: string; posted_at: string | null; comments: number; score: number; score_parts: Part[] | null; reply?: string | null; status: "in_review" | "replied" | "dismissed"; rule: string | null; rule_why: string | null; min_karma: number | null; min_account_age_days: number | null; person_status: string; status_at: string | null; reply_url: string | null; replied_at: string | null; reach_level: string; reach: unknown; dm_draft?: string | null; nudge_draft?: string | null }[])
         .map((r) => {
           const kind = salesRuleKind(r.rule);
           // A free account never holds reply text (free-scan plan): `reply` was not selected for it.
@@ -1472,6 +1525,17 @@ async function sales({ supabase, userId }: LoadContext): Promise<Partial<SalesSc
                 : `No links · under 120 words · ${kind === "mention_allowed" || kind === "requires_disclosure" ? "product named at most once, saying it is yours" : "no product mention"}`,
             status: r.status === "in_review" ? ("open" as const) : r.status,
             approvalId: cards.get(r.id) ?? null,
+            person: {
+              status: PERSON_STATUSES.find((p) => p === r.person_status) ?? ("found" as const),
+              statusAt: iso(r.status_at),
+              replyUrl: r.reply_url && /^https?:\/\//.test(r.reply_url) ? r.reply_url : null,
+              repliedAt: iso(r.replied_at),
+              reachLevel: REACH_LEVELS.find((l) => l === r.reach_level) ?? ("reply_first" as const),
+              // Written by `cmo_save_reach`; a check that does not parse shows as no check rather than a broken one.
+              reach: ReachCheckSchema.safeParse(r.reach).data ?? null,
+              dmDraft: free ? null : (r.dm_draft || null),
+              nudgeDraft: free ? null : (r.nudge_draft || null),
+            },
           };
         })
         .sort((a, b) => Number(b.status === "open") - Number(a.status === "open"));

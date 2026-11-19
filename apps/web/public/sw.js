@@ -16,16 +16,20 @@ self.addEventListener("push", (event) => {
         const res = await fetch("/api/v1/notify/next", { credentials: "same-origin", cache: "no-store" });
         if (res.ok) {
           const json = await res.json();
-          const list = json && (json.data ? json.data.autopilot : json.autopilot);
-          for (const soon of Array.isArray(list) ? list : []) {
-            if (!soon || typeof soon.line !== "string" || typeof soon.approvalId !== "string") continue;
-            await self.registration.showNotification("Ferreto", {
-              body: soon.line,
-              icon: "/icon.svg",
-              tag: "autopilot-" + soon.approvalId,
-              renotify: false,
-              data: { url: "/app/inbox/" + encodeURIComponent(soon.approvalId) },
-            });
+          const data = json && (json.data ? json.data : json);
+          // Autopilot posts about to go out, then strong matches in a fresh thread (wave 3), each under its own tag.
+          const lists = [["autopilot-", data && data.autopilot], ["strong-", data && data.strong]];
+          for (const [prefix, list] of lists) {
+            for (const soon of Array.isArray(list) ? list : []) {
+              if (!soon || typeof soon.line !== "string" || typeof soon.approvalId !== "string") continue;
+              await self.registration.showNotification("Ferreto", {
+                body: soon.line,
+                icon: "/icon.svg",
+                tag: prefix + soon.approvalId,
+                renotify: false,
+                data: { url: "/app/inbox/" + encodeURIComponent(soon.approvalId) },
+              });
+            }
           }
         }
       } catch (_) {

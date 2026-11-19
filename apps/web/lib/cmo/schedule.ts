@@ -3,7 +3,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { readAll } from "@/lib/cmo/jobs/progress-run";
-import { isoDay, type CmoJobKind } from "@/lib/cmo/jobs/types";
+import { isoDay, SCAN_CADENCES, type CmoJobKind, type ScanCadence } from "@/lib/cmo/jobs/types";
 import { dueLoops, type LoopState } from "@/lib/cmo/loops";
 import { socialReaderReady } from "@/lib/cmo/social/reddit";
 
@@ -49,6 +49,9 @@ const POST_RUNS_A_DAY = 3;
 export const DRAFT_LOOP = "daily-post-draft";
 /** The loop's name before 2026-11-12: a day in flight then is not drafted twice. Drop it after 2026-11-19. */
 const OLD_DRAFT_LOOP = "daily-x-draft";
+/** The scan loop's name before wave 3 (2026-11-20): a scan queued that day under it is not queued twice. */
+const OLD_SCAN_LOOP = "reddit-listening";
+const SCAN_LOOP = "sales-scan";
 
 type DueRow = { id: string; user_id: string; department: string; idea: string; platform: string | null };
 
@@ -79,7 +82,7 @@ async function queuedToday(admin: SupabaseClient, today: string): Promise<Set<st
   const out = new Set<string>();
   for (const row of rows) {
     if (typeof row.input?.loop !== "string") continue;
-    const loop = row.input.loop === OLD_DRAFT_LOOP ? DRAFT_LOOP : row.input.loop;
+    const loop = row.input.loop === OLD_DRAFT_LOOP ? DRAFT_LOOP : row.input.loop === OLD_SCAN_LOOP ? SCAN_LOOP : row.input.loop;
     out.add(loopKey(row.user_id, loop, typeof row.input.item_id === "string" ? row.input.item_id : null));
   }
   return out;
@@ -186,6 +189,18 @@ export async function enqueueDueLoops(admin: SupabaseClient, now = new Date()): 
     admin.from("cmo_draft_outcomes").select("user_id").eq("department", "sales").eq("action", "replied").is("outcome_checked_at", null)
       .lte("decided_at", new Date(now.getTime() - 3 * 86_400_000).toISOString()).order("id").range(from, to),
   ));
+  // Wave 3 B2: the same condition as `cmo_nudges_due`.
+  const nudgesBy = count(await readAll((from, to) =>
+    admin.from("opportunities").select("user_id").eq("person_status", "replied").is("nudge_draft", null)
+      .lte("replied_at", new Date(now.getTime() - 4 * 86_400_000).toISOString()).order("id").range(from, to),
+  ));
+  // Wave 3: each founder's Sales scan days (Settings › Sales scans); a founder with no row scans Mon/Wed/Fri.
+  const cadenceBy = new Map<string, ScanCadence>();
+  for (const row of await readAll<{ user_id: string; cadence: string | null }>((from, to) =>
+    admin.from("sales_settings").select("user_id, cadence").order("user_id").range(from, to),
+  )) {
+    if ((SCAN_CADENCES as readonly string[]).includes(row.cadence ?? "")) cadenceBy.set(row.user_id, row.cadence as ScanCadence);
+  }
   const socialReader = socialReaderReady();
   // CMO review 3, 3.1: loops run for accounts with a plan or credits left, the same rule as `cmo_require_paid`.
   const paid = await paidUsers(admin, users);
@@ -204,6 +219,8 @@ export async function enqueueDueLoops(admin: SupabaseClient, now = new Date()): 
       publishedRecently: publishedBy.get(user) ?? 0,
       connectedAccounts: connectedBy.get(user) ?? 0,
       repliesDue: repliesBy.get(user) ?? 0,
+      nudgesDue: nudgesBy.get(user) ?? 0,
+      scanCadence: cadenceBy.get(user) ?? "mwf",
       socialReader,
       paid: paid.has(user),
     };

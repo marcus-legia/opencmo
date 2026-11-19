@@ -3,9 +3,11 @@
  * Supabase. Not `server-only`, so `tsx` scripts can import it.
  */
 
+import type { LibrarySaveItem, LibraryTopTheme } from "../library";
+import { reachLevel, type ReachCheck, type ReachLevel } from "../reach";
 import type { VideoSource } from "../writer/types";
 import { latestPerTopic } from "./context";
-import { isoDay, type CmoStore, type DraftRating, type CompetitorInsight, type ConnectedAccountRow, type ReplyOutcomeDue, type MetricRow, type ZernioPostRow, type NicheVideoInsight, type SalesSettings, type SubredditRule, type Documents, type Goal, type ItemRow, type Lesson, type MemoryEvent, type Opportunity, type QueuedRun, type Step, type VoiceNoteRow, type WeekResults } from "./types";
+import { isoDay, type CmoStore, type DraftRating, type CompetitorInsight, type ConnectedAccountRow, type ReplyOutcomeDue, type MetricRow, type ZernioPostRow, type NicheVideoInsight, type SalesSettings, type SubredditRule, type Documents, type Goal, type ItemRow, type Lesson, type MemoryEvent, type Opportunity, type PostSource, type QueuedRun, type Step, type VoiceNoteRow, type WeekResults } from "./types";
 import type { AccountMetricRow } from "./metrics-source";
 import { defaultPostingPlan, type PostingPlan } from "../posting-plan";
 import { SALES_PLATFORMS } from "../social/conversations";
@@ -28,10 +30,19 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
   const runs: RunState[] = [];
   const items: ItemRow[] = [];
   const opps: Opportunity[] = [];
+  /** Library lines by conversation url, as `cmo_save_library` keeps them (one per conversation, themes by name). */
+  const library = new Map<string, LibrarySaveItem & { theme: string }>();
+  /** People by conversation url (the memory store uses the url as the opportunity id), as A3's columns keep them. */
+  const people = new Map<string, { level: ReachLevel; reach: ReachCheck; dm: string | null; dmAt: number | null; nudge: string | null; status: string; repliedAt: number | null }>();
+  const person = (url: string) => {
+    let p = people.get(url);
+    if (!p) people.set(url, (p = { level: "reply_first", reach: {} as ReachCheck, dm: null, dmAt: null, nudge: null, status: "found", repliedAt: null }));
+    return p;
+  };
   /** URLs of cards the founder already decided (replied or dismissed): no reply is written for them. */
   const decided = new Set<string>();
   const rules = new Map<string, SubredditRule>();
-  const salesSettings: SalesSettings = { excluded: [], pairs: [], platforms: [...SALES_PLATFORMS] };
+  const salesSettings: SalesSettings = { excluded: [], pairs: [], platforms: [...SALES_PLATFORMS], cadence: "mwf" };
   const mentions = { used: 0 };
   /** The account's plan (`cmo_paid`); checks flip it to run a free scan. */
   const account = { paid: true };
@@ -50,6 +61,17 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
   const replies: (ReplyOutcomeDue & { check?: { status: string; votes: number | null; replies: number | null } })[] = [];
   /** The founder's saved posting plan; null = never chosen, the default for the connected accounts applies. */
   const posting: { plan: PostingPlan | null } = { plan: null };
+  /** As `post_sources_clean`: at most 5, each the founder's conversation (the memory id is its url), trimmed. */
+  const cleanSources = (value: unknown): PostSource[] | null => {
+    if (!Array.isArray(value)) return null;
+    const kept = value
+      .filter((s): s is PostSource => !!s && typeof s === "object")
+      .filter((s) => opps.some((o) => o.url === s.opportunityId) && typeof s.summary === "string" && s.summary.trim().length >= 1 && s.summary.trim().length <= 200
+        && (SALES_PLATFORMS as readonly string[]).includes(s.platform) && (s.community ?? "").length <= 120)
+      .slice(0, 5)
+      .map((s) => ({ opportunityId: s.opportunityId, summary: s.summary.trim(), platform: s.platform, community: s.community ?? "" }));
+    return kept.length ? kept : null;
+  };
   let seq = 0;
   const id = () => `id-${++seq}`;
   const store: CmoStore = {
@@ -124,9 +146,15 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
     async planWeek(_u, runId, plan) {
       for (let i = items.length - 1; i >= 0; i--) if (items[i].status === "planned") items.splice(i, 1);
       for (const p of plan) {
-        const { targets, slot, ...item } = p;
-        // As `cmo_plan_week` writes it: a post keeps its slot's platforms in `body.targets` and its index in `body.slot`.
-        items.push({ id: id(), run_id: runId, ...item, status: "planned", priority: "medium", body: targets?.length ? { targets, ...(slot === undefined ? {} : { slot }) } : {}, final_text: null, external_url: null, decided_at: null, published_at: null, created_at: new Date().toISOString() });
+        const { targets, slot, sources, planned_from, ...item } = p;
+        // As `cmo_plan_week` writes it: a post keeps its slot's platforms in `body.targets` and its index in `body.slot`,
+        // and its valid Library sources in `body.sources`.
+        const kept = item.department === "post" ? cleanSources(sources) : null;
+        const body = {
+          ...(targets?.length ? { targets, ...(slot === undefined ? {} : { slot }) } : {}),
+          ...(kept ? { sources: kept } : item.department === "post" && planned_from ? { planned_from } : {}),
+        };
+        items.push({ id: id(), run_id: runId, ...item, status: "planned", priority: "medium", body, final_text: null, external_url: null, decided_at: null, published_at: null, created_at: new Date().toISOString() });
       }
       return plan.length;
     },
@@ -158,7 +186,10 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
       }
       // As `cmo_save_draft`: the draft keeps the planner's targets and slot, so the post still goes to every platform.
       const kept = Object.fromEntries(Object.entries(item.body).filter(([k]) => k === "targets" || k === "slot"));
-      Object.assign(item, { status: "in_review", body: { ...body, ...kept }, priority, run_id: runId });
+      // The draft's own sources win; one that sends none keeps the plan's.
+      const sources = cleanSources(body.sources) ?? cleanSources(item.body.sources);
+      const { sources: _drop, ...rest } = body;
+      Object.assign(item, { status: "in_review", body: { ...rest, ...kept, ...(sources ? { sources } : {}) }, priority, run_id: runId });
       return item;
     },
     seenUrls: async () => new Set(opps.map((o) => o.url)),
@@ -203,6 +234,80 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
       if (!card) return false;
       Object.assign(card, { rule: "skip", rule_why: why.trim().slice(0, 200) || null });
       return true;
+    },
+    async libraryThemeNames(_u, limit = 30) {
+      const counts = new Map<string, number>();
+      for (const e of library.values()) counts.set(e.theme, (counts.get(e.theme) ?? 0) + 1);
+      return [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, limit).map(([name]) => name);
+    },
+    async saveReach(_u, runId, list) {
+      if (!runs.some((r) => r.id === runId && (r.kind === "sales_scan" || r.kind === "sales_reply_drafts"))) throw new Error("cmo_save_reach: Run not found.");
+      let saved = 0;
+      for (const item of list) {
+        const opp = opps.find((o) => o.url === item.url);
+        if (!opp) continue;
+        const p = person(item.url);
+        const reach = { ...item.reach, dmAllowed: item.reach.dmAllowed && (opp.platform ?? "reddit") !== "hn" };
+        p.reach = reach;
+        p.level = reachLevel(reach);
+        const today = [...people.values()].filter((x) => x.dmAt !== null && Date.now() - x.dmAt < 86_400_000).length;
+        if (item.dm?.trim() && p.level !== "reply_first" && !p.dm && today < 20) Object.assign(p, { dm: item.dm.trim().slice(0, 1000), dmAt: Date.now() });
+        saved += 1;
+      }
+      return saved;
+    },
+    async saveNudge(_u, runId, id, text) {
+      if (!runs.some((r) => r.id === runId)) throw new Error("cmo_save_nudge: Run not found.");
+      const p = people.get(id);
+      if (!p || !text.trim() || p.status !== "replied" || p.nudge || !p.repliedAt || Date.now() - p.repliedAt < 4 * 86_400_000) return false;
+      p.nudge = text.trim().slice(0, 1000);
+      return true;
+    },
+    async nudgesDue(_u, limit = 10) {
+      return [...people.entries()]
+        .filter(([, p]) => p.status === "replied" && !p.nudge && p.repliedAt !== null && Date.now() - p.repliedAt > 4 * 86_400_000)
+        .sort((a, b) => a[1].repliedAt! - b[1].repliedAt!)
+        .slice(0, limit)
+        .flatMap(([url]) => {
+          const o = opps.find((x) => x.url === url);
+          return o ? [{ opportunity_id: url, url, platform: o.platform ?? "reddit", community: o.community, title: o.title, snippet: o.snippet, reply: o.reply || null, posted_at: o.posted_at }] : [];
+        });
+    },
+    async markAnsweredBack(_u, id) {
+      const p = people.get(id);
+      if (!p || p.status !== "replied") return false;
+      p.status = "answered_back";
+      return true;
+    },
+    async libraryTopThemes(_u, days = 14, limit = 5) {
+      // The memory Library keys lines by url; the opportunity id is the url there too (as `saveOpportunityReply`).
+      const since = Date.now() - days * 86_400_000;
+      const byTheme = new Map<string, LibraryTopTheme>();
+      for (const [url, line] of library) {
+        const opp = opps.find((o) => o.url === url);
+        if (!opp || (opp.posted_at && Date.parse(opp.posted_at) <= since)) continue;
+        const theme = byTheme.get(line.theme) ?? { id: `theme-${line.theme}`, name: line.theme, count: 0, entries: [] };
+        theme.count += 1;
+        theme.entries.push({ opportunityId: url, summary: line.summary, platform: opp.platform ?? "reddit", community: opp.community, postedAt: opp.posted_at, quotes: line.quotes });
+        byTheme.set(line.theme, theme);
+      }
+      const newest = (a: { postedAt: string | null }, b: { postedAt: string | null }) => (b.postedAt ?? "").localeCompare(a.postedAt ?? "");
+      return [...byTheme.values()]
+        .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+        .slice(0, limit)
+        .map((t) => ({ ...t, entries: t.entries.sort(newest).slice(0, 5) }));
+    },
+    async saveLibrary(_u, runId, list) {
+      if (!runs.some((r) => r.id === runId && r.kind === "sales_scan")) throw new Error("cmo_save_library: Run not found.");
+      let saved = 0;
+      for (const item of list) {
+        if (!item.summary.trim() || !opps.some((o) => o.url === item.url)) continue;
+        const theme = item.theme.trim().replace(/\s+/g, " ").slice(0, 80) || "Other";
+        const known = [...library.values()].find((e) => e.theme.toLowerCase() === theme.toLowerCase())?.theme ?? theme;
+        library.set(item.url, { ...item, theme: known, summary: item.summary.trim().slice(0, 200), quotes: item.quotes.slice(0, 4) });
+        saved += 1;
+      }
+      return saved;
     },
     async saveOpportunities(_u, runId, list) {
       // As `cmo_save_opportunities`: a card with no draft is kept only by the account's free scan (priced 0).
@@ -259,5 +364,5 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
     runs.push(run);
     return run;
   };
-  return { store, posting, runs, items, opps, decided, rules, salesSettings, mentions, account, insights, niche, metrics, zernio, replies, lessons, goals, results, enqueue, voice, videos, captions, variants, photoCaptions, ratings, ratingRules };
+  return { store, posting, runs, items, opps, library, people, decided, rules, salesSettings, mentions, account, insights, niche, metrics, zernio, replies, lessons, goals, results, enqueue, voice, videos, captions, variants, photoCaptions, ratings, ratingRules };
 }

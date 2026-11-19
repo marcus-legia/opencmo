@@ -86,10 +86,12 @@ export async function run(): Promise<void> {
 
   for (const [kind, body] of Object.entries({
     product: { name: "Ferreto", one_liner: "An AI CMO for solo founders: an editor, post drafts and Reddit leads you approve." },
-    strategy: { icp: "Solo founders who ship software", pains: ["editing product demos takes longer than building them"], voice: "Plain and direct" },
-    content_strategy: {
-      pillars: [{ name: "Editing by words", ideas: ["Cut a video by deleting words"] }],
-      cadence: "X every day; the same idea on Threads and LinkedIn when it is worth it; one short video a week.",
+    strategy: { icp: "Solo founders who ship software", pains: ["editing product demos takes longer than building them"] },
+    brand: { voice: "Plain and direct" },
+    post_plan: {
+      topics: ["Cut a video by deleting words"],
+      channels: ["x", "threads", "linkedin"],
+      rhythm: "X every day; the same idea on Threads and LinkedIn when it is worth it; one short video a week.",
     },
   })) {
     const { error } = await me.rpc("save_marketing_document", { p_kind: kind, p_body: body });

@@ -30,7 +30,8 @@ export const USED_BY: Record<DocView, string[]> = {
   product: ["X Agent", "Reddit Agent"],
   strategy: ["X Agent", "Weekly plan"],
   competitors: ["Reddit Agent", "Weekly plan"],
-  content_strategy: ["X Agent", "Weekly plan"],
+  post_plan: ["Planner", "Writer"],
+  brand: ["Writer", "Sales"],
   calendar: ["X Agent", "Reddit Agent"],
 };
 

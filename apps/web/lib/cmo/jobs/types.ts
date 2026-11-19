@@ -8,6 +8,8 @@ import type { DocumentKind } from "../documents";
 import type { VideoSource } from "../writer/types";
 import type { AccountMetricRow } from "./metrics-source";
 import type { SalesPlatform } from "../social/conversations";
+import type { LibrarySaveItem, LibraryTopTheme } from "../library";
+import type { ReachSaveItem } from "../reach";
 
 export type CmoJobKind =
   | "plan_week"
@@ -132,6 +134,9 @@ export type ReplyOutcomeDue = {
   outcome_url: string | null;
 };
 
+/** A person due a nudge (wave 3 B2): the thread and the founder's reply, nothing about the author. */
+export type NudgeDue = { opportunity_id: string; url: string; platform: SalesPlatform; community: string; title: string; snippet: string; reply: string | null; posted_at: string | null };
+
 export type ConnectedAccountRow = { id: string; platform: AccountMetricRow["platform"]; handle: string; zernio_account_id: string };
 
 export type StepStatus = "running" | "done" | "failed" | "skipped";
@@ -172,9 +177,16 @@ export type ItemRow = {
  * `targets`: posts only, the platform ids one core post goes to (the posting plan's slot); `platform` is the first one's
  * label. `slot`: that slot's index within its day, so saving a new plan retargets each post by it (`save_posting_plan`).
  */
-export type PlanItem = { department: "post" | "sales" | "video"; platform: string; day: string; idea: string; reason: string; image?: boolean; targets?: string[]; slot?: number };
+/** `sources`: posts only, the Library conversations it is written from (B3); `cmo_plan_week` keeps the valid ones. */
+export type PlanItem = { department: "post" | "sales" | "video"; platform: string; day: string; idea: string; reason: string; image?: boolean; targets?: string[]; slot?: number; sources?: PostSource[]; planned_from?: "brief" | "onboarding" };
 
 export type Documents = Partial<Record<DocumentKind, Record<string, unknown>>>;
+
+/**
+ * A Library conversation a post was written from (wave 3 contract). Stored on content items written from the Library
+ * and shown as "Based on N conversations" by its summary, never the thread's title.
+ */
+export type PostSource = { opportunityId: string; summary: string; platform: SalesPlatform; community: string };
 
 /** One part of an opportunity's score: the number and the quote that earned it (shown in the Sales card's drawer). */
 export type ScorePart = { label: "Pain" | "Fit" | "Timing" | "Reach" | "Evidence"; score: number; max: number; evidence: string };
@@ -247,6 +259,8 @@ export type SubredditRule = {
   min_karma?: number | null;
   min_account_age_days?: number | null;
   megathread?: boolean;
+  /** Wave 3: the rules forbid DMs or soliciting, so nobody there is DM ready. */
+  no_dms?: boolean;
 };
 /**
  * Free scan (docs/plans/cmo/2026-11-18-free-scan-plan.md): what a Sales scan returns. `queries` and `scanned` let the
@@ -272,7 +286,10 @@ export type SalesScanOutput = {
 
 /** The founder's Sales settings (`sales_settings`). */
 /** The founder's Sales settings; `platforms` are the places Sales may look (at least one, `sales_settings.platforms`). */
-export type SalesSettings = { excluded: string[]; pairs: [string, string][]; platforms: SalesPlatform[] };
+/** Wave 3 A5: when Sales scans on its own (Settings › Sales scans). The store always fills it; missing means `mwf`. */
+export const SCAN_CADENCES = ["mwf", "weekdays", "monday"] as const;
+export type ScanCadence = (typeof SCAN_CADENCES)[number];
+export type SalesSettings = { excluded: string[]; pairs: [string, string][]; platforms: SalesPlatform[]; cadence?: ScanCadence };
 
 /** Every read and write of a CMO job goes through here: Supabase (service role) for real, memory in tests. */
 export interface CmoStore {
@@ -326,6 +343,23 @@ export interface CmoStore {
   /** Thread links that already became cards (dismissed ones too): W4 never offers them again. */
   seenUrls(userId: string): Promise<Set<string>>;
   saveOpportunities(userId: string, runId: string, items: Opportunity[]): Promise<number>;
+  /** Wave 3 A2: the scan's Library lines (`cmo_save_library`); returns how many were saved or updated. */
+  saveLibrary(userId: string, runId: string, items: LibrarySaveItem[]): Promise<number>;
+  /** The founder's Library theme names, most used first (`cmo_library_theme_names`), for the scan to reuse. */
+  libraryThemeNames(userId: string, limit?: number): Promise<string[]>;
+  /** B3: themes with entries posted (or saved) in the last `days`, most entries first, five newest entries each. */
+  libraryTopThemes(userId: string, days?: number, limit?: number): Promise<LibraryTopTheme[]>;
+  /**
+   * Wave 3 A3: the scan's reach checks (`cmo_save_reach`). SQL works the level out from the checks (Hacker News never
+   * has DMs) and keeps a `dm` draft only for a DM-ready person without one, at most 20 a day.
+   */
+  saveReach(userId: string, runId: string, items: ReachSaveItem[]): Promise<number>;
+  /** One nudge for a person replied to 4+ days ago with no answer (`cmo_save_nudge`); false when not due. */
+  saveNudge(userId: string, runId: string, opportunityId: string, text: string): Promise<boolean>;
+  /** `reply-outcomes` saw an answer: replied → answered back (`cmo_mark_answered_back`), never backwards. */
+  markAnsweredBack(userId: string, opportunityId: string): Promise<boolean>;
+  /** B2: people replied to 4+ days ago, no answer seen and no nudge yet, oldest reply first (`cmo_nudges_due`). */
+  nudgesDue(userId: string, limit?: number): Promise<NudgeDue[]>;
   /** Free scan A5: the founder's cards still in review with no reply yet (`reply = ''`, not skipped), newest first. */
   undraftedOpportunities(userId: string, limit: number): Promise<UndraftedOpportunity[]>;
   /** Fills one undrafted card's reply (`cmo_save_opportunity_reply`); `rule` may only tighten it to help only. */

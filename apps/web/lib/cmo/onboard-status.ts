@@ -16,10 +16,21 @@ export type OnboardingStatus = {
   scanCards: number | null;
   plan: RunState | null;
   draft: RunState | null;
-  answers: { xHandle: string | null; platforms: string[] | null; heardFrom: string | null };
+  answers: { xHandle: string | null; platforms: string[] | null; heardFrom: string | null; sellsTo?: string | null };
   /** The Product document's X handle, to prefill the question once the CMO found it. */
   suggestedHandle: string | null;
+  /** Who the Product document says buys it, cut into a few chips for "Who do you sell to?" (wave 3, the fit test). */
+  suggestedBuyers?: string[];
 };
+
+/** "Freelancers and small agencies, consultants" → ["Freelancers", "Small agencies", "Consultants"]: at most 4 short chips. */
+export function buyerChips(audience: string): string[] {
+  const parts = audience
+    .split(/,|;|\band\b|\bor\b|\//i)
+    .map((p) => p.replace(/[.()]/g, "").trim())
+    .filter((p) => p.length >= 3 && p.length <= 40);
+  return [...new Set(parts.map((p) => p.charAt(0).toUpperCase() + p.slice(1)))].slice(0, 4);
+}
 
 export type SetupStep = { id: string; label: string; state: "waiting" | StepState };
 
@@ -28,13 +39,14 @@ const LABELS: Record<string, string> = {
   product: "Writing your Product document",
   strategy: "Writing your Strategy",
   competitors: "Writing your Competitors",
-  content_strategy: "Writing your Content plan",
+  post_plan: "Writing your Post plan",
+  brand: "Writing your Brand",
   scan: "Finding people who describe the problem",
   plan: "Planning your week",
   draft: "Drafting today's posts",
 };
 
-const ORDER = ["site", "product", "strategy", "competitors", "content_strategy", "scan", "plan", "draft"] as const;
+const ORDER = ["site", "product", "strategy", "competitors", "post_plan", "brand", "scan", "plan", "draft"] as const;
 
 const runStep = (state: RunState | null): SetupStep["state"] => (state === "done" ? "done" : state === "failed" ? "failed" : state === "running" || state === "queued" ? "running" : "waiting");
 

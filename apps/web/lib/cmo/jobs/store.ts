@@ -4,8 +4,9 @@ import type { SupabaseClient as BaseClient } from "@supabase/supabase-js";
 
 import { DOCUMENT_KINDS, type DocumentKind } from "../documents";
 import { latestPerTopic } from "./context";
-import type { CmoStore, DraftRating, CompetitorInsight, ConnectedAccountRow, ReplyOutcomeDue, ZernioPostRow, Documents, NicheVideoInsight, SubredditRule, Goal, ItemRow, Lesson, MemoryEvent, QueuedRun, UndraftedOpportunity } from "./types";
-import { isoDay, toVerdict } from "./types";
+import type { LibraryTopTheme } from "../library";
+import type { CmoStore, NudgeDue, DraftRating, CompetitorInsight, ConnectedAccountRow, ReplyOutcomeDue, ZernioPostRow, Documents, NicheVideoInsight, SubredditRule, Goal, ItemRow, Lesson, MemoryEvent, QueuedRun, UndraftedOpportunity } from "./types";
+import { SCAN_CADENCES, isoDay, toVerdict } from "./types";
 import { enqueueDueDrafts } from "../schedule";
 import { planOrDefault } from "../posting-plan";
 import { SALES_PLATFORMS, parsePlatforms } from "../social/conversations";
@@ -241,10 +242,18 @@ export function supabaseStore(admin: BaseClient): CmoStore {
       }),
     markOpportunitySkip: (userId, runId, id, why) => rpc<boolean>("cmo_mark_opportunity_skip", { p_user: userId, p_run: runId, p_id: id, p_why: why }),
     saveOpportunities: (userId, runId, items) => rpc<number>("cmo_save_opportunities", { p_user: userId, p_run: runId, p_items: items }),
+    saveLibrary: (userId, runId, items) => rpc<number>("cmo_save_library", { p_user: userId, p_run: runId, p_items: items }),
+    libraryThemeNames: (userId, limit = 30) => rpc<string[]>("cmo_library_theme_names", { p_user: userId, p_limit: limit }),
+    libraryTopThemes: (userId, days = 14, limit = 5) =>
+      rpc<LibraryTopTheme[]>("cmo_library_top_themes", { p_user: userId, p_days: days, p_limit: limit }).then((rows) => rows ?? []),
+    saveReach: (userId, runId, items) => rpc<number>("cmo_save_reach", { p_user: userId, p_run: runId, p_items: items }),
+    saveNudge: (userId, runId, id, text) => rpc<boolean>("cmo_save_nudge", { p_user: userId, p_run: runId, p_id: id, p_text: text }),
+    markAnsweredBack: (userId, id) => rpc<boolean>("cmo_mark_answered_back", { p_user: userId, p_id: id }),
+    nudgesDue: (userId, limit = 10) => rpc<NudgeDue[]>("cmo_nudges_due", { p_user: userId, p_limit: limit }).then((rows) => rows ?? []),
     async subredditRule(subreddit) {
       const { data, error } = await admin
         .from("subreddit_rules")
-        .select("subreddit, verdict, summary, read_at, min_karma, min_account_age_days, megathread")
+        .select("subreddit, verdict, summary, read_at, min_karma, min_account_age_days, megathread, no_dms")
         .eq("subreddit", subreddit.toLowerCase())
         .maybeSingle();
       if (error) throw new Error(`subreddit_rules: ${error.message}`);
@@ -261,17 +270,19 @@ export function supabaseStore(admin: BaseClient): CmoStore {
           min_karma: rule.min_karma ?? null,
           min_account_age_days: rule.min_account_age_days ?? null,
           megathread: rule.megathread ?? false,
+          no_dms: rule.no_dms ?? false,
           read_at: new Date().toISOString(),
         });
       if (error) throw new Error(`subreddit_rules: ${error.message}`);
     },
     async salesSettings(userId) {
-      const { data, error } = await admin.from("sales_settings").select("excluded_subreddits, co_occurrence, platforms").eq("user_id", userId).maybeSingle();
+      const { data, error } = await admin.from("sales_settings").select("excluded_subreddits, co_occurrence, platforms, cadence").eq("user_id", userId).maybeSingle();
       if (error) throw new Error(`sales_settings: ${error.message}`);
-      const row = data as { excluded_subreddits: string[]; co_occurrence: [string, string][]; platforms: string[] } | null;
+      const row = data as { excluded_subreddits: string[]; co_occurrence: [string, string][]; platforms: string[]; cadence: string } | null;
       // No row yet means the defaults: every platform on. An empty list cannot be saved (`sales_settings_platforms_check`).
       const platforms = row ? parsePlatforms(row.platforms) : [...SALES_PLATFORMS];
-      return { excluded: row?.excluded_subreddits ?? [], pairs: row?.co_occurrence ?? [], platforms: platforms.length ? platforms : [...SALES_PLATFORMS] };
+      const cadence = SCAN_CADENCES.find((c) => c === row?.cadence) ?? "mwf";
+      return { excluded: row?.excluded_subreddits ?? [], pairs: row?.co_occurrence ?? [], platforms: platforms.length ? platforms : [...SALES_PLATFORMS], cadence };
     },
     recentMentions: (userId) => rpc<number>("sales_mention_count_for", { p_user: userId }),
     async waitingMentions(userId) {

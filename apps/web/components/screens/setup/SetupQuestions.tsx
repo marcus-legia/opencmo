@@ -9,7 +9,8 @@ import { HEARD_FROM, POST_PLATFORMS, type OnboardingStatus } from "@/lib/cmo/onb
 import { ErrorNote } from "../parts";
 
 /**
- * Three optional questions while onboarding runs (CMO review 3, 3.2): the X handle, the platforms the founder posts
+ * Optional questions while onboarding runs (CMO review 3, 3.2): who the founder sells to (wave 3, the fit test: it
+ * becomes the Strategy's ideal customer and steers the first scan), the X handle, the platforms the founder posts
  * on, how they heard of Ferreto. Skip hides them; nothing waits on them. Saved through `cmo_onboarding_answers`, which
  * puts the handle and the platforms into the documents the CMO reads (the plan reads them if it has not started yet,
  * the next one otherwise).
@@ -20,6 +21,10 @@ export function SetupQuestions({ status }: { status: OnboardingStatus }) {
   const [platforms, setPlatforms] = useState<string[]>(status.answers.platforms ?? []);
   const [heard, setHeard] = useState(status.answers.heardFrom ?? "");
   const [note, setNote] = useState("");
+  // Who they sell to: chips cut from the website's audience, plus anything the founder types. Joined into one line.
+  const [buyers, setBuyers] = useState<string[]>(status.answers.sellsTo ? [status.answers.sellsTo] : []);
+  const [buyerText, setBuyerText] = useState("");
+  const chips = [...new Set([...(status.suggestedBuyers ?? []), ...buyers])].slice(0, 8);
   const [state, setState] = useState<"open" | "saving" | "saved" | "skipped">("open");
   const [error, setError] = useState<string | null>(null);
 
@@ -41,6 +46,8 @@ export function SetupQuestions({ status }: { status: OnboardingStatus }) {
 
   async function save() {
     const answers: Record<string, unknown> = {};
+    const sellsTo = [...buyers, buyerText.trim()].filter(Boolean).join(", ").slice(0, 160);
+    if (sellsTo) answers.sells_to = sellsTo;
     if (handle.trim()) answers.x_handle = handle.trim();
     if (platforms.length) answers.platforms = platforms;
     if (heard) {
@@ -74,6 +81,32 @@ export function SetupQuestions({ status }: { status: OnboardingStatus }) {
         <h2 id="setup-questions-title" className="v2-panel-title">
           While you wait (optional)
         </h2>
+        <fieldset className="td-setup-fieldset" data-testid="setup-buyers">
+          <legend>Who do you sell to?</legend>
+          {chips.map((chip) => {
+            const on = buyers.includes(chip);
+            return (
+              <button
+                key={chip}
+                type="button"
+                className={`td-setup-chip${on ? " is-on" : ""}`}
+                aria-pressed={on}
+                onClick={() => setBuyers((list) => (on ? list.filter((b) => b !== chip) : [...list, chip]))}
+              >
+                {chip}
+              </button>
+            );
+          })}
+          <input
+            className="v2-input td-setup-buyer-input"
+            type="text"
+            aria-label="Who you sell to, in your words"
+            placeholder={chips.length ? "Or say it in your words" : "Freelance designers, small agencies…"}
+            maxLength={160}
+            value={buyerText}
+            onChange={(event) => setBuyerText(event.target.value)}
+          />
+        </fieldset>
         <label className="v2-field" htmlFor="setup-handle">
           Your X handle
           <input

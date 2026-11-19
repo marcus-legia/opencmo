@@ -122,10 +122,17 @@ insert into allowed values
   ('mcp_confirm_use(uuid)'),
   ('mcp_grant_record(text)'),
   ('mcp_grant_revoke(text)'),
+  ('my_library(text)'),  -- wave 3 A2
+  ('competitor_add(text,text,text,text,text,text)'),  -- wave 3 A6
+  ('competitor_remove(uuid)'),  -- wave 3 A6
+  ('my_funnel(integer)'),  -- wave 3 A5
   ('my_published_items(timestamp with time zone)'),
   ('normalize_capture_url(text)'),
   ('notify_settings_save(boolean,boolean)'),
+  ('opportunity_mark_replied(uuid,text)'),  -- wave 3 A3
+  ('opportunity_mark_sent(uuid,text)'),  -- wave 3 review: I sent it on a DM or email
   ('opportunity_reply_url(uuid,text)'),
+  ('opportunity_set_status(uuid,text)'),  -- wave 3 A3
   ('purge_in_progress()'),
   ('push_subscribe(text,text,text,text)'),
   ('push_unsubscribe(text)'),
@@ -145,7 +152,7 @@ insert into allowed values
   ('photo_post_schedule(uuid)'),
   ('post_photos_save(uuid,text[],text[])'),
   ('request_stills_export(uuid,uuid,uuid)'),
-  ('sales_settings_save(text[],jsonb,text[])'),
+  ('sales_settings_save(text[],jsonb,text[],text)'),  -- wave 3 A5: cadence
   ('rename_project(uuid,text)'),
   ('sales_mention_count()'),
   ('request_document_export(uuid,uuid,uuid,integer)'),

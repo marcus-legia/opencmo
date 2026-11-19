@@ -143,7 +143,8 @@ function build(row: ApprovalRow): Built | null {
       const community = clip(str(s.community) || SALES_LABEL[platform], 80);
       const score = typeof s.score === "number" ? Math.min(100, Math.max(0, Math.round(s.score))) : 0;
       return {
-        title: clip(`${community} · “${str(s.title)}”`, 300),
+        // The card's head already names the platform and community: the title is the thread's own.
+        title: clip(`“${str(s.title)}”`, 300),
         summary: clip(quotes[0] ? `“${quotes[0].text}” Reply drafted, help first.` : "Reply drafted, help first.", 400),
         meta: `Score ${score} · you post it yourself`,
         body: {

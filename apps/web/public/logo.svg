@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="4 70 236 132" role="img" aria-label="Ferreto">
+<style>
+.fur{fill:#d8b088}.cream{fill:#fafaf8}.mask{fill:#2b2723}.limbf{fill:#2b2723}.lap{fill:#2b2723}.brand{fill:#ef4a1a}
+.tailp{stroke:#2b2723;fill:none;stroke-width:12;stroke-linecap:round}
+.arm{stroke:#2b2723;fill:none;stroke-width:9;stroke-linecap:round}
+.lid{stroke:#2b2723;stroke-width:7;stroke-linecap:round}
+.screen{stroke:#ef4a1a;stroke-width:2.2;stroke-linecap:round}
+.ringc{fill:none;stroke:#ef4a1a;stroke-width:2}
+.tail{transform-origin:48px 188px;animation:t 3s ease-in-out infinite}
+.pa{animation:p .46s ease-in-out infinite}
+.pb{animation:p .46s ease-in-out infinite .23s}
+.head{animation:b 2.4s ease-in-out infinite}
+.eye{transform-box:fill-box;transform-origin:center;animation:k 4.2s infinite}
+.ear{transform-box:fill-box;transform-origin:50% 100%;animation:e 5.5s ease-in-out infinite}
+.glow{animation:g 1.8s ease-in-out infinite}
+.ping{transform-box:fill-box;transform-origin:center;animation:n 3.4s ease-out infinite}
+.ring{transform-box:fill-box;transform-origin:center;animation:r 3.4s ease-out infinite}
+@media (prefers-color-scheme:dark){.lap{fill:#f3f3ee}.lid{stroke:#f3f3ee}.limbf{fill:#9a6c4e}.tailp,.arm{stroke:#9a6c4e}}
+@keyframes t{0%,100%{transform:rotate(-6deg)}50%{transform:rotate(8deg)}}
+@keyframes p{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
+@keyframes b{0%,100%{transform:translateY(0)}50%{transform:translateY(1.6px)}}
+@keyframes k{0%,90%,100%{transform:scaleY(1)}94%{transform:scaleY(.1)}}
+@keyframes e{0%,78%,100%{transform:rotate(0)}82%{transform:rotate(-16deg)}86%{transform:rotate(0)}}
+@keyframes g{0%,100%{opacity:.12}50%{opacity:.26}}
+@keyframes n{0%,38%{transform:scale(0);opacity:0}48%{transform:scale(1.25);opacity:1}56%{transform:scale(1)}86%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(1)}}
+@keyframes r{0%,46%{transform:scale(1);opacity:0}50%{opacity:.7}80%,100%{transform:scale(2.6);opacity:0}}
+@media (prefers-reduced-motion:reduce){.tail,.pa,.pb,.head,.eye,.ear,.glow,.ping,.ring{animation:none}.ping{opacity:1}}
+</style>
+<g class="tail"><path class="tailp" d="M48,188 C22,190 10,172 16,152 C18,144 24,140 30,142"/></g>
+<path class="fur" d="M38,196 C32,162 60,132 96,128 C120,125 138,140 140,160 C141,176 132,190 120,196 Z"/>
+<ellipse class="limbf" cx="70" cy="191" rx="18" ry="7"/>
+<polygon class="glow brand" opacity=".18" points="200,116 196,186 156,152 150,100"/>
+<rect class="lap" x="132" y="186" width="84" height="8" rx="3"/>
+<line class="lid" x1="207" y1="188" x2="219" y2="110"/>
+<line class="screen" x1="203" y1="181" x2="213" y2="119"/>
+<g class="pb"><path class="arm" d="M116,148 Q132,170 148,184"/><circle class="limbf" cx="149" cy="184" r="5"/></g>
+<ellipse class="fur" cx="122" cy="134" rx="18" ry="17"/>
+<g class="pa"><path class="arm" d="M128,150 Q146,168 162,183"/><circle class="limbf" cx="163" cy="183" r="5.5"/></g>
+<g transform="translate(140 112)"><g class="head">
+<g class="ear"><circle class="fur" cx="-11" cy="-17" r="8"/><circle class="mask" cx="-11" cy="-17" r="4"/></g>
+<ellipse class="fur" cx="0" cy="0" rx="24" ry="19"/>
+<ellipse class="cream" cx="19" cy="7" rx="13" ry="9"/>
+<ellipse class="mask" cx="7" cy="-3" rx="13" ry="7.5" transform="rotate(12 7 -3)"/>
+<g class="eye"><circle cx="11" cy="-3" r="3.2" fill="#0b0b0a"/><circle cx="12.2" cy="-4.2" r="1" fill="#fff"/></g>
+<circle class="brand" cx="31" cy="7" r="3.2"/>
+</g></g>
+<circle class="ring ringc" opacity="0" cx="224" cy="90" r="7"/>
+<circle class="ping brand" cx="224" cy="90" r="7"/>
+</svg>

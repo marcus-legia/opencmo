@@ -21,9 +21,11 @@ test("a document is edited in the drawer over the feed and saved as a new versio
 
   await signIn(page, user);
   await page.setViewportSize({ width: 1440, height: 900 });
+  // The Context column's card opens Your business (wave 3, C3); a `?doc=` link still opens the drawer over the feed.
   await page.goto("/app");
   await page.getByRole("complementary", { name: "Context" }).getByTestId("context-documents").click();
-  await expect(page).toHaveURL(/\/app\?doc=product$/);
+  await expect(page).toHaveURL(/\/app\/business$/);
+  await page.goto("/app?doc=product");
   const drawer = page.getByRole("dialog", { name: "Product" });
   await expect(drawer).toBeVisible();
 

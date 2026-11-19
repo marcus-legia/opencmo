@@ -8,6 +8,7 @@ import { readAll } from "@/lib/cmo/jobs/progress-run";
 import { emailSender } from "@/lib/notify/email";
 import { pushNewCards, vapidFromEnv } from "@/lib/notify/push";
 import { pushAutopilotSoon } from "@/lib/notify/autopilot";
+import { pushStrongMatches } from "@/lib/notify/strong-match";
 import { digestDue, sendDigestEmail, type Founder } from "@/lib/notify/send";
 import { SITE_URL } from "@/lib/site";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -67,6 +68,7 @@ async function run(request: NextRequest) {
   // One push per browser for the cards raised since its last push (P6 C1); none without VAPID keys.
   let pushed = 0;
   let autopilot = 0;
+  let strong = 0;
   const vapid = vapidFromEnv();
   if (vapid) {
     // Autopilot posts going out within two hours: one push per card, before the round of new cards.
@@ -75,6 +77,12 @@ async function run(request: NextRequest) {
     } catch (err) {
       console.warn("[cron] cmo-digest: autopilot pushes not sent", err instanceof Error ? err.message : err);
     }
+    // Strong matches a scan's own push missed (it ran on Modal's sweep, or the push failed): one per card, as there.
+    try {
+      strong = await pushStrongMatches(admin, vapid, fetch, { now, deadline: started + (maxDuration - 40) * 1000 });
+    } catch (err) {
+      console.warn("[cron] cmo-digest: strong-match pushes not sent", err instanceof Error ? err.message : err);
+    }
     try {
       // A batch can take one push timeout (10 s) past the deadline; the admin client gives up at maxDuration - 10 s.
       pushed = await pushNewCards(admin, vapid, fetch, { deadline: started + (maxDuration - 25) * 1000 });
@@ -82,7 +90,7 @@ async function run(request: NextRequest) {
       console.warn("[cron] cmo-digest: pushes not sent", err instanceof Error ? err.message : err);
     }
   }
-  return NextResponse.json({ due, sent, skipped, pushed, autopilot, released: released.data ?? 0, sender: send?.name ?? null });
+  return NextResponse.json({ due, sent, skipped, pushed, autopilot, strong, released: released.data ?? 0, sender: send?.name ?? null });
 }
 
 /** Checks in with Sentry's cron monitor once the caller is the clock (`lib/ops/cron-monitor.ts`). */

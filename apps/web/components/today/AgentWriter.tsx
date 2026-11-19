@@ -10,11 +10,13 @@ import { fillChat } from "@/components/dashboard/TodayBlock";
 import { useShellState } from "@/components/shell-v2/ShellState";
 import { useScreen } from "@/components/screens/useScreen";
 import { JOB_PRICES } from "@/lib/cmo/jobs/progress";
+import { PLATFORM_LABEL as SOURCE_LABEL } from "@/lib/cmo/social/conversations";
 import type { ApprovalCard as Card } from "@/lib/screens/approval-card";
 import { PLATFORM_LABEL } from "@/lib/screens/common";
 import type { WriterScreen } from "@/lib/screens/writer";
 
 import { KIND_ICON, PLATFORM_ICON } from "./cards";
+import { whereSaid } from "./LibraryView";
 import { PostViewSwitch } from "./TopBar";
 import { useDecide } from "./useDecide";
 import { dayLabel, draftsLeftOver, draftsThisWeek } from "./week";
@@ -44,6 +46,32 @@ const iconOf = (d: Draft) => (d.kind === "video_brief" ? KIND_ICON.script : d.ki
  * before anything runs (charge before running). A waiting row opens its real card in place; an approved script offers
  * the phone prompter and the editor.
  */
+type Source = NonNullable<Draft["sources"]>[number];
+
+/** "Based on 3 conversations · Reddit, Hacker News": what a post is written from, at a glance in the list. */
+export function basedOn(sources: readonly Source[]): string {
+  const where = [...new Set(sources.map((s) => SOURCE_LABEL[s.platform]))].join(", ");
+  return `Based on ${sources.length} ${sources.length === 1 ? "conversation" : "conversations"} · ${where}`;
+}
+
+/** The conversations an open draft is written from: each one's summary and where it was said (never its title). */
+function SourceList({ sources }: { sources: readonly Source[] }) {
+  return (
+    <section aria-label="What this post is based on" data-testid="writer-sources" style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+      <div className="meta" style={{ fontWeight: "500" }}>
+        Based on {sources.length === 1 ? "this conversation" : `these ${sources.length} conversations`} in your <Link href="/app/library">Library</Link>
+      </div>
+      <ul style={{ listStyle: "none", margin: "0", padding: "0", display: "flex", flexDirection: "column", gap: "4px" }}>
+        {sources.map((s) => (
+          <li key={s.opportunityId} data-testid="writer-source" style={{ fontSize: "13.5px" }}>
+            {s.summary} <span className="meta">{whereSaid(s)}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 export function AgentWriter() {
   const [state, reload] = useScreen("writer");
   const [dash, reloadCards] = useScreen("dashboard");
@@ -118,9 +146,16 @@ export function AgentWriter() {
       <div key={d.id} className="th" data-open={isOpen} data-testid="writer-row" data-platform={d.platform}>
         <button type="button" className="row" onClick={opens ? () => setOpen(isOpen ? "" : d.id) : undefined} aria-expanded={opens ? isOpen : undefined} style={opens ? undefined : { cursor: "default" }}>
           <span className="st">{iconOf(d)}</span>
-          <span className="ttl">
-            <span className="kind">{kindOf(d)} · </span>
-            {d.title}
+          <span style={{ flex: "1 1 auto", minWidth: "0", display: "flex", flexDirection: "column" }}>
+            <span className="ttl">
+              <span className="kind">{kindOf(d)} · </span>
+              {d.title}
+            </span>
+            {d.sources?.length ? (
+              <span className="meta" data-testid="writer-based-on" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {basedOn(d.sources)}
+              </span>
+            ) : null}
           </span>
           <span className={badge[1]}>{badge[0]}</span>
           <span className="meta" style={{ minWidth: "64px", textAlign: "right", whiteSpace: "nowrap" }}>
@@ -130,11 +165,13 @@ export function AgentWriter() {
         {isOpen && card ? (
           <div className="detail td-cardhost">
             <ApprovalCard card={card} sample={sample} onDecide={onDecide} open />
+            {d.sources?.length ? <SourceList sources={d.sources} /> : null}
           </div>
         ) : null}
         {isOpen && !card && !d.scriptId && d.column === "waiting" ? (
           <div className="detail" data-testid="writer-show-now">
             {d.text ? <p className="post">{d.text}</p> : null}
+            {d.sources?.length ? <SourceList sources={d.sources} /> : null}
             <div className="meta">
               {d.cardState === "held"
                 ? `Held until ${d.heldUntil ? new Date(d.heldUntil).toLocaleString("en-GB", { weekday: "short", hour: "2-digit", minute: "2-digit" }) : "tomorrow"}: you get about ten new cards a day, so the rest wait for the next one.`

@@ -23,6 +23,7 @@ import { Readable } from "node:stream";
 import { cleanUntrusted } from "@/lib/cmo/untrusted";
 import { blockedName, checkUrl, privateAddress, refused } from "@/lib/net/address";
 import { agentFakeAllowed } from "@/lib/production";
+import { extractLook, type SiteLook } from "./site-look";
 
 export { privateAddress };
 
@@ -36,7 +37,8 @@ const EXTRA_PAGE = /\/(pricing|plans|about|features|product|how-it-works)\/?$/i;
 export class SiteError extends Error {}
 
 export type SitePage = { url: string; title: string; description: string; headings: string[]; text: string };
-export type SiteSnapshot = { url: string; pages: SitePage[] };
+/** `look`: the logo, colours and font the home page's own markup shows (wave 3 B4, `site-look.ts`). */
+export type SiteSnapshot = { url: string; pages: SitePage[]; look?: SiteLook };
 /** `port` is for tests only (a local server cannot listen on 80); `publicAddresses` never sets it. */
 export type Resolved = { address: string; family: number; port?: number };
 /** Host → the addresses we may connect to; throws SiteError when any answer is private. */
@@ -290,5 +292,5 @@ export async function readSite(input: string, resolve: Resolver = publicAddresse
   if (pages.every((p) => p.text.length < 80 && !p.description)) {
     throw new SiteError("That website has almost no text we can read. Try your main marketing site.");
   }
-  return { url: home.url.toString(), pages };
+  return { url: home.url.toString(), pages, look: extractLook(home.url.toString(), home.html) };
 }

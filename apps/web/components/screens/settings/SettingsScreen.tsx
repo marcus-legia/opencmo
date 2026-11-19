@@ -18,6 +18,8 @@ import { cx, ErrorNote, PageHeader, Panel, Screen, SkeletonBlocks } from "../par
 import { isSample, useScreen } from "../useScreen";
 import { ACCOUNTS_PANEL_ID, AccountsPanel } from "./AccountsPanel";
 import { NotifyPanel } from "./NotifyPanel";
+import { SalesScansPanel } from "./SalesScansPanel";
+import { TrackingPanel } from "./TrackingPanel";
 
 
 function zones(current: string): string[] {
@@ -182,6 +184,8 @@ function SettingsBody({ data, live }: { data: Data; live: Record<keyof Data, boo
   return (
     <>
       <AccountsPanel accounts={data.accounts} live={live.accounts} />
+      <SalesScansPanel />
+      <TrackingPanel />
 
       <div className="scr-settings-grid">
         <Panel id="settings-your-cmo" title="Your CMO" className="scr-settings-cmo">
@@ -266,7 +270,7 @@ function SettingsBody({ data, live }: { data: Data; live: Record<keyof Data, boo
             </span>
             <span className="scr-off-links">
               <a href="/app/billing">Billing</a>
-              <a href="/app?doc=brand">Brand Kit</a>
+              <a href="/app/business?d=brand">Brand</a>
               <a href="#api-keys">API keys</a>
             </span>
           </div>

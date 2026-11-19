@@ -8,7 +8,17 @@
  * runs only when the founder set the intent (an item on the calendar), except W7 once a week.
  */
 
-import type { CmoJobKind } from "./jobs/types";
+import type { CmoJobKind, ScanCadence } from "./jobs/types";
+
+/** The weekdays (0 = Sunday) each Sales scan cadence runs on (Settings › Sales scans, wave 3 A5). */
+export const CADENCE_DAYS: Readonly<Record<ScanCadence, readonly number[]>> = {
+  mwf: [1, 3, 5],
+  weekdays: [1, 2, 3, 4, 5],
+  monday: [1],
+};
+
+/** Whether the founder's cadence scans on `weekday`; no setting reads as Mon/Wed/Fri. */
+export const scanDay = (cadence: ScanCadence | null | undefined, weekday: number) => (CADENCE_DAYS[cadence ?? "mwf"] ?? CADENCE_DAYS.mwf).includes(weekday);
 
 export type LoopState = {
   /** 0 = Sunday … 6 = Saturday (UTC). */
@@ -24,6 +34,10 @@ export type LoopState = {
   connectedAccounts?: number;
   /** Replies marked "replied" three or more days ago and not checked yet (P6 A3). */
   repliesDue?: number;
+  /** The founder's Sales scan cadence (`sales_settings.cadence`, wave 3); unset reads as Mon/Wed/Fri. */
+  scanCadence?: ScanCadence | null;
+  /** People replied to 4+ days ago with no answer and no nudge yet (wave 3 B2): `pull_metrics` drafts their nudges. */
+  nudgesDue?: number;
   /** The server has a ScrapeCreators key (or the fake). */
   socialReader: boolean;
   /**
@@ -55,10 +69,13 @@ export const LOOPS: Loop[] = [
     run: () => ({ loop: "daily-post-draft", kind: "post_draft", input: { source: "schedule" } }),
   },
   {
-    name: "reddit-listening",
-    cadence: "daily, only when a Reddit item is due (5 credits)",
-    when: (s) => s.socialReader && Boolean(s.dueSales),
-    run: (s) => ({ loop: "reddit-listening", kind: "sales_scan", input: { source: "schedule", brief: s.dueSales!.idea } }),
+    // Wave 3: Sales scans on its own cadence, not only when the week plan has a Sales item. A Sales item due by then
+    // steers the searches with its idea: one planned on a day off the cadence is still due (`day <= today` in
+    // schedule.ts) and is used by the next scan day, so it is never left planned (review of #239).
+    name: "sales-scan",
+    cadence: "the founder's scan days (Mon/Wed/Fri by default, weekdays, or Mondays); included in the plan",
+    when: (s) => s.socialReader && scanDay(s.scanCadence, s.weekday),
+    run: (s) => ({ loop: "sales-scan", kind: "sales_scan", input: { source: "schedule", ...(s.dueSales ? { brief: s.dueSales.idea } : {}) } }),
   },
   {
     name: "competitor-research",
@@ -82,8 +99,8 @@ export const LOOPS: Loop[] = [
   },
   {
     name: "post-metrics",
-    cadence: "daily, when something was published in the last 14 days, an account is connected or a reply is due a check (free)",
-    when: (s) => (s.socialReader && s.publishedRecently > 0) || (s.connectedAccounts ?? 0) > 0 || (s.repliesDue ?? 0) > 0,
+    cadence: "daily, when something was published in the last 14 days, an account is connected, a reply is due a check or a nudge is due (free)",
+    when: (s) => (s.socialReader && s.publishedRecently > 0) || (s.connectedAccounts ?? 0) > 0 || (s.repliesDue ?? 0) > 0 || (s.nudgesDue ?? 0) > 0,
     run: () => ({ loop: "post-metrics", kind: "pull_metrics", input: { source: "schedule" } }),
   },
 ];

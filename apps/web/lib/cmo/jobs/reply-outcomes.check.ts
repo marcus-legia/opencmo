@@ -13,7 +13,7 @@ import { dueLoops } from "../loops";
 import { HnReadError, parseHnItem } from "../social/hn";
 import type { RedditComment } from "../social/scrapecreators";
 import { memoryStore } from "./memory-store";
-import { checkReplies, checkReply, findReply, replyOverlap, type ReplyReaders } from "./reply-outcomes";
+import { checkReplies, checkReply, draftNudges, findReply, replyOverlap, type ReplyReaders } from "./reply-outcomes";
 import { drainCmoQueue } from "./runner";
 import type { ReplyOutcomeDue } from "./types";
 
@@ -37,19 +37,31 @@ async function main() {
     { id: "44", author: "", text: "How?", replies: 0 },
   ]);
 
-  const due = (platform: "reddit" | "hn", extra: Partial<ReplyOutcomeDue> = {}): ReplyOutcomeDue => ({
+  const due = (platform: "reddit" | "hn" | "threads" | "facebook", extra: Partial<ReplyOutcomeDue> = {}): ReplyOutcomeDue => ({
     outcome_id: `o-${platform}`, opportunity_id: `p-${platform}`, platform, community: "r/SaaS", reply: REPLY, outcome_url: null,
-    url: platform === "hn" ? "https://news.ycombinator.com/item?id=42" : "https://www.reddit.com/r/SaaS/comments/abc/x/", ...extra,
+    url: platform === "hn" ? "https://news.ycombinator.com/item?id=42" : platform === "threads" ? "https://www.threads.com/@dana/post/C9xYz" : "https://www.reddit.com/r/SaaS/comments/abc/x/", ...extra,
   });
   const seen: string[] = [];
   const readers: ReplyReaders = {
     reddit: async (url) => (seen.push(url), { gone: false, comments }),
     hn: async (url) => (seen.push(url), [{ id: "9", author: "me", text: REPLY, replies: 3 }]),
+    threads: async (url) => (seen.push(url), url.endsWith("/C9xYz") ? [{ author: "me", text: REPLY }] : url.endsWith("/MyReply") ? [{ author: "dana", text: "Thanks, how do you set the fee?" }] : []),
   };
-  assert.deepEqual(await checkReply(due("reddit"), readers), { status: "found", votes: 12, replies: 4 });
-  assert.deepEqual(await checkReply(due("hn", { outcome_url: "https://news.ycombinator.com/item?id=9" }), readers), { status: "found", votes: null, replies: 3 });
+  // A found reply with answers under it is an answer back (wave 3 B6).
+  assert.deepEqual(await checkReply(due("reddit"), readers), { status: "found", votes: 12, replies: 4, answeredBack: true });
+  assert.deepEqual(await checkReply(due("hn", { outcome_url: "https://news.ycombinator.com/item?id=9" }), readers), { status: "found", votes: null, replies: 3, answeredBack: true });
   assert.equal(seen.at(-1), "https://news.ycombinator.com/item?id=9", "a pasted HN link is read alone");
-  assert.deepEqual(await checkReply(due("reddit", { reply: "Something else entirely about pricing pages." }), readers), { status: "not_found", votes: null, replies: null });
+  assert.deepEqual(await checkReply(due("reddit", { reply: "Something else entirely about pricing pages." }), readers), { status: "not_found", votes: null, replies: null, answeredBack: false });
+  assert.equal((await checkReply(due("reddit"), { ...readers, reddit: async () => ({ gone: false, comments: comments.map((c) => ({ ...c, replies: 0 })) }) }))!.answeredBack, false, "no answers, no answer back");
+
+  // Threads: the founder's reply link reads the answers under it; without it, only whether the reply is there.
+  assert.deepEqual(await checkReply(due("threads", { outcome_url: "https://www.threads.com/@me/post/MyReply" }), readers), { status: "found", votes: null, replies: 1, answeredBack: true });
+  assert.equal(seen.at(-1), "https://www.threads.com/@me/post/MyReply", "the reply's own post is read");
+  assert.deepEqual(await checkReply(due("threads"), readers), { status: "found", votes: null, replies: null, answeredBack: false });
+  assert.deepEqual(await checkReply(due("threads", { reply: "Something else entirely about pricing pages." }), readers), { status: "not_found", votes: null, replies: null });
+  assert.equal(await checkReply(due("threads"), { reddit: readers.reddit, hn: readers.hn }), null, "no Threads reader: the founder marks it");
+  // Facebook groups: no reader lists a post's comments, so the founder marks it.
+  assert.equal(await checkReply(due("facebook"), readers), null);
   assert.deepEqual(await checkReply(due("reddit"), { ...readers, reddit: async () => ({ gone: true, comments: [] }) }), { status: "gone", votes: null, replies: null });
   assert.equal(await checkReply(due("hn"), { ...readers, hn: async () => { throw new HnReadError("busy"); } }), null, "a failed read is tried again tomorrow");
   await assert.rejects(checkReply(due("hn"), { ...readers, hn: async () => { throw new Error("bug"); } }), /bug/, "a bug is not swallowed");
@@ -64,6 +76,38 @@ async function main() {
   assert.equal(mem.replies.find((r) => r.platform === "hn")!.check!.status, "not_found", "the fake discussion has no reply of ours");
   const again = await checkReplies({ store: mem.store, run: { user_id: "u" }, step: async (_t: string, _l: string, fn: () => unknown) => fn() } as never, readers);
   assert.deepEqual(again, { checked: 0, found: 0 }, "checked once");
+
+  // Wave 3 B6: a reply someone answered moves its person from replied to answered back.
+  const mem2 = memoryStore({ product: { name: "Paylane" } } as never);
+  const url = "https://www.reddit.com/r/SaaS/comments/abc/x/";
+  mem2.replies.push(due("reddit", { opportunity_id: url }));
+  mem2.people.set(url, { level: "reply_first", reach: {} as never, dm: null, dmAt: null, nudge: null, status: "replied", repliedAt: Date.now() - 5 * 86_400_000 });
+  const answered = await checkReplies({ store: mem2.store, run: { user_id: "u" }, step: async (_t: string, _l: string, fn: () => unknown) => fn() } as never, readers);
+  assert.deepEqual(answered, { checked: 1, found: 1, answered: 1 });
+  assert.equal(mem2.people.get(url)!.status, "answered_back");
+
+  // Wave 3 B2: a reply with no answer after four days gets one nudge, through pull_metrics; an answered one, a fresh one
+  // and one already nudged get none.
+  const mem3 = memoryStore({ product: { name: "Paylane" } } as never);
+  const person = (url: string, status: string, days: number) => {
+    mem3.opps.push({ url, community: "r/SaaS", title: "Late invoices", author: "a", snippet: "My clients pay late and I hate chasing them.", posted_at: null, comments: 3, score: 80, score_parts: [], reply: REPLY });
+    mem3.people.set(url, { level: "reply_first", reach: {} as never, dm: null, dmAt: null, nudge: null, status, repliedAt: Date.now() - days * 86_400_000 });
+  };
+  person("https://www.reddit.com/r/SaaS/comments/n1/a/", "replied", 5);
+  person("https://www.reddit.com/r/SaaS/comments/n2/b/", "answered_back", 5);
+  person("https://www.reddit.com/r/SaaS/comments/n3/c/", "replied", 2);
+  const metrics = mem3.enqueue("pull_metrics");
+  await drainCmoQueue(mem3.store);
+  assert.equal(metrics.status, "done", `pull_metrics done (${metrics.error})`);
+  assert.ok(metrics.steps.some((st) => st.tool === "draft_nudge"), "the nudge step ran");
+  assert.ok(mem3.people.get("https://www.reddit.com/r/SaaS/comments/n1/a/")!.nudge, "the quiet reply has a nudge");
+  assert.equal(mem3.people.get("https://www.reddit.com/r/SaaS/comments/n2/b/")!.nudge, null, "an answered one has none");
+  assert.equal(mem3.people.get("https://www.reddit.com/r/SaaS/comments/n3/c/")!.nudge, null, "a two-day-old one has none yet");
+  const quiet = await draftNudges({ store: mem3.store, run: { user_id: "u", id: metrics.id } } as never);
+  assert.deepEqual(quiet, { drafted: 0 }, "nudged once");
+  // Review of #239: a nudge that cannot be drafted costs the nudge, never the founder's daily metrics pull.
+  const broken = { ...mem3.store, nudgesDue: async () => { throw new Error("store down"); } };
+  assert.deepEqual(await draftNudges({ store: broken, run: { user_id: "u", id: metrics.id } } as never), { drafted: 0 }, "a failing nudge is swallowed");
 
   // The loop: connected accounts or due replies run pull_metrics without the social reader.
   const base = { weekday: 3, duePost: null, dueSales: null, competitorHandles: 0, publishedRecently: 0, socialReader: false };

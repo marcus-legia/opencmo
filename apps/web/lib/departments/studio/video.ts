@@ -16,7 +16,7 @@ export type StrategyVoice = { voice?: string; avoid?: string[] };
 
 const PROMPT_MAX = 2000;
 
-/** The Director's prompt from the brief and the strategy's voice; facts only from the brief. */
+/** The Director's prompt from the brief and the Brand's voice; facts only from the brief. */
 export function briefRequest(brief: VideoBrief, strategy: StrategyVoice = {}): CreateVideoRequest {
   const lines = [
     `Goal: ${brief.objective}`,
@@ -33,7 +33,7 @@ export function briefRequest(brief: VideoBrief, strategy: StrategyVoice = {}): C
 }
 
 async function strategyVoice(ctx: StudioContext): Promise<StrategyVoice> {
-  const { data, error } = await ctx.supabase.from("marketing_documents_latest").select("body").eq("kind", "strategy").maybeSingle<{ body: { voice?: unknown; avoid?: unknown } }>();
+  const { data, error } = await ctx.supabase.from("marketing_documents_latest").select("body").eq("kind", "brand").maybeSingle<{ body: { voice?: unknown; avoid?: unknown } }>();
   if (error) throw new Error(`marketing_documents_latest read: ${error.message}`);
   const body = data?.body ?? {};
   return {

@@ -10,12 +10,12 @@ blocks for Library and Research (`lib/screens/load.ts`, new `lib/screens/library
 
 ## Tasks
 
-### - [ ] A1. Contract (push first)
+### - [x] A1. Contract (push first)
 Create `lib/cmo/library.ts` and `lib/cmo/reach.ts` with the plan's types and zod schemas, `PostSource` in
 `lib/cmo/jobs/types.ts`. A `reachLevel(check)` helper with its check: email ready needs DM ready + `emailFound` +
 warm; DM ready needs buyer, wants now, fresh, `dmAllowed` and (warm or the post asks for tools). Commit and push.
 
-### - [ ] A2. Library tables
+### - [x] A2. Library tables
 - `library_themes (id, user_id, name, created_at)`, `library_entries (opportunity_id pk → opportunities, user_id,
   theme_id, summary, quotes jsonb, platform, community, posted_at, created_at)`; RLS read own; writes by RPC
   `cmo_save_library(p_user, p_run, p_items jsonb)` (service role, from a `sales_scan` run of that user).
@@ -23,7 +23,7 @@ warm; DM ready needs buyer, wants now, fresh, `dmAllowed` and (warm or the post 
   and up to 3 entries each; `library_delete_entry(p_url)` for removal on request (service role).
 - pgTAP: ownership, a run of another user refused, counts, the weekly trend.
 
-### - [ ] A3. People: status, reply link, reach, DM draft
+### - [x] A3. People: status, reply link, reach, DM draft
 - `opportunities`: `person_status` (plan's `PersonStatus`, default `found`), `reply_url`, `replied_at`,
   `reach_level`, `reach jsonb`, `dm_draft text`, `nudge_draft text`, `status_at`.
 - RPCs (founder): `opportunity_mark_replied(p_id, p_url)` (URL must be on the thread's host), `opportunity_set_status
@@ -31,7 +31,7 @@ warm; DM ready needs buyer, wants now, fresh, `dmAllowed` and (warm or the post 
   `opportunity_reply_url` or replace it.
 - Allowlist test 182 gets the founder functions. pgTAP for each.
 
-### - [ ] A4. Documents v2
+### - [x] A4. Documents v2
 - `strategy`: add `where_they_ask` (list of communities / places) and `this_week` (one line); move `voice` and
   `avoid` to a new `brand` document kind with `voice_samples` (up to 5 texts, 600 chars each), `intro_line`, `avoid`
   (list), `look` (`logo_url`, `colors` (2–4 hex), `font`, `screenshots` (storage paths), `image_styles`).
@@ -40,16 +40,70 @@ warm; DM ready needs buyer, wants now, fresh, `dmAllowed` and (warm or the post 
   migration of `marketing_documents.kind`.
 - pgTAP: the migration keeps every old document readable.
 
-### - [ ] A5. Scan cadence and the funnel
+### - [x] A5. Scan cadence and the funnel
 - `sales_settings.cadence` (`mwf` default, `weekdays`, `monday`) with `sales_settings_save` extended.
 - RPC `my_funnel(p_days int default 7)`: found, replied, answered back, signed up, by source; reads `opportunities`
   statuses and `cmo_draft_outcomes`.
 
-### - [ ] A6. Competitors by URL
+### - [x] A6. Competitors by URL
 RPC `competitor_add(p_url)` (founder) storing name, site, logo URL, price text and offer read by B or C's route (A
 gives the table and RPC; reading the site is a route in C5 that calls the existing site reader). Mentions per
 competitor per week from `opportunities` text (counted in SQL view `my_competitor_mentions`).
 
 ## Requests
 
-(none yet)
+- **From B (for A2/A3, what B1's scan sends):** `cmo_save_opportunities` returns a count, not ids, so the scan cannot
+  know an opportunity's id. Please key the items of `cmo_save_library` and `cmo_save_reach` by the thread's `url`
+  (SQL finds the opportunity of `p_user` with that URL, saved by `p_run`; an unknown URL is skipped, not an error).
+  Item shapes B1 will send, as `Store` methods (`types.ts`, `store.ts`, `memory-store.ts`):
+  - `saveLibrary(userId, runId, items: { url, summary, theme, quotes: LibraryQuote[] }[]): Promise<number>`: `theme`
+    is a name (≤ 80 chars); SQL reuses the user's theme with that name (case-insensitive) or creates it.
+  - `libraryThemeNames(userId, limit = 30): Promise<string[]>`: the user's theme names, most used first, so the
+    scoring prompt can reuse one.
+  - `saveReach(userId, runId, items: { url, level: ReachLevel, reach: ReachCheck }[]): Promise<number>`.
+  - On the Reddit rules cache (`subreddit_rules`, `SubredditRule`): one more field, `no_dms boolean` (default false),
+    saved by `saveSubredditRule`. The rules reader already reads each community; it will also say when the rules forbid
+    DMs or soliciting, so `dmAllowed` reads the community's rule as the plan asks.
+
+- **From B (B5, Today):** `today.ts` now takes `TodayCard.score` / `TodayCard.postedAt` (reply cards) and
+  `TodayInput.followUps: TodayFollowUp[]`. `lib/cmo/today-input.ts` is no session's file; with A3, please fill them
+  there (or say I may): `score` from the reply card's snapshot, `postedAt` from its opportunity's `posted_at`, and
+  `followUps` from opportunities with `person_status = 'answered_back'` (status `answered_back`, `at` = `status_at`)
+  or `replied` with `replied_at` older than `NUDGE_AFTER_DAYS` and a nudge drafted (`no_answer`, `approvalId` = the
+  nudge's card if it has one).
+
+- **From B (B3, posts from the Library):** `plan_week` and `post_draft` run under the service role, so `my_library`
+  (founder) does not reach them. Please add a store method (any RPC name):
+  `libraryTopThemes(userId, days = 14, limit = 5): Promise<{ id, name, count, entries: { opportunityId, summary,
+  platform, community, postedAt, quotes }[] }[]>`: themes with entries posted (or saved) in the last `days`, most
+  entries first, up to 5 entries each, newest first. B3 writes `content_items.body.sources: PostSource[]` from these
+  (A2 note). A memory-store twin that reads `mem.library` is enough for the evals; it needs the opportunity id, so
+  the memory Library may key lines by url and look the id up in `opps`.
+
+- **From B (B6, re-reads; with A3):** `checkReply` now returns `answeredBack` and reads Threads. Please, in SQL:
+  `cmo_reply_outcomes_due` returns Threads too (`p.platform in ('reddit', 'hn', 'threads')`) and gives the new
+  `reply_url` as `outcome_url` when set (`coalesce(p.reply_url, o.outcome_url)`); `saveReplyOutcome` takes an
+  optional `answeredBack` (or SQL reads `p_replies > 0` on a `found` outcome) and sets `person_status =
+  'answered_back'`, `status_at = now()` when the person is still `found` or `replied` (never moving a later status
+  back). The memory store does the same, so the check and the evals see it.
+
+- **From B (B2 nudges):** a read for who is due a nudge, as a store method: `nudgesDue(userId, limit = 10):
+  Promise<{ opportunity_id, url, platform, community, title, snippet, reply, posted_at }[]>` for opportunities with
+  `person_status = 'replied'`, `replied_at < now() - 4 days`, `nudge_draft is null` (oldest reply first), and a count
+  for the loop: please add `nudgesDue?: number` to what the CMO cron fills in `LoopState` (`app/api/cron/cmo`), from
+  the same condition. B drafts the nudges in `pull_metrics` after the re-reads (so an answer found that day stops
+  the nudge) and saves each with `saveNudge`; `loops.ts` runs `pull_metrics` when `nudgesDue > 0`. In the memory store,
+  `repliedAt` on `people` is enough.
+
+- **From B (B3, sources on posts):** `PlanItem` gains `sources?: PostSource[]` (`types.ts`), and `cmo_plan_week`
+  keeps them in the planned post's `body.sources` (today it builds `body` from targets and slot only, so they are
+  dropped). Please validate there and in `cmo_save_draft` (which keeps `p_body` whole, so a draft's `body.sources` is
+  already saved): at most 5, each `opportunityId` an opportunity of `p_user`, `summary` 1–200 chars, `platform` a
+  Sales platform, `community` ≤ 120; drop the invalid ones rather than fail the plan. The memory store keeps them the
+  same way. `post_draft` reads `due.body.sources` and writes `body.sources` on the draft.
+
+- **From B (B4, "who do you sell to?"):** please let `cmo_onboarding_answers` take `sells_to` (text, 1–160 chars, the
+  founder's own words or a chip's label; C8 draws the chips), store it on `profiles.sells_to`, and in
+  `cmo_apply_onboarding_answers` write it into the newest Strategy's `icp` (a new version, the founder's words win
+  over the website's guess). `onboard.ts` also reads `profiles.sells_to` right before the documents are drafted, so
+  an answer given while the site is read reaches the prompt; until the column exists that read is skipped.

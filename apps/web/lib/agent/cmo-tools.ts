@@ -31,6 +31,7 @@ import { DECISION_TOOL_SPECS, DECISION_WRITES } from "./cmo-decisions";
 import { EDITOR_TOOL_SPECS } from "./cmo-editor";
 import { WAIT_FOR_RUN_SPEC } from "./cmo-wait";
 import { RESEARCH_TOOL_SPECS, RESEARCH_TOOLS } from "./cmo-research";
+import { FIND_COMPETITORS_SPEC } from "./cmo-competitors";
 import { PANEL_SCREENS, PanelOpenSchema, type PanelOpen } from "./panel";
 import type { ToolOutcome, ToolSpec } from "./tools";
 import { salesBanRisk } from "../cmo/sales/ban-risk";
@@ -43,7 +44,7 @@ const CMO_READABLE: string[] = SKILL_NAMES.filter((name) => (CMO_SKILLS[name].ag
 export const CMO_TOOL_SPECS: ToolSpec[] = [
   {
     name: "read_doc",
-    description: "Read one of the user's marketing documents in full: product, strategy, competitors or content_strategy.",
+    description: "Read one of the user's marketing documents in full: product, strategy, competitors, post_plan or brand.",
     schema: {
       type: "object",
       properties: { kind: { type: "string", enum: [...DOCUMENT_KINDS] } },
@@ -207,6 +208,8 @@ export const CMO_TOOL_SPECS: ToolSpec[] = [
   WAIT_FOR_RUN_SPEC,
   // The editor handoff (plan 2026-11-02): last, for the same reason.
   ...EDITOR_TOOL_SPECS,
+  // Research chat (wave 3 B7): last, for the same reason.
+  FIND_COMPETITORS_SPEC,
 ];
 
 // open_editor can create a New edit, and its prompt is sent to the editor's Assistant as the founder's request.
@@ -219,7 +222,7 @@ export const isCmoWrite = (name: string) => WRITES.has(name);
  * refused until the founder's next message: text on a page must not become a founder preference.
  * `create_task` stays allowed; it only queues our own job.
  */
-export const TAINTING_TOOLS = new Set([...[...RESEARCH_TOOLS].filter((name) => name !== "research_credits"), "read_site"]);
+export const TAINTING_TOOLS = new Set([...[...RESEARCH_TOOLS].filter((name) => name !== "research_credits"), "read_site", "find_competitors"]);
 // Decisions too: after a page or a stranger's post was read, a decision needs the founder's next message.
 // The editor handoff too: its prompt is sent as the founder's own request, so a page must not write it.
 export const TAINT_GATED_TOOLS = new Set(["remember", "update_document", "set_week_goal", "open_editor", ...DECISION_WRITES]);
@@ -357,7 +360,7 @@ async function runTool(supabase: SupabaseClient, name: string, input: unknown, t
   switch (name) {
     case "read_doc": {
       const parsed = readInput.safeParse(input);
-      if (!parsed.success) return invalid("kind must be product, strategy, competitors or content_strategy.");
+      if (!parsed.success) return invalid("kind must be product, strategy, competitors, post_plan or brand.");
       const { data: row, error } = await supabase.from("marketing_documents_latest").select("body, created_by, version").eq("kind", parsed.data.kind).maybeSingle();
       if (error) return readFailed;
       if (!row) return { ok: true, content: JSON.stringify({ missing: true }), summary: `No ${DOCUMENTS[parsed.data.kind].title} yet` };

@@ -67,15 +67,17 @@ export const SCREENS = {
     schema: LibraryScreenSchema,
     fixture: libraryFixture,
     empty: libraryEmpty,
-    live: ["site", "documents", "brandKits", "voice", "skills"],
-    release: ["site", "documents", "brandKits", "voice", "skills"],
+    // Wave 3 A2: `themes` and `source` from `my_library`, shown by the Library page (C1).
+    live: ["site", "documents", "brandKits", "voice", "skills", "themes", "source"],
+    release: ["site", "documents", "brandKits", "voice", "skills", "themes", "source"],
   }),
   research: entry({
     schema: ResearchScreenSchema,
     fixture: researchFixture,
     empty: researchEmpty,
-    live: ["lastRunAt", "nextRunAt", "insights", "dropped", "results"],
-    release: ["lastRunAt", "insights", "results"],
+    // Wave 3 A6: `competitors`, shown by Research (C5).
+    live: ["lastRunAt", "nextRunAt", "insights", "dropped", "results", "competitors"],
+    release: ["lastRunAt", "insights", "results", "competitors"],
   }),
   // Drafts per platform (posts, captions, briefs for Studio) and the voice Writer reads (P3 A3).
   writer: entry({ schema: WriterScreenSchema, fixture: writerFixture, empty: writerEmpty, live: ["drafts", "voice"], release: ["drafts", "voice"] }),

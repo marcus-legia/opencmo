@@ -9,7 +9,7 @@ license: MIT — Copyright (c) 2025 Corey Haines
 # Planning the week
 
 ## Mix
-- Build on 3-5 content pillars from the content strategy. A healthy founder mix: insights from the market ~30%, building in public ~25%, how-tos ~25%, personal take ~15%, product ~5%.
+- Build on the topics of the Post plan and the top Library themes. A healthy founder mix: insights from the market ~30%, building in public ~25%, how-tos ~25%, personal take ~15%, product ~5%.
 - 60/30/10: most items are proven formats, some are shareable bets, a few are experiments.
 - X is the daily channel: about one post a day. Reddit at most one item a day, on days the founder can reply. Short video only when the founder has recordings.
 

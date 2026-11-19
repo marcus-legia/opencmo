@@ -16,14 +16,16 @@ import { profileOf } from "../platforms";
 import { checkRules } from "./context";
 import { fakeThread, threadIssues } from "./draft-thread";
 import { memoryStore } from "./memory-store";
+import { seedLibrary } from "./eval/library";
 import { adapterInput, type FiredSlot } from "./publish-post";
 import { drainCmoQueue } from "./runner";
 import type { Documents } from "./types";
 
 const docs: Documents = {
   product: { name: "Paylane", one_liner: "Invoicing that chases late payments.", pricing: "$12/month" },
-  strategy: { icp: "Freelancers who invoice 3–15 clients a month", avoid: ["revolutionary"] },
-  content_strategy: { pillars: [{ name: "Getting paid", ideas: ["The 3-7-14 reminder rule"] }] },
+  strategy: { icp: "Freelancers who invoice 3–15 clients a month" },
+  brand: { avoid: ["revolutionary"] },
+  post_plan: { topics: ["The 3-7-14 reminder rule"] },
 };
 
 async function main() {
@@ -49,7 +51,9 @@ async function main() {
   assert.equal(body.text, body.thread[0], "the card's text is the first post");
   assert.equal(mem.items.filter((i) => i.status === "in_review").length, 1, "one card, not three versions");
 
+  // Wave 3 B3: a planned item is written from the Library, so this one has a conversation to write from.
   const memL = memoryStore(docs);
+  seedLibrary(memL, { ...docs, strategy: { ...docs.strategy, pains: ["late invoices"] } });
   memL.items.push({ id: "li-1", run_id: null, department: "post", platform: "LinkedIn", day: new Date().toISOString().slice(0, 10), idea: "A LinkedIn post", reason: "", status: "planned", priority: "medium", body: {}, final_text: null, external_url: null, decided_at: null, published_at: null, created_at: new Date().toISOString() });
   const runL = memL.enqueue("post_draft", { item_id: "li-1", thread: true });
   await drainCmoQueue(memL.store);

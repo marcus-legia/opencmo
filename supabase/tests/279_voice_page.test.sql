@@ -23,12 +23,12 @@ values ('e2790000-0000-4000-8000-00000000000a', 'e2793000-0000-4000-8000-0000000
 insert into public.cmo_corrections (id, user_id, rule, source, status, round_id) values
   ('e2791000-0000-4000-8000-00000000000b', 'e2790000-0000-4000-8000-00000000000a', 'Name one specific step.', 'ratings', 'proposed', 'e2792000-0000-4000-8000-00000000000a');
 
--- Onboarding's strategy (a job writes it as `agent`), then the founder's own edit of the voice.
+-- Onboarding's Brand (a job writes it as `agent`), then the founder's own edit of the voice.
 insert into public.marketing_documents (user_id, kind, version, body, created_by)
-values ('e2790000-0000-4000-8000-00000000000a', 'strategy', 1, '{"voice":"Plain and direct.","avoid":["hype"]}', 'agent');
+values ('e2790000-0000-4000-8000-00000000000a', 'brand', 1, '{"voice":"Plain and direct.","avoid":["hype"]}', 'agent');
 set local role authenticated;
 set local request.jwt.claims = '{"sub":"e2790000-0000-4000-8000-00000000000a","role":"authenticated"}';
-select public.save_marketing_document('strategy', '{"voice":"Plain, direct, a little dry.","avoid":["hype"]}');
+select public.save_marketing_document('brand', '{"voice":"Plain, direct, a little dry.","avoid":["hype"]}');
 -- A card, the rating sheet and the page.
 select public.cmo_decide_correction('e2791000-0000-4000-8000-00000000000a', 'approve');
 select public.cmo_accept_corrections('e2792000-0000-4000-8000-00000000000a', array['e2791000-0000-4000-8000-00000000000b'::uuid], array['Name one specific step, like a day.']);
@@ -39,7 +39,7 @@ select is((select string_agg(coalesce(field, 'rule') || ':' || source, ', ' orde
   where user_id = 'e2790000-0000-4000-8000-00000000000a'),
   'voice:setup, avoid:setup, voice:you, rule:edits, rule:ratings, rule:you', 'each source writes its event');
 select is((select before #>> '{}' from public.cmo_voice_events where user_id = 'e2790000-0000-4000-8000-00000000000a' and source = 'you' and field = 'voice'),
-  'Plain and direct.', 'the strategy event keeps the words before');
+  'Plain and direct.', 'the Brand event keeps the words before');
 
 -- The page's Undo names its event: one older than the newest is refused.
 create temp table t_last on commit drop as select id from public.cmo_voice_events order by seq desc limit 1;
@@ -85,30 +85,30 @@ select public.cmo_voice_undo((select id from public.cmo_voice_events where undon
 reset role;
 select is((select status from public.cmo_corrections where id = 'e2791000-0000-4000-8000-00000000000a'), 'active', 'undo turns it back on');
 
--- Undo of the founder's strategy edit: the voice goes back, as a new version, and writes no event.
+-- Undo of the founder's Brand edit (voice and avoid live in the Brand since 20270201070000): the voice goes back, as a new version, and writes no event.
 update public.cmo_voice_events set undone_at = now()
 where user_id = 'e2790000-0000-4000-8000-00000000000a' and correction_id is not null and undone_at is null;
 set local role authenticated;
 set local request.jwt.claims = '{"sub":"e2790000-0000-4000-8000-00000000000a","role":"authenticated"}';
 select public.cmo_voice_undo((select id from public.cmo_voice_events where undone_at is null order by seq desc limit 1));
 reset role;
-select is((select body->>'voice' from public.marketing_documents where user_id = 'e2790000-0000-4000-8000-00000000000a' and kind = 'strategy'
-  order by version desc limit 1), 'Plain and direct.', 'the strategy''s voice is back');
-select is((select count(*)::int from public.marketing_documents where user_id = 'e2790000-0000-4000-8000-00000000000a' and kind = 'strategy'), 3,
+select is((select body->>'voice' from public.marketing_documents where user_id = 'e2790000-0000-4000-8000-00000000000a' and kind = 'brand'
+  order by version desc limit 1), 'Plain and direct.', 'the Brand''s voice is back');
+select is((select count(*)::int from public.marketing_documents where user_id = 'e2790000-0000-4000-8000-00000000000a' and kind = 'brand'), 3,
   'as a new version');
 select is((select count(*)::int from public.cmo_voice_events where user_id = 'e2790000-0000-4000-8000-00000000000a'), 7, 'with no event for the undo');
 
 -- The CMO chat's save is "Your CMO", not the founder's.
 set local role authenticated;
 set local request.jwt.claims = '{"sub":"e2790000-0000-4000-8000-00000000000a","role":"authenticated"}';
-select public.cmo_chat_save_document('strategy', '{"voice":"Plain and direct.","avoid":["hype","synergy"]}');
+select public.cmo_chat_save_document('brand', '{"voice":"Plain and direct.","avoid":["hype","synergy"]}');
 reset role;
 select is((select source from public.cmo_voice_events where user_id = 'e2790000-0000-4000-8000-00000000000a' and field = 'avoid' order by seq desc limit 1),
   'cmo', 'the chat''s change is the CMO''s');
 
 -- A field that had no value before is emptied by Undo, never removed from the document.
 insert into public.marketing_documents (user_id, kind, version, body, created_by)
-values ('e2790000-0000-4000-8000-00000000000b', 'strategy', 1, '{"voice":"Warm.","avoid":[]}', 'agent');
+values ('e2790000-0000-4000-8000-00000000000b', 'brand', 1, '{"voice":"Warm.","avoid":[]}', 'agent');
 set local role authenticated;
 set local request.jwt.claims = '{"sub":"e2790000-0000-4000-8000-00000000000b","role":"authenticated"}';
 select public.cmo_voice_undo((select id from public.cmo_voice_events where undone_at is null order by seq desc limit 1));

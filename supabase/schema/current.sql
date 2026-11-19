@@ -3855,19 +3855,17 @@ $$;
 
 
 --
--- Name: cmo_apply_onboarding_answers(uuid, boolean); Type: FUNCTION; Schema: public; Owner: -
+-- Name: cmo_apply_onboarding_answers(uuid, boolean, boolean); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.cmo_apply_onboarding_answers(p_user uuid, p_handle_given boolean DEFAULT false) RETURNS void
+CREATE FUNCTION public.cmo_apply_onboarding_answers(p_user uuid, p_handle_given boolean DEFAULT false, p_sells_given boolean DEFAULT false) RETURNS void
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
 declare
   v_profile public.profiles;
   v_doc public.marketing_documents;
-  v_line text;
-  v_cadence text;
-  v_next text;
+  v_channels jsonb;
 begin
   select * into v_profile from public.profiles where id = p_user;
   if not found then
@@ -3885,22 +3883,24 @@ begin
     end if;
   end if;
 
+  -- "Who do you sell to?" in the founder's words: it replaces the website's guess at the ideal customer (a Strategy the
+  -- agent wrote), or any icp when the founder answers now; a later edit of their own is not overwritten by a re-apply.
+  if v_profile.sells_to is not null then
+    perform pg_advisory_xact_lock(hashtextextended(p_user::text || ':doc:strategy', 1713));
+    select * into v_doc from public.marketing_documents where user_id = p_user and kind = 'strategy' order by version desc limit 1;
+    if found and (p_sells_given or v_doc.created_by = 'agent') and v_doc.body->>'icp' is distinct from v_profile.sells_to then
+      insert into public.marketing_documents (user_id, kind, version, body, created_by)
+      values (p_user, 'strategy', v_doc.version + 1, v_doc.body || jsonb_build_object('icp', v_profile.sells_to), 'user');
+    end if;
+  end if;
+
   if v_profile.post_platforms is not null then
-    perform pg_advisory_xact_lock(hashtextextended(p_user::text || ':doc:content_strategy', 1713));
-    select * into v_doc from public.marketing_documents where user_id = p_user and kind = 'content_strategy' order by version desc limit 1;
-    if found then
-      v_line := 'The founder posts on ' || (
-        select string_agg(case p when 'x' then 'X' when 'threads' then 'Threads' else 'LinkedIn' end, ', ' order by array_position(array['x', 'threads', 'linkedin'], p))
-        from unnest(v_profile.post_platforms) p
-      ) || case when v_profile.post_platforms = array['x'] then ' only.' else '.' end;
-      v_cadence := coalesce(v_doc.body->>'cadence', '');
-      -- One such sentence, always first: the earlier answer is replaced, the founder's own words are kept.
-      -- concat, not ||: an empty rhythm must leave the sentence alone, never make the whole value null.
-      v_next := btrim(concat(v_line, ' ', btrim(regexp_replace(v_cadence, 'The founder posts on [^.]*\.\s*', '', 'g'))));
-      if v_next is distinct from v_cadence then
-        insert into public.marketing_documents (user_id, kind, version, body, created_by)
-        values (p_user, 'content_strategy', v_doc.version + 1, v_doc.body || jsonb_build_object('cadence', v_next), 'user');
-      end if;
+    perform pg_advisory_xact_lock(hashtextextended(p_user::text || ':doc:post_plan', 1713));
+    select * into v_doc from public.marketing_documents where user_id = p_user and kind = 'post_plan' order by version desc limit 1;
+    v_channels := public.documents_v2_channels(v_profile.post_platforms);
+    if found and jsonb_array_length(v_channels) > 0 and v_doc.body->'channels' is distinct from v_channels then
+      insert into public.marketing_documents (user_id, kind, version, body, created_by)
+      values (p_user, 'post_plan', v_doc.version + 1, v_doc.body || jsonb_build_object('channels', v_channels), 'user');
     end if;
   end if;
 end;
@@ -3941,7 +3941,7 @@ CREATE TABLE public.marketing_documents (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT marketing_documents_body_check CHECK (((jsonb_typeof(body) = 'object'::text) AND (octet_length((body)::text) <= 65536))),
     CONSTRAINT marketing_documents_created_by_check CHECK ((created_by = ANY (ARRAY['agent'::text, 'user'::text]))),
-    CONSTRAINT marketing_documents_kind_check CHECK ((kind = ANY (ARRAY['product'::text, 'strategy'::text, 'competitors'::text, 'content_strategy'::text, 'calendar'::text]))),
+    CONSTRAINT marketing_documents_kind_check CHECK ((kind = ANY (ARRAY['product'::text, 'strategy'::text, 'competitors'::text, 'post_plan'::text, 'brand'::text, 'calendar'::text, 'content_strategy'::text]))),
     CONSTRAINT marketing_documents_version_check CHECK ((version >= 1))
 );
 
@@ -4159,16 +4159,34 @@ CREATE TABLE public.opportunities (
     rule_why text,
     min_karma integer,
     min_account_age_days integer,
+    person_status text DEFAULT 'found'::text NOT NULL,
+    status_at timestamp with time zone,
+    reply_url text,
+    replied_at timestamp with time zone,
+    reach_level text DEFAULT 'reply_first'::text NOT NULL,
+    reach jsonb DEFAULT '{}'::jsonb NOT NULL,
+    dm_draft text,
+    dm_drafted_at timestamp with time zone,
+    nudge_draft text,
+    nudge_drafted_at timestamp with time zone,
+    contacted_via text,
     CONSTRAINT opportunities_author_check CHECK ((char_length(author) <= 100)),
     CONSTRAINT opportunities_comments_check CHECK ((comments >= 0)),
     CONSTRAINT opportunities_community_check CHECK ((char_length(community) <= 100)),
+    CONSTRAINT opportunities_contacted_via_check CHECK ((contacted_via = ANY (ARRAY['dm'::text, 'email'::text]))),
+    CONSTRAINT opportunities_dm_draft_check CHECK ((char_length(dm_draft) <= 1000)),
     CONSTRAINT opportunities_gen_check CHECK (((jsonb_typeof(gen) = 'object'::text) AND (octet_length((gen)::text) <= 256))),
     CONSTRAINT opportunities_min_account_age_days_check CHECK (((min_account_age_days >= 0) AND (min_account_age_days <= 3650))),
     CONSTRAINT opportunities_min_karma_check CHECK (((min_karma >= 0) AND (min_karma <= 1000000))),
+    CONSTRAINT opportunities_nudge_draft_check CHECK ((char_length(nudge_draft) <= 1000)),
+    CONSTRAINT opportunities_person_status_check CHECK ((person_status = ANY (ARRAY['found'::text, 'replied'::text, 'answered_back'::text, 'talking'::text, 'signed_up'::text, 'customer'::text, 'not_interested'::text]))),
     CONSTRAINT opportunities_platform_check CHECK ((platform = ANY (ARRAY['reddit'::text, 'hn'::text, 'facebook'::text, 'threads'::text]))),
     CONSTRAINT opportunities_priority_check CHECK ((priority = ANY (ARRAY['high'::text, 'medium'::text, 'low'::text]))),
+    CONSTRAINT opportunities_reach_check CHECK (((jsonb_typeof(reach) = 'object'::text) AND (octet_length((reach)::text) <= 2048))),
+    CONSTRAINT opportunities_reach_level_check CHECK ((reach_level = ANY (ARRAY['reply_first'::text, 'dm_ready'::text, 'email_ready'::text]))),
     CONSTRAINT opportunities_reply_check CHECK ((char_length(reply) <= 3000)),
     CONSTRAINT opportunities_reply_or_skip CHECK (((reply IS NOT NULL) OR (rule = 'skip'::text))),
+    CONSTRAINT opportunities_reply_url_check CHECK ((char_length(reply_url) <= 500)),
     CONSTRAINT opportunities_rule_check CHECK ((rule = ANY (ARRAY['safe'::text, 'requires_disclosure'::text, 'no_product_mention'::text, 'not_verified'::text, 'skip'::text, 'mention_ok'::text, 'help_only'::text]))),
     CONSTRAINT opportunities_rule_why_check CHECK ((char_length(rule_why) <= 200)),
     CONSTRAINT opportunities_score_check CHECK (((score >= 0) AND (score <= 100))),
@@ -4879,6 +4897,71 @@ $$;
 
 
 --
+-- Name: cmo_library_theme_names(uuid, integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_library_theme_names(p_user uuid, p_limit integer DEFAULT 30) RETURNS SETOF text
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select t.name from public.library_themes t
+  left join public.library_entries e on e.theme_id = t.id
+  where t.user_id = p_user
+  group by t.id, t.name
+  order by count(e.opportunity_id) desc, t.name
+  limit least(greatest(coalesce(p_limit, 30), 1), 100);
+$$;
+
+
+--
+-- Name: cmo_library_top_themes(uuid, integer, integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_library_top_themes(p_user uuid, p_days integer DEFAULT 14, p_limit integer DEFAULT 5) RETURNS jsonb
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  with e as (
+    select le.* from public.library_entries le
+    where le.user_id = p_user and le.theme_id is not null
+      and coalesce(le.posted_at, le.created_at) > now() - make_interval(days => least(greatest(coalesce(p_days, 14), 1), 90))
+  ), t as (
+    select th.id, th.name, count(*)::integer as n
+    from public.library_themes th join e on e.theme_id = th.id
+    where th.user_id = p_user
+    group by th.id, th.name
+    order by n desc, th.name
+    limit least(greatest(coalesce(p_limit, 5), 1), 20)
+  )
+  select coalesce(jsonb_agg(jsonb_build_object('id', t.id, 'name', t.name, 'count', t.n, 'entries', (
+    select coalesce(jsonb_agg(x.j order by x.at desc), '[]'::jsonb) from (
+      select jsonb_build_object('opportunityId', e.opportunity_id, 'summary', e.summary, 'platform', e.platform,
+        'community', e.community, 'postedAt', e.posted_at, 'quotes', e.quotes) j,
+        coalesce(e.posted_at, e.created_at) at
+      from e where e.theme_id = t.id
+      order by coalesce(e.posted_at, e.created_at) desc limit 5
+    ) x)) order by t.n desc, t.name), '[]'::jsonb)
+  from t;
+$$;
+
+
+--
+-- Name: cmo_mark_answered_back(uuid, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_mark_answered_back(p_user uuid, p_id uuid) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+begin
+  update public.opportunities o set person_status = 'answered_back', status_at = now()
+  where o.id = p_id and o.user_id = p_user and o.person_status = 'replied';
+  return found;
+end;
+$$;
+
+
+--
 -- Name: cmo_mark_opportunity_skip(uuid, uuid, uuid, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -4997,6 +5080,23 @@ $$;
 
 
 --
+-- Name: cmo_nudges_due(uuid, integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_nudges_due(p_user uuid, p_limit integer DEFAULT 10) RETURNS TABLE(opportunity_id uuid, url text, platform text, community text, title text, snippet text, reply text, posted_at timestamp with time zone)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select o.id, o.url, o.platform, o.community, o.title, o.snippet, o.reply, o.posted_at
+  from public.opportunities o
+  where o.user_id = p_user and o.person_status = 'replied' and o.nudge_draft is null and o.contacted_via is null
+    and o.replied_at < now() - interval '4 days'
+  order by o.replied_at
+  limit greatest(1, least(coalesce(p_limit, 10), 50));
+$$;
+
+
+--
 -- Name: cmo_onboard_step(uuid, jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -5038,9 +5138,10 @@ declare
   v_platforms text[];
   v_heard text;
   v_note text;
+  v_sells text;
 begin
   if p_answers is null or jsonb_typeof(p_answers) <> 'object' or octet_length(p_answers::text) > 1024
-     or exists (select 1 from jsonb_object_keys(p_answers) k where k not in ('x_handle', 'platforms', 'heard_from', 'heard_from_note')) then
+     or exists (select 1 from jsonb_object_keys(p_answers) k where k not in ('x_handle', 'platforms', 'heard_from', 'heard_from_note', 'sells_to')) then
     raise exception 'These answers are not valid.' using errcode = '22023';
   end if;
 
@@ -5068,15 +5169,22 @@ begin
   elsif p_answers ? 'heard_from_note' then
     raise exception 'These answers are not valid.' using errcode = '22023';
   end if;
+  if p_answers ? 'sells_to' then
+    v_sells := btrim(regexp_replace(coalesce(p_answers->>'sells_to', ''), '\s+', ' ', 'g'));
+    if jsonb_typeof(p_answers->'sells_to') <> 'string' or char_length(v_sells) not between 1 and 160 then
+      raise exception 'Say who you sell to in 1 to 160 characters.' using errcode = '22023';
+    end if;
+  end if;
 
   update public.profiles set
     x_handle = coalesce(v_handle, x_handle),
     post_platforms = coalesce(v_platforms, post_platforms),
     heard_from = coalesce(v_heard, heard_from),
-    heard_from_note = case when v_heard is not null then v_note else heard_from_note end
+    heard_from_note = case when v_heard is not null then v_note else heard_from_note end,
+    sells_to = coalesce(v_sells, sells_to)
   where id = v_user;
 
-  perform public.cmo_apply_onboarding_answers(v_user, v_handle is not null);
+  perform public.cmo_apply_onboarding_answers(v_user, v_handle is not null, v_sells is not null);
 end;
 $_$;
 
@@ -5209,6 +5317,7 @@ declare
   v_count integer := 0;
   v_day date;
   v_targets jsonb;
+  v_sources jsonb;
 begin
   if p_items is null or jsonb_typeof(p_items) <> 'array' or jsonb_array_length(p_items) > 60 then
     raise exception 'This plan is not valid.' using errcode = '22023';
@@ -5220,17 +5329,23 @@ begin
       continue;
     end if;
     v_targets := case when v_item->>'department' = 'post' then public.posting_plan_targets(v_item->'targets') end;
+    v_sources := case when v_item->>'department' = 'post' then public.post_sources_clean(p_user, v_item->'sources') end;
     insert into public.content_items (user_id, run_id, department, platform, day, idea, reason, wants_image, body)
     values (
       p_user, p_run, v_item->>'department', left(v_item->>'platform', 20), v_day,
       left(v_item->>'idea', 300), left(coalesce(v_item->>'reason', ''), 300),
       coalesce(v_item->>'department' = 'post' and jsonb_typeof(v_item->'image') = 'boolean' and (v_item->>'image')::boolean, false),
-      case
+      (case
         when v_targets is null then '{}'::jsonb
         when jsonb_typeof(v_item->'slot') = 'number' and (v_item->>'slot')::numeric in (0, 1, 2)
           then jsonb_build_object('targets', v_targets, 'slot', (v_item->>'slot')::int)
         else jsonb_build_object('targets', v_targets)
-      end
+      end) || jsonb_strip_nulls(jsonb_build_object(
+        'sources', v_sources,
+        -- A post planned with no Library sources from the founder's brief or the first week (onboarding): the draft
+        -- writes it without sources instead of refusing it for an empty Library.
+        'planned_from', case when v_item->>'department' = 'post' and v_sources is null
+                               and v_item->>'planned_from' in ('brief', 'onboarding') then v_item->>'planned_from' end))
     );
     v_count := v_count + 1;
   end loop;
@@ -5716,14 +5831,14 @@ $$;
 
 CREATE FUNCTION public.cmo_reply_outcomes_due(p_user uuid, p_limit integer) RETURNS TABLE(outcome_id uuid, opportunity_id uuid, platform text, url text, community text, reply text, outcome_url text)
     LANGUAGE sql STABLE SECURITY DEFINER
-    SET search_path TO 'public'
+    SET search_path TO ''
     AS $$
-  select o.id, p.id, p.platform, p.url, p.community, p.reply, o.outcome_url
+  select o.id, p.id, p.platform, p.url, p.community, p.reply, coalesce(p.reply_url, o.outcome_url)
   from public.cmo_draft_outcomes o
   join public.opportunities p on p.id = o.item_id and p.user_id = o.user_id
   where o.user_id = p_user and o.department = 'sales' and o.action = 'replied' and o.outcome_checked_at is null
-    and o.decided_at <= now() - interval '3 days' and p.reply is not null
-    and p.platform in ('reddit', 'hn')
+    and o.decided_at <= now() - interval '3 days' and p.reply is not null and p.contacted_via is null
+    and p.platform in ('reddit', 'hn', 'threads')
   order by o.decided_at desc
   limit greatest(1, least(coalesce(p_limit, 10), 50));
 $$;
@@ -5937,10 +6052,12 @@ begin
     end if;
   end if;
   if p_item is not null then
+    -- The draft's own sources win; a draft that sends none keeps the ones the plan gave its item.
     update public.content_items
     set status = 'in_review',
-        body = (p_body - 'targets' - 'slot')
-          || jsonb_strip_nulls(jsonb_build_object('targets', body->'targets', 'slot', body->'slot')),
+        body = (p_body - 'targets' - 'slot' - 'sources')
+          || jsonb_strip_nulls(jsonb_build_object('targets', body->'targets', 'slot', body->'slot',
+               'sources', coalesce(public.post_sources_clean(p_user, p_body->'sources'), public.post_sources_clean(p_user, body->'sources')))),
         priority = coalesce(p_priority, 'medium'), run_id = p_run, updated_at = now()
     where id = p_item and user_id = p_user and status in ('planned', 'drafting')
     returning * into v_row;
@@ -5951,7 +6068,9 @@ begin
     insert into public.content_items (user_id, run_id, department, platform, day, idea, status, priority, body)
     values (p_user, p_run, 'post', v_platform, current_date,
             left(coalesce(nullif(p_idea, ''), 'Post for ' || case when v_post then v_profile->>'label' else 'X' end), 300),
-            'in_review', coalesce(p_priority, 'medium'), p_body - 'targets' - 'slot')
+            'in_review', coalesce(p_priority, 'medium'),
+            (p_body - 'targets' - 'slot' - 'sources')
+              || jsonb_strip_nulls(jsonb_build_object('sources', public.post_sources_clean(p_user, p_body->'sources'))))
     returning * into v_row;
   end if;
   return v_row;
@@ -6032,6 +6151,68 @@ $$;
 
 
 --
+-- Name: cmo_save_library(uuid, uuid, jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_save_library(p_user uuid, p_run uuid, p_items jsonb) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_item jsonb;
+  v_opp public.opportunities;
+  v_theme uuid;
+  v_name text;
+  v_summary text;
+  v_quotes jsonb;
+  v_count integer := 0;
+begin
+  if not exists (
+    select 1 from public.cmo_runs r where r.id = p_run and r.user_id = p_user and r.kind = 'sales_scan'
+  ) then
+    raise exception 'Run not found.' using errcode = 'P0002';
+  end if;
+  if p_items is null or jsonb_typeof(p_items) <> 'array' or jsonb_array_length(p_items) > 50 then
+    raise exception 'These Library entries are not valid.' using errcode = '22023';
+  end if;
+  for v_item in select * from jsonb_array_elements(p_items) loop
+    continue when jsonb_typeof(v_item) <> 'object';
+    v_summary := left(btrim(coalesce(v_item->>'summary', '')), 200);
+    continue when v_summary = '';
+    select * into v_opp from public.opportunities o where o.user_id = p_user and o.url = v_item->>'url';
+    continue when not found;
+
+    v_name := left(btrim(regexp_replace(coalesce(v_item->>'theme', ''), '\s+', ' ', 'g')), 80);
+    if v_name = '' then
+      v_name := 'Other';
+    end if;
+    insert into public.library_themes (user_id, name) values (p_user, v_name)
+    on conflict (user_id, lower(name)) do nothing
+    returning id into v_theme;
+    if v_theme is null then
+      select t.id into v_theme from public.library_themes t where t.user_id = p_user and lower(t.name) = lower(v_name);
+    end if;
+
+    select coalesce(jsonb_agg(jsonb_build_object('kind', q->>'kind', 'text', left(btrim(q->>'text'), 280))), '[]'::jsonb)
+    into v_quotes
+    from (
+      select q from jsonb_array_elements(case when jsonb_typeof(v_item->'quotes') = 'array' then v_item->'quotes' else '[]'::jsonb end) q
+      where jsonb_typeof(q) = 'object' and q->>'kind' in ('pain', 'evidence') and btrim(coalesce(q->>'text', '')) <> ''
+      limit 4
+    ) s;
+
+    insert into public.library_entries (opportunity_id, user_id, theme_id, summary, quotes, platform, community, posted_at)
+    values (v_opp.id, p_user, v_theme, v_summary, v_quotes, v_opp.platform, v_opp.community, v_opp.posted_at)
+    on conflict (opportunity_id) do update set
+      theme_id = excluded.theme_id, summary = excluded.summary, quotes = excluded.quotes;
+    v_count := v_count + 1;
+  end loop;
+  return v_count;
+end;
+$$;
+
+
+--
 -- Name: cmo_save_metrics(uuid, jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -6075,6 +6256,31 @@ begin
     end if;
   end loop;
   return v_count;
+end;
+$$;
+
+
+--
+-- Name: cmo_save_nudge(uuid, uuid, uuid, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_save_nudge(p_user uuid, p_run uuid, p_id uuid, p_text text) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_text text := left(nullif(btrim(coalesce(p_text, '')), ''), 1000);
+begin
+  if not exists (select 1 from public.cmo_runs r where r.id = p_run and r.user_id = p_user) then
+    raise exception 'Run not found.' using errcode = 'P0002';
+  end if;
+  if v_text is null then
+    return false;
+  end if;
+  update public.opportunities o set nudge_draft = v_text, nudge_drafted_at = now()
+  where o.id = p_id and o.user_id = p_user and o.person_status = 'replied' and o.nudge_draft is null
+    and o.replied_at < now() - interval '4 days';
+  return found;
 end;
 $$;
 
@@ -6232,6 +6438,83 @@ begin
   return v_row;
 end;
 $$;
+
+
+--
+-- Name: cmo_save_reach(uuid, uuid, jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_save_reach(p_user uuid, p_run uuid, p_items jsonb) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $_$
+declare
+  v_item jsonb;
+  v_r jsonb;
+  v_opp public.opportunities;
+  v_dm boolean;
+  v_email text;
+  v_level text;
+  v_reach jsonb;
+  v_text text;
+  v_today integer;
+  v_count integer := 0;
+begin
+  if not exists (
+    select 1 from public.cmo_runs r where r.id = p_run and r.user_id = p_user and r.kind in ('sales_scan', 'sales_reply_drafts')
+  ) then
+    raise exception 'Run not found.' using errcode = 'P0002';
+  end if;
+  if p_items is null or jsonb_typeof(p_items) <> 'array' or jsonb_array_length(p_items) > 50 then
+    raise exception 'These reach checks are not valid.' using errcode = '22023';
+  end if;
+  select count(*)::integer into v_today from public.opportunities o
+  where o.user_id = p_user and o.dm_drafted_at > now() - interval '1 day';
+
+  for v_item in select * from jsonb_array_elements(p_items) loop
+    continue when jsonb_typeof(v_item) <> 'object' or jsonb_typeof(v_item->'reach') <> 'object';
+    select * into v_opp from public.opportunities o where o.user_id = p_user and o.url = v_item->>'url';
+    continue when not found;
+    v_r := v_item->'reach';
+    v_email := nullif(btrim(coalesce(v_r->>'emailFound', '')), '');
+    if v_email is not null and (char_length(v_email) > 254 or v_email !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$') then
+      v_email := null;
+    end if;
+    v_reach := jsonb_build_object(
+      'buyer', coalesce(v_r->'buyer' = 'true'::jsonb, false),
+      'wantsNow', coalesce(v_r->'wantsNow' = 'true'::jsonb, false),
+      'warm', coalesce(v_r->'warm' = 'true'::jsonb, false),
+      'fresh', coalesce(v_r->'fresh' = 'true'::jsonb, false),
+      'dmAllowed', coalesce(v_r->'dmAllowed' = 'true'::jsonb, false) and v_opp.platform <> 'hn',
+      'asksForTools', coalesce(v_r->'asksForTools' = 'true'::jsonb, false),
+      'emailFound', v_email,
+      'reasons', coalesce((
+        select jsonb_agg(left(btrim(x), 160)) from (
+          select x from jsonb_array_elements_text(case when jsonb_typeof(v_r->'reasons') = 'array' then v_r->'reasons' else '[]'::jsonb end) x
+          where btrim(x) <> '' limit 8
+        ) s), '[]'::jsonb));
+    v_dm := (v_reach->>'buyer')::boolean and (v_reach->>'wantsNow')::boolean and (v_reach->>'fresh')::boolean
+      and (v_reach->>'dmAllowed')::boolean and ((v_reach->>'warm')::boolean or (v_reach->>'asksForTools')::boolean);
+    v_level := case when not v_dm then 'reply_first'
+      when v_email is not null and (v_reach->>'warm')::boolean then 'email_ready' else 'dm_ready' end;
+    v_text := left(nullif(btrim(coalesce(v_item->>'dm', '')), ''), 1000);
+    if v_text is not null and (not v_dm or v_today >= 20 or v_opp.dm_draft is not null) then
+      v_text := null;
+    end if;
+    update public.opportunities o set
+      reach = v_reach,
+      reach_level = v_level,
+      dm_draft = coalesce(v_text, o.dm_draft),
+      dm_drafted_at = case when v_text is not null then now() else o.dm_drafted_at end
+    where o.id = v_opp.id;
+    if v_text is not null then
+      v_today := v_today + 1;
+    end if;
+    v_count := v_count + 1;
+  end loop;
+  return v_count;
+end;
+$_$;
 
 
 --
@@ -6643,13 +6926,13 @@ begin
         decided_at = now()
     where id = v_event.correction_id and user_id = v_user;
   else
-    perform pg_advisory_xact_lock(hashtextextended(v_user::text || ':doc:strategy', 1713));
+    perform pg_advisory_xact_lock(hashtextextended(v_user::text || ':doc:brand', 1713));
     select * into v_doc from public.marketing_documents
-    where user_id = v_user and kind = 'strategy' order by version desc limit 1;
+    where user_id = v_user and kind = 'brand' order by version desc limit 1;
     if found then
       insert into public.marketing_documents (user_id, kind, version, body, created_by)
-      values (v_user, 'strategy', v_doc.version + 1,
-        -- The document keeps both fields (StrategySchema): one that had no value before is emptied, not removed.
+      values (v_user, 'brand', v_doc.version + 1,
+        -- The document keeps both fields (BrandSchema): one that had no value before is emptied, not removed.
         jsonb_set(v_doc.body, array[v_event.field],
           coalesce(v_event.before, case v_event.field when 'avoid' then '[]'::jsonb else '""'::jsonb end)), 'user');
     end if;
@@ -6695,6 +6978,93 @@ CREATE FUNCTION public.cmo_zernio_posts_all(p_user uuid, p_since timestamp with 
   where s.user_id = p_user and s.status = 'published' and s.mode = 'publish' and s.external_id is not null
     and s.publish_at >= p_since
   order by s.publish_at desc;
+$$;
+
+
+--
+-- Name: competitors; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.competitors (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    site text NOT NULL,
+    name text NOT NULL,
+    logo_url text,
+    price text,
+    offer text,
+    added_via text DEFAULT 'url'::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT competitors_added_via_check CHECK ((added_via = ANY (ARRAY['url'::text, 'chat'::text]))),
+    CONSTRAINT competitors_logo_url_check CHECK (((char_length(logo_url) <= 500) AND (logo_url ~ '^https://'::text))),
+    CONSTRAINT competitors_name_check CHECK (((char_length(name) >= 1) AND (char_length(name) <= 80))),
+    CONSTRAINT competitors_offer_check CHECK ((char_length(offer) <= 300)),
+    CONSTRAINT competitors_price_check CHECK ((char_length(price) <= 200)),
+    CONSTRAINT competitors_site_check CHECK (((site ~ '^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$'::text) AND (char_length(site) <= 253)))
+);
+
+
+--
+-- Name: competitor_add(text, text, text, text, text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.competitor_add(p_url text, p_name text DEFAULT NULL::text, p_logo_url text DEFAULT NULL::text, p_price text DEFAULT NULL::text, p_offer text DEFAULT NULL::text, p_via text DEFAULT 'url'::text) RETURNS public.competitors
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $_$
+declare
+  v_user uuid := public.require_user();
+  v_url text := lower(btrim(coalesce(p_url, '')));
+  v_site text;
+  v_name text;
+  v_row public.competitors;
+begin
+  if v_url !~ '^https?://' then
+    v_url := 'https://' || v_url;
+  end if;
+  v_site := regexp_replace(split_part(split_part(split_part(regexp_replace(v_url, '^https?://', ''), '/', 1), '?', 1), '#', 1), '^www\.', '');
+  v_site := split_part(v_site, ':', 1);
+  if char_length(v_url) > 500 or v_site !~ '^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$'
+     or char_length(v_site) > 253 or v_site ~ '^[0-9.]+$' or v_site ~ '(^|\.)(localhost|local|internal)$' then
+    raise exception 'Paste the competitor''s website, like example.com.' using errcode = '22023';
+  end if;
+  if coalesce(p_via, 'url') not in ('url', 'chat') then
+    raise exception 'Unknown source.' using errcode = '22023';
+  end if;
+  if (select count(*) from public.competitors c where c.user_id = v_user and c.site <> v_site) >= 20 then
+    raise exception 'Keep at most 20 competitors.' using errcode = 'P0001';
+  end if;
+  v_name := left(nullif(btrim(coalesce(p_name, '')), ''), 80);
+  insert into public.competitors (user_id, site, name, logo_url, price, offer, added_via)
+  values (v_user, v_site, coalesce(v_name, v_site),
+    case when btrim(coalesce(p_logo_url, '')) ~ '^https://' and char_length(btrim(p_logo_url)) <= 500 then btrim(p_logo_url) end,
+    left(nullif(btrim(coalesce(p_price, '')), ''), 200), left(nullif(btrim(coalesce(p_offer, '')), ''), 300),
+    coalesce(p_via, 'url'))
+  on conflict (user_id, site) do update set
+    name = coalesce(v_name, public.competitors.name),
+    logo_url = coalesce(excluded.logo_url, public.competitors.logo_url),
+    price = coalesce(excluded.price, public.competitors.price),
+    offer = coalesce(excluded.offer, public.competitors.offer),
+    updated_at = now()
+  returning * into v_row;
+  return v_row;
+end;
+$_$;
+
+
+--
+-- Name: competitor_remove(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.competitor_remove(p_id uuid) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+begin
+  delete from public.competitors c where c.id = p_id and c.user_id = public.require_user();
+  return found;
+end;
 $$;
 
 
@@ -8457,6 +8827,72 @@ $$;
 
 
 --
+-- Name: documents_v2_channels(text[]); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.documents_v2_channels(p_platforms text[]) RETURNS jsonb
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO ''
+    AS $$
+  select coalesce(jsonb_agg(c order by array_position(array['x', 'linkedin', 'threads'], c)), '[]'::jsonb)
+  from (select distinct c from unnest(coalesce(p_platforms, '{}')) c where c in ('x', 'linkedin', 'threads')) s;
+$$;
+
+
+--
+-- Name: documents_v2_migrate(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.documents_v2_migrate() RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_count integer := 0;
+  v_n integer;
+begin
+  -- Post plan: the pillars' names become topics, the weekly rhythm stays, the rest is kept under `legacy`.
+  update public.marketing_documents d set
+    kind = 'post_plan',
+    body = jsonb_build_object(
+      'topics', coalesce((
+        select jsonb_agg(left(btrim(p->>'name'), 300)) from (
+          select p from jsonb_array_elements(case when jsonb_typeof(d.body->'pillars') = 'array' then d.body->'pillars' else '[]'::jsonb end) p
+          where jsonb_typeof(p) = 'object' and btrim(coalesce(p->>'name', '')) <> '' limit 12
+        ) s), '[]'::jsonb),
+      'channels', public.documents_v2_channels((select pr.post_platforms from public.profiles pr where pr.id = d.user_id)),
+      'rhythm', left(coalesce(d.body->>'cadence', ''), 1500),
+      'legacy', d.body)
+  where d.kind = 'content_strategy'
+    and not exists (select 1 from public.marketing_documents x where x.user_id = d.user_id and x.kind = 'post_plan' and x.version = d.version);
+  get diagnostics v_n = row_count;
+  v_count := v_count + v_n;
+
+  -- Brand: one first version per founder with a Strategy, from its newest voice and words to avoid. The voice history
+  -- trigger is told to stay quiet: nothing changed for the founder.
+  perform set_config('opencmo.voice_undo', 'on', true);
+  insert into public.marketing_documents (user_id, kind, version, body, created_by)
+  select s.user_id, 'brand', 1, jsonb_build_object(
+      'voice', coalesce(case when jsonb_typeof(s.body->'voice') = 'string' then s.body->>'voice' end, ''),
+      'voice_samples', '[]'::jsonb,
+      'intro_line', '',
+      'avoid', case when jsonb_typeof(s.body->'avoid') = 'array' then s.body->'avoid' else '[]'::jsonb end,
+      'look', jsonb_build_object('logo_url', '', 'colors', '[]'::jsonb, 'font', '', 'screenshots', '[]'::jsonb, 'image_styles', '[]'::jsonb)),
+    s.created_by
+  from (
+    select distinct on (m.user_id) m.user_id, m.body, m.created_by
+    from public.marketing_documents m where m.kind = 'strategy'
+    order by m.user_id, m.version desc
+  ) s
+  where not exists (select 1 from public.marketing_documents b where b.user_id = s.user_id and b.kind = 'brand');
+  get diagnostics v_n = row_count;
+  perform set_config('opencmo.voice_undo', '', true);
+  return v_count + v_n;
+end;
+$$;
+
+
+--
 -- Name: editor_document_hash(jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -9323,6 +9759,26 @@ CREATE FUNCTION public.job_hold_credits() RETURNS integer
 
 
 --
+-- Name: library_delete_entry(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.library_delete_entry(p_url text) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_count integer;
+begin
+  delete from public.library_entries le
+  using public.opportunities o
+  where o.id = le.opportunity_id and o.url = btrim(coalesce(p_url, ''));
+  get diagnostics v_count = row_count;
+  return v_count;
+end;
+$$;
+
+
+--
 -- Name: list_projects(timestamp with time zone, uuid, text, integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -9640,7 +10096,7 @@ declare
   v_prev jsonb;
   v_field text;
 begin
-  if new.kind <> 'strategy' or coalesce(current_setting('opencmo.voice_undo', true), '') = 'on' then
+  if new.kind <> 'brand' or coalesce(current_setting('opencmo.voice_undo', true), '') = 'on' then
     return new;
   end if;
   if tg_op = 'UPDATE' then
@@ -9651,7 +10107,7 @@ begin
   end if;
   begin
     select body into v_prev from public.marketing_documents
-    where user_id = new.user_id and kind = 'strategy' and version < new.version
+    where user_id = new.user_id and kind = 'brand' and version < new.version
     order by version desc limit 1;
     foreach v_field in array array['voice', 'avoid'] loop
       continue when (v_prev->v_field) is not distinct from (new.body->v_field);
@@ -9821,6 +10277,86 @@ $$;
 
 
 --
+-- Name: my_funnel(integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.my_funnel(p_days integer DEFAULT 7) RETURNS TABLE(source text, found integer, replied integer, answered_back integer, signed_up integer)
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_since timestamptz;
+begin
+  if p_days is null or p_days not between 1 and 90 then
+    raise exception 'Pick 1 to 90 days.' using errcode = '22023';
+  end if;
+  v_since := now() - make_interval(days => p_days);
+  return query
+  with o as (
+    select x.platform, x.created_at, x.replied_at, x.status_at, x.person_status
+    from public.opportunities x where x.user_id = v_user
+      and (x.created_at > v_since or x.replied_at > v_since or x.status_at > v_since)
+  ), counted as (
+    select o.platform,
+      count(*) filter (where o.created_at > v_since)::integer f,
+      count(*) filter (where o.replied_at > v_since)::integer r,
+      count(*) filter (where o.status_at > v_since and o.person_status in ('answered_back', 'talking', 'signed_up', 'customer'))::integer a,
+      count(*) filter (where o.status_at > v_since and o.person_status in ('signed_up', 'customer'))::integer s
+    from o group by rollup (o.platform)
+  )
+  select coalesce(c.platform, 'all'), coalesce(c.f, 0), coalesce(c.r, 0), coalesce(c.a, 0), coalesce(c.s, 0)
+  from (select * from counted union all
+        select null, 0, 0, 0, 0 where not exists (select 1 from counted)) c
+  order by c.platform is not null, array_position(array['reddit', 'hn', 'facebook', 'threads'], c.platform);
+end;
+$$;
+
+
+--
+-- Name: my_library(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.my_library(p_source text DEFAULT NULL::text) RETURNS TABLE(id uuid, name text, count integer, this_week integer, used_in_posts integer, entries jsonb)
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_user uuid := public.require_user();
+begin
+  if p_source is not null and p_source not in ('reddit', 'hn', 'facebook', 'threads') then
+    raise exception 'Pick Reddit, Hacker News, Facebook groups or Threads.' using errcode = '22023';
+  end if;
+  return query
+  with e as (
+    select le.* from public.library_entries le
+    where le.user_id = v_user and le.theme_id is not null and (p_source is null or le.platform = p_source)
+  )
+  select t.id, t.name,
+    (select count(*)::integer from e where e.theme_id = t.id),
+    (select count(*)::integer from e where e.theme_id = t.id and e.created_at > now() - interval '7 days'),
+    (select count(*)::integer from public.content_items ci
+      where ci.user_id = v_user and jsonb_typeof(ci.body->'sources') = 'array'
+        and exists (
+          select 1 from jsonb_array_elements(ci.body->'sources') s
+          join e on e.theme_id = t.id and e.opportunity_id::text = s->>'opportunityId'
+        )),
+    (select coalesce(jsonb_agg(x.j order by x.ord), '[]'::jsonb) from (
+      select jsonb_build_object(
+        'opportunityId', e.opportunity_id, 'platform', e.platform, 'community', e.community,
+        'postedAt', e.posted_at, 'summary', e.summary, 'quotes', e.quotes, 'themeId', e.theme_id
+      ) j, row_number() over (order by e.posted_at desc nulls last, e.created_at desc) ord
+      from e where e.theme_id = t.id
+      order by ord limit 3
+    ) x)
+  from public.library_themes t
+  where t.user_id = v_user and exists (select 1 from e where e.theme_id = t.id)
+  order by 3 desc, t.name;
+end;
+$$;
+
+
+--
 -- Name: my_published_items(timestamp with time zone); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -9972,34 +10508,155 @@ $$;
 
 
 --
+-- Name: opportunities_person_replied(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.opportunities_person_replied() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO ''
+    AS $$
+begin
+  if new.status = 'replied' and old.status is distinct from 'replied' and new.person_status = 'found' then
+    new.person_status := 'replied';
+    new.replied_at := coalesce(new.replied_at, now());
+    new.status_at := now();
+  end if;
+  return new;
+end;
+$$;
+
+
+--
+-- Name: opportunity_mark_replied(uuid, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.opportunity_mark_replied(p_id uuid, p_url text) RETURNS public.opportunities
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_opp public.opportunities;
+  v_url text;
+begin
+  select * into v_opp from public.opportunities o where o.id = p_id and o.user_id = v_user;
+  if not found then
+    raise exception 'Conversation not found.' using errcode = 'P0002';
+  end if;
+  if v_opp.status = 'dismissed' then
+    raise exception 'You dismissed this conversation.' using errcode = 'P0001';
+  end if;
+  v_url := public.reply_url_clean(v_opp.platform, p_url);
+  if not public.reply_url_fits(v_opp.platform, v_opp.url, v_url) then
+    raise exception 'Paste the link to your reply in this thread.' using errcode = '22023';
+  end if;
+  if v_opp.status = 'in_review' then
+    perform public.cmo_decide_opportunity(p_id, 'replied');
+  end if;
+  -- A public reply after a DM: the person is now followed as a public reply too.
+  update public.opportunities o set
+    reply_url = v_url,
+    contacted_via = null,
+    replied_at = coalesce(o.replied_at, now()),
+    person_status = case when o.person_status = 'found' then 'replied' else o.person_status end,
+    status_at = case when o.person_status = 'found' then now() else o.status_at end
+  where o.id = p_id
+  returning * into v_opp;
+  update public.cmo_draft_outcomes d set outcome_url = v_url
+  where d.user_id = v_user and d.department = 'sales' and d.item_id = p_id and d.action = 'replied';
+  return v_opp;
+end;
+$$;
+
+
+--
+-- Name: opportunity_mark_sent(uuid, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.opportunity_mark_sent(p_id uuid, p_via text) RETURNS public.opportunities
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_opp public.opportunities;
+begin
+  if p_via is null or p_via not in ('dm', 'email') then
+    raise exception 'Say whether you sent a DM or an email.' using errcode = '22023';
+  end if;
+  select * into v_opp from public.opportunities o where o.id = p_id and o.user_id = v_user;
+  if not found then
+    raise exception 'Conversation not found.' using errcode = 'P0002';
+  end if;
+  if v_opp.status = 'dismissed' then
+    raise exception 'You dismissed this conversation.' using errcode = 'P0001';
+  end if;
+  if v_opp.status = 'in_review' then
+    perform public.cmo_decide_opportunity(p_id, 'replied');
+  end if;
+  update public.opportunities o set
+    -- A public reply already linked stays the way the person is followed.
+    contacted_via = case when o.reply_url is null then p_via else o.contacted_via end,
+    replied_at = coalesce(o.replied_at, now()),
+    person_status = case when o.person_status = 'found' then 'replied' else o.person_status end,
+    status_at = case when o.person_status = 'found' then now() else o.status_at end
+  where o.id = p_id
+  returning * into v_opp;
+  return v_opp;
+end;
+$$;
+
+
+--
 -- Name: opportunity_reply_url(uuid, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.opportunity_reply_url(p_id uuid, p_url text) RETURNS void
     LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public'
-    AS $_$
+    SET search_path TO ''
+    AS $$
+begin
+  if not exists (
+    select 1 from public.opportunities o where o.id = p_id and o.user_id = public.require_user() and o.status = 'replied'
+  ) then
+    raise exception 'Conversation not found.' using errcode = 'P0002';
+  end if;
+  perform public.opportunity_mark_replied(p_id, p_url);
+end;
+$$;
+
+
+--
+-- Name: opportunity_set_status(uuid, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.opportunity_set_status(p_id uuid, p_status text) RETURNS public.opportunities
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
 declare
   v_user uuid := public.require_user();
   v_opp public.opportunities;
-  v_url text := trim(coalesce(p_url, ''));
-  v_base text;
 begin
-  select * into v_opp from public.opportunities where id = p_id and user_id = v_user and status = 'replied';
+  if p_status is null or p_status not in ('found', 'replied', 'answered_back', 'talking', 'signed_up', 'customer', 'not_interested') then
+    raise exception 'Unknown status.' using errcode = '22023';
+  end if;
+  select * into v_opp from public.opportunities o where o.id = p_id and o.user_id = v_user;
   if not found then
     raise exception 'Conversation not found.' using errcode = 'P0002';
   end if;
-  v_base := regexp_replace(v_opp.url, '^https://(www\.|old\.)?reddit\.com', '');
-  if char_length(v_url) > 500
-     or not ((v_opp.platform = 'hn' and v_url ~ '^https://news\.ycombinator\.com/item\?id=[0-9]{1,12}$')
-          or (v_opp.platform = 'reddit' and v_url ~ '^https://(www\.|old\.)?reddit\.com/r/'
-              and position(rtrim(v_base, '/') || '/' in regexp_replace(v_url, '^https://(www\.|old\.)?reddit\.com', '')) = 1)) then
-    raise exception 'Paste the link to your reply in this thread.' using errcode = '22023';
+  if p_status not in ('found', 'not_interested') and v_opp.status <> 'replied' then
+    raise exception 'Mark that you replied first.' using errcode = 'P0001';
   end if;
-  update public.cmo_draft_outcomes set outcome_url = v_url
-  where user_id = v_user and department = 'sales' and item_id = p_id and action = 'replied';
+  update public.opportunities o set person_status = p_status, status_at = now()
+  where o.id = p_id and o.person_status is distinct from p_status
+  returning * into v_opp;
+  if not found then
+    select * into v_opp from public.opportunities o where o.id = p_id;
+  end if;
+  return v_opp;
 end;
-$_$;
+$$;
 
 
 --
@@ -11224,6 +11881,32 @@ CREATE FUNCTION public.post_schedules(p_status text, p_deliverable uuid) RETURNS
   select p_status = 'approved' or (p_status = 'published' and exists (select 1 from public.schedule_slots s
     where s.deliverable_id = p_deliverable and s.status = 'published'))
 $$;
+
+
+--
+-- Name: post_sources_clean(uuid, jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.post_sources_clean(p_user uuid, p_sources jsonb) RETURNS jsonb
+    LANGUAGE sql STABLE
+    SET search_path TO ''
+    AS $_$
+  select nullif(coalesce(jsonb_agg(jsonb_build_object(
+      'opportunityId', s->>'opportunityId', 'summary', btrim(s->>'summary'),
+      'platform', s->>'platform', 'community', coalesce(s->>'community', '')) order by n), '[]'::jsonb), '[]'::jsonb)
+  from (
+    select s, n from jsonb_array_elements(case when jsonb_typeof(p_sources) = 'array' then p_sources else '[]'::jsonb end)
+      with ordinality as x(s, n)
+    where jsonb_typeof(s) = 'object'
+      and coalesce(s->>'opportunityId', '') ~ '^[0-9a-fA-F-]{36}$'
+      and char_length(btrim(coalesce(s->>'summary', ''))) between 1 and 200
+      and s->>'platform' in ('reddit', 'hn', 'facebook', 'threads')
+      and char_length(coalesce(s->>'community', '')) <= 120
+      and exists (select 1 from public.opportunities o where o.id = (s->>'opportunityId')::uuid and o.user_id = p_user)
+    order by n
+    limit 5
+  ) y;
+$_$;
 
 
 --
@@ -13461,6 +14144,53 @@ $$;
 
 
 --
+-- Name: reply_url_clean(text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.reply_url_clean(p_platform text, p_url text) RETURNS text
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO ''
+    AS $_$
+  select case
+    -- HN's only form is `?id=`; a Facebook comment link names the comment in its query (`?comment_id=`).
+    when p_platform in ('hn', 'facebook') then btrim(coalesce(p_url, ''))
+    when p_platform = 'threads' then regexp_replace(
+      rtrim(regexp_replace(btrim(coalesce(p_url, '')), '[?#].*$', ''), '/'),
+      '^https://(www\.)?threads\.(com|net)/', 'https://www.threads.com/', 'i')
+    else rtrim(regexp_replace(btrim(coalesce(p_url, '')), '[?#].*$', ''), '/')
+  end;
+$_$;
+
+
+--
+-- Name: reply_url_fits(text, text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.reply_url_fits(p_platform text, p_thread text, p_url text) RETURNS boolean
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO ''
+    AS $_$
+  select char_length(p_url) <= 500 and p_url !~ '\s' and case p_platform
+    when 'reddit' then p_url ~* '^https://(www\.|old\.|new\.|m\.)?reddit\.com/r/'
+      and (
+        -- A comment or post link: the same subreddit and post id as the thread.
+        coalesce(lower(substring(p_url from '(?i)/r/[^/]+/comments/[a-z0-9]+'))
+          = lower(substring(p_thread from '(?i)/r/[^/]+/comments/[a-z0-9]+')), false)
+        -- A phone share link names no post: it must at least be in the thread's subreddit.
+        or (p_url ~* '^https://(www\.)?reddit\.com/r/[^/]+/s/[A-Za-z0-9]+$'
+            and coalesce(lower(substring(p_url from '(?i)/r/[^/]+/')) = lower(substring(p_thread from '(?i)/r/[^/]+/')), false))
+      )
+    when 'hn' then p_url ~ '^https://news\.ycombinator\.com/item\?id=[0-9]{1,12}$'
+    when 'facebook' then p_url ~ '^https://www\.facebook\.com/groups/'
+      and split_part(regexp_replace(p_url, '^https://www\.facebook\.com/groups/', ''), '/', 1)
+        = split_part(regexp_replace(p_thread, '^https://www\.facebook\.com/groups/', ''), '/', 1)
+    when 'threads' then p_url ~ '^https://www\.threads\.com/@[A-Za-z0-9._]{1,30}/post/[A-Za-z0-9_-]{1,40}$'
+    else false
+  end;
+$_$;
+
+
+--
 -- Name: repurpose_post(uuid, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -14145,6 +14875,8 @@ CREATE TABLE public.sales_settings (
     co_occurrence jsonb DEFAULT '[]'::jsonb NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     platforms text[] DEFAULT '{reddit,hn,facebook,threads}'::text[] NOT NULL,
+    cadence text DEFAULT 'mwf'::text NOT NULL,
+    CONSTRAINT sales_settings_cadence_check CHECK ((cadence = ANY (ARRAY['mwf'::text, 'weekdays'::text, 'monday'::text]))),
     CONSTRAINT sales_settings_co_occurrence_check CHECK (((jsonb_typeof(co_occurrence) = 'array'::text) AND (jsonb_array_length(co_occurrence) <= 20) AND (octet_length((co_occurrence)::text) <= 4096))),
     CONSTRAINT sales_settings_excluded_subreddits_check CHECK ((cardinality(excluded_subreddits) <= 50)),
     CONSTRAINT sales_settings_platforms_check CHECK ((((cardinality(platforms) >= 1) AND (cardinality(platforms) <= 4)) AND (platforms <@ ARRAY['reddit'::text, 'hn'::text, 'facebook'::text, 'threads'::text])))
@@ -14152,12 +14884,12 @@ CREATE TABLE public.sales_settings (
 
 
 --
--- Name: sales_settings_save(text[], jsonb, text[]); Type: FUNCTION; Schema: public; Owner: -
+-- Name: sales_settings_save(text[], jsonb, text[], text); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.sales_settings_save(p_excluded text[], p_pairs jsonb, p_platforms text[] DEFAULT NULL::text[]) RETURNS public.sales_settings
+CREATE FUNCTION public.sales_settings_save(p_excluded text[], p_pairs jsonb, p_platforms text[] DEFAULT NULL::text[], p_cadence text DEFAULT NULL::text) RETURNS public.sales_settings
     LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public'
+    SET search_path TO ''
     AS $_$
 declare
   v_user uuid := public.require_user();
@@ -14205,11 +14937,16 @@ begin
       raise exception 'Sales can look on Reddit, Hacker News, Facebook groups and Threads.' using errcode = '22023';
     end if;
   end if;
-  insert into public.sales_settings (user_id, excluded_subreddits, co_occurrence, platforms, updated_at)
-  values (v_user, v_excluded, v_pairs, coalesce(v_platforms, v_all), now())
+  -- Null keeps the saved cadence, as with the platforms.
+  if p_cadence is not null and p_cadence not in ('mwf', 'weekdays', 'monday') then
+    raise exception 'Scan on Monday, Wednesday and Friday, on weekdays, or on Mondays.' using errcode = '22023';
+  end if;
+  insert into public.sales_settings (user_id, excluded_subreddits, co_occurrence, platforms, cadence, updated_at)
+  values (v_user, v_excluded, v_pairs, coalesce(v_platforms, v_all), coalesce(p_cadence, 'mwf'), now())
   on conflict (user_id) do update
     set excluded_subreddits = excluded.excluded_subreddits, co_occurrence = excluded.co_occurrence,
-        platforms = coalesce(v_platforms, public.sales_settings.platforms), updated_at = now()
+        platforms = coalesce(v_platforms, public.sales_settings.platforms),
+        cadence = coalesce(p_cadence, public.sales_settings.cadence), updated_at = now()
   returning * into v_row;
   return v_row;
 end;
@@ -14541,7 +15278,7 @@ declare
   v_by text := 'user';
   v_row public.marketing_documents;
 begin
-  if p_kind is null or p_kind not in ('product', 'strategy', 'competitors', 'content_strategy', 'calendar') then
+  if p_kind is null or p_kind not in ('product', 'strategy', 'competitors', 'post_plan', 'brand', 'calendar') then
     raise exception 'Unknown document.' using errcode = '22023';
   end if;
   if p_body is null or jsonb_typeof(p_body) <> 'object' then
@@ -18713,6 +19450,7 @@ CREATE TABLE public.profiles (
     posting_plan jsonb,
     autopilot_paused boolean DEFAULT false NOT NULL,
     digest_days text DEFAULT 'weekdays'::text NOT NULL,
+    sells_to text,
     CONSTRAINT profiles_autopilot_hours_check CHECK ((autopilot_hours = ANY (ARRAY[6, 12, 24]))),
     CONSTRAINT profiles_autopilot_note_check CHECK ((char_length(autopilot_note) <= 200)),
     CONSTRAINT profiles_autopilot_platforms_check CHECK ((autopilot_platforms <@ ARRAY['x'::text, 'threads'::text, 'linkedin'::text])),
@@ -18721,6 +19459,7 @@ CREATE TABLE public.profiles (
     CONSTRAINT profiles_heard_from_check CHECK (((heard_from IS NULL) OR (heard_from = ANY (ARRAY['search'::text, 'x'::text, 'reddit'::text, 'linkedin'::text, 'youtube'::text, 'ai_assistant'::text, 'friend'::text, 'newsletter'::text, 'other'::text])))),
     CONSTRAINT profiles_heard_from_note_check CHECK (((heard_from_note IS NULL) OR (char_length(heard_from_note) <= 100))),
     CONSTRAINT profiles_post_platforms_check CHECK (((post_platforms IS NULL) OR (((cardinality(post_platforms) >= 1) AND (cardinality(post_platforms) <= 3)) AND (post_platforms <@ ARRAY['x'::text, 'threads'::text, 'linkedin'::text])))),
+    CONSTRAINT profiles_sells_to_check CHECK (((sells_to IS NULL) OR ((char_length(sells_to) >= 1) AND (char_length(sells_to) <= 160)))),
     CONSTRAINT profiles_timezone_check CHECK (((char_length(timezone) >= 1) AND (char_length(timezone) <= 64))),
     CONSTRAINT profiles_timezone_source_check CHECK ((timezone_source = ANY (ARRAY['default'::text, 'browser'::text, 'founder'::text]))),
     CONSTRAINT profiles_weekly_credit_budget_check CHECK (((weekly_credit_budget >= 0) AND (weekly_credit_budget <= 10000))),
@@ -19231,6 +19970,40 @@ CREATE TABLE public.generations (
 
 
 --
+-- Name: library_entries; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.library_entries (
+    opportunity_id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    theme_id uuid,
+    summary text NOT NULL,
+    quotes jsonb DEFAULT '[]'::jsonb NOT NULL,
+    platform text NOT NULL,
+    community text DEFAULT ''::text NOT NULL,
+    posted_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT library_entries_community_check CHECK ((char_length(community) <= 100)),
+    CONSTRAINT library_entries_platform_check CHECK ((platform = ANY (ARRAY['reddit'::text, 'hn'::text, 'facebook'::text, 'threads'::text]))),
+    CONSTRAINT library_entries_quotes_check CHECK (((jsonb_typeof(quotes) = 'array'::text) AND (jsonb_array_length(quotes) <= 4) AND (octet_length((quotes)::text) <= 2048))),
+    CONSTRAINT library_entries_summary_check CHECK (((char_length(summary) >= 1) AND (char_length(summary) <= 200)))
+);
+
+
+--
+-- Name: library_themes; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.library_themes (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    name text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT library_themes_name_check CHECK (((char_length(name) >= 1) AND (char_length(name) <= 80)))
+);
+
+
+--
 -- Name: marketing_documents_latest; Type: VIEW; Schema: public; Owner: -
 --
 
@@ -19287,6 +20060,21 @@ CREATE TABLE public.media_transcripts (
     CONSTRAINT media_transcripts_seconds_check CHECK ((seconds > (0)::numeric)),
     CONSTRAINT media_transcripts_source_check CHECK ((source = ANY (ARRAY['scribe'::text, 'fake'::text, 'import'::text])))
 );
+
+
+--
+-- Name: my_competitor_mentions; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW public.my_competitor_mentions WITH (security_invoker='true') AS
+ SELECT c.id AS competitor_id,
+    c.name,
+    (date_trunc('week'::text, o.created_at))::date AS week,
+    (count(*))::integer AS mentions
+   FROM (public.competitors c
+     JOIN public.opportunities o ON (((o.user_id = c.user_id) AND (((o.title || ' '::text) || o.snippet) ~* (('\m'::text || regexp_replace(c.name, '([.^$*+?()\[\]{}|\\-])'::text, '\\\1'::text, 'g'::text)) || '\M'::text)))))
+  WHERE ((c.user_id = ( SELECT auth.uid() AS uid)) AND (char_length(c.name) >= 3))
+  GROUP BY c.id, c.name, (date_trunc('week'::text, o.created_at));
 
 
 --
@@ -19592,6 +20380,7 @@ CREATE TABLE public.subreddit_rules (
     min_karma integer,
     min_account_age_days integer,
     megathread boolean DEFAULT false NOT NULL,
+    no_dms boolean DEFAULT false NOT NULL,
     CONSTRAINT subreddit_rules_min_account_age_days_check CHECK (((min_account_age_days >= 0) AND (min_account_age_days <= 3650))),
     CONSTRAINT subreddit_rules_min_karma_check CHECK (((min_karma >= 0) AND (min_karma <= 1000000))),
     CONSTRAINT subreddit_rules_subreddit_check CHECK ((subreddit ~ '^[a-z0-9_]{2,21}$'::text)),
@@ -20063,6 +20852,22 @@ ALTER TABLE ONLY public.cmo_voice_events
 
 
 --
+-- Name: competitors competitors_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.competitors
+    ADD CONSTRAINT competitors_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: competitors competitors_user_id_site_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.competitors
+    ADD CONSTRAINT competitors_user_id_site_key UNIQUE (user_id, site);
+
+
+--
 -- Name: content_items content_items_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -20220,6 +21025,22 @@ ALTER TABLE ONLY public.generations
 
 ALTER TABLE ONLY public.jobs
     ADD CONSTRAINT jobs_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: library_entries library_entries_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.library_entries
+    ADD CONSTRAINT library_entries_pkey PRIMARY KEY (opportunity_id);
+
+
+--
+-- Name: library_themes library_themes_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.library_themes
+    ADD CONSTRAINT library_themes_pkey PRIMARY KEY (id);
 
 
 --
@@ -21317,6 +22138,20 @@ CREATE INDEX jobs_warnings_finished_idx ON public.jobs USING btree (finished_at)
 
 
 --
+-- Name: library_entries_user_theme_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX library_entries_user_theme_idx ON public.library_entries USING btree (user_id, theme_id, created_at DESC);
+
+
+--
+-- Name: library_themes_user_name_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX library_themes_user_name_idx ON public.library_themes USING btree (user_id, lower(name));
+
+
+--
 -- Name: look_checks_one_round; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -21394,10 +22229,24 @@ CREATE INDEX operation_log_user_at_idx ON public.operation_log USING btree (user
 
 
 --
+-- Name: opportunities_nudges_due_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX opportunities_nudges_due_idx ON public.opportunities USING btree (user_id, replied_at) WHERE ((person_status = 'replied'::text) AND (nudge_draft IS NULL));
+
+
+--
 -- Name: opportunities_run_id_idx; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX opportunities_run_id_idx ON public.opportunities USING btree (run_id);
+
+
+--
+-- Name: opportunities_user_person_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX opportunities_user_person_idx ON public.opportunities USING btree (user_id, person_status, status_at DESC);
 
 
 --
@@ -22031,6 +22880,13 @@ CREATE TRIGGER media_assets_record_storage_deletions BEFORE DELETE ON public.med
 
 
 --
+-- Name: opportunities opportunities_person_replied; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER opportunities_person_replied BEFORE UPDATE OF status ON public.opportunities FOR EACH ROW EXECUTE FUNCTION public.opportunities_person_replied();
+
+
+--
 -- Name: approvals product_events_approve; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -22505,6 +23361,14 @@ ALTER TABLE ONLY public.cmo_voice_events
 
 
 --
+-- Name: competitors competitors_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.competitors
+    ADD CONSTRAINT competitors_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
 -- Name: content_items content_items_clip_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -22734,6 +23598,38 @@ ALTER TABLE ONLY public.generations
 
 ALTER TABLE ONLY public.jobs
     ADD CONSTRAINT jobs_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: library_entries library_entries_opportunity_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.library_entries
+    ADD CONSTRAINT library_entries_opportunity_id_fkey FOREIGN KEY (opportunity_id) REFERENCES public.opportunities(id) ON DELETE CASCADE;
+
+
+--
+-- Name: library_entries library_entries_theme_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.library_entries
+    ADD CONSTRAINT library_entries_theme_id_fkey FOREIGN KEY (theme_id) REFERENCES public.library_themes(id) ON DELETE SET NULL;
+
+
+--
+-- Name: library_entries library_entries_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.library_entries
+    ADD CONSTRAINT library_entries_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: library_themes library_themes_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.library_themes
+    ADD CONSTRAINT library_themes_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
 
 
 --
@@ -23440,6 +24336,12 @@ ALTER TABLE public.cmo_runs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.cmo_voice_events ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: competitors; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.competitors ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: content_items; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -23541,6 +24443,18 @@ ALTER TABLE public.generations ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.jobs ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: library_entries; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.library_entries ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: library_themes; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.library_themes ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: look_checks; Type: ROW SECURITY; Schema: public; Owner: -
@@ -23724,6 +24638,13 @@ CREATE POLICY "read own card budget" ON public.card_budget FOR SELECT TO authent
 
 
 --
+-- Name: competitors read own competitors; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "read own competitors" ON public.competitors FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
+
+
+--
 -- Name: cmo_corrections read own corrections; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -23756,6 +24677,20 @@ CREATE POLICY "read own draft ratings" ON public.cmo_draft_ratings FOR SELECT TO
 --
 
 CREATE POLICY "read own email log" ON public.email_log FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
+
+
+--
+-- Name: library_entries read own library entries; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "read own library entries" ON public.library_entries FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
+
+
+--
+-- Name: library_themes read own library themes; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "read own library themes" ON public.library_themes FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
 
 
 --

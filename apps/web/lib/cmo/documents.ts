@@ -11,7 +11,11 @@
 
 import { z } from "zod";
 
-export const DOCUMENT_KINDS = ["product", "strategy", "competitors", "content_strategy"] as const;
+/**
+ * Documents v2 (wave 3 A4, owner 2026-11-18/19): Strategy gains where they ask and this week; Post plan replaces
+ * Content Strategy; Brand holds the voice (moved out of Strategy) and the look.
+ */
+export const DOCUMENT_KINDS = ["product", "strategy", "competitors", "post_plan", "brand"] as const;
 export type DocumentKind = (typeof DOCUMENT_KINDS)[number];
 
 const list = z.array(z.string());
@@ -31,10 +35,10 @@ export const ProductSchema = z.object({
 export const StrategySchema = z.object({
   icp: z.string().describe("Ideal customer profile: role, company type, situation"),
   pains: list.describe("The pains that make them look for a solution"),
+  where_they_ask: list.describe("Communities and places where these customers ask about the problem: subreddits, forums, groups"),
   positioning: z.string().describe("One positioning statement: for whom, what category, key difference"),
   value_props: list.describe("Three to five reasons to choose this product"),
-  voice: z.string().describe("How the brand should sound, in one or two sentences"),
-  avoid: list.describe("Words, claims or tones to avoid"),
+  this_week: z.string().describe("This week's focus, in one line, or empty"),
 });
 
 export const CompetitorsSchema = z.object({
@@ -50,28 +54,46 @@ export const CompetitorsSchema = z.object({
     .describe("Up to five real, well-known alternatives. Fewer is better than guessing."),
 });
 
-export const ContentStrategySchema = z.object({
-  pillars: z
-    .array(z.object({ name: z.string(), why: z.string(), ideas: list.describe("Three post ideas") }))
-    .describe("Three or four content pillars"),
-  x: z.string().describe("How to use X (Twitter) for this product"),
-  reddit: z.string().describe("Which conversations on Reddit matter and how to join them helpfully"),
-  short_video: z.string().describe("What short videos the founder should record and edit"),
-  cadence: z.string().describe("A realistic weekly rhythm for a solo founder"),
+/** Where posts go (B2B channels only, owner 2026-11-18). */
+export const POST_CHANNELS = ["x", "linkedin", "threads"] as const;
+export type PostChannel = (typeof POST_CHANNELS)[number];
+
+export const PostPlanSchema = z.object({
+  topics: list.describe("Three to six topics to post about, from what customers say (the Library), in their words"),
+  channels: z.array(z.enum(POST_CHANNELS)).describe("Where the founder posts: x, linkedin and/or threads"),
+  rhythm: z.string().describe("A realistic weekly rhythm for a solo founder"),
+});
+
+export const BrandSchema = z.object({
+  voice: z.string().describe("How the brand sounds, in one or two sentences"),
+  voice_samples: list.describe("Up to five pieces of the founder's own writing, pasted by them. Leave empty."),
+  intro_line: z.string().describe("One line the founder uses to say what they make, in the first person"),
+  avoid: list.describe("Words, claims or tones to avoid"),
+  look: z
+    .object({
+      logo_url: z.string().describe("The logo's https URL from the website, or empty"),
+      colors: list.describe("Two to four brand colours as #rrggbb, from the website"),
+      font: z.string().describe("The website's main font family, or empty"),
+      screenshots: list.describe("Storage paths of product screenshots the founder uploaded. Leave empty."),
+      image_styles: list.describe("Two short descriptions of image styles that fit the brand"),
+    })
+    .describe("How the brand looks"),
 });
 
 export const DOCUMENT_SCHEMAS = {
   product: ProductSchema,
   strategy: StrategySchema,
   competitors: CompetitorsSchema,
-  content_strategy: ContentStrategySchema,
+  post_plan: PostPlanSchema,
+  brand: BrandSchema,
 } as const;
 
 export type DocumentBodies = {
   product: z.infer<typeof ProductSchema>;
   strategy: z.infer<typeof StrategySchema>;
   competitors: z.infer<typeof CompetitorsSchema>;
-  content_strategy: z.infer<typeof ContentStrategySchema>;
+  post_plan: z.infer<typeof PostPlanSchema>;
+  brand: z.infer<typeof BrandSchema>;
 };
 
 /** Một lượt onboarding trả về đủ bốn document trong một lần gọi model. */
@@ -80,8 +102,12 @@ export type OnboardingDrafts = z.infer<typeof OnboardingSchema>;
 
 /** Cách vẽ form: mỗi field là chữ ngắn, đoạn dài, danh sách dòng, hoặc nhóm lặp. */
 export type Field =
-  | { key: string; label: string; type: "text" | "long" | "list" }
-  | { key: string; label: string; type: "group"; fields: Field[]; max: number };
+  | { key: string; label: string; type: "text" | "long" | "list"; max?: number }
+  | { key: string; label: string; type: "group"; fields: Field[]; max: number }
+  /** A fixed set of values, any of them (Post plan's channels). */
+  | { key: string; label: string; type: "choices"; options: readonly { value: string; label: string }[] }
+  /** One nested object (Brand's look). */
+  | { key: string; label: string; type: "object"; fields: Field[] };
 
 export const DOCUMENTS: Record<DocumentKind, { title: string; summary: string; fields: Field[] }> = {
   product: {
@@ -101,14 +127,14 @@ export const DOCUMENTS: Record<DocumentKind, { title: string; summary: string; f
   },
   strategy: {
     title: "Marketing Strategy",
-    summary: "Who you are talking to and how you sound.",
+    summary: "Who you are talking to, where they ask, and this week's focus.",
     fields: [
       { key: "icp", label: "Ideal customer", type: "long" },
       { key: "pains", label: "Their pains", type: "list" },
+      { key: "where_they_ask", label: "Where they ask", type: "list" },
       { key: "positioning", label: "Positioning", type: "long" },
       { key: "value_props", label: "Why choose you", type: "list" },
-      { key: "voice", label: "Brand voice", type: "long" },
-      { key: "avoid", label: "Words and claims to avoid", type: "list" },
+      { key: "this_week", label: "This week", type: "text" },
     ],
   },
   competitors: {
@@ -129,30 +155,54 @@ export const DOCUMENTS: Record<DocumentKind, { title: string; summary: string; f
       },
     ],
   },
-  content_strategy: {
-    title: "Content Strategy",
-    summary: "What to talk about, and where.",
+  post_plan: {
+    title: "Post plan",
+    summary: "What to post about, where, and how often.",
     fields: [
+      { key: "topics", label: "Topics", type: "list" },
       {
-        key: "pillars",
-        label: "Content pillars",
-        type: "group",
-        max: 6,
-        fields: [
-          { key: "name", label: "Pillar", type: "text" },
-          { key: "why", label: "Why it matters", type: "long" },
-          { key: "ideas", label: "Post ideas", type: "list" },
+        key: "channels",
+        label: "Channels",
+        type: "choices",
+        options: [
+          { value: "x", label: "X" },
+          { value: "linkedin", label: "LinkedIn" },
+          { value: "threads", label: "Threads" },
         ],
       },
-      { key: "x", label: "On X", type: "long" },
-      { key: "reddit", label: "On Reddit", type: "long" },
-      { key: "short_video", label: "Short videos", type: "long" },
-      { key: "cadence", label: "Weekly rhythm", type: "long" },
+      { key: "rhythm", label: "Weekly rhythm", type: "long" },
+    ],
+  },
+  brand: {
+    title: "Brand",
+    summary: "How you sound and how you look.",
+    fields: [
+      { key: "voice", label: "Brand voice", type: "long" },
+      { key: "voice_samples", label: "Your writing samples", type: "list", max: 5 },
+      { key: "intro_line", label: "How you introduce what you make", type: "text" },
+      { key: "avoid", label: "Words you never use", type: "list" },
+      {
+        key: "look",
+        label: "Look",
+        type: "object",
+        fields: [
+          { key: "logo_url", label: "Logo", type: "text" },
+          { key: "colors", label: "Colours", type: "list", max: 4 },
+          { key: "font", label: "Font", type: "text" },
+          { key: "screenshots", label: "Product screenshots", type: "list", max: 8 },
+          { key: "image_styles", label: "Image styles", type: "list", max: 2 },
+        ],
+      },
     ],
   },
 };
 
 const LIMITS = { text: 200, long: 1500, list: 12, item: 300 };
+/** A writing sample is longer than a list item: up to 600 characters each (owner, 2026-11-19). */
+const ITEM_LIMITS: Record<string, number> = { voice_samples: 600 };
+/** Values a list keeps only when they look right: a colour as #rrggbb, a logo on https. */
+const ITEM_RULES: Record<string, (v: string) => boolean> = { colors: (v) => /^#[0-9a-fA-F]{6}$/.test(v) };
+const TEXT_RULES: Record<string, (v: string) => boolean> = { logo_url: (v) => v === "" || /^https:\/\/\S+$/.test(v) };
 
 /** Cắt mọi chuỗi và danh sách theo mô tả field — chạy trên cả bản agent lẫn bản người sửa. */
 export function clampDocument(kind: DocumentKind, body: Record<string, unknown>): Record<string, unknown> {
@@ -163,7 +213,12 @@ function clampFields(fields: Field[], body: Record<string, unknown>): Record<str
   const out: Record<string, unknown> = {};
   for (const field of fields) {
     const value = body[field.key];
-    if (field.type === "group") {
+    if (field.type === "object") {
+      out[field.key] = clampFields(field.fields, value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {});
+    } else if (field.type === "choices") {
+      const allowed = new Set(field.options.map((o) => o.value));
+      out[field.key] = [...new Set((Array.isArray(value) ? value : []).filter((v): v is string => typeof v === "string" && allowed.has(v)))];
+    } else if (field.type === "group") {
       const rows = Array.isArray(value) ? value : [];
       out[field.key] = rows
         .filter((row): row is Record<string, unknown> => typeof row === "object" && row !== null)
@@ -171,13 +226,15 @@ function clampFields(fields: Field[], body: Record<string, unknown>): Record<str
         .map((row) => clampFields(field.fields, row));
     } else if (field.type === "list") {
       const items = Array.isArray(value) ? value : [];
+      const rule = ITEM_RULES[field.key];
       out[field.key] = items
         .filter((item): item is string => typeof item === "string")
-        .map((item) => item.trim().slice(0, LIMITS.item))
-        .filter(Boolean)
-        .slice(0, LIMITS.list);
+        .map((item) => item.trim().slice(0, ITEM_LIMITS[field.key] ?? LIMITS.item))
+        .filter((item) => item && (!rule || rule(item)))
+        .slice(0, field.max ?? LIMITS.list);
     } else {
-      out[field.key] = typeof value === "string" ? value.trim().slice(0, LIMITS[field.type]) : "";
+      const text = typeof value === "string" ? value.trim().slice(0, LIMITS[field.type]) : "";
+      out[field.key] = TEXT_RULES[field.key] && !TEXT_RULES[field.key]!(text) ? "" : text;
     }
   }
   return out;

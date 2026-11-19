@@ -100,7 +100,7 @@ export async function writeThread(ctx: JobContext, input: ThreadInput): Promise<
   const noteModel = (usage: { model: string }) => {
     answered = usage.model;
   };
-  const ask = idea ? `Today's calendar item: "${idea}"` : "No calendar item is due. Pick the most useful thread from the content strategy.";
+  const ask = idea ? `Today's calendar item: "${idea}"` : "No calendar item is due. Pick the most useful thread from the Post plan.";
 
   let draft = await ctx.step("draft_post", "Writing the thread", () =>
     ctx.think({

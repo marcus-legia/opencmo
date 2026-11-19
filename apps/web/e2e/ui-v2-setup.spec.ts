@@ -50,23 +50,27 @@ for (const width of [1280, 390]) {
 
     // Answer while it works: the handle, LinkedIn as well as X, and where they heard of us.
     const questions = page.getByTestId("setup-questions");
+    // Wave 3, the fit test: who they sell to, in their words; it becomes the Strategy's ideal customer.
+    await questions.getByLabel("Who you sell to, in your words").fill("Freelance designers who invoice monthly");
     await questions.getByLabel("Your X handle").fill("@paylane_hq");
     await questions.getByRole("checkbox", { name: "X", exact: true }).check();
     await questions.getByRole("checkbox", { name: "LinkedIn" }).check();
     await questions.getByLabel("How did you hear about Ferreto?").selectOption("reddit");
     await questions.getByRole("button", { name: "Save" }).click();
     await expect(page.getByTestId("setup-questions-saved")).toBeVisible();
-    const { data: profile } = await admin().from("profiles").select("x_handle, post_platforms, heard_from").eq("id", user.id).single();
-    expect(profile).toEqual({ x_handle: "paylane_hq", post_platforms: ["linkedin", "x"], heard_from: "reddit" });
+    const { data: profile } = await admin().from("profiles").select("x_handle, post_platforms, heard_from, sells_to").eq("id", user.id).single();
+    expect(profile).toEqual({ x_handle: "paylane_hq", post_platforms: ["linkedin", "x"], heard_from: "reddit", sells_to: "Freelance designers who invoice monthly" });
 
     // Setup ends on Sales while the free scan runs or once it found people, on the Dashboard otherwise.
     await expect(page).toHaveURL(/\/app(\/sales)?$/, { timeout: 180_000 });
     // The run wrote its real steps, in order (the fake model is quicker than the 2 s poll, so the list is read back).
     const { data: run } = await admin().from("cmo_runs").select("steps").eq("user_id", user.id).eq("kind", "onboard").single();
-    expect(run!.steps).toEqual(["site", "product", "strategy", "competitors", "content_strategy"].map((id) => ({ id, status: "done" })));
-    // The answers reached the content plan the planner reads.
-    const { data: plan } = await admin().from("marketing_documents_latest").select("body").eq("user_id", user.id).eq("kind", "content_strategy").single();
-    expect(String((plan!.body as { cadence?: string }).cadence)).toMatch(/^The founder posts on X, LinkedIn\./);
+    expect(run!.steps).toEqual(["site", "product", "strategy", "competitors", "post_plan", "brand"].map((id) => ({ id, status: "done" })));
+    // The answers reached the Post plan the planner reads.
+    const { data: plan } = await admin().from("marketing_documents_latest").select("body").eq("user_id", user.id).eq("kind", "post_plan").single();
+    expect((plan!.body as { channels?: string[] }).channels).toEqual(["x", "linkedin"]);
+    const { data: strategy } = await admin().from("marketing_documents_latest").select("body").eq("user_id", user.id).eq("kind", "strategy").single();
+    expect(String((strategy!.body as { icp?: string }).icp)).toContain("Freelance designers who invoice monthly");
     // Today opens with the strategy to read.
     await page.goto("/app");
     await expect(page.getByTestId("approval-queue").getByTestId("feed-row").filter({ hasText: "Ready to read: your marketing strategy" })).toBeVisible();

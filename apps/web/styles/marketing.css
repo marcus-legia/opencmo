@@ -110,7 +110,7 @@ html:has(.marketing), body:has(.marketing) { overflow-x: clip; }
   .marketing-nav > div { gap: 16px; }
   .marketing-nav a[href$="#departments"], .marketing-nav a[href$="#how-it-works"] { display: none; }
   .brand-lockup { font-size: 18px; gap: 8px; }
-  .brand-lockup img { width: 28px; height: 28px; }
+  .brand-lockup img { width: 50px; height: 28px; }
   .marketing-nav .marketing-nav-cta { padding: 10px 14px; }
   .marketing-hero { padding: 36px 16px 48px; gap: 28px; }
   .marketing-hero h1 { font-size: clamp(38px, 11vw, 48px); }

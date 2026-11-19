@@ -40,8 +40,9 @@ const profile = (p: Short): BrainEvalProfile => ({
   ...(p.brief ? { brief: p.brief } : {}),
   docs: {
     product: { name: p.product, one_liner: p.oneLiner, pricing: p.pricing },
-    strategy: { icp: p.icp, avoid: p.avoid, stage: STAGE_TEXT[p.stage], ...(p.platforms ? { channels: p.platforms } : {}) },
-    content_strategy: { pillars: [{ name: p.pillar, ideas: p.ideas }], ...(p.video ? { short_video: p.video } : {}) },
+    strategy: { icp: p.icp, stage: STAGE_TEXT[p.stage], ...(p.platforms ? { channels: p.platforms } : {}) },
+    brand: { avoid: p.avoid },
+    post_plan: { topics: [p.pillar, ...p.ideas] },
   },
 });
 

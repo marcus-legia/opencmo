@@ -173,7 +173,7 @@ export async function competitorResearch(ctx: JobContext): Promise<JobOutput> {
       }),
       agent: "research",
       system: SYSTEM,
-      prompt: `${documentsBlock({ product: docs.product, strategy: docs.strategy, content_strategy: docs.content_strategy })}\n\n<posts>\n${posts}\n</posts>\n\nExtract what works and three to five ideas for this founder.`,
+      prompt: `${documentsBlock({ product: docs.product, strategy: docs.strategy, post_plan: docs.post_plan })}\n\n<posts>\n${posts}\n</posts>\n\nExtract what works and three to five ideas for this founder.`,
       schema: InsightSchema,
       label: "competitor_research",
       failure: "Could not analyse competitor posts this time. Your credits were refunded.",

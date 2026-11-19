@@ -22,6 +22,7 @@ import { fakePlanJudge, planJudge, planText } from "../plan-judge";
 import type { BrainEvalProfile, BrainStage } from "../studio-types";
 import { PLAN_JUDGE_QUESTIONS, PLAN_JUDGE_VERSION } from "../studio-types";
 import { registerCases, type EvalCase, type EvalEnv } from "../types";
+import { seedLibrary } from "../library";
 
 const BUDGET_MS = 240_000;
 const EARLY: ReadonlySet<BrainStage> = new Set(["pre_launch", "launched_no_users"]);
@@ -50,6 +51,7 @@ export function planIssues(profile: BrainEvalProfile, plan: readonly PlanItem[])
 async function runProfile(profile: BrainEvalProfile, env: EvalEnv): Promise<CaseResult[]> {
   const id = (output: string) => `b4:${profile.name}:${output}`;
   const mem = memoryStore(profile.docs, []);
+  seedLibrary(mem, profile.docs);
   mem.goals.push({ id: `goal-${profile.name}`, week: mondayOf(), goal: profile.goal, metric: "posts", target: 5, status: "approved", result: null });
   const run = mem.enqueue("plan_week", profile.brief ? { brief: profile.brief } : {});
   await env.drain(mem.store, { runId: run.id, budgetMs: BUDGET_MS });

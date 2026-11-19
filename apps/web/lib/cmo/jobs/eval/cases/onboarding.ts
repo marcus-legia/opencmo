@@ -11,7 +11,10 @@
 import type { CaseResult } from "@/lib/eval/compare";
 
 import type { OnboardingDrafts } from "../../../documents";
-import { draftDocuments } from "../../../generate";
+import { POST_CHANNELS } from "../../../documents";
+import { draftDocuments, finishDrafts } from "../../../generate";
+import { keepFounderBrand } from "../../../onboard";
+import { extractLook } from "../../../site-look";
 import type { SiteSnapshot } from "../../../site";
 import { normalizeNumber } from "../../context";
 import duely from "../fixtures/sites/duely.json";
@@ -61,6 +64,13 @@ export function onboardingIssues(site: SiteFixture, drafts: OnboardingDrafts, op
   }
   const lower = text.toLowerCase();
   for (const phrase of site.forbidden ?? []) if (lower.includes(phrase.toLowerCase())) issues.push(`repeats hidden text: "${phrase}"`);
+  // Wave 3 B4: documents v2. B2B channels only, the founder's samples left to them, the look only from the markup.
+  const channels = drafts.post_plan.channels;
+  if (!channels.length || channels.some((c) => !(POST_CHANNELS as readonly string[]).includes(c))) issues.push(`post plan channels ${JSON.stringify(channels)}`);
+  if (drafts.brand.voice_samples.length) issues.push("writes the founder's writing samples");
+  if (JSON.stringify(drafts.brand.look.colors) !== JSON.stringify(site.snapshot.look?.colors ?? [])) issues.push(`colours ${JSON.stringify(drafts.brand.look.colors)} are not the website's`);
+  if (opts.prices && !drafts.strategy.where_they_ask.length) issues.push("no places where these customers ask");
+  if (opts.prices && !drafts.strategy.this_week.trim()) issues.push("no focus for this week");
   return issues;
 }
 
@@ -93,12 +103,49 @@ async function runSite(site: SiteFixture, env: EvalEnv): Promise<CaseResult> {
   return { ...base, pass: !contradicts.length, decided_by: "judge", verdict, cost_usd: cost, notes: [...notes, ...contradicts] };
 }
 
+/**
+ * Wave 3 B4 in code: the look read from fixed markup, the founder's answer as the ideal customer, the default channels,
+ * and a second read of the website keeping what the founder put in the Brand.
+ */
+function runLook(env: EvalEnv): CaseResult[] {
+  const id = (output: string) => `w0:look:${output}`;
+  const result = (name: string, pass: boolean, notes: string[] = []): CaseResult => ({ id: id(name), epoch: env.epoch, pass, decided_by: "code", notes });
+  const html = `<html><head><meta name="theme-color" content="#C93A0F"><link rel="icon" href="/favicon.png">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600&display=swap" rel="stylesheet">
+    <style>:root{--brand-accent:#1f6feb;--bg:#ffffff;--text:#222}.btn{background:#1f6feb;color:#fff}.tag{color:#2da44e}</style></head>
+    <body><img src="/img/logo.svg" alt="Duely logo"><h1>Get paid</h1></body></html>`;
+  const look = extractLook("https://duely.example/", html);
+  const plain = extractLook("http://plain.example/", `<html><head><link rel="icon" href="data:image/png;base64,xx"></head><body style="font-family: Arial, sans-serif; color:#333333">Hi</body></html>`);
+  const site = SITES[0]!;
+  const drafts = {
+    product: { name: "Duely", one_liner: "", description: "", audience: "", problems: [], features: [], pricing: "", category: "" },
+    strategy: { icp: "Not stated on the website", pains: [], where_they_ask: [], positioning: "", value_props: [], this_week: "" },
+    competitors: { competitors: [] },
+    post_plan: { topics: [], channels: [], rhythm: "" },
+    brand: { voice: "", voice_samples: ["made up"], intro_line: "", avoid: [], look: { logo_url: "https://guess.example/x.png", colors: ["#000001"], font: "Guess", screenshots: [], image_styles: ["Clean screenshots"] } },
+  } as OnboardingDrafts;
+  const finished = finishDrafts(drafts, { ...site.snapshot, look }, "Freelance designers who invoice clients monthly");
+  const again = keepFounderBrand(finished, { voice_samples: ["My own post about late invoices."], intro_line: "I make Duely so freelancers stop chasing.", look: { screenshots: ["brand/u/1.png"] } });
+  return [
+    result("logo", look.logo_url === "https://duely.example/img/logo.svg", [look.logo_url]),
+    result("colors", JSON.stringify(look.colors) === JSON.stringify(["#c93a0f", "#1f6feb", "#2da44e"]), look.colors),
+    result("font", look.font === "Space Grotesk", [look.font]),
+    result("nothing-guessed", plain.logo_url === "" && plain.colors.length === 0 && plain.font === "", [JSON.stringify(plain)]),
+    result("look-from-markup", finished.brand.look.logo_url === look.logo_url && finished.brand.look.font === "Space Grotesk" && finished.brand.look.image_styles.length === 1),
+    result("no-samples-written", finished.brand.voice_samples.length === 0),
+    result("founder-answer", finished.strategy.icp === "Freelance designers who invoice clients monthly", [finished.strategy.icp]),
+    result("default-channels", JSON.stringify(finished.post_plan.channels) === JSON.stringify(["x", "linkedin", "threads"]), finished.post_plan.channels),
+    result("reread-keeps-founder-brand", again.brand.voice_samples[0] === "My own post about late invoices." && again.brand.intro_line.startsWith("I make Duely") && again.brand.look.screenshots[0] === "brand/u/1.png" && again.brand.look.font === "Space Grotesk"),
+  ];
+}
+
 export const onboardingCase: EvalCase = {
   job: "w0",
   once: true,
   async run(_fixture, env) {
     const results: CaseResult[] = [];
     for (const site of SITES) results.push(await runSite(site, env));
+    results.push(...runLook(env));
     return results;
   },
 };

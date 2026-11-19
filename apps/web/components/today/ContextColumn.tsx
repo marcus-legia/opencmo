@@ -1,15 +1,18 @@
 "use client";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+
+import { api } from "@/components/clipping/api";
+import { useShellState } from "@/components/shell-v2/ShellState";
+import type { FunnelRow } from "@/lib/cmo/funnel-view";
 
 import { DOCUMENT_KINDS, type DocumentKind } from "@/lib/cmo/documents";
 
 import { ContextDrawer, DOC_ROWS, isDocId, missingDocument, type DocId } from "./ContextDrawer";
+import { useLibraryCounts } from "./LibraryView";
+import { Mark } from "./ResearchView";
 import { siteLabel, useWorkspace } from "./workspace";
-
-/** The artboard's colour squares for competitors, in order. */
-const SWATCH = ["#d9467a", "#e9773a", "#5b6ee1", "#3aa58a", "#8a63d2", "#c9a227"];
 
 const DocIcon = () => (
   <svg className="i s" viewBox="0 0 24 24" aria-hidden="true" style={{ marginTop: "2px", color: "var(--muted)" }}>
@@ -20,14 +23,45 @@ const DocIcon = () => (
   </svg>
 );
 
-const Plus = () => (
-  <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
-    <path d="M5 12h14" />
-    <path d="M12 5v14" />
-  </svg>
-);
-
 const isToday = (iso: string | undefined) => (iso ? new Date(iso).toDateString() === new Date().toDateString() : false);
+
+/** Found, replied, answered back and signed up over the last 7 days, all sources; null until read. */
+function useFunnelWeek(): FunnelRow | null {
+  const [row, setRow] = useState<FunnelRow | null>(null);
+  const { workVersion } = useShellState();
+  const pathname = usePathname();
+  useEffect(() => {
+    let alive = true;
+    api<{ rows: FunnelRow[] }>("/sales/funnel?days=7")
+      .then((r) => alive && setRow(r.rows.find((x) => x.source === "all") ?? null))
+      .catch(() => {
+        // The tiles show a dash until a read works.
+      });
+    return () => {
+      alive = false;
+    };
+  }, [workVersion, pathname]);
+  return row;
+}
+
+/** The competitors kept in Research, read once per change of work (an Add in Research reloads the shell's version). */
+function useKeptCompetitors(): { id: string; name: string; site: string }[] | null {
+  const [list, setList] = useState<{ id: string; name: string; site: string }[] | null>(null);
+  const { workVersion } = useShellState();
+  const pathname = usePathname();
+  useEffect(() => {
+    let alive = true;
+    api<{ competitors: { id: string; name: string; site: string }[] }>("/research/competitors")
+      .then((r) => alive && setList(r.competitors))
+      .catch(() => {
+        // The document's list stays shown.
+      });
+    return () => {
+      alive = false;
+    };
+  }, [workVersion, pathname]);
+  return list;
+}
 
 /**
  * The Context column (redesign 2026-11-19): what Ferreto knows about the business, one card for its documents, the
@@ -46,6 +80,13 @@ export function ContextColumn({ goal }: { goal: { text: string | null; done: num
   const missing = ws.ready ? missingDocument(ws.documents) : null;
   const site = siteLabel(ws.site);
   const docCount = DOC_ROWS.length;
+  const library = useLibraryCounts();
+  const kept = useKeptCompetitors();
+  const week = useFunnelWeek();
+  // The competitors the founder keeps in Research (wave 3); before any, the ones the Competitors document names.
+  const rivals = kept?.length
+    ? kept.map((c) => ({ key: c.id, name: c.name }))
+    : ws.competitors.map((c) => ({ key: c.name, name: c.name || siteLabel(c.website) || "?" }));
   const pct = goal && goal.total > 0 ? Math.round((goal.done / goal.total) * 100) : 0;
 
   const chip = (icon: ReactNode, label: string) => (
@@ -98,7 +139,7 @@ export function ContextColumn({ goal }: { goal: { text: string | null; done: num
       {/* One card for the documents (owner, 2026-11-18: the list here repeated the drawer's own list). */}
       <button
         type="button"
-        onClick={() => openDoc(missing ?? "product", Boolean(missing))}
+        onClick={() => router.push(`/app/business${missing ? `?d=${missing}` : ""}`)}
         data-testid="context-documents"
         style={{ width: "100%", display: "flex", alignItems: "center", gap: "10px", padding: "10px", margin: "0 0 12px", border: "1px solid var(--line)", borderRadius: "10px", background: "transparent", textAlign: "left", font: "inherit", color: "inherit", cursor: "pointer" }}
       >
@@ -111,46 +152,89 @@ export function ContextColumn({ goal }: { goal: { text: string | null; done: num
         <span className="meta" style={{ color: "var(--accent)" }}>Open</span>
       </button>
 
-      <div style={{ borderTop: "1px solid var(--line)", paddingTop: "12px", marginTop: "10px" }}>
+      {/* What people said (wave 3): Post writes from it, so it sits under the business it serves. */}
+      <a
+        href="/app/library"
+        data-testid="context-library"
+        aria-current={pathname === "/app/library" ? "page" : undefined}
+        style={{ display: "flex", alignItems: "center", gap: "8px", padding: "10px", margin: "0 0 12px", border: `1px solid ${pathname === "/app/library" ? "var(--accent)" : "var(--line)"}`, borderRadius: "10px", color: "inherit", textDecoration: "none" }}
+      >
+        <span style={{ fontSize: "13.5px", fontWeight: "500" }}>Library</span>
+        <span className="meta">{library ? `${library.total} ${library.total === 1 ? "conversation" : "conversations"}` : ""}</span>
+        {library && library.thisWeek > 0 ? (
+          <span className="meta" style={{ marginLeft: "auto", color: "var(--ok)" }}>
+            +{library.thisWeek} this week
+          </span>
+        ) : null}
+      </a>
+
+      {/* The funnel of the week (wave 3): people, not posts. The week's goal stays under it. */}
+      <div style={{ borderTop: "1px solid var(--line)", paddingTop: "12px", marginTop: "10px" }} data-testid="context-funnel">
         <div className="sec" style={{ padding: "0 6px" }}>
-          <h2>Goal this week</h2>
-          <span className="meta">{goal ? `${goal.done} / ${goal.total}` : ""}</span>
+          <h2>This week</h2>
+          <a href="/app/analytics" className="meta" style={{ color: "var(--accent)", textDecoration: "none" }}>
+            Analytics
+          </a>
         </div>
-        <div style={{ padding: "0 6px" }}>
-          <div style={{ fontSize: "13.5px", marginBottom: "6px" }}>{goal?.text ?? "No goal yet. It comes with the week's plan."}</div>
-          <div style={{ height: "4px", borderRadius: "4px", background: "var(--line-2)" }}>
-            <div style={{ width: `${pct}%`, height: "4px", borderRadius: "4px", background: "var(--accent)" }}></div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: "6px", padding: "0 6px", textAlign: "center" }}>
+          {(
+            [
+              ["Found", week?.found],
+              ["Replied", week?.replied],
+              ["Answered back", week?.answeredBack],
+              ["Signed up", week?.signedUp],
+            ] as const
+          ).map(([label, n]) => (
+            <div key={label} data-testid="context-funnel-step" style={{ display: "flex", flexDirection: "column", padding: "6px 0", borderRadius: "7px", background: "var(--hover)" }}>
+              <b style={{ fontSize: "16px", fontWeight: "600" }}>{n ?? "–"}</b>
+              <span style={{ fontSize: "11px", lineHeight: "1.25", color: "var(--text)" }}>
+                {label}
+              </span>
+            </div>
+          ))}
+        </div>
+        <div style={{ padding: "8px 6px 0" }}>
+          <div className="meta" style={{ marginBottom: "4px" }}>
+            {goal?.text ? `Goal: ${goal.text}` : "No goal yet. It comes with the week's plan."}
+            {goal && goal.total > 0 ? ` · ${goal.done} / ${goal.total}` : ""}
           </div>
+          {goal && goal.total > 0 ? (
+            <div style={{ height: "4px", borderRadius: "4px", background: "var(--line-2)" }}>
+              <div style={{ width: `${pct}%`, height: "4px", borderRadius: "4px", background: "var(--accent)" }}></div>
+            </div>
+          ) : null}
         </div>
       </div>
 
-      <div style={{ borderTop: "1px solid var(--line)", paddingTop: "12px", marginTop: "14px" }}>
+      <div style={{ borderTop: "1px solid var(--line)", paddingTop: "12px", marginTop: "14px" }} data-testid="context-competitors">
         <div className="sec" style={{ padding: "0 6px" }}>
           <h2>
             Competitors{" "}
             <span className="meta" style={{ marginLeft: "4px" }}>
-              {ws.competitors.length}
+              {rivals.length}
             </span>
           </h2>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
-            <a href="/app/research" className="meta" style={{ color: "var(--accent)", textDecoration: "none" }}>
-              Research
-            </a>
-            <button type="button" className="ib" aria-label="Add a competitor" onClick={() => openDoc("competitors", true)}>
-              <Plus />
-            </button>
-          </span>
+          <a href="/app/research" className="meta" style={{ color: "var(--accent)", textDecoration: "none" }}>
+            Research
+          </a>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: "2px" }}>
-          {ws.competitors.map((c, i) => (
-            <div key={c.name} className="doc" style={{ alignItems: "center" }}>
-              <span aria-hidden="true" style={{ width: "18px", height: "18px", borderRadius: "5px", background: SWATCH[i % SWATCH.length], color: "#fff", display: "inline-grid", placeItems: "center", fontSize: "10.5px", fontWeight: "700", flexShrink: 0 }}>
-                {(c.name || siteLabel(c.website) || "?").charAt(0).toUpperCase()}
-              </span>
-              <span style={{ fontSize: "13.5px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{siteLabel(c.website) ?? c.name}</span>
+          {rivals.slice(0, 8).map((c, i) => (
+            <div key={c.key} className="doc" style={{ alignItems: "center" }}>
+              <Mark name={c.name} index={i} size={18} />
+              <span style={{ fontSize: "13.5px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.name}</span>
             </div>
           ))}
         </div>
+        {rivals.length > 8 ? (
+          <a href="/app/research" className="meta" style={{ display: "block", padding: "4px 6px 0" }}>
+            {rivals.length - 8} more
+          </a>
+        ) : rivals.length === 0 ? (
+          <a href="/app/research" className="meta" style={{ display: "block", padding: "4px 6px 0" }}>
+            Add the tools your customers compare you with
+          </a>
+        ) : null}
       </div>
       {isDocId(doc) ? <ContextDrawer doc={doc} edit={editing} onClose={() => router.push(pathname, { scroll: false })} onOpen={openDoc} /> : null}
     </aside>

@@ -21,9 +21,10 @@ test("AI CMO: lập lịch, soạn bài X, duyệt, đánh dấu đã đăng, qu
   await admin.from("credit_ledger").insert({ user_id: userId, delta: 50, reason: "E2E top-up" });
   const docs = {
     product: { name: "Paylane", category: "SaaS", one_liner: "Invoicing that chases late payments for freelancers.", description: "Reminders on day 3, 7 and 14.", audience: "Freelancers", problems: ["Late payments"], features: ["Reminders"], pricing: "$12/month" },
-    strategy: { icp: "Freelancers who invoice 3 to 15 clients a month and hate chasing payments.", pains: ["Late payments", "Awkward follow-ups"], positioning: "Invoicing that follows up for you.", value_props: ["Get paid faster"], voice: "Plain and friendly, a little dry.", avoid: ["revolutionary"] },
+    strategy: { icp: "Freelancers who invoice 3 to 15 clients a month and hate chasing payments.", pains: ["Late payments", "Awkward follow-ups"], positioning: "Invoicing that follows up for you.", value_props: ["Get paid faster"] },
+    brand: { voice: "Plain and friendly, a little dry.", avoid: ["revolutionary"] },
     competitors: { competitors: [{ name: "FreshBooks", website: "https://www.freshbooks.com", difference: "Simpler" }] },
-    content_strategy: { pillars: [{ name: "Getting paid", why: "Core pain", ideas: ["The 3-7-14 reminder rule", "Why invoices go unpaid"] }], x: "One post a day.", reddit: "Help in r/freelance.", short_video: "Clips from demos.", cadence: "Daily" },
+    post_plan: { topics: ["The 3-7-14 reminder rule", "Why invoices go unpaid"], channels: ["x"], rhythm: "Daily" },
   };
   for (const [kind, body] of Object.entries(docs)) {
     const { error: insertError } = await admin.from("marketing_documents").insert({ user_id: userId, kind, version: 1, body, created_by: "agent" });

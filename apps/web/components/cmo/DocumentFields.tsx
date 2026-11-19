@@ -21,7 +21,8 @@ export function DocumentRead({ fields, value }: { fields: Field[]; value: Body }
   const shown = fields.filter((field) => {
     const v = value[field.key];
     if (field.type === "group") return Array.isArray(v) && v.length > 0;
-    if (field.type === "list") return list(v).length > 0;
+    if (field.type === "list" || field.type === "choices") return list(v).length > 0;
+    if (field.type === "object") return !!v && typeof v === "object" && field.fields.some((f) => (Array.isArray((v as Body)[f.key]) ? list((v as Body)[f.key]).length : str((v as Body)[f.key])));
     return str(v) !== "";
   });
   if (!shown.length) return <p className="cmo-muted">This document is empty. Edit it to add what your CMO should know.</p>;
@@ -44,6 +45,23 @@ export function DocumentRead({ fields, value }: { fields: Field[]; value: Body }
                   );
                 })}
               </div>
+            </section>
+          );
+        }
+        if (field.type === "object") {
+          return (
+            <section key={field.key}>
+              <h3>{field.label}</h3>
+              <DocumentRead fields={field.fields} value={v as Body} />
+            </section>
+          );
+        }
+        if (field.type === "choices") {
+          const labels = new Map(field.options.map((o) => [o.value, o.label]));
+          return (
+            <section key={field.key}>
+              <h3>{field.label}</h3>
+              <p>{list(v).map((item) => labels.get(item) ?? item).join(", ")}</p>
             </section>
           );
         }
@@ -92,6 +110,18 @@ export function DocumentForm({ fields, value, onChange, idPrefix }: { fields: Fi
               ) : null}
             </fieldset>
           );
+        }
+        if (field.type === "object") {
+          const inner = value[field.key] && typeof value[field.key] === "object" ? (value[field.key] as Body) : {};
+          return (
+            <fieldset key={field.key} className="cmo-group">
+              <legend>{field.label}</legend>
+              <DocumentForm fields={field.fields} value={inner} idPrefix={id} onChange={(next) => set(field.key, next)} />
+            </fieldset>
+          );
+        }
+        if (field.type === "choices") {
+          return <Choices key={field.key} field={field} value={value[field.key]} onChange={(next) => set(field.key, next)} />;
         }
         if (field.type === "list") {
           const items = Array.isArray(value[field.key]) ? (value[field.key] as string[]) : [];
@@ -146,4 +176,24 @@ export function documentMarkdown(kind: DocumentKind, value: Body): string {
   };
   walk(doc.fields, value, 2);
   return `${lines.join("\n").trim()}\n`;
+}
+
+/** A set of fixed values, any of them: one checkbox each (Post plan's channels). */
+export function Choices({ field, value, onChange }: { field: Extract<Field, { type: "choices" }>; value: unknown; onChange: (next: string[]) => void }) {
+  const picked = new Set(list(value));
+  return (
+    <fieldset className="cmo-group">
+      <legend>{field.label}</legend>
+      {field.options.map((o) => (
+        <label key={o.value} className="cmo-field">
+          <input
+            type="checkbox"
+            checked={picked.has(o.value)}
+            onChange={(e) => onChange(field.options.map((x) => x.value).filter((v) => (v === o.value ? e.target.checked : picked.has(v))))}
+          />{" "}
+          {o.label}
+        </label>
+      ))}
+    </fieldset>
+  );
 }

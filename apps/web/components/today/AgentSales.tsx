@@ -1,13 +1,13 @@
 "use client";
 
 import { STRONG_MATCH, matchLabel } from "@/lib/cmo/match";
+import dynamic from "next/dynamic";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { Logs } from "@/app/api/v1/logs/route";
 import { PlanSheet, isPlanRequired } from "@/components/billing/PlanSheet";
 import { api, jsonBody } from "@/components/clipping/api";
 import { useLive } from "@/components/clipping/useLive";
-import { SalesSettings } from "@/components/screens/sales/SalesSettings";
 import { useScreen } from "@/components/screens/useScreen";
 import { useOptionalShellState } from "@/components/shell-v2/ShellState";
 import { salesScanCard } from "@/lib/cmo/jobs/price-card";
@@ -17,8 +17,15 @@ import { createClient } from "@/lib/supabase/client";
 
 import { useWorkspace } from "./workspace";
 
+// Reaching out, Following up and the settings tab open after the list: their code loads when first shown, which keeps
+// the Sales page inside its first-load budget (scripts/bundle-budget.mts, review of #239).
+const ReachPanel = dynamic(() => import("./SalesReach").then((m) => m.ReachPanel), { loading: () => <div className="meta">Loading…</div> });
+const ReplyLink = dynamic(() => import("./SalesReach").then((m) => m.ReplyLink));
+const FollowingUp = dynamic(() => import("./SalesReach").then((m) => m.FollowingUp), { loading: () => <div className="meta">Loading…</div> });
+const SalesSettings = dynamic(() => import("@/components/screens/sales/SalesSettings").then((m) => m.SalesSettings), { loading: () => <div className="meta">Loading…</div> });
+
 type Thread = SalesScreen["threads"][number];
-type Tab = "threads" | "runs" | "settings";
+type Tab = "threads" | "following" | "runs" | "settings";
 
 const DISMISS_REASONS = ["Not our customer", "Already solved", "Too old", "Wrong community"] as const;
 
@@ -28,7 +35,7 @@ const tone = (score: number) => (score >= STRONG_MATCH ? "score hi" : score >= 6
 function ago(iso: string | null): string {
   if (!iso) return "";
   const h = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 3_600_000));
-  return h < 24 ? `${h} h` : `${Math.round(h / 24)} d`;
+  return h < 1 ? "just now" : h < 24 ? `${h} h` : `${Math.round(h / 24)} d`;
 }
 
 const runTime = (iso: string) => {
@@ -297,6 +304,50 @@ function places(list: SalesPlatform[]): string {
  * The scan's verdict when it found no one (free-scan plan B3): a plain answer about the product's fit, with what it
  * searched and where, so the founder can judge the search. Not an error and not a paywall push.
  */
+/**
+ * Wave 3 (canvas "Scan problems"): what Sales says while a paid account's first scan runs, and when a scan could not do
+ * its work. Each says what happened and the one thing the founder can do; none promises anything we do not check.
+ */
+function WhileYouWait() {
+  return (
+    <section className="card" data-testid="sales-while-you-wait" style={{ marginTop: "14px", display: "flex", flexDirection: "column", gap: "8px" }}>
+      <b>Your first scan is running. It takes a few minutes.</b>
+      <div className="meta">While you wait:</div>
+      <ul style={{ margin: "0", paddingLeft: "18px", fontSize: "14px", display: "flex", flexDirection: "column", gap: "4px" }}>
+        <li>
+          <a href="/app/business?d=brand">Paste a few things you wrote</a>: replies and posts follow how you write.
+        </li>
+        <li>
+          <a href="/app/settings#settings-connected-accounts">Connect X or LinkedIn</a> to schedule the posts you approve.
+        </li>
+        <li>
+          <a href="/app/settings#settings-tracking">Get your tracking links</a>, so sign-ups from your replies can be counted.
+        </li>
+      </ul>
+    </section>
+  );
+}
+
+function ScanProblem({ testId, title, detail, action }: { testId: string; title: string; detail: string; action?: { label: string; href?: string; onClick?: () => void } }) {
+  return (
+    <div className="card" role="status" data-testid={testId} style={{ marginTop: "14px", display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+      <div style={{ flex: "1 1 260px", minWidth: "0" }}>
+        <b>{title}</b>
+        <div className="meta">{detail}</div>
+      </div>
+      {action?.href ? (
+        <a href={action.href} className="ghost" style={{ textDecoration: "none" }}>
+          {action.label}
+        </a>
+      ) : action?.onClick ? (
+        <button type="button" className="ghost" onClick={action.onClick}>
+          {action.label}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 function NoOneAsked({ scan, onEdit }: { scan: NonNullable<SalesScreen["lastScan"]>; onEdit: () => void }) {
   const answered = scan.platforms.filter((p) => !scan.failed.includes(p));
   return (
@@ -331,7 +382,7 @@ function NoOneAsked({ scan, onEdit }: { scan: NonNullable<SalesScreen["lastScan"
   );
 }
 
-function ThreadRow({ t, free, open, onToggle, onPlan, onDecide }: { t: Thread; free: boolean; open: boolean; onToggle: () => void; onPlan: (action: string) => void; onDecide: (t: Thread, action: "replied" | "dismissed", reason?: string, text?: string) => Promise<void> }) {
+function ThreadRow({ t, free, open, onToggle, onPlan, onDecide, onSent }: { t: Thread; free: boolean; open: boolean; onToggle: () => void; onPlan: (action: string) => void; onDecide: (t: Thread, action: "replied" | "dismissed", reason?: string, text?: string) => Promise<void>; onSent: (t: Thread, via: "dm" | "email") => Promise<void> }) {
   const [draft, setDraft] = useState(t.draft ?? "");
   const [copied, setCopied] = useState(false);
   const [dismissing, setDismissing] = useState(false);
@@ -381,7 +432,7 @@ function ThreadRow({ t, free, open, onToggle, onPlan, onDecide }: { t: Thread; f
         </svg>
       </button>
       {open ? (
-        <div style={{ borderTop: "1px solid var(--line)", padding: "14px 14px 14px 60px", display: "flex", flexDirection: "column", gap: "12px" }}>
+        <div className="th-body">
           {t.quotes.length ? (
             <div>
               <div className="meta" style={{ marginBottom: "6px" }}>
@@ -408,6 +459,24 @@ function ThreadRow({ t, free, open, onToggle, onPlan, onDecide }: { t: Thread; f
             </div>
           ) : t.draft === null ? (
             <div className="meta">No reply yet. Write the replies above, or reply in your own words and mark it replied.</div>
+          ) : !done && t.person ? (
+            <ReachPanel
+              t={t}
+              onSent={(via) => onSent(t, via)}
+              publicReply={
+                <div>
+                  <label className="meta" htmlFor={`reply-${t.id}`} style={{ display: "block", marginBottom: "6px" }}>
+                    Draft reply
+                  </label>
+                  <textarea id={`reply-${t.id}`} className="reply" value={draft} onChange={(e) => setDraft(e.target.value)} rows={4} style={{ width: "100%", resize: "vertical", font: "inherit", fontSize: "15px", lineHeight: "1.55", color: "var(--text)" }} />
+                  {t.draftChecks ? (
+                    <div className="meta" style={{ marginTop: "6px" }}>
+                      {t.draftChecks}
+                    </div>
+                  ) : null}
+                </div>
+              }
+            />
           ) : (
             <div>
               <label className="meta" htmlFor={`reply-${t.id}`} style={{ display: "block", marginBottom: "6px" }}>
@@ -454,7 +523,7 @@ function ThreadRow({ t, free, open, onToggle, onPlan, onDecide }: { t: Thread; f
                 </a>
               ) : (
                 <button type="button" className="ghost" disabled={busy} onClick={() => void run("replied")}>
-                  Mark replied
+                  I replied
                 </button>
               )}
               {!skipped && t.draft !== null ? (
@@ -483,6 +552,11 @@ export function AgentSales() {
   const [state, reload] = useScreen("sales");
   const ws = useWorkspace();
   const [tab, setTab] = useState<Tab>("threads");
+  // Today's "Open Following up" links to `?tab=following`: the tab named in the link opens first.
+  useEffect(() => {
+    const named = new URLSearchParams(window.location.search).get("tab");
+    if (named === "threads" || named === "following" || named === "runs" || named === "settings") setTab(named);
+  }, []);
   const [threads, setThreads] = useState<Thread[] | null>(null);
   const [week, setWeek] = useState<SalesScreen["week"] | null>(null);
   const [open, setOpen] = useState<string | null>(null);
@@ -507,6 +581,23 @@ export function AgentSales() {
       .catch(() => {});
   }, []);
   useEffect(loadRuns, [loadRuns]);
+
+  // Wave 3 "Scan problems", read once: the newest scan (a failed one is not followed live) and whether Sales has a
+  // Strategy to know who to look for.
+  const [lastRun, setLastRun] = useState<{ status: string; error: string | null; at: string } | null>(null);
+  const [noStrategy, setNoStrategy] = useState(false);
+  useEffect(() => {
+    const db = createClient();
+    void db.from("cmo_runs").select("status, error, created_at").eq("kind", "sales_scan").order("created_at", { ascending: false }).limit(1).maybeSingle()
+      .then(({ data }) => {
+        const row = data as { status: string; error: string | null; created_at: string } | null;
+        if (row) setLastRun({ status: row.status, error: row.error, at: row.created_at });
+      });
+    void db.from("marketing_documents_latest").select("kind").eq("kind", "strategy").limit(1)
+      .then(({ data, error }) => {
+        if (!error && (data ?? []).length === 0) setNoStrategy(true);
+      });
+  }, []);
 
   // The scan being followed. Realtime (with useLive's 5-second fallback poll) re-reads it under RLS; the payload is never
   // trusted. When it finishes, the threads and the runs are read again, so new threads show without a page reload.
@@ -552,12 +643,31 @@ export function AgentSales() {
     [refreshScan],
   );
 
-  async function decide(t: Thread, action: "replied" | "dismissed", reason?: string, text?: string) {
+  // "I replied" then asks where (canvas board Replied); "I sent it" on a DM or an email does not: there is no link.
+  const [askLink, setAskLink] = useState<Thread | null>(null);
+  const setPerson = (id: string, change: Partial<NonNullable<Thread["person"]>>) =>
+    setThreads((all) => (all ?? []).map((x) => (x.id === id && x.person ? { ...x, person: { ...x.person, ...change } } : x)));
+
+  async function decide(t: Thread, action: "replied" | "dismissed", reason?: string, text?: string, ask = true, via?: "dm" | "email") {
     setError(null);
     try {
       // Sample threads change only in the browser; live ones go through the ownership-checking RPC.
-      if (live) await api(`/cmo/opportunities/${encodeURIComponent(t.id)}`, jsonBody(action === "replied" ? { action, ...(text ? { text } : {}) } : { action, reason }));
-      setThreads((all) => (all ?? []).map((x) => (x.id === t.id ? { ...x, status: action, ...(text ? { draft: text } : {}) } : x)));
+      // A DM or an email sent is its own action: SQL keeps it out of the public reply re-reads and nudges.
+      if (live) await api(`/cmo/opportunities/${encodeURIComponent(t.id)}`, jsonBody(via ? { action: "sent", via } : action === "replied" ? { action, ...(text ? { text } : {}) } : { action, reason }));
+      setThreads((all) =>
+        (all ?? []).map((x) =>
+          x.id === t.id
+            ? {
+                ...x,
+                status: action,
+                ...(text ? { draft: text } : {}),
+                // SQL moves a person found to replied with the decision (the people_reach trigger).
+                ...(action === "replied" && x.person && x.person.status === "found" ? { person: { ...x.person, status: "replied" as const, repliedAt: new Date().toISOString(), statusAt: new Date().toISOString() } } : {}),
+              }
+            : x,
+        ),
+      );
+      if (action === "replied" && ask) setAskLink(t);
       setWeek((w) => (w ? (action === "replied" ? { ...w, replied: w.replied + 1 } : { ...w, dismissed: w.dismissed + 1 }) : w));
       setOpen((threads ?? []).find((x) => x.id !== t.id && x.status === "open")?.id ?? null);
     } catch (err) {
@@ -566,6 +676,7 @@ export function AgentSales() {
   }
 
   const list = threads ?? [];
+  const following = list.filter((t) => t.status === "replied" && t.person && t.person.status !== "found" && t.person.status !== "not_interested").length;
   const worth = list.filter((t) => t.status === "open" && t.rule.kind !== "skipped");
   const below = list.length - worth.length;
   const lastScan = runs[0]?.at ?? null;
@@ -617,6 +728,30 @@ export function AgentSales() {
           <ScanNow scanning={scanActive(scan) && scan.kind === "sales_scan"} paused={paused !== null} platforms={data?.settings.platforms} free={free} freeLeft={freeLeft} onPlan={setPlanFor} onStarted={startedScan} />
         </div>
         {scan ? <ScanProgress scan={scan} onClose={() => setScan(null)} /> : null}
+        {data && !free && !data.lastScan && scanActive(scan) && scan.kind === "sales_scan" ? <WhileYouWait /> : null}
+        {noStrategy ? (
+          <ScanProblem
+            testId="sales-not-set-up"
+            title="Sales does not know who to look for yet"
+            detail="It reads your Strategy: who your customers are and the problems they write about. Add your website or fill in the Strategy, then scan."
+            action={{ label: "Open Your business", href: "/app/business?d=strategy" }}
+          />
+        ) : null}
+        {!scanActive(scan) && lastRun?.status === "failed" && (!data?.lastScan || Date.parse(lastRun.at) > Date.parse(data.lastScan.at)) ? (
+          <ScanProblem
+            testId="sales-scan-failed"
+            title="The last scan did not finish"
+            detail={`${lastRun.error ?? "Something went wrong."} The people found before are still here. Scan again when you are ready.`}
+          />
+        ) : null}
+        {!scanActive(scan) && data?.lastScan && data.lastScan.verdict !== "none" && data.lastScan.failed.length ? (
+          <ScanProblem
+            testId="sales-source-down"
+            title={`${places(data.lastScan.failed)} did not answer in the last scan`}
+            detail={`The other places were read. The next scan tries ${data.lastScan.failed.length === 1 ? "it" : "them"} again.`}
+            action={{ label: "Where Sales looks", onClick: openSettings }}
+          />
+        ) : null}
         {paused ? (
           <div className="card" role="status" data-testid="sales-paused" style={{ marginTop: "14px", display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
             <div style={{ flex: "1 1 260px", minWidth: "0" }}>
@@ -635,12 +770,14 @@ export function AgentSales() {
           {(
             [
               ["threads", "Threads"],
+              ["following", "Following up"],
               ["runs", "Runs"],
               ["settings", "Settings"],
             ] as const
           ).map(([id, labelText]) => (
             <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)}>
               {labelText}
+              {id === "following" && following > 0 ? ` · ${following}` : ""}
             </button>
           ))}
         </div>
@@ -657,6 +794,19 @@ export function AgentSales() {
           </div>
         ) : null}
 
+        {tab === "threads" && askLink ? (
+          <div style={{ marginTop: "14px" }}>
+            <ReplyLink
+              t={askLink}
+              live={Boolean(live)}
+              onDone={(url) => {
+                if (url) setPerson(askLink.id, { replyUrl: url });
+                setAskLink(null);
+              }}
+            />
+          </div>
+        ) : null}
+        {tab === "following" && data ? <FollowingUp threads={list} live={Boolean(live)} onStatus={(id, status) => setPerson(id, { status, statusAt: new Date().toISOString() })} /> : null}
         {tab === "threads" && data ? (
           <>
             <div style={{ display: list.length === 0 && data.lastScan?.verdict === "none" ? "none" : "flex", alignItems: "center", gap: "8px", margin: "14px 0 10px", flexWrap: "wrap" }}>
@@ -675,7 +825,7 @@ export function AgentSales() {
             {list.length === 0 && data.lastScan?.verdict !== "none" ? <div className="meta">No threads yet. Sales scans the communities your customers use and scores what it finds.</div> : null}
             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }} role={list.length ? "list" : undefined} aria-label={list.length ? "Threads" : undefined}>
               {list.map((t) => (
-                <ThreadRow key={t.id} t={t} free={free} open={open === t.id} onToggle={() => setOpen(open === t.id ? null : t.id)} onPlan={setPlanFor} onDecide={decide} />
+                <ThreadRow key={t.id} t={t} free={free} open={open === t.id} onToggle={() => setOpen(open === t.id ? null : t.id)} onPlan={setPlanFor} onDecide={decide} onSent={(x, via) => decide(x, "replied", undefined, undefined, false, via)} />
               ))}
             </div>
           </>
@@ -705,7 +855,8 @@ export function AgentSales() {
       <aside style={{ flex: "1 1 300px", maxWidth: "360px", display: "flex", flexDirection: "column", gap: "14px" }}>
         <section className="card">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "6px" }}>
-            <h2 style={{ margin: "0", fontSize: "14px", fontWeight: "600" }}>This week</h2>
+            {/* The funnel ("This week") is the Context column's; this box is the replies and the 1-in-10 mention rule. */}
+            <h2 style={{ margin: "0", fontSize: "14px", fontWeight: "600" }}>Your replies</h2>
             <span className="meta">since Mon</span>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: "8px" }}>

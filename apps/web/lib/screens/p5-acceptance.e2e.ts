@@ -80,8 +80,8 @@ async function main() {
   await admin.from("profiles").update({ timezone: "UTC", credit_balance: 200 }).eq("id", userId);
   await admin.from("marketing_documents").insert([
     { user_id: userId, kind: "product", version: 1, created_by: "user", body: { name: "Ferreto", one_liner: "An AI CMO for solo founders." } },
-    { user_id: userId, kind: "strategy", version: 1, created_by: "user", body: { pains: ["late invoice payments"], avoid: [] } },
-    { user_id: userId, kind: "content_strategy", version: 1, created_by: "user", body: { pillars: [{ name: "Cut demos by words", why: "", ideas: [] }] } },
+    { user_id: userId, kind: "strategy", version: 1, created_by: "user", body: { pains: ["late invoice payments"] } },
+    { user_id: userId, kind: "post_plan", version: 1, created_by: "user", body: { topics: ["Cut demos by words"] } },
   ]);
 
   // F7–F8: niche research, then a week plan with a video: its brief cites the niche videos and the order keeps them.

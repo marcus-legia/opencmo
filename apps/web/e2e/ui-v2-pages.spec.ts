@@ -2,20 +2,24 @@ import { expect, test } from "@playwright/test";
 
 import type { Project } from "../lib/clipping-types";
 import { sidewaysOverflow, signIn, state } from "./helpers";
+import { ensureOnboarded } from "./ui-v2-seed";
 
 /**
  * Session C's v2 pages (ui-build plan U5–U8). They exist only in a build with NEXT_PUBLIC_OPENCMO_UI=v2,
  * so the default suite (flag off) skips this file and keeps testing today's pages.
  */
 test.skip(process.env.NEXT_PUBLIC_OPENCMO_UI !== "v2", "v2 pages are built only with NEXT_PUBLIC_OPENCMO_UI=v2");
+// The drawer test opens /app, which sends a founder with no documents to Setup: run alone, the spec seeds one.
+test.beforeAll(ensureOnboarded);
 
 const PAGES: [string, string][] = [
   ["/app/analytics", "This week"],
-  ["/app/research", "What works, with the link."],
+  ["/app/research", "Competitors"],
   // Post's list view (four tabs, 2026-11-19).
   ["/app/writer", "Posts"],
   ["/app/studio", "Videos"],
   ["/app/sales", "Sales"],
+  ["/app/library", "Library"],
   ["/app/settings", "Settings"],
 ];
 
@@ -30,13 +34,13 @@ for (const [path, heading] of PAGES) {
   });
 }
 
-test("Brain and Library open as panes of the Context drawer over the feed", async ({ page }) => {
+test("Brain and the old Library tabs open as panes of the Context drawer over the feed", async ({ page }) => {
   await signIn(page, state().users.a);
   await page.setViewportSize({ width: 1440, height: 900 });
   for (const [from, to, title] of [
     ["/app/brain", "/app?doc=plan", "Plan and orders"],
     ["/app/brain?tab=memory", "/app?doc=learned", "What it learned"],
-    ["/app/library", "/app?doc=product", "Product"],
+    ["/app/library?tab=business", "/app?doc=product", "Product"],
     ["/app/library?tab=voice", "/app?doc=voice", "Voice"],
     ["/app/library?tab=skills", "/app?doc=skills", "Skills"],
     ["/app/library?edit=competitors", "/app?doc=competitors&edit=1", "Competitors"],
@@ -64,7 +68,7 @@ test("old project routes redirect to Studio", async ({ page }) => {
   await expect(page).toHaveURL(new RegExp(`/app/studio\\?item=${id}$`));
   await page.goto(`/app/jobs/${id}`);
   await expect(page).toHaveURL(new RegExp(`/app/studio\\?item=${id}$`));
-  // The Brand Kit is a pane of the Context drawer over the feed (plan 2026-11-10-today-in-place).
+  // `/app/brand` opens the Brand document in the Context drawer over the feed (wave 3 A4).
   await page.goto("/app/brand");
   await expect(page).toHaveURL(/\/app\?doc=brand$/);
 });

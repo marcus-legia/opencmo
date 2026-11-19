@@ -85,7 +85,7 @@ const tables: Record<string, Row[]> = {
     { rule: "A rejected rule.", status: "rejected", created_at: now, decided_at: now },
   ],
   marketing_documents_latest: [
-    { kind: "strategy", body: { avoid: ["game-changer", "unlock", "a phrase far too long to be a single word anyone would cut from a post"] }, created_by: "user", created_at: now },
+    { kind: "brand", body: { avoid: ["game-changer", "unlock", "a phrase far too long to be a single word anyone would cut from a post"] }, created_by: "user", created_at: now },
   ],
   editor_skills: [{ id: "sk-1", name: "demo-cut", description: "How I cut a product demo", created_at: now }],
   cmo_runs: [{ kind: "onboard", input: { site: "https://ferreto.io/" }, created_at: now }],
@@ -142,7 +142,7 @@ async function main(): Promise<void> {
   assert.deepEqual(writer.data.voice.lines.map((l) => l.text.slice(0, 20)), ["End on the point its", "Edited on LinkedIn b", "Approved as written ", "Skipped a draft on X", "No links, no hashtag"],
     "rules first, then voice notes heaviest first, then the product rule");
   assert.match(writer.data.voice.lines[1]!.source, /^From your edit: shorter · LinkedIn · weight 0\.98$/);
-  assert.deepEqual(writer.data.voice.wordsCut, ["game-changer", "unlock"], "the strategy's words to avoid, one or two words each");
+  assert.deepEqual(writer.data.voice.wordsCut, ["game-changer", "unlock"], "the Brand's words to avoid, one or two words each");
 
   const library = compose("library", (await LOADERS.library!(ctx)) as never, { production: true, sample: false });
   assert.ok(library.live.voice && library.live.skills, "Library's voice and skills are live");

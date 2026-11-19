@@ -14,6 +14,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { PAUSED_EVERYWHERE, cmoPausedEverywhere } from "../pause";
 import { socialReaderReady } from "../social/reddit";
 
+import { vapidFromEnv } from "@/lib/notify/push";
+import { pushStrongMatches } from "@/lib/notify/strong-match";
+
 import { drainCmoQueue } from "./runner";
 import { supabaseStore } from "./store";
 import type { CmoJobKind } from "./types";
@@ -27,7 +30,11 @@ export type StartedRun = { id: string; kind: CmoJobKind; status: "queued" | "run
 export function kickCmoQueue(runId?: string, budgetMs = 250_000): void {
   after(async () => {
     try {
-      await drainCmoQueue(supabaseStore(createAdminClient()), { runId, budgetMs });
+      const admin = createAdminClient();
+      await drainCmoQueue(supabaseStore(admin), { runId, budgetMs });
+      // Wave 3 B8: right after a scan, one push per new strong match in a fresh thread (once per card, in SQL).
+      const vapid = vapidFromEnv();
+      if (vapid) await pushStrongMatches(admin, vapid).catch((error) => console.warn("[cmo] strong-match pushes not sent", error));
     } catch (error) {
       console.error("[cmo] draining the queue failed", error);
     }

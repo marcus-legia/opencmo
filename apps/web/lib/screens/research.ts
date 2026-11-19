@@ -31,6 +31,20 @@ export const InsightSchema = z.object({
     .optional(),
 });
 
+/** One competitor the founder added (wave 3 A6, `competitors`), with its weekly mentions in Sales conversations. */
+export const CompetitorViewSchema = z.object({
+  id: z.string(),
+  name: z.string().max(80),
+  site: z.string().max(253),
+  logoUrl: z.url().nullable(),
+  price: z.string().max(200).nullable(),
+  offer: z.string().max(300).nullable(),
+  addedVia: z.enum(["url", "chat"]),
+  /** Mentions per week (Monday, `YYYY-MM-DD`), the last 8 weeks, oldest first; weeks with none are left out. */
+  mentions: z.array(z.object({ week: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), count: z.number().int().min(0) })).max(8),
+});
+export type CompetitorView = z.infer<typeof CompetitorViewSchema>;
+
 export const ResearchScreenSchema = z.object({
   lastRunAt: iso.nullable(),
   nextRunAt: iso.nullable(),
@@ -47,5 +61,7 @@ export const ResearchScreenSchema = z.object({
       replies: z.number().int().min(0).nullable(),
     }),
   ),
+  /** Wave 3: the competitors the founder added by website or from Research's chat, newest first. */
+  competitors: z.array(CompetitorViewSchema).max(20),
 });
 export type ResearchScreen = z.infer<typeof ResearchScreenSchema>;
