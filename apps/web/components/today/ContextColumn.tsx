@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import { DOCUMENT_KINDS, type DocumentKind } from "@/lib/cmo/documents";
 
 import { ContextDrawer, DOC_ROWS, isDocId, missingDocument, type DocId } from "./ContextDrawer";
+import { useLibraryCounts } from "./LibraryView";
 import { siteLabel, useWorkspace } from "./workspace";
 
 /** The artboard's colour squares for competitors, in order. */
@@ -46,6 +47,7 @@ export function ContextColumn({ goal }: { goal: { text: string | null; done: num
   const missing = ws.ready ? missingDocument(ws.documents) : null;
   const site = siteLabel(ws.site);
   const docCount = DOC_ROWS.length;
+  const library = useLibraryCounts();
   const pct = goal && goal.total > 0 ? Math.round((goal.done / goal.total) * 100) : 0;
 
   const chip = (icon: ReactNode, label: string) => (
@@ -110,6 +112,22 @@ export function ContextColumn({ goal }: { goal: { text: string | null; done: num
         {DOC_ROWS.some((row) => (DOCUMENT_KINDS as readonly string[]).includes(row.id) && isToday(ws.documents[row.id as DocumentKind]?.at)) ? <span className="live" title="Updated today"></span> : null}
         <span className="meta" style={{ color: "var(--accent)" }}>Open</span>
       </button>
+
+      {/* What people said (wave 3): Post writes from it, so it sits under the business it serves. */}
+      <a
+        href="/app/library"
+        data-testid="context-library"
+        aria-current={pathname === "/app/library" ? "page" : undefined}
+        style={{ display: "flex", alignItems: "center", gap: "8px", padding: "10px", margin: "0 0 12px", border: `1px solid ${pathname === "/app/library" ? "var(--accent)" : "var(--line)"}`, borderRadius: "10px", color: "inherit", textDecoration: "none" }}
+      >
+        <span style={{ fontSize: "13.5px", fontWeight: "500" }}>Library</span>
+        <span className="meta">{library ? `${library.total} ${library.total === 1 ? "conversation" : "conversations"}` : ""}</span>
+        {library && library.thisWeek > 0 ? (
+          <span className="meta" style={{ marginLeft: "auto", color: "var(--ok)" }}>
+            +{library.thisWeek} this week
+          </span>
+        ) : null}
+      </a>
 
       <div style={{ borderTop: "1px solid var(--line)", paddingTop: "12px", marginTop: "10px" }}>
         <div className="sec" style={{ padding: "0 6px" }}>

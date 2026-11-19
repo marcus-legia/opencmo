@@ -16,6 +16,7 @@ const PAGES: [string, string][] = [
   ["/app/writer", "Posts"],
   ["/app/studio", "Videos"],
   ["/app/sales", "Sales"],
+  ["/app/library", "Library"],
   ["/app/settings", "Settings"],
 ];
 
@@ -30,13 +31,13 @@ for (const [path, heading] of PAGES) {
   });
 }
 
-test("Brain and Library open as panes of the Context drawer over the feed", async ({ page }) => {
+test("Brain and the old Library tabs open as panes of the Context drawer over the feed", async ({ page }) => {
   await signIn(page, state().users.a);
   await page.setViewportSize({ width: 1440, height: 900 });
   for (const [from, to, title] of [
     ["/app/brain", "/app?doc=plan", "Plan and orders"],
     ["/app/brain?tab=memory", "/app?doc=learned", "What it learned"],
-    ["/app/library", "/app?doc=product", "Product"],
+    ["/app/library?tab=business", "/app?doc=product", "Product"],
     ["/app/library?tab=voice", "/app?doc=voice", "Voice"],
     ["/app/library?tab=skills", "/app?doc=skills", "Skills"],
     ["/app/library?edit=competitors", "/app?doc=competitors&edit=1", "Competitors"],
