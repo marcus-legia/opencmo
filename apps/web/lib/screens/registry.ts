@@ -75,9 +75,9 @@ export const SCREENS = {
     schema: ResearchScreenSchema,
     fixture: researchFixture,
     empty: researchEmpty,
-    // Wave 3 A6: `competitors`, released once Research (C5) shows them.
+    // Wave 3 A6: `competitors`, shown by Research (C5).
     live: ["lastRunAt", "nextRunAt", "insights", "dropped", "results", "competitors"],
-    release: ["lastRunAt", "insights", "results"],
+    release: ["lastRunAt", "insights", "results", "competitors"],
   }),
   // Drafts per platform (posts, captions, briefs for Studio) and the voice Writer reads (P3 A3).
   writer: entry({ schema: WriterScreenSchema, fixture: writerFixture, empty: writerEmpty, live: ["drafts", "voice"], release: ["drafts", "voice"] }),

@@ -35,7 +35,7 @@ open" the platform's chat; Email: Copy only; locked tabs say why: "Reply in publ
 person to Following up. "I replied" asks for the link (skippable). Following up tab with
 statuses, the nudge, and the status select. Copy through `no-ai-slop`.
 
-### - [ ] C5. Research (after A6)
+### - [x] C5. Research (after A6)
 Competitors display page: logo, site, price, offer, a recent quote, mentions this week; Add by URL (a route that reads
 the site with the existing site reader and calls `competitor_add`). Left panel logos (8 + "N more").
 

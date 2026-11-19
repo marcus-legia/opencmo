@@ -2,16 +2,19 @@ import { expect, test } from "@playwright/test";
 
 import type { Project } from "../lib/clipping-types";
 import { sidewaysOverflow, signIn, state } from "./helpers";
+import { ensureOnboarded } from "./ui-v2-seed";
 
 /**
  * Session C's v2 pages (ui-build plan U5–U8). They exist only in a build with NEXT_PUBLIC_OPENCMO_UI=v2,
  * so the default suite (flag off) skips this file and keeps testing today's pages.
  */
 test.skip(process.env.NEXT_PUBLIC_OPENCMO_UI !== "v2", "v2 pages are built only with NEXT_PUBLIC_OPENCMO_UI=v2");
+// The drawer test opens /app, which sends a founder with no documents to Setup: run alone, the spec seeds one.
+test.beforeAll(ensureOnboarded);
 
 const PAGES: [string, string][] = [
   ["/app/analytics", "This week"],
-  ["/app/research", "What works, with the link."],
+  ["/app/research", "Competitors"],
   // Post's list view (four tabs, 2026-11-19).
   ["/app/writer", "Posts"],
   ["/app/studio", "Videos"],
