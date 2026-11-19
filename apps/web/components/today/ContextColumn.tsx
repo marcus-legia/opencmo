@@ -67,7 +67,8 @@ function useKeptCompetitors(): { id: string; name: string; site: string }[] | nu
  * The Context column (redesign 2026-11-19): what Ferreto knows about the business, one card for its documents, the
  * week's goal and the competitors. A document opens the Context drawer (`?doc=`), which lists all of them.
  */
-export function ContextColumn({ goal }: { goal: { text: string | null; done: number; total: number } | null }) {
+/** `onClose`: on a phone the column is a sheet opened from the top bar (wave 4 C1); the button that folds it again. */
+export function ContextColumn({ goal, onClose }: { goal: { text: string | null; done: number; total: number } | null; onClose?: () => void }) {
   const ws = useWorkspace();
   const router = useRouter();
   const params = useSearchParams();
@@ -98,6 +99,14 @@ export function ContextColumn({ goal }: { goal: { text: string | null; done: num
 
   return (
     <aside className="left" id="td-context" aria-label="Context">
+      {onClose ? (
+        <button type="button" className="ib td-ctx-close" aria-label="Close context" onClick={onClose}>
+          <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M18 6 6 18" />
+            <path d="m6 6 12 12" />
+          </svg>
+        </button>
+      ) : null}
       <div className="sec" style={{ padding: "0 6px" }}>
         <h2>Context</h2>
         <button type="button" className="ib" aria-label="Edit context" onClick={() => openDoc("product")}>
@@ -130,7 +139,7 @@ export function ContextColumn({ goal }: { goal: { text: string | null; done: num
       {ws.summary ? (
         <>
           <p style={{ margin: "0 6px 4px", color: "var(--muted)", fontSize: "13.5px", lineHeight: "1.5", display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{ws.summary}</p>
-          <button type="button" onClick={() => openDoc("product")} style={{ border: "0", background: "transparent", color: "var(--text)", fontSize: "13px", padding: "0 6px", marginBottom: "16px", textDecoration: "underline", textUnderlineOffset: "2px" }}>
+          <button type="button" className="td-ctx-more" onClick={() => openDoc("product")} style={{ border: "0", background: "transparent", color: "var(--text)", fontSize: "13px", padding: "0 6px", marginBottom: "16px", textDecoration: "underline", textUnderlineOffset: "2px" }}>
             View more
           </button>
         </>

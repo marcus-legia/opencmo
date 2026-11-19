@@ -130,7 +130,7 @@ export function ReachPanel({ t, publicReply, onSent }: { t: Thread; publicReply:
         </section>
       ) : null}
 
-      <div role="tablist" aria-label="How to reach them" style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+      <div role="tablist" aria-label="How to reach them" className="reach-tabs" style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
         {tabs.map(([id, label, lock]) => (
           <button
             key={id}

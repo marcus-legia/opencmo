@@ -6,6 +6,7 @@
  */
 
 import { profileIdOf, profileOf } from "../cmo/platforms";
+import { REACH_LEVELS, ReachCheckSchema, reachReason } from "../cmo/reach";
 import { PLATFORM_LABEL as SALES_LABEL, SALES_PLATFORMS } from "../cmo/social/conversations";
 
 import {
@@ -403,4 +404,39 @@ export function approvalToCard(row: ApprovalRow, now = new Date()): ApprovalCard
         ? { kind: "decided_elsewhere", text: row.decided_via === "auto" ? "It went out without asking: nobody changed it in its review window." : row.decided_via === "mcp" ? "You decided this through your Claude." : "You decided this on another device." }
         : null,
   };
+}
+
+/** The columns of `opportunities` a reply card's reach is read from (RLS: the founder's own). */
+export const REACH_COLUMNS = "id, reach_level, reach";
+export type ReachRow = { id: string; reach_level: string | null; reach: unknown };
+
+/**
+ * Wave 4 B3: a reply card carries its person's reach level and one line, like Sales. `approvals` are the rows the
+ * cards were built from (a card points at its opportunity through its row); `reach` are those opportunities. A card
+ * whose opportunity is missing keeps no reach rather than a guessed one; a check that does not parse still shows the
+ * level with the plain line.
+ */
+export function withReach(cards: ApprovalCard[], approvals: Pick<ApprovalRow, "id" | "ref_kind" | "ref_id">[], reach: ReachRow[]): ApprovalCard[] {
+  const opportunityOf = new Map(approvals.filter((a) => a.ref_kind === "opportunity").map((a) => [a.id, a.ref_id]));
+  const byId = new Map(reach.map((r) => [r.id, r]));
+  return cards.map((card) => {
+    if (card.body.kind !== "reply") return card;
+    const row = byId.get(opportunityOf.get(card.id) ?? "");
+    if (!row) return card;
+    // Never checked (the scan's reach step has not run or failed): the column's default is not a verdict, so the card
+    // shows no level, as Sales shows none for that person.
+    // (`reach_level` 'reply_first' with `reach` '{}', the columns' defaults). A check saved but not readable still
+    // shows its level with the plain line.
+    const unchecked = row.reach_level === "reply_first" && (row.reach == null || (typeof row.reach === "object" && !Array.isArray(row.reach) && Object.keys(row.reach).length === 0));
+    const level = REACH_LEVELS.find((l) => l === row.reach_level);
+    if (!level || unchecked) return card;
+    const check = ReachCheckSchema.safeParse(row.reach).data ?? null;
+    const reason = clip(reachReason(level, check), 200);
+    return { ...card, body: { ...card.body, reach: { level, reason } } };
+  });
+}
+
+/** The opportunities the reply cards among `approvals` point at: what `withReach` needs read. */
+export function replyOpportunityIds(approvals: Pick<ApprovalRow, "kind" | "ref_kind" | "ref_id">[]): string[] {
+  return [...new Set(approvals.filter((a) => a.kind === "reply" && a.ref_kind === "opportunity").map((a) => a.ref_id))];
 }

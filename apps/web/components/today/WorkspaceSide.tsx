@@ -11,13 +11,13 @@ import { LEFT, useTodayColumns } from "./columns";
  * Calendar, Sales, Analytics), so what the CMO knows about the business stays in place while the centre changes.
  * The week's goal comes from the dashboard read the feed makes too (one request, shared).
  */
-export function WorkspaceSide() {
+export function WorkspaceSide({ onClose }: { onClose?: () => void }) {
   const [dash] = useScreen("dashboard");
   const sides = useTodayColumns();
   const week = dash.status === "ready" ? dash.data.week : null;
   return (
     <>
-      <ContextColumn goal={week ? { text: week.goal, done: week.deliverables.done, total: week.deliverables.total } : null} />
+      <ContextColumn onClose={onClose} goal={week ? { text: week.goal, done: week.deliverables.done, total: week.deliverables.total } : null} />
       <Sash
         label="Resize the context column"
         controls="td-context"

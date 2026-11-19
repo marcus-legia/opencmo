@@ -119,13 +119,19 @@ export function BillingV2({
                 >
                   <span style={{ width: `${usage.percent}%` }} />
                 </div>
-                <div className="meta" style={{ marginTop: "8px" }}>
+                {/* At 100% (wave 4 C2): what stopped and until when, what keeps working, the plans. Same lines as the banner. */}
+                <div className="meta" style={{ marginTop: "8px" }} data-testid={usage.paused ? "billing-usage-full" : undefined}>
                   {usage.paused
-                    ? `New scans pause until ${usage.resetsAt ? day(usage.resetsAt) : "the allowance resets"}. Your drafts and posts keep working.`
+                    ? `New scans and competitor research stop until ${usage.resetsAt ? day(usage.resetsAt) : "the allowance resets"}. The people already found, your drafts and your posts keep working.`
                     : usage.resetsAt
                       ? `Resets on ${day(usage.resetsAt)}.`
                       : "Resets each month."}
                 </div>
+                {usage.paused ? (
+                  <a href="#billing-plans" className="ghost" style={{ textDecoration: "none", marginTop: "10px" }}>
+                    See plans
+                  </a>
+                ) : null}
               </div>
             ) : null}
           </div>

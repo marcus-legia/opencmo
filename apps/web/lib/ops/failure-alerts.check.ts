@@ -54,6 +54,14 @@ async function main() {
   assert.ok(long[0]!.message.length <= 200, "a long key is cut for the issue title");
   assert.equal(long[0]!.fingerprint[3]!.length, 5000, "the fingerprint keeps the whole key, so two long keys stay two issues");
 
+  // Wave 4 B2: a failed Sales scan is a `cmo_runs` failure (`ops_failure_groups` reads every failed run, whatever its
+  // kind), so it reaches the owner like any other job. A scan where only some sources failed finishes `done`: that
+  // shows on `/api/health/cmo` instead.
+  const scan = alertEvents({ groups: [group({ source: "cmo_runs", kind: "sales_scan", key: "Sales could not read any platform. Try again in a minute." })], warnings: [] });
+  assert.equal(scan.length, 1);
+  assert.equal(scan[0]!.message, "Founder failure: CMO run · sales_scan: Sales could not read any platform. Try again in a minute.");
+  assert.deepEqual(scan[0]!.fingerprint, ["founder-failure", "cmo_runs", "sales_scan", "Sales could not read any platform. Try again in a minute."]);
+
   assert.deepEqual(alertEvents({ groups: [], warnings: [] }), [], "a quiet hour sends nothing");
   assert.deepEqual(alertEvents({} as never), [], "an answer without sections sends nothing");
 

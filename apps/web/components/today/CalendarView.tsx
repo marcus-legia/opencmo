@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import type { DragEvent } from "react";
 
+import { AllowanceBanner, FreeLockedCard, useUsageState } from "@/components/billing/UsageNotice";
 import { ApprovalCard } from "@/components/cards/ApprovalCard";
 import { ApiError, api, jsonBody } from "@/components/clipping/api";
 import { useShellState } from "@/components/shell-v2/ShellState";
@@ -78,6 +79,7 @@ function sameTimeOn(at: string, fromKey: string, toKey: string, minutesOf: (t: n
 export function CalendarView() {
   // `?from=YYYY-MM-DD` opens that week (a card's "See it in the calendar", the old Schedule screen's links).
   const asked = useSearchParams().get("from");
+  const usageState = useUsageState();
   const askedWeek = asked && /^\d{4}-\d{2}-\d{2}$/.test(asked) ? asked : null;
   const [from, setFrom] = useState<string | null>(askedWeek);
   // A link to another week while the Calendar is open (the component stays mounted) moves it there too.
@@ -148,6 +150,8 @@ export function CalendarView() {
   return (
     <div style={{ display: "flex", flexWrap: "wrap", minHeight: "calc(100vh - 48px)" }} data-testid="v2-schedule">
       <main style={{ flex: "1 1 640px", minWidth: "0", padding: "16px 20px 32px" }}>
+        <AllowanceBanner state={usageState} />
+        <FreeLockedCard state={usageState} where="post" />
         <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", marginBottom: "14px" }}>
           <button type="button" className="ib" aria-label={range === "month" ? "Previous month" : "Previous week"} onClick={() => step(-1)}>
             <svg className="i" viewBox="0 0 24 24" aria-hidden="true">

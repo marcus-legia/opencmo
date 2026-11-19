@@ -14,6 +14,7 @@ import { useSearchParams } from "next/navigation";
 import { Children, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
+import { AllowanceBanner, FreeLockedCard, useUsageState } from "@/components/billing/UsageNotice";
 import { PlanSheet } from "@/components/billing/PlanSheet";
 import { ApprovalCard, type DecideHandler } from "@/components/cards/ApprovalCard";
 import { RatingSheet } from "@/components/cards/RatingSheet";
@@ -23,6 +24,7 @@ import { useLive } from "@/components/clipping/useLive";
 import { useShellAccount } from "@/components/clipping/web/WebShell";
 import { useShellState } from "@/components/shell-v2/ShellState";
 import { useScreen } from "@/components/screens/useScreen";
+import { REACH_LEVEL_LABEL } from "@/lib/cmo/reach";
 import { isTodayPrompt } from "@/lib/cmo/today";
 import type { ApprovalCard as Card } from "@/lib/screens/approval-card";
 import { PLATFORM_LABEL } from "@/lib/screens/common";
@@ -164,7 +166,19 @@ function Row({
 
 function CardRow({ card, inv, open, onToggle, onLater, onDecide, sample }: { card: Card; inv: boolean; open: boolean; onToggle: () => void; onLater: () => void; onDecide: DecideHandler; sample: boolean }) {
   const label = kindLabel(card);
-  const meta = whenLabel(card);
+  const when = whenLabel(card);
+  // A Sales card says how far the person can be reached, as Sales does (wave 4 B3/C2): "DM ready", and why when open.
+  const reach = card.body.kind === "reply" ? (card.body.reach ?? null) : null;
+  const meta = reach ? (
+    <>
+      <span className="chip td-reach" data-testid="feed-reach-level">
+        {REACH_LEVEL_LABEL[reach.level]}
+      </span>
+      {when ? ` ${when}` : null}
+    </>
+  ) : (
+    when
+  );
   return (
     <Row
       cardId={card.id}
@@ -188,6 +202,11 @@ function CardRow({ card, inv, open, onToggle, onLater, onDecide, sample }: { car
         )
       }
     >
+      {reach ? (
+        <p className="meta" data-testid="feed-reach-reason" style={{ margin: "0 0 10px" }}>
+          <b style={{ fontWeight: "600", color: "var(--text)" }}>{REACH_LEVEL_LABEL[reach.level]}</b> · {reach.reason}
+        </p>
+      ) : null}
       {/* The real card body: its versions, text, time and every action it has (cards.css draws it as the artboard does). */}
       <ApprovalCard card={card} sample={sample} onDecide={onDecide} open headingLevel="h3" />
     </Row>
@@ -254,6 +273,7 @@ export function Feed({ email }: { email?: string | null }) {
   const { state, decideCard, reload, planSheet, closePlanSheet } = useDashboard();
   const [week, reloadWeek] = useScreen("schedule");
   const [writer, reloadWriter] = useScreen("writer");
+  const usageState = useUsageState();
   const { focusChat, openLogs, workVersion } = useShellState();
   const { userId } = useShellAccount();
   const search = useSearchParams();
@@ -513,6 +533,8 @@ export function Feed({ email }: { email?: string | null }) {
             </div>
           ) : null}
 
+          <AllowanceBanner state={usageState} />
+          <FreeLockedCard state={usageState} where="feed" />
           <div className="flow" role="group" aria-label="This week's workflow" style={{ marginBottom: "22px" }}>
             {steps.map((s, i) => (
               <span key={s.id} style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>

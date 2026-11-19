@@ -38,6 +38,11 @@ export function parseRedditSearch(json: unknown): RedditThread[] {
     .map(toThread);
 }
 
-export async function searchReddit(query: string, budget?: ScBudget): Promise<RedditThread[]> {
-  return (await redditSearch(query, budget)).map(toThread);
+/**
+ * `timeframe` (Reddit's `hour|day|week|month|year|all`): Sales asks for a recent window, most relevant first. Without
+ * one Reddit answers from all time, and on 2026-11-20 most results per query were older than Sales keeps
+ * (docs/cmo/2026-11-20-scan-quality.md). Research and the competitor finder want all time and pass none.
+ */
+export async function searchReddit(query: string, budget?: ScBudget, opts: { timeframe?: string } = {}): Promise<RedditThread[]> {
+  return (await redditSearch(query, budget, opts.timeframe ? { sort: "relevance", timeframe: opts.timeframe } : {})).map(toThread);
 }

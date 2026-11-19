@@ -162,6 +162,12 @@ function TodayFrame({ credits, plan, email, userId, pending, usage, chatLive, ch
   const [chatFolded, setChatFolded] = useState(foldsByDefault);
   const folded = foldsByDefault && chatFolded;
   const [logsOpen, setLogsOpen] = useState(false);
+  // Phone (wave 4 C1, canvas "Sales on a phone"): the Context column folds into a sheet the top bar opens.
+  const [contextOpen, setContextOpen] = useState(false);
+  const closeContext = useCallback(() => setContextOpen(false), []);
+  useEffect(() => {
+    if (contextOpen) requestAnimationFrame(() => document.querySelector<HTMLButtonElement>("#td-context .td-ctx-close")?.focus());
+  }, [contextOpen]);
   const chatColumn = useRef<HTMLElement>(null);
   const focusChat = useCallback(() => {
     setLogsOpen(false);
@@ -200,6 +206,7 @@ function TodayFrame({ credits, plan, email, userId, pending, usage, chatLive, ch
     setChatFolded(!chatMovedHere);
     chatTarget.current = null;
     setLogsOpen(false);
+    setContextOpen(false);
   }, [segment, screen.chat]);
 
   // `?logs=1` (Billing's "Open Logs") opens the drawer over the screen it lands on, then drops the flag.
@@ -213,7 +220,10 @@ function TodayFrame({ credits, plan, email, userId, pending, usage, chatLive, ch
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setChatOpen(false);
+      if (event.key === "Escape") {
+        setChatOpen(false);
+        setContextOpen(false);
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -249,12 +259,12 @@ function TodayFrame({ credits, plan, email, userId, pending, usage, chatLive, ch
     <ShellAccountContext.Provider value={{ credits: account.credits, plan: account.plan, userId: userId ?? null, refreshAccount }}>
       <ShellStateContext.Provider value={state}>
         <WorkspaceProvider>
-          <div className={`k pg-${screen.page} td-frame`} data-chat={chatOpen ? "open" : undefined} data-screen={screen.page}>
+          <div className={`k pg-${screen.page} td-frame`} data-chat={chatOpen ? "open" : undefined} data-context={contextOpen ? "open" : undefined} data-screen={screen.page}>
             {screen.top ? (
-              <TopBar variant={screen.top} usage={account.usage} email={email ?? null} logsOpen={logsOpen} onLogs={openLogs} onChat={focusChat} />
+              <TopBar variant={screen.top} usage={account.usage} email={email ?? null} logsOpen={logsOpen} onLogs={openLogs} onChat={focusChat} contextOpen={contextOpen} onContext={screen.chat === "column" ? () => setContextOpen((was) => !was) : undefined} />
             ) : null}
             <div className={screen.chat === "column" ? "cols" : "td-body"}>
-              {screen.chat === "column" ? <WorkspaceSide /> : null}
+              {screen.chat === "column" ? <WorkspaceSide onClose={closeContext} /> : null}
               {screen.view ? (
                 <div className="mid td-view" data-view={screen.view}>
                   <div className={`k pg-${screen.view}`}>{screen.legacy ? <div className="v2 td-legacy td-cardhost td-v2host">{children}</div> : children}</div>
@@ -308,6 +318,7 @@ function TodayFrame({ credits, plan, email, userId, pending, usage, chatLive, ch
               </aside>
             </div>
             {chatOpen && screen.chat === "drawer" ? <div className="td-scrim" aria-hidden="true" onClick={() => setChatOpen(false)} /> : null}
+            {contextOpen ? <div className="td-scrim td-ctx-scrim" aria-hidden="true" onClick={closeContext} /> : null}
             {logsOpen ? <LogsDrawer onClose={closeLogs} running={active.length} /> : null}
           </div>
         </WorkspaceProvider>

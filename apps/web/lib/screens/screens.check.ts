@@ -9,7 +9,7 @@
 import assert from "node:assert/strict";
 
 import { ApprovalCardSchema, CARD_KINDS, STUDIO_REF_KIND, ScheduleOptionsSchema, ScheduleSnapshotSchema, StudioSnapshotSchema } from "./approval-card";
-import { approvalToCard, type ApprovalRow } from "./cards";
+import { approvalToCard, replyOpportunityIds, withReach, type ApprovalRow } from "./cards";
 import { ALL_KINDS, SAMPLE_CARDS, SCHEDULE_SNAPSHOT, STATE_CARDS, STUDIO_SNAPSHOTS } from "./fixtures/cards";
 import { videoSteps } from "./video-steps";
 import { LOADERS } from "./load";
@@ -363,6 +363,32 @@ check("compose: one card the contract cannot carry is dropped, the rest of the q
 });
 
 // Last: a check registered after this gate could never fail the script.
+check("cards: a reply card on the Feed carries the person's reach level and its line (wave 4 B3)", () => {
+  const snap = { kind: "reply", url: "https://www.reddit.com/r/SaaS/comments/x/", community: "r/SaaS", title: "T", reply: "R", score: 70, score_parts: [] };
+  const rows = [
+    row("reply", snap, { id: "c1", department: "sales", ref_kind: "opportunity", ref_id: "o1" }),
+    row("reply", snap, { id: "c2", department: "sales", ref_kind: "opportunity", ref_id: "o2" }),
+    row("reply", snap, { id: "c3", department: "sales", ref_kind: "opportunity", ref_id: "o3" }),
+    row("post", { kind: "post", text: "One line.", alternates: [] }, { id: "c4", ref_id: "o1" }),
+  ];
+  assert.deepEqual(replyOpportunityIds(rows), ["o1", "o2", "o3"], "only reply cards' opportunities are read");
+  const check = { buyer: true, wantsNow: true, warm: false, fresh: true, dmAllowed: true, asksForTools: true, emailFound: null, reasons: ["a", "b", "c", "d", "e"] };
+  const cards = withReach(rows.map((r) => approvalToCard(r)!), rows, [
+    { id: "o1", reach_level: "dm_ready", reach: check },
+    { id: "o2", reach_level: "reply_first", reach: { broken: true } },
+    // Review of #241: the columns' defaults mean "never checked", not "reply first".
+    { id: "o3", reach_level: "reply_first", reach: {} },
+  ]);
+  for (const c of cards) ApprovalCardSchema.parse(c);
+  const reach = cards.map((c) => (c.body.kind === "reply" ? c.body.reach : "post"));
+  assert.deepEqual(reach, [
+    { level: "dm_ready", reason: "The post asks for tools or recommendations." },
+    { level: "reply_first", reason: "Reply in public first." },
+    undefined,
+    "post",
+  ]);
+});
+
 if (failures.length) {
   console.error(`screens.check: ${failures.length} failed\n  ${failures.join("\n  ")}`);
   process.exit(1);

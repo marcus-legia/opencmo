@@ -15,6 +15,7 @@ select plan(2);
 
 create temp table allowed (signature text primary key) on commit drop;
 insert into allowed values
+  ('account_delete(text)'),  -- wave 4 A2: typed email, then the existing purge
   ('account_retention()'),
   ('account_summary()'),
   ('agent_3d_hold_credits()'),
@@ -126,6 +127,7 @@ insert into allowed values
   ('competitor_add(text,text,text,text,text,text)'),  -- wave 3 A6
   ('competitor_remove(uuid)'),  -- wave 3 A6
   ('my_funnel(integer)'),  -- wave 3 A5
+  ('my_usage_state()'),  -- wave 4 A1: the founder's own usage state, read-only
   ('my_published_items(timestamp with time zone)'),
   ('normalize_capture_url(text)'),
   ('notify_settings_save(boolean,boolean)'),

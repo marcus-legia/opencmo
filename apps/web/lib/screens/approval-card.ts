@@ -9,6 +9,7 @@
 import { z } from "zod";
 
 import { profileOf } from "../cmo/platforms";
+import { REACH_LEVELS } from "../cmo/reach";
 import { SALES_PLATFORMS } from "../cmo/social/conversations";
 
 import { DepartmentSchema, PlatformSchema, QuoteSchema, SalesRuleSchema, ScorePartSchema, WhereSchema, day, iso } from "./common";
@@ -117,6 +118,12 @@ const ReplyBody = z.object({
   rule: SalesRuleSchema.optional(),
   /** Where the thread is (P6 R4, Sales finder): absent for Reddit, so cards raised before P6 parse as they did. */
   platform: z.enum(SALES_PLATFORMS).optional(),
+  /**
+   * The person's reach level and its one line (wave 4 B3), as Sales shows them. Read fresh from the opportunity when
+   * the queue loads (`withReach`), not part of what the card approves: an answer can make a person warm after the card
+   * was raised. Absent when the opportunity could not be read.
+   */
+  reach: z.object({ level: z.enum(REACH_LEVELS), reason: z.string().max(200) }).optional(),
 });
 
 const GoalBody = z.object({

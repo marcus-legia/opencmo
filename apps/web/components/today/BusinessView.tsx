@@ -18,7 +18,7 @@ const ABOUT: Record<DocumentKind, { title: string; readers: string; lede: string
   product: { title: "Product", readers: "every step", lede: "What you sell, in the words a customer would use. Sales reads it to judge fit; Post reads it so drafts never invent a feature." },
   strategy: { title: "Strategy", readers: "Sales, Post, chat", lede: "Who you sell to and where they talk. This decides what Sales looks for and what this week is for." },
   competitors: { title: "Competitors", readers: "Sales, Research", lede: "Who else they look at. Sales looks for people comparing you with each one." },
-  post_plan: { title: "Post plan", readers: "Post, Calendar", lede: "What you post about and how often. Topics come from what people said, not from guesses." },
+  post_plan: { title: "Post plan", readers: "Post, Calendar", lede: "What you post about and how often. Topics come from what people said in your Library." },
   brand: { title: "Brand", readers: "replies, posts, images", lede: "How you sound and how your images look. Replies and posts read the voice; images in Post use the look." },
 };
 
@@ -31,9 +31,9 @@ const USES: Record<string, string> = {
   where_they_ask: "Sales looks here first",
   this_week: "The planner sets it on Monday",
   topics: "From the Library",
-  voice_samples: "Replies and posts copy this, not a description of it",
+  voice_samples: "Replies and posts follow how these read",
   intro_line: "Every reply that names you",
-  avoid: "Plus the no-AI-slop rules on every draft",
+  avoid: "Plus the stock phrases every draft leaves out",
 };
 const CHANNEL_LABEL: Record<string, string> = { x: "X", linkedin: "LinkedIn", threads: "Threads" };
 
@@ -107,7 +107,7 @@ function Look({ look, name }: { look: Record<string, unknown>; name: string }) {
         {font ? <div style={{ marginTop: "8px", fontFamily: `"${font}", var(--font-sans, system-ui)` }}>{font}</div> : null}
       </Section>
       {shots.length ? (
-        <Section label="Look · product screenshots" uses="The image B2B buyers trust most">
+        <Section label="Look · product screenshots" uses="Images in Post use these">
           <Items items={shots.map((s) => s.split("/").pop() ?? s)} />
         </Section>
       ) : null}
