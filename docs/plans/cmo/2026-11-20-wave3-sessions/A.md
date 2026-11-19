@@ -79,3 +79,10 @@ competitor per week from `opportunities` text (counted in SQL view `my_competito
   entries first, up to 5 entries each, newest first. B3 writes `content_items.body.sources: PostSource[]` from these
   (A2 note). A memory-store twin that reads `mem.library` is enough for the evals; it needs the opportunity id, so
   the memory Library may key lines by url and look the id up in `opps`.
+
+- **From B (B6, re-reads; with A3):** `checkReply` now returns `answeredBack` and reads Threads. Please, in SQL:
+  `cmo_reply_outcomes_due` returns Threads too (`p.platform in ('reddit', 'hn', 'threads')`) and gives the new
+  `reply_url` as `outcome_url` when set (`coalesce(p.reply_url, o.outcome_url)`); `saveReplyOutcome` takes an
+  optional `answeredBack` (or SQL reads `p_replies > 0` on a `found` outcome) and sets `person_status =
+  'answered_back'`, `status_at = now()` when the person is still `found` or `replied` (never moving a later status
+  back). The memory store does the same, so the check and the evals see it.
