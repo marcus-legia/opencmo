@@ -176,6 +176,12 @@ export type PlanItem = { department: "post" | "sales" | "video"; platform: strin
 
 export type Documents = Partial<Record<DocumentKind, Record<string, unknown>>>;
 
+/**
+ * A Library conversation a post was written from (wave 3 contract). Stored on content items written from the Library
+ * and shown as "Based on N conversations" by its summary, never the thread's title.
+ */
+export type PostSource = { opportunityId: string; summary: string; platform: SalesPlatform; community: string };
+
 /** One part of an opportunity's score: the number and the quote that earned it (shown in the Sales card's drawer). */
 export type ScorePart = { label: "Pain" | "Fit" | "Timing" | "Reach" | "Evidence"; score: number; max: number; evidence: string };
 

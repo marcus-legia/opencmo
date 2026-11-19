@@ -10,7 +10,7 @@ blocks for Library and Research (`lib/screens/load.ts`, new `lib/screens/library
 
 ## Tasks
 
-### - [ ] A1. Contract (push first)
+### - [x] A1. Contract (push first)
 Create `lib/cmo/library.ts` and `lib/cmo/reach.ts` with the plan's types and zod schemas, `PostSource` in
 `lib/cmo/jobs/types.ts`. A `reachLevel(check)` helper with its check: email ready needs DM ready + `emailFound` +
 warm; DM ready needs buyer, wants now, fresh, `dmAllowed` and (warm or the post asks for tools). Commit and push.
