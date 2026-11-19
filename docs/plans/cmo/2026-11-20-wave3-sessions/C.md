@@ -29,7 +29,7 @@ Five documents in the drawer's list: Product, Strategy (with Where they ask, Thi
 Brand (Voice: paste samples, intro line, words to avoid; Look: colours, font, logo, screenshots, preview). "Read my
 website again" asks before overwriting edits.
 
-### - [ ] C4. Sales: reach out, Following up, I replied (after A3, B1, B2)
+### - [x] C4. Sales: reach out, Following up, I replied (after A3, B1, B2)
 Per person: "Ready to reach out" with the five checks and their reasons; tabs Public reply · DM · Email (DM: "Copy and
 open" the platform's chat; Email: Copy only; locked tabs say why: "Reply in public first"); "I sent it" moves the
 person to Following up. "I replied" asks for the link (skippable). Following up tab with

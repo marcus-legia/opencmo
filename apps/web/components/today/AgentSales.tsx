@@ -15,10 +15,11 @@ import { PLATFORM_LABEL, SALES_PLATFORMS, type SalesPlatform } from "@/lib/cmo/s
 import type { SalesScreen } from "@/lib/screens/sales";
 import { createClient } from "@/lib/supabase/client";
 
+import { FollowingUp, ReachPanel, ReplyLink } from "./SalesReach";
 import { useWorkspace } from "./workspace";
 
 type Thread = SalesScreen["threads"][number];
-type Tab = "threads" | "runs" | "settings";
+type Tab = "threads" | "following" | "runs" | "settings";
 
 const DISMISS_REASONS = ["Not our customer", "Already solved", "Too old", "Wrong community"] as const;
 
@@ -331,7 +332,7 @@ function NoOneAsked({ scan, onEdit }: { scan: NonNullable<SalesScreen["lastScan"
   );
 }
 
-function ThreadRow({ t, free, open, onToggle, onPlan, onDecide }: { t: Thread; free: boolean; open: boolean; onToggle: () => void; onPlan: (action: string) => void; onDecide: (t: Thread, action: "replied" | "dismissed", reason?: string, text?: string) => Promise<void> }) {
+function ThreadRow({ t, free, open, onToggle, onPlan, onDecide, onSent }: { t: Thread; free: boolean; open: boolean; onToggle: () => void; onPlan: (action: string) => void; onDecide: (t: Thread, action: "replied" | "dismissed", reason?: string, text?: string) => Promise<void>; onSent: (t: Thread) => Promise<void> }) {
   const [draft, setDraft] = useState(t.draft ?? "");
   const [copied, setCopied] = useState(false);
   const [dismissing, setDismissing] = useState(false);
@@ -408,6 +409,24 @@ function ThreadRow({ t, free, open, onToggle, onPlan, onDecide }: { t: Thread; f
             </div>
           ) : t.draft === null ? (
             <div className="meta">No reply yet. Write the replies above, or reply in your own words and mark it replied.</div>
+          ) : !done && t.person ? (
+            <ReachPanel
+              t={t}
+              onSent={() => onSent(t)}
+              publicReply={
+                <div>
+                  <label className="meta" htmlFor={`reply-${t.id}`} style={{ display: "block", marginBottom: "6px" }}>
+                    Draft reply
+                  </label>
+                  <textarea id={`reply-${t.id}`} className="reply" value={draft} onChange={(e) => setDraft(e.target.value)} rows={4} style={{ width: "100%", resize: "vertical", font: "inherit", fontSize: "15px", lineHeight: "1.55", color: "var(--text)" }} />
+                  {t.draftChecks ? (
+                    <div className="meta" style={{ marginTop: "6px" }}>
+                      {t.draftChecks}
+                    </div>
+                  ) : null}
+                </div>
+              }
+            />
           ) : (
             <div>
               <label className="meta" htmlFor={`reply-${t.id}`} style={{ display: "block", marginBottom: "6px" }}>
@@ -454,7 +473,7 @@ function ThreadRow({ t, free, open, onToggle, onPlan, onDecide }: { t: Thread; f
                 </a>
               ) : (
                 <button type="button" className="ghost" disabled={busy} onClick={() => void run("replied")}>
-                  Mark replied
+                  I replied
                 </button>
               )}
               {!skipped && t.draft !== null ? (
@@ -552,12 +571,30 @@ export function AgentSales() {
     [refreshScan],
   );
 
-  async function decide(t: Thread, action: "replied" | "dismissed", reason?: string, text?: string) {
+  // "I replied" then asks where (canvas board Replied); "I sent it" on a DM or an email does not: there is no link.
+  const [askLink, setAskLink] = useState<Thread | null>(null);
+  const setPerson = (id: string, change: Partial<NonNullable<Thread["person"]>>) =>
+    setThreads((all) => (all ?? []).map((x) => (x.id === id && x.person ? { ...x, person: { ...x.person, ...change } } : x)));
+
+  async function decide(t: Thread, action: "replied" | "dismissed", reason?: string, text?: string, ask = true) {
     setError(null);
     try {
       // Sample threads change only in the browser; live ones go through the ownership-checking RPC.
       if (live) await api(`/cmo/opportunities/${encodeURIComponent(t.id)}`, jsonBody(action === "replied" ? { action, ...(text ? { text } : {}) } : { action, reason }));
-      setThreads((all) => (all ?? []).map((x) => (x.id === t.id ? { ...x, status: action, ...(text ? { draft: text } : {}) } : x)));
+      setThreads((all) =>
+        (all ?? []).map((x) =>
+          x.id === t.id
+            ? {
+                ...x,
+                status: action,
+                ...(text ? { draft: text } : {}),
+                // SQL moves a person found to replied with the decision (the people_reach trigger).
+                ...(action === "replied" && x.person && x.person.status === "found" ? { person: { ...x.person, status: "replied" as const, repliedAt: new Date().toISOString(), statusAt: new Date().toISOString() } } : {}),
+              }
+            : x,
+        ),
+      );
+      if (action === "replied" && ask) setAskLink(t);
       setWeek((w) => (w ? (action === "replied" ? { ...w, replied: w.replied + 1 } : { ...w, dismissed: w.dismissed + 1 }) : w));
       setOpen((threads ?? []).find((x) => x.id !== t.id && x.status === "open")?.id ?? null);
     } catch (err) {
@@ -566,6 +603,7 @@ export function AgentSales() {
   }
 
   const list = threads ?? [];
+  const following = list.filter((t) => t.status === "replied" && t.person && t.person.status !== "found" && t.person.status !== "not_interested").length;
   const worth = list.filter((t) => t.status === "open" && t.rule.kind !== "skipped");
   const below = list.length - worth.length;
   const lastScan = runs[0]?.at ?? null;
@@ -635,12 +673,14 @@ export function AgentSales() {
           {(
             [
               ["threads", "Threads"],
+              ["following", "Following up"],
               ["runs", "Runs"],
               ["settings", "Settings"],
             ] as const
           ).map(([id, labelText]) => (
             <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)}>
               {labelText}
+              {id === "following" && following > 0 ? ` · ${following}` : ""}
             </button>
           ))}
         </div>
@@ -657,6 +697,19 @@ export function AgentSales() {
           </div>
         ) : null}
 
+        {tab === "threads" && askLink ? (
+          <div style={{ marginTop: "14px" }}>
+            <ReplyLink
+              t={askLink}
+              live={Boolean(live)}
+              onDone={(url) => {
+                if (url) setPerson(askLink.id, { replyUrl: url });
+                setAskLink(null);
+              }}
+            />
+          </div>
+        ) : null}
+        {tab === "following" && data ? <FollowingUp threads={list} live={Boolean(live)} onStatus={(id, status) => setPerson(id, { status, statusAt: new Date().toISOString() })} /> : null}
         {tab === "threads" && data ? (
           <>
             <div style={{ display: list.length === 0 && data.lastScan?.verdict === "none" ? "none" : "flex", alignItems: "center", gap: "8px", margin: "14px 0 10px", flexWrap: "wrap" }}>
@@ -675,7 +728,7 @@ export function AgentSales() {
             {list.length === 0 && data.lastScan?.verdict !== "none" ? <div className="meta">No threads yet. Sales scans the communities your customers use and scores what it finds.</div> : null}
             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }} role={list.length ? "list" : undefined} aria-label={list.length ? "Threads" : undefined}>
               {list.map((t) => (
-                <ThreadRow key={t.id} t={t} free={free} open={open === t.id} onToggle={() => setOpen(open === t.id ? null : t.id)} onPlan={setPlanFor} onDecide={decide} />
+                <ThreadRow key={t.id} t={t} free={free} open={open === t.id} onToggle={() => setOpen(open === t.id ? null : t.id)} onPlan={setPlanFor} onDecide={decide} onSent={(x) => decide(x, "replied", undefined, undefined, false)} />
               ))}
             </div>
           </>
