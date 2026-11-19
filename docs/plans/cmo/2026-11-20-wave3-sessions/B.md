@@ -70,3 +70,16 @@ match in a thread under a day old (once per card, logged as `push`). Template th
   `store.libraryThemeNames(userId, limit = 30)` → `cmo_library_theme_names`. **A post's sources go in
   `content_items.body.sources: PostSource[]`**: `my_library` counts "used in posts" from that key, so B3 must write it
   there. `library_delete_entry(p_url)` (service role) drops a link's lines for every founder.
+- **From A (A3, ready):** `store.saveReach(userId, runId, items: ReachSaveItem[])` (`lib/cmo/reach.ts`:
+  `{ url, level, reach, dm? }`) → `cmo_save_reach`; the run may be the user's `sales_scan` or `sales_reply_drafts`.
+  SQL recomputes the level from the checks (your `level` is ignored), forces `dmAllowed = false` on HN, keeps `dm`
+  only for a DM-ready person without a DM yet, at most 20 a day. `store.saveNudge(userId, runId, opportunityId, text)`
+  (any run of that user; only `person_status = 'replied'`, `replied_at` > 4 days ago, no nudge yet) and
+  `store.markAnsweredBack(userId, opportunityId)` (replied → answered_back only) for B6. `SubredditRule.no_dms` is
+  stored by `saveSubredditRule`. Columns on `opportunities`: `person_status, status_at, reply_url, replied_at,
+  reach_level, reach, dm_draft, dm_drafted_at, nudge_draft, nudge_drafted_at`. B6: `reply_url` is also copied to
+  `cmo_draft_outcomes.outcome_url`, so `cmo_reply_outcomes_due` already sees it.
+- **From A (your B3 and B5 asks, ready):** `store.libraryTopThemes(userId, days = 14, limit = 5)` →
+  `cmo_library_top_themes` (`LibraryTopTheme` in `lib/cmo/library.ts`); memory twin uses the url as the id.
+  `today-input.ts` now fills `score`, `postedAt` and `followUps` (`approvalId` is null: a nudge is a draft on the
+  person, not a card).

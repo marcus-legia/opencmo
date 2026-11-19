@@ -64,3 +64,11 @@ Specs for Library, post sources, reach out and I replied, Following up, Research
   newest post first)), most quoted first, and `source` (the `?source=reddit|hn|facebook|threads` filter, null for all).
   Not in `release` yet: add them when C1 shows them. Fixtures carry one sample theme. Direct reads: `library_themes`,
   `library_entries` (select, own rows). RPC for founders: `my_library(p_source text default null)`.
+- **From A (A3, ready):** founder RPCs: `opportunity_mark_replied(p_id, p_url)` ("I replied" with the reply's
+  link; the link must be on the thread's site — Reddit under the same thread, HN item, Facebook same group, a Threads
+  post; it also marks a card still in review replied; errors "Paste the link to your reply in this thread.",
+  "You dismissed this conversation.") and `opportunity_set_status(p_id, p_status)` (`PERSON_STATUSES`; anything but
+  found / not_interested needs the reply first: "Mark that you replied first."). Both return the opportunity row.
+  Columns to read (select own rows): `person_status, status_at, reply_url, replied_at, reach_level` (`ReachLevel`),
+  `reach` (`ReachCheck` JSON, `reasons` for the lock line), `dm_draft, nudge_draft`. The old `opportunity_reply_url`
+  still works. The Sales loader block is yours (A only owns the Library and Research blocks).
