@@ -298,6 +298,50 @@ function places(list: SalesPlatform[]): string {
  * The scan's verdict when it found no one (free-scan plan B3): a plain answer about the product's fit, with what it
  * searched and where, so the founder can judge the search. Not an error and not a paywall push.
  */
+/**
+ * Wave 3 (canvas "Scan problems"): what Sales says while a paid account's first scan runs, and when a scan could not do
+ * its work. Each says what happened and the one thing the founder can do; none promises anything we do not check.
+ */
+function WhileYouWait() {
+  return (
+    <section className="card" data-testid="sales-while-you-wait" style={{ marginTop: "14px", display: "flex", flexDirection: "column", gap: "8px" }}>
+      <b>Your first scan is running. It takes a few minutes.</b>
+      <div className="meta">While you wait:</div>
+      <ul style={{ margin: "0", paddingLeft: "18px", fontSize: "14px", display: "flex", flexDirection: "column", gap: "4px" }}>
+        <li>
+          <a href="/app/business?d=brand">Paste a few things you wrote</a>: replies and posts follow how you write.
+        </li>
+        <li>
+          <a href="/app/settings#settings-connected-accounts">Connect X or LinkedIn</a> to schedule the posts you approve.
+        </li>
+        <li>
+          <a href="/app/settings#settings-tracking">Get your tracking links</a>, so sign-ups from your replies can be counted.
+        </li>
+      </ul>
+    </section>
+  );
+}
+
+function ScanProblem({ testId, title, detail, action }: { testId: string; title: string; detail: string; action?: { label: string; href?: string; onClick?: () => void } }) {
+  return (
+    <div className="card" role="status" data-testid={testId} style={{ marginTop: "14px", display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+      <div style={{ flex: "1 1 260px", minWidth: "0" }}>
+        <b>{title}</b>
+        <div className="meta">{detail}</div>
+      </div>
+      {action?.href ? (
+        <a href={action.href} className="ghost" style={{ textDecoration: "none" }}>
+          {action.label}
+        </a>
+      ) : action?.onClick ? (
+        <button type="button" className="ghost" onClick={action.onClick}>
+          {action.label}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 function NoOneAsked({ scan, onEdit }: { scan: NonNullable<SalesScreen["lastScan"]>; onEdit: () => void }) {
   const answered = scan.platforms.filter((p) => !scan.failed.includes(p));
   return (
@@ -527,6 +571,23 @@ export function AgentSales() {
   }, []);
   useEffect(loadRuns, [loadRuns]);
 
+  // Wave 3 "Scan problems", read once: the newest scan (a failed one is not followed live) and whether Sales has a
+  // Strategy to know who to look for.
+  const [lastRun, setLastRun] = useState<{ status: string; error: string | null; at: string } | null>(null);
+  const [noStrategy, setNoStrategy] = useState(false);
+  useEffect(() => {
+    const db = createClient();
+    void db.from("cmo_runs").select("status, error, created_at").eq("kind", "sales_scan").order("created_at", { ascending: false }).limit(1).maybeSingle()
+      .then(({ data }) => {
+        const row = data as { status: string; error: string | null; created_at: string } | null;
+        if (row) setLastRun({ status: row.status, error: row.error, at: row.created_at });
+      });
+    void db.from("marketing_documents_latest").select("kind").eq("kind", "strategy").limit(1)
+      .then(({ data, error }) => {
+        if (!error && (data ?? []).length === 0) setNoStrategy(true);
+      });
+  }, []);
+
   // The scan being followed. Realtime (with useLive's 5-second fallback poll) re-reads it under RLS; the payload is never
   // trusted. When it finishes, the threads and the runs are read again, so new threads show without a page reload.
   const [scan, setScan] = useState<Scan | null>(null);
@@ -655,6 +716,30 @@ export function AgentSales() {
           <ScanNow scanning={scanActive(scan) && scan.kind === "sales_scan"} paused={paused !== null} platforms={data?.settings.platforms} free={free} freeLeft={freeLeft} onPlan={setPlanFor} onStarted={startedScan} />
         </div>
         {scan ? <ScanProgress scan={scan} onClose={() => setScan(null)} /> : null}
+        {data && !free && !data.lastScan && scanActive(scan) && scan.kind === "sales_scan" ? <WhileYouWait /> : null}
+        {noStrategy ? (
+          <ScanProblem
+            testId="sales-not-set-up"
+            title="Sales does not know who to look for yet"
+            detail="It reads your Strategy: who your customers are and the problems they write about. Add your website or fill in the Strategy, then scan."
+            action={{ label: "Open Your business", href: "/app/business?d=strategy" }}
+          />
+        ) : null}
+        {!scanActive(scan) && lastRun?.status === "failed" && (!data?.lastScan || Date.parse(lastRun.at) > Date.parse(data.lastScan.at)) ? (
+          <ScanProblem
+            testId="sales-scan-failed"
+            title="The last scan did not finish"
+            detail={`${lastRun.error ?? "Something went wrong."} The people found before are still here. Scan again when you are ready.`}
+          />
+        ) : null}
+        {!scanActive(scan) && data?.lastScan && data.lastScan.verdict !== "none" && data.lastScan.failed.length ? (
+          <ScanProblem
+            testId="sales-source-down"
+            title={`${places(data.lastScan.failed)} did not answer in the last scan`}
+            detail={`The other places were read. The next scan tries ${data.lastScan.failed.length === 1 ? "it" : "them"} again.`}
+            action={{ label: "Where Sales looks", onClick: openSettings }}
+          />
+        ) : null}
         {paused ? (
           <div className="card" role="status" data-testid="sales-paused" style={{ marginTop: "14px", display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
             <div style={{ flex: "1 1 260px", minWidth: "0" }}>

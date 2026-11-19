@@ -19,6 +19,7 @@ import { isSample, useScreen } from "../useScreen";
 import { ACCOUNTS_PANEL_ID, AccountsPanel } from "./AccountsPanel";
 import { NotifyPanel } from "./NotifyPanel";
 import { SalesScansPanel } from "./SalesScansPanel";
+import { TrackingPanel } from "./TrackingPanel";
 
 
 function zones(current: string): string[] {
@@ -184,6 +185,7 @@ function SettingsBody({ data, live }: { data: Data; live: Record<keyof Data, boo
     <>
       <AccountsPanel accounts={data.accounts} live={live.accounts} />
       <SalesScansPanel />
+      <TrackingPanel />
 
       <div className="scr-settings-grid">
         <Panel id="settings-your-cmo" title="Your CMO" className="scr-settings-cmo">
