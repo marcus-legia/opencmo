@@ -52,4 +52,15 @@ competitor per week from `opportunities` text (counted in SQL view `my_competito
 
 ## Requests
 
-(none yet)
+- **From B (for A2/A3, what B1's scan sends):** `cmo_save_opportunities` returns a count, not ids, so the scan cannot
+  know an opportunity's id. Please key the items of `cmo_save_library` and `cmo_save_reach` by the thread's `url`
+  (SQL finds the opportunity of `p_user` with that URL, saved by `p_run`; an unknown URL is skipped, not an error).
+  Item shapes B1 will send, as `Store` methods (`types.ts`, `store.ts`, `memory-store.ts`):
+  - `saveLibrary(userId, runId, items: { url, summary, theme, quotes: LibraryQuote[] }[]): Promise<number>`: `theme`
+    is a name (≤ 80 chars); SQL reuses the user's theme with that name (case-insensitive) or creates it.
+  - `libraryThemeNames(userId, limit = 30): Promise<string[]>`: the user's theme names, most used first, so the
+    scoring prompt can reuse one.
+  - `saveReach(userId, runId, items: { url, level: ReachLevel, reach: ReachCheck }[]): Promise<number>`.
+  - On the Reddit rules cache (`subreddit_rules`, `SubredditRule`): one more field, `no_dms boolean` (default false),
+    saved by `saveSubredditRule`. The rules reader already reads each community; it will also say when the rules forbid
+    DMs or soliciting, so `dmAllowed` reads the community's rule as the plan asks.
