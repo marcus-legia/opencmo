@@ -3855,10 +3855,10 @@ $$;
 
 
 --
--- Name: cmo_apply_onboarding_answers(uuid, boolean); Type: FUNCTION; Schema: public; Owner: -
+-- Name: cmo_apply_onboarding_answers(uuid, boolean, boolean); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.cmo_apply_onboarding_answers(p_user uuid, p_handle_given boolean DEFAULT false) RETURNS void
+CREATE FUNCTION public.cmo_apply_onboarding_answers(p_user uuid, p_handle_given boolean DEFAULT false, p_sells_given boolean DEFAULT false) RETURNS void
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
@@ -3880,6 +3880,17 @@ begin
         or (p_handle_given and lower(regexp_replace(btrim(v_doc.body->>'x_handle'), '^@', '')) <> lower(v_profile.x_handle))) then
       insert into public.marketing_documents (user_id, kind, version, body, created_by)
       values (p_user, 'product', v_doc.version + 1, v_doc.body || jsonb_build_object('x_handle', '@' || v_profile.x_handle), 'user');
+    end if;
+  end if;
+
+  -- "Who do you sell to?" in the founder's words: it replaces the website's guess at the ideal customer (a Strategy the
+  -- agent wrote), or any icp when the founder answers now; a later edit of their own is not overwritten by a re-apply.
+  if v_profile.sells_to is not null then
+    perform pg_advisory_xact_lock(hashtextextended(p_user::text || ':doc:strategy', 1713));
+    select * into v_doc from public.marketing_documents where user_id = p_user and kind = 'strategy' order by version desc limit 1;
+    if found and (p_sells_given or v_doc.created_by = 'agent') and v_doc.body->>'icp' is distinct from v_profile.sells_to then
+      insert into public.marketing_documents (user_id, kind, version, body, created_by)
+      values (p_user, 'strategy', v_doc.version + 1, v_doc.body || jsonb_build_object('icp', v_profile.sells_to), 'user');
     end if;
   end if;
 
@@ -5125,9 +5136,10 @@ declare
   v_platforms text[];
   v_heard text;
   v_note text;
+  v_sells text;
 begin
   if p_answers is null or jsonb_typeof(p_answers) <> 'object' or octet_length(p_answers::text) > 1024
-     or exists (select 1 from jsonb_object_keys(p_answers) k where k not in ('x_handle', 'platforms', 'heard_from', 'heard_from_note')) then
+     or exists (select 1 from jsonb_object_keys(p_answers) k where k not in ('x_handle', 'platforms', 'heard_from', 'heard_from_note', 'sells_to')) then
     raise exception 'These answers are not valid.' using errcode = '22023';
   end if;
 
@@ -5155,15 +5167,22 @@ begin
   elsif p_answers ? 'heard_from_note' then
     raise exception 'These answers are not valid.' using errcode = '22023';
   end if;
+  if p_answers ? 'sells_to' then
+    v_sells := btrim(regexp_replace(coalesce(p_answers->>'sells_to', ''), '\s+', ' ', 'g'));
+    if jsonb_typeof(p_answers->'sells_to') <> 'string' or char_length(v_sells) not between 1 and 160 then
+      raise exception 'Say who you sell to in 1 to 160 characters.' using errcode = '22023';
+    end if;
+  end if;
 
   update public.profiles set
     x_handle = coalesce(v_handle, x_handle),
     post_platforms = coalesce(v_platforms, post_platforms),
     heard_from = coalesce(v_heard, heard_from),
-    heard_from_note = case when v_heard is not null then v_note else heard_from_note end
+    heard_from_note = case when v_heard is not null then v_note else heard_from_note end,
+    sells_to = coalesce(v_sells, sells_to)
   where id = v_user;
 
-  perform public.cmo_apply_onboarding_answers(v_user, v_handle is not null);
+  perform public.cmo_apply_onboarding_answers(v_user, v_handle is not null, v_sells is not null);
 end;
 $_$;
 
@@ -19358,6 +19377,7 @@ CREATE TABLE public.profiles (
     posting_plan jsonb,
     autopilot_paused boolean DEFAULT false NOT NULL,
     digest_days text DEFAULT 'weekdays'::text NOT NULL,
+    sells_to text,
     CONSTRAINT profiles_autopilot_hours_check CHECK ((autopilot_hours = ANY (ARRAY[6, 12, 24]))),
     CONSTRAINT profiles_autopilot_note_check CHECK ((char_length(autopilot_note) <= 200)),
     CONSTRAINT profiles_autopilot_platforms_check CHECK ((autopilot_platforms <@ ARRAY['x'::text, 'threads'::text, 'linkedin'::text])),
@@ -19366,6 +19386,7 @@ CREATE TABLE public.profiles (
     CONSTRAINT profiles_heard_from_check CHECK (((heard_from IS NULL) OR (heard_from = ANY (ARRAY['search'::text, 'x'::text, 'reddit'::text, 'linkedin'::text, 'youtube'::text, 'ai_assistant'::text, 'friend'::text, 'newsletter'::text, 'other'::text])))),
     CONSTRAINT profiles_heard_from_note_check CHECK (((heard_from_note IS NULL) OR (char_length(heard_from_note) <= 100))),
     CONSTRAINT profiles_post_platforms_check CHECK (((post_platforms IS NULL) OR (((cardinality(post_platforms) >= 1) AND (cardinality(post_platforms) <= 3)) AND (post_platforms <@ ARRAY['x'::text, 'threads'::text, 'linkedin'::text])))),
+    CONSTRAINT profiles_sells_to_check CHECK (((sells_to IS NULL) OR ((char_length(sells_to) >= 1) AND (char_length(sells_to) <= 160)))),
     CONSTRAINT profiles_timezone_check CHECK (((char_length(timezone) >= 1) AND (char_length(timezone) <= 64))),
     CONSTRAINT profiles_timezone_source_check CHECK ((timezone_source = ANY (ARRAY['default'::text, 'browser'::text, 'founder'::text]))),
     CONSTRAINT profiles_weekly_credit_budget_check CHECK (((weekly_credit_budget >= 0) AND (weekly_credit_budget <= 10000))),
