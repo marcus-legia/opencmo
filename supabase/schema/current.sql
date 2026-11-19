@@ -10086,6 +10086,43 @@ $$;
 
 
 --
+-- Name: my_funnel(integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.my_funnel(p_days integer DEFAULT 7) RETURNS TABLE(source text, found integer, replied integer, answered_back integer, signed_up integer)
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_since timestamptz;
+begin
+  if p_days is null or p_days not between 1 and 90 then
+    raise exception 'Pick 1 to 90 days.' using errcode = '22023';
+  end if;
+  v_since := now() - make_interval(days => p_days);
+  return query
+  with o as (
+    select x.platform, x.created_at, x.replied_at, x.status_at, x.person_status
+    from public.opportunities x where x.user_id = v_user
+      and (x.created_at > v_since or x.replied_at > v_since or x.status_at > v_since)
+  ), counted as (
+    select o.platform,
+      count(*) filter (where o.created_at > v_since)::integer f,
+      count(*) filter (where o.replied_at > v_since)::integer r,
+      count(*) filter (where o.status_at > v_since and o.person_status in ('answered_back', 'talking', 'signed_up', 'customer'))::integer a,
+      count(*) filter (where o.status_at > v_since and o.person_status in ('signed_up', 'customer'))::integer s
+    from o group by rollup (o.platform)
+  )
+  select coalesce(c.platform, 'all'), coalesce(c.f, 0), coalesce(c.r, 0), coalesce(c.a, 0), coalesce(c.s, 0)
+  from (select * from counted union all
+        select null, 0, 0, 0, 0 where not exists (select 1 from counted)) c
+  order by c.platform is not null, array_position(array['reddit', 'hn', 'facebook', 'threads'], c.platform);
+end;
+$$;
+
+
+--
 -- Name: my_library(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -14555,6 +14592,8 @@ CREATE TABLE public.sales_settings (
     co_occurrence jsonb DEFAULT '[]'::jsonb NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     platforms text[] DEFAULT '{reddit,hn,facebook,threads}'::text[] NOT NULL,
+    cadence text DEFAULT 'mwf'::text NOT NULL,
+    CONSTRAINT sales_settings_cadence_check CHECK ((cadence = ANY (ARRAY['mwf'::text, 'weekdays'::text, 'monday'::text]))),
     CONSTRAINT sales_settings_co_occurrence_check CHECK (((jsonb_typeof(co_occurrence) = 'array'::text) AND (jsonb_array_length(co_occurrence) <= 20) AND (octet_length((co_occurrence)::text) <= 4096))),
     CONSTRAINT sales_settings_excluded_subreddits_check CHECK ((cardinality(excluded_subreddits) <= 50)),
     CONSTRAINT sales_settings_platforms_check CHECK ((((cardinality(platforms) >= 1) AND (cardinality(platforms) <= 4)) AND (platforms <@ ARRAY['reddit'::text, 'hn'::text, 'facebook'::text, 'threads'::text])))
@@ -14562,12 +14601,12 @@ CREATE TABLE public.sales_settings (
 
 
 --
--- Name: sales_settings_save(text[], jsonb, text[]); Type: FUNCTION; Schema: public; Owner: -
+-- Name: sales_settings_save(text[], jsonb, text[], text); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.sales_settings_save(p_excluded text[], p_pairs jsonb, p_platforms text[] DEFAULT NULL::text[]) RETURNS public.sales_settings
+CREATE FUNCTION public.sales_settings_save(p_excluded text[], p_pairs jsonb, p_platforms text[] DEFAULT NULL::text[], p_cadence text DEFAULT NULL::text) RETURNS public.sales_settings
     LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public'
+    SET search_path TO ''
     AS $_$
 declare
   v_user uuid := public.require_user();
@@ -14615,11 +14654,16 @@ begin
       raise exception 'Sales can look on Reddit, Hacker News, Facebook groups and Threads.' using errcode = '22023';
     end if;
   end if;
-  insert into public.sales_settings (user_id, excluded_subreddits, co_occurrence, platforms, updated_at)
-  values (v_user, v_excluded, v_pairs, coalesce(v_platforms, v_all), now())
+  -- Null keeps the saved cadence, as with the platforms.
+  if p_cadence is not null and p_cadence not in ('mwf', 'weekdays', 'monday') then
+    raise exception 'Scan on Monday, Wednesday and Friday, on weekdays, or on Mondays.' using errcode = '22023';
+  end if;
+  insert into public.sales_settings (user_id, excluded_subreddits, co_occurrence, platforms, cadence, updated_at)
+  values (v_user, v_excluded, v_pairs, coalesce(v_platforms, v_all), coalesce(p_cadence, 'mwf'), now())
   on conflict (user_id) do update
     set excluded_subreddits = excluded.excluded_subreddits, co_occurrence = excluded.co_occurrence,
-        platforms = coalesce(v_platforms, public.sales_settings.platforms), updated_at = now()
+        platforms = coalesce(v_platforms, public.sales_settings.platforms),
+        cadence = coalesce(p_cadence, public.sales_settings.cadence), updated_at = now()
   returning * into v_row;
   return v_row;
 end;

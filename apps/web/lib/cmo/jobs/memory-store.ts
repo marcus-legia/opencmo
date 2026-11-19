@@ -42,7 +42,7 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
   /** URLs of cards the founder already decided (replied or dismissed): no reply is written for them. */
   const decided = new Set<string>();
   const rules = new Map<string, SubredditRule>();
-  const salesSettings: SalesSettings = { excluded: [], pairs: [], platforms: [...SALES_PLATFORMS] };
+  const salesSettings: SalesSettings = { excluded: [], pairs: [], platforms: [...SALES_PLATFORMS], cadence: "mwf" };
   const mentions = { used: 0 };
   /** The account's plan (`cmo_paid`); checks flip it to run a free scan. */
   const account = { paid: true };

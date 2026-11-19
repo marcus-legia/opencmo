@@ -40,7 +40,7 @@ warm; DM ready needs buyer, wants now, fresh, `dmAllowed` and (warm or the post 
   migration of `marketing_documents.kind`.
 - pgTAP: the migration keeps every old document readable.
 
-### - [ ] A5. Scan cadence and the funnel
+### - [x] A5. Scan cadence and the funnel
 - `sales_settings.cadence` (`mwf` default, `weekdays`, `monday`) with `sales_settings_save` extended.
 - RPC `my_funnel(p_days int default 7)`: found, replied, answered back, signed up, by source; reads `opportunities`
   statuses and `cmo_draft_outcomes`.

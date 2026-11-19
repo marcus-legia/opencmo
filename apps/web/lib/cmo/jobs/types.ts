@@ -282,7 +282,10 @@ export type SalesScanOutput = {
 
 /** The founder's Sales settings (`sales_settings`). */
 /** The founder's Sales settings; `platforms` are the places Sales may look (at least one, `sales_settings.platforms`). */
-export type SalesSettings = { excluded: string[]; pairs: [string, string][]; platforms: SalesPlatform[] };
+/** Wave 3 A5: when Sales scans on its own (Settings › Sales scans). The store always fills it; missing means `mwf`. */
+export const SCAN_CADENCES = ["mwf", "weekdays", "monday"] as const;
+export type ScanCadence = (typeof SCAN_CADENCES)[number];
+export type SalesSettings = { excluded: string[]; pairs: [string, string][]; platforms: SalesPlatform[]; cadence?: ScanCadence };
 
 /** Every read and write of a CMO job goes through here: Supabase (service role) for real, memory in tests. */
 export interface CmoStore {

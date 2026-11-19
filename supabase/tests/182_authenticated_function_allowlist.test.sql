@@ -123,6 +123,7 @@ insert into allowed values
   ('mcp_grant_record(text)'),
   ('mcp_grant_revoke(text)'),
   ('my_library(text)'),  -- wave 3 A2
+  ('my_funnel(integer)'),  -- wave 3 A5
   ('my_published_items(timestamp with time zone)'),
   ('normalize_capture_url(text)'),
   ('notify_settings_save(boolean,boolean)'),
@@ -148,7 +149,7 @@ insert into allowed values
   ('photo_post_schedule(uuid)'),
   ('post_photos_save(uuid,text[],text[])'),
   ('request_stills_export(uuid,uuid,uuid)'),
-  ('sales_settings_save(text[],jsonb,text[])'),
+  ('sales_settings_save(text[],jsonb,text[],text)'),  -- wave 3 A5: cadence
   ('rename_project(uuid,text)'),
   ('sales_mention_count()'),
   ('request_document_export(uuid,uuid,uuid,integer)'),
