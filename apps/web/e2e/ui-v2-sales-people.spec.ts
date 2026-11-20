@@ -56,6 +56,8 @@ async function seed() {
       reply: "Send the reminder before the due date, not after.", reach_level: "email_ready",
       reach: reach({ warm: true, emailFound: "sam@example.com", reasons: ["Says who they are", "Wants a fix now", "Answered your reply", "Posted today", "Reddit allows DMs", "Published sam@example.com in the post"] }),
       dm_draft: "Hi Sam, I saw your post about net 30 turning into net 60. I built a small tool for it." },
+    { url: "https://www.reddit.com/r/startups/comments/e2eold/unchecked/", platform: "reddit", community: "startups", title: "Found before the reach checks existed", score: 55,
+      reply: "Help first: what worked for me was a short reminder on fixed days.", reach_level: "reply_first", reach: {}, dm_draft: null },
   ];
   const { data: opps, error } = await db
     .from("opportunities")
@@ -99,7 +101,7 @@ test("reach out: five checks, DM open or locked with why, I sent it, I replied w
   await expect(panel.getByTestId("sales-dm").getByRole("textbox")).toHaveValue(/saw your post about late invoices/);
   await expect(panel.getByRole("button", { name: "Copy and open Reddit chat" })).toBeVisible();
   await panel.getByRole("tab", { name: /Email/ }).click();
-  await expect(panel.getByTestId("sales-email-locked")).toContainText("Reply in public first");
+  await expect(panel.getByTestId("sales-email-locked")).toContainText("Email not open yet");
   await page.screenshot({ path: "test-results/sales-reach-1440.png" });
 
   // "I sent it" marks the person replied; no link is asked for a DM.
@@ -172,4 +174,37 @@ test("email ready: the Email tab opens Gmail or the mail app with the subject, t
   await expect(email.getByTestId("sales-email-gmail")).toHaveCount(0);
   expect((await sidewaysOverflow(page)).culprits).toEqual([]);
   await page.screenshot({ path: "test-results/sales-email-1440.png" });
+});
+
+test("the DM and Email tabs show even before a person is checked: what they are for and what opens them", async ({ page }) => {
+  const s = await seed();
+  await signIn(page, s.user);
+  const row = page.getByRole("listitem").filter({ hasText: "Found before the reach checks existed" });
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: width < 500 ? 844 : 1000 });
+    await page.goto("/app/sales");
+    const toggle = row.getByRole("button", { name: /Found before the reach checks/ }).first();
+    if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
+    // On a phone the open person shows full width below the list, not inside its row.
+    const panel = page.getByTestId("sales-reach").filter({ hasText: "Found before Ferreto checked" }).first();
+    await expect(panel.getByTestId("sales-reach-card")).toBeVisible();
+    await expect(panel.getByTestId("sales-reach-unchecked")).toContainText("Found before Ferreto checked");
+    await expect(panel.getByTestId("sales-reach-check")).toHaveCount(5);
+    await expect(panel.getByRole("tab")).toHaveCount(3);
+    await page.screenshot({ path: `test-results/sales-reach-unchecked-public-${width}.png`, fullPage: width < 500 });
+    await panel.getByRole("tab", { name: /DM/ }).click();
+    await expect(panel.getByRole("tab", { name: /DM/ })).toHaveAttribute("aria-selected", "true");
+    await page.mouse.move(0, 0);
+    await page.waitForTimeout(400);
+    await expect(panel.getByTestId("sales-dm-locked")).toContainText("DM not open yet");
+    await expect(panel.getByTestId("sales-dm-locked")).toContainText("Opens when");
+    await page.screenshot({ path: `test-results/sales-reach-unchecked-dm-${width}.png`, fullPage: width < 500 });
+    await panel.getByRole("tab", { name: /Email/ }).click();
+    await expect(panel.getByRole("tab", { name: /Email/ })).toHaveAttribute("aria-selected", "true");
+    await page.mouse.move(0, 0);
+    await page.waitForTimeout(400);
+    await expect(panel.getByTestId("sales-email-locked")).toContainText("Email not open yet");
+    await page.screenshot({ path: `test-results/sales-reach-unchecked-email-${width}.png`, fullPage: width < 500 });
+    expect((await sidewaysOverflow(page)).culprits).toEqual([]);
+  }
 });
