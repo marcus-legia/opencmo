@@ -92,3 +92,40 @@ test("the old photo-post and prompter addresses land on the app (deleted in wave
     expect(await page.evaluate(() => document.documentElement.scrollWidth), `no sideways scroll on ${path}`).toBeLessThanOrEqual(390);
   }
 });
+
+test("a quote card from the post's Library source is made, previewed, added as a photo and removed (wave 4b)", async ({ page }, testInfo) => {
+  test.setTimeout(120_000);
+  const db = admin();
+  const { user, itemId } = await seedCoreDraft();
+  // One conversation in the Library, with a quote, as a source of the post.
+  const opp = await db.from("opportunities").insert({ user_id: user.id, platform: "reddit", url: `https://www.reddit.com/r/SaaS/comments/${itemId.slice(0, 6)}/quote/`,
+    community: "SaaS", title: "Forms", score: 70, reply: "" }).select("id").single();
+  expect(opp.error).toBeNull();
+  const quote = "I pay $50 a month for forms nobody fills in.";
+  expect((await db.from("library_entries").insert({ opportunity_id: opp.data!.id, user_id: user.id, summary: "Forms cost too much for what they do",
+    quotes: [{ kind: "pain", text: quote }], platform: "reddit", community: "r/SaaS" })).error).toBeNull();
+  const { data: item } = await db.from("content_items").select("body").eq("id", itemId).single();
+  expect((await db.from("content_items").update({ body: { ...(item!.body as object), sources: [{ opportunityId: opp.data!.id, summary: "Forms cost too much", platform: "reddit", community: "SaaS" }] } }).eq("id", itemId)).error).toBeNull();
+
+  await signIn(page, user);
+  await page.goto("/app");
+  const card = await openFeedCard(page, "Post for 3 platforms");
+  await card.getByTestId("quote-card-make").click();
+  const maker = card.getByTestId("quote-card");
+  await expect(maker.getByRole("radio", { name: new RegExp(quote.slice(0, 20).replace(/\$/g, "\\$")) })).toBeChecked();
+  const preview = maker.getByRole("img", { name: "The quote card" });
+  await expect(preview).toBeVisible();
+  await expect.poll(() => preview.evaluate((img: HTMLImageElement) => img.naturalWidth), { timeout: 30_000 }).toBe(1080);
+  await maker.screenshot({ path: testInfo.outputPath("quote-card-maker.png") });
+  await maker.getByTestId("quote-card-add").click();
+  await expect(card.getByRole("img", { name: "Photo 1" })).toBeVisible({ timeout: 30_000 });
+  await expect
+    .poll(async () => ((await db.from("content_items").select("body").eq("id", itemId).single()).data?.body as { quote_card?: { quote?: string } }).quote_card?.quote)
+    .toBe(quote);
+
+  // Removing the photo takes the quote card off the post.
+  await card.getByRole("button", { name: "Remove photo 1" }).click();
+  await expect
+    .poll(async () => "quote_card" in ((await db.from("content_items").select("body").eq("id", itemId).single()).data?.body as object))
+    .toBe(false);
+});

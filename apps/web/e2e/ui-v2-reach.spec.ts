@@ -36,7 +36,6 @@ const KINDS: { id: string; decide: RegExp }[] = [
   { id: "card-finished", decide: /^Approve/ },
   { id: "card-finished-look", decide: /^Approve/ },
   { id: "card-shorts", decide: /^Approve/ },
-  { id: "card-slideshow", decide: /^Approve/ },
   { id: "card-time", decide: /^Approve time$/ },
   { id: "card-correction", decide: /^Keep as a rule$/ },
 ];

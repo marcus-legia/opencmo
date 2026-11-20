@@ -23,13 +23,13 @@ link), so no charge runs on a deleted account. pgTAP: wrong email, active plan, 
 
 ## 4b (only after "4b go")
 
-### - [ ] A3. Drop the hidden tables and functions
+### - [x] A3. Drop the hidden tables and functions
 With B4 and C6: list every table, function, trigger, policy and enum value used only by TikTok, Instagram, slideshows,
 video scripts, Photos and Studio orders (grep the code after B4/C6 remove callers). Migrations drop them, one area per
 migration; a table with founder rows that could matter is archived to a `legacy_*` table first. pgTAP files of the
 dropped functions are removed with them; 182 updated; `current.sql` dumped.
 
-### - [ ] A4. Quote card data
+### - [x] A4. Quote card data
 A post may carry `quote_card` in its body: `{ entryId, quote, community, platform }` taken from a Library entry of the
 founder (checked in SQL like `post_sources_clean`: the entry is theirs, the quote is one of its quotes, ≤ 280 chars).
 RPC `post_set_quote_card(p_item uuid, p_entry uuid, p_quote text)` and clearing it. pgTAP.

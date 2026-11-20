@@ -36,16 +36,16 @@ Specs for C1–C3; `ui-v2-look` screenshots at 1440, 390 and 360 for Sales, Feed
 
 ## 4b (only after "4b go")
 
-### - [ ] C6. Delete the hidden pages and UI
+### - [x] C6. Delete the hidden pages and UI
 `app/app/photos`, `studio`, `script`, `video` (if only hidden flows use it), their components, cards, fixtures, CSS,
 e2e, nav entries and redirects (old URLs redirect to `/app`). Keep the editor. One commit per area. Tell A and B
 under their Requests what you removed.
 
-### - [ ] C7. Quote card and email buttons (after A4, B5, B6)
+### - [x] C7. Quote card and email buttons (after A4, B5, B6)
 Post: "Make a quote card" beside "Make an image", pick a quote from the post's sources, preview, remove. Email tab:
 "Open in Gmail", "Open in your mail app", Copy.
 
-### - [ ] C8. e2e, look, the 4b PR
+### - [x] C8. e2e, look, the 4b PR
 Specs for C7; the deleted specs gone; look screenshots; a grep that shows no TikTok / Instagram / slideshow / script
 code outside the editor and history docs. Open "Wave 4b: delete and extend". Do not merge.
 
@@ -75,3 +75,10 @@ code outside the editor and history docs. Open "Wave 4b: delete and extend". Do 
   người dùng: cron cleanup hằng ngày xoá lại (yêu cầu đã nằm trong `account_deletions`). Gọi RPC hai lần không sao.
 - **From the owner (PR):** the 4a PR is open as a draft: #241 (from `claude/launch`). C5 opens no new PR: update
   #241's description and screenshots, and mark it ready when 4a is reviewed. 4b gets its own PR later.
+- **Wave 4b, done in one session by the owner's go (2026-11-20), PR `claude/wave4b`:** what changed from the plan:
+  Studio stays (it is the editor's home: uploads, edits, shorts); only its Slideshows and Post images go. TikTok and
+  Instagram can no longer be connected or planned or captioned; an old account still shows so it can be
+  disconnected, and the publish adapter keeps the two platforms' code for rows made before. Shared SQL functions
+  (`approval_decide`, `approval_snapshot`, `schedule_content`, `schedule_propose`, the studio order claim) keep their
+  branches for the deleted kinds: no row can reach them; they go when one is next changed. The editor's own
+  slideshows (Slides view, `create_slideshow`) and Script tab stay with the editor.
