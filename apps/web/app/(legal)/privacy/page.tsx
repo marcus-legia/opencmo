@@ -18,9 +18,9 @@ export default function PrivacyPage() {
               <li><strong>Account data</strong>: your email address, name and profile picture from the sign-in you choose, and sign-in records.</li>
               <li><strong>Business information</strong>: the website you enter, the documents Ferreto writes from it, and the edits you make to them.</li>
               <li><strong>Your content</strong>: drafts, posts, replies you edit or mark as sent, and any files you upload.</li>
-              <li><strong>Connected accounts</strong>: access tokens for social accounts you choose to connect, used only to publish what you approve.</li>
+              <li><strong>Connected accounts</strong>: access tokens for social accounts you choose to connect, used only to publish what you approve or set to post on autopilot, and to read how those posts did.</li>
               <li><strong>Billing data</strong>: your plan and payment status. Card details are handled by our payment provider, never by us.</li>
-              <li><strong>Usage data</strong>: basic logs and error reports needed to keep the service working and secure.</li>
+              <li><strong>Usage data</strong>: basic logs and error reports needed to keep the service working and secure, and anonymous page-speed measurements.</li>
             </ul>
           ),
         },
@@ -42,12 +42,16 @@ export default function PrivacyPage() {
           body: <p>We use providers to run Ferreto: hosting, database and processing providers; AI model providers that process prompts to produce drafts; email delivery; providers of publicly available social data; publishing integrations for the accounts you connect; and our payment provider, which acts as merchant of record. They process data only on our instructions and under their own security obligations.</p>,
         },
         {
+          heading: "Cookies",
+          body: <p>We use only the cookies needed to keep you signed in and to keep the service secure. We do not use advertising or tracking cookies, and the page-speed measurements we collect set no cookies.</p>,
+        },
+        {
           heading: "Retention",
           body: <p>Account data and your content are kept while your account is open. Accounts that never make a purchase are deleted, with all their content, 30 days after sign-up; the app shows the date in advance. When you delete your account, we delete your content and personal data within 30 days, except records we must keep for legal or tax reasons.</p>,
         },
         {
           heading: "Your rights",
-          body: <p>You can access, correct, export or delete your data, and stop any email from its own link or in Settings. Email <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> and we will respond within 30 days. If you are in the EU or UK you may also complain to your local data protection authority.</p>,
+          body: <p>You can access, correct, export or delete your data, and stop any email from its own link or in Settings. You can delete your account yourself in Settings › Account. For anything else, email <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> and we will respond within 30 days. If you are in the EU or UK you may also complain to your local data protection authority.</p>,
         },
         {
           heading: "Changes and contact",

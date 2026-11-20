@@ -8,9 +8,9 @@ import { MarketingNav } from "@/components/marketing/MarketingNav";
  */
 export default function LegalLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="marketing legal">
+    <div className="site">
       <MarketingNav />
-      {children}
+      <div className="marketing legal">{children}</div>
       <MarketingFooter />
     </div>
   );

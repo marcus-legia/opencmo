@@ -16,14 +16,14 @@ export default function TermsPage() {
           heading: "1. What Ferreto is",
           body: (
             <>
-              <p>Ferreto is software. It reads the website you give it, finds public conversations where people describe the problem your product solves, and drafts replies and posts for you. It is not an agency and does not provide human marketing or sales services.</p>
-              <p>Ferreto does not post, reply or message anyone on its own. You post replies yourself, from your own accounts. Posts are published only after you approve them, and only to accounts you have connected yourself.</p>
+              <p>Ferreto is software. It reads the website you give it, finds public conversations where people describe the problem your product solves, and drafts replies, direct messages, emails and posts for you. It is not an agency and does not provide human marketing or sales services.</p>
+              <p>Ferreto does not reply to, message or email anyone on its own. You send replies, messages and emails yourself, from your own accounts. Posts are published only to accounts you have connected yourself, and only after you approve them or, if you turn on autopilot for a platform, at the time shown on a post you left untouched. You can turn autopilot off at any time.</p>
             </>
           ),
         },
         {
           heading: "2. Your account",
-          body: <p>You must be at least 18 years old and give accurate information. You are responsible for activity under your account and for keeping the account you sign in with secure. Tell us at {SUPPORT_EMAIL} if you believe your account was used without permission. Accounts that never make a purchase are deleted, with all their content, 30 days after sign-up; the app shows the date.</p>,
+          body: <p>You must be at least 18 years old and give accurate information. You are responsible for activity under your account and for keeping the account you sign in with secure. Tell us at {SUPPORT_EMAIL} if you believe your account was used without permission. You can delete your account at any time in Settings › Account. Accounts that never make a purchase are deleted, with all their content, 30 days after sign-up; the app shows the date.</p>,
         },
         {
           heading: "3. Your content and your rights",
@@ -36,7 +36,7 @@ export default function TermsPage() {
         },
         {
           heading: "4. Public conversations and community rules",
-          body: <p>Ferreto shows you publicly available posts and suggests how to reply. Those posts belong to their authors and platforms. When you reply, you do so as yourself and must follow each community’s rules, including rules about mentioning your own product. Ferreto points out the rules it can read, but you remain responsible for what you post.</p>,
+          body: <p>Ferreto shows you publicly available posts and suggests how to reply. Those posts belong to their authors and platforms. When you reply, you do so as yourself and must follow each community’s rules, including rules about mentioning your own product. Ferreto points out the rules it can read, but you remain responsible for what you post. When you send a direct message or an email Ferreto drafted, you are the sender: you must follow the laws that apply to it, such as anti-spam and data protection laws, and stop contacting anyone who asks you to.</p>,
         },
         {
           heading: "5. Acceptable use",
@@ -50,7 +50,7 @@ export default function TermsPage() {
           heading: "7. Plans and payment",
           body: (
             <>
-              <p>Paid plans are subscriptions billed monthly or yearly. Each plan includes a fair-use allowance shown in the app; when it runs out, new searches pause until the next period. Free accounts get a limited first use, as described in the app.</p>
+              <p>Paid plans are subscriptions billed monthly or yearly. Each plan includes a fair-use allowance shown in the app; when it runs out, new searches pause until the next period. Free accounts get one free scan, as described in the app.</p>
               <p>Payments are processed by our payment provider acting as merchant of record, which also handles sales tax and invoices. You can cancel at any time from Settings. Refunds follow our <Link href="/refund">Refund Policy</Link>.</p>
             </>
           ),
