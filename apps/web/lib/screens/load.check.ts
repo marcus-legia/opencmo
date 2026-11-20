@@ -66,9 +66,6 @@ const tables: Record<string, Row[]> = {
     { id: "c-yt", department: "video", platform: "youtube", day: today, idea: "Cut", status: "in_review", body: { text: "Desc.", title: "Cut a demo by words", edited_at: now }, final_text: null, published_at: null, clip_id: "clip-video" },
   ],
   work_orders: [
-    { id: "b-1", kind: "write_video_brief", status: "done", brief: { objective: "Show a demo cut by words", platform: "TikTok" }, due_at: `${today}T23:59:00Z`, created_at: now },
-    { id: "b-2", kind: "write_video_brief", status: "failed", brief: { objective: "Failed brief" }, due_at: null, created_at: now },
-    { id: "b-3", kind: "write_video_brief", status: "done", brief: { objective: "Record the demo", platform: "Shorts", storyboard: [{ say: "a", show: "b", shot: "screen", seconds: 10 }] }, due_at: `${today}T23:59:00Z`, created_at: now },
   ],
   approvals: [
     { id: "card-post", ref_kind: "content_item", ref_id: "p-x", status: "waiting" },
@@ -76,8 +73,6 @@ const tables: Record<string, Row[]> = {
     { id: "card-video", ref_kind: "editor_project", ref_id: "clip-video", status: "waiting" },
     { id: "card-batch", ref_kind: "short_batch", ref_id: "batch-1", status: "waiting" },
     { id: "card-time", ref_kind: "schedule_slot", ref_id: "sl-wait", status: "waiting" },
-    { id: "card-script", kind: "script", ref_kind: "work_order", ref_id: "b-3", status: "approved", created_at: now },
-    { id: "card-script-old", kind: "script", ref_kind: "work_order", ref_id: "b-3", status: "cancelled", created_at: now },
   ],
   shorts: [{ short_clip_id: "clip-short", batch_id: "batch-1", created_at: now }],
   cmo_corrections: [
@@ -120,9 +115,7 @@ async function main(): Promise<void> {
   const writer = compose("writer", (await LOADERS.writer!(ctx)) as never, { production: true, sample: false });
   assert.ok(writer.live.drafts && writer.live.voice, "Writer's drafts and voice are live");
   const drafts = new Map(writer.data.drafts.map((d) => [d.id, d]));
-  assert.deepEqual([...drafts.keys()].sort(), ["b-1", "b-3", "c-tt", "c-yt", "p-held", "p-li", "p-lost", "p-th", "p-x"], "posts, captions and briefs of the last two weeks");
-  assert.deepEqual([drafts.get("b-3")!.scriptId, drafts.get("b-3")!.note, drafts.get("b-3")!.column, drafts.get("b-1")!.scriptId ?? null], ["b-3", "Approved: you record it", "scheduled", null],
-    "an approved script opens in the editor; a brief without a storyboard does not");
+  assert.deepEqual([...drafts.keys()].sort(), ["c-tt", "c-yt", "p-held", "p-li", "p-lost", "p-th", "p-x"], "posts and captions of the last two weeks");
   assert.deepEqual(
     ["p-x", "p-li", "p-th"].map((id) => [drafts.get(id)!.platform, drafts.get(id)!.column]),
     [["x", "waiting"], ["linkedin", "scheduled"], ["threads", "planned"]],
@@ -138,7 +131,6 @@ async function main(): Promise<void> {
   assert.equal(drafts.get("p-li")!.note, "You edited it before approving");
   assert.deepEqual([drafts.get("c-tt")!.kind, drafts.get("c-tt")!.platform, drafts.get("c-tt")!.approvalId], ["caption", "tiktok", "card-batch"], "a short's caption opens its batch card");
   assert.deepEqual([drafts.get("c-yt")!.platform, drafts.get("c-yt")!.title, drafts.get("c-yt")!.approvalId, drafts.get("c-yt")!.note], ["youtube", "Cut a demo by words", "card-video", "You edited it on the card"]);
-  assert.deepEqual([drafts.get("b-1")!.kind, drafts.get("b-1")!.platform, drafts.get("b-1")!.column, drafts.get("b-1")!.note], ["video_brief", "tiktok", "posted", "Fed the Studio team"]);
   assert.deepEqual(writer.data.voice.lines.map((l) => l.text.slice(0, 20)), ["End on the point its", "Edited on LinkedIn b", "Approved as written ", "Skipped a draft on X", "No links, no hashtag"],
     "rules first, then voice notes heaviest first, then the product rule");
   assert.match(writer.data.voice.lines[1]!.source, /^From your edit: shorter · LinkedIn · weight 0\.98$/);
@@ -184,7 +176,7 @@ async function main(): Promise<void> {
   assert.ok(settings.live.accounts, "Settings → Accounts is live");
   assert.deepEqual(
     settings.data.accounts.map((a) => [a.platform, a.status, a.avatarUrl ?? null]),
-    [["x", "connected", "https://pbs.example/x.png"], ["threads", "not_connected", null], ["linkedin", "not_connected", null], ["facebook", "not_connected", null], ["tiktok", "reconnect", null], ["youtube", "not_connected", null], ["instagram", "not_connected", null]],
+    [["x", "connected", "https://pbs.example/x.png"], ["threads", "not_connected", null], ["linkedin", "not_connected", null], ["facebook", "not_connected", null], ["tiktok", "reconnect", null], ["youtube", "not_connected", null]],
     "every platform Ferreto posts to, in one order",
   );
 

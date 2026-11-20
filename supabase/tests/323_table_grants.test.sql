@@ -69,7 +69,6 @@ insert into expected values
     ('notify_settings', 'authenticated', 'SELECT'),
     ('opportunities', 'authenticated', 'SELECT'),
     ('page_captures', 'authenticated', 'SELECT'),
-    ('photo_posts', 'authenticated', 'SELECT'),
     ('post_metrics', 'authenticated', 'SELECT'),
     ('post_variants', 'authenticated', 'SELECT'),
     ('profiles', 'authenticated', 'SELECT'),

@@ -177,9 +177,6 @@ export function ScriptPanel({
             Record
           </button>
         ) : null}
-        <a className="ed2-btn" href={`/app/script/${encodeURIComponent(script.orderId)}/prompter`} target="_blank" rel="noopener noreferrer">
-          Read on your phone
-        </a>
       </header>
       {note ? (
         <p className="ed2-scr-note" role="status">

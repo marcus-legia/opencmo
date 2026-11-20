@@ -7,9 +7,8 @@ import { openFeedCard, signIn, state } from "./helpers";
 import { seedCoreDraft } from "./ui-v2-seed";
 
 /**
- * Photos on a text post and the slideshow page (owner, 2026-11-13; `docs/plans/cmo/2026-11-13-post-photos-plan.md`).
- * The founder adds their own photo on the post's card, approves, and every slot carries it; a slideshow or carousel
- * is made on /app/photos, not on the Calendar. The SQL is `supabase/tests/313_post_photos.test.sql`.
+ * Photos on a text post (owner, 2026-11-13; `docs/plans/cmo/2026-11-13-post-photos-plan.md`). The founder adds their
+ * own photo on the post's card, approves, and every slot carries it. The SQL is `supabase/tests/313_post_photos.test.sql`.
  */
 test.skip(process.env.NEXT_PUBLIC_OPENCMO_UI !== "v2", "v2 UI only: run with npm run test:e2e:v2");
 
@@ -50,7 +49,7 @@ test("a photo added on the post card goes out with the post on every platform", 
   const { user, itemId } = await seedCoreDraft();
   await signIn(page, user);
   await page.goto("/app");
-  const card = await openFeedCard(page, "Post for 3 platforms");
+  let card = await openFeedCard(page, "Post for 3 platforms");
   const photos = card.getByTestId("post-photos");
   await expect(photos).toContainText("Add photos");
   await photos.locator('input[type="file"]').setInputFiles({ name: "desk.png", mimeType: "image/png", buffer: png() });
@@ -58,6 +57,9 @@ test("a photo added on the post card goes out with the post on every platform", 
   await expect
     .poll(async () => ((await db.from("content_items").select("photos").eq("id", itemId).single()).data?.photos as string[] | undefined)?.length)
     .toBe(1);
+  // Saving the photos raises the post's card again (they are part of what is approved): find it afresh.
+  card = await openFeedCard(page, "Post for 3 platforms");
+  await expect(card.getByRole("img", { name: "Photo 1" })).toBeVisible({ timeout: 30_000 });
   await card.screenshot({ path: testInfo.outputPath("post-card-photo.png") });
 
   await card.getByRole("button", { name: "Approve", exact: true }).click();
@@ -76,30 +78,59 @@ test("a photo added on the post card goes out with the post on every platform", 
   await waiting.screenshot({ path: testInfo.outputPath("schedule-card-photo.png") });
 });
 
-test("the photo-post page still works by its address (hidden from the bar since 2026-11-18)", async ({ page }, testInfo) => {
+test("the old photo-post and prompter addresses land on the app (deleted in wave 4b)", async ({ page }) => {
   const { user } = await seedCoreDraft();
   await signIn(page, user);
-  await page.goto("/app/schedule");
-  await expect(page.getByTestId("v2-schedule")).toBeVisible();
-  await expect(page.getByTestId("photo-post")).toHaveCount(0);
-  await page.goto("/app/photos");
-  await expect(page.getByRole("heading", { name: "Slideshows and carousels" })).toBeVisible();
-  await expect(page.getByTestId("photo-post")).toBeVisible();
-  await page.screenshot({ path: testInfo.outputPath("photos-page.png") });
-
-  // A picked photo shows once uploaded, from its signed link (never a link made from the picked file).
-  const panel = page.getByTestId("photo-post");
-  await panel.getByRole("button", { name: "New photo post" }).click();
-  await expect(panel.locator('input[type="file"]')).toBeEnabled();
-  await panel.locator('input[type="file"]').setInputFiles({ name: "desk.png", mimeType: "image/png", buffer: png() });
-  await expect(panel.getByRole("img", { name: "Photo 1: desk.png" })).toHaveAttribute("src", /^http/, { timeout: 30_000 });
+  for (const path of ["/app/photos", "/app/script/00000000-0000-4000-8000-000000000000/prompter"]) {
+    await page.goto(path);
+    await expect(page).toHaveURL(/\/app$/);
+  }
+  await expect(page.locator(".td-views").getByRole("link", { name: "Photos" })).toHaveCount(0);
 
   // Four views in the bar: on a phone the row fits, never the page scrolling sideways.
   await page.setViewportSize({ width: 390, height: 844 });
-  for (const path of ["/app", "/app/schedule", "/app/photos"]) {
+  for (const path of ["/app", "/app/schedule"]) {
     await page.goto(path);
     await expect(page.locator(".td-views")).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth), `no sideways scroll on ${path}`).toBeLessThanOrEqual(390);
   }
-  await expect(page.locator(".td-views").getByRole("link", { name: "Photos" })).toHaveCount(0);
+});
+
+test("a quote card from the post's Library source is made, previewed, added as a photo and removed (wave 4b)", async ({ page }, testInfo) => {
+  test.setTimeout(120_000);
+  const db = admin();
+  const { user, itemId } = await seedCoreDraft();
+  // One conversation in the Library, with a quote, as a source of the post.
+  const opp = await db.from("opportunities").insert({ user_id: user.id, platform: "reddit", url: `https://www.reddit.com/r/SaaS/comments/${itemId.slice(0, 6)}/quote/`,
+    community: "SaaS", title: "Forms", score: 70, reply: "" }).select("id").single();
+  expect(opp.error).toBeNull();
+  const quote = "I pay $50 a month for forms nobody fills in.";
+  expect((await db.from("library_entries").insert({ opportunity_id: opp.data!.id, user_id: user.id, summary: "Forms cost too much for what they do",
+    quotes: [{ kind: "pain", text: quote }], platform: "reddit", community: "r/SaaS" })).error).toBeNull();
+  const { data: item } = await db.from("content_items").select("body").eq("id", itemId).single();
+  expect((await db.from("content_items").update({ body: { ...(item!.body as object), sources: [{ opportunityId: opp.data!.id, summary: "Forms cost too much", platform: "reddit", community: "SaaS" }] } }).eq("id", itemId)).error).toBeNull();
+
+  await signIn(page, user);
+  await page.goto("/app");
+  const card = await openFeedCard(page, "Post for 3 platforms");
+  await card.getByTestId("quote-card-make").click();
+  const maker = card.getByTestId("quote-card");
+  await expect(maker.getByRole("radio", { name: new RegExp(quote.slice(0, 20).replace(/\$/g, "\\$")) })).toBeChecked();
+  const preview = maker.getByRole("img", { name: "The quote card" });
+  await expect(preview).toBeVisible();
+  await expect.poll(() => preview.evaluate((img: HTMLImageElement) => img.naturalWidth), { timeout: 30_000 }).toBe(1080);
+  await maker.screenshot({ path: testInfo.outputPath("quote-card-maker.png") });
+  await maker.getByTestId("quote-card-add").click();
+  await expect
+    .poll(async () => ((await db.from("content_items").select("body").eq("id", itemId).single()).data?.body as { quote_card?: { quote?: string } }).quote_card?.quote, { timeout: 30_000 })
+    .toBe(quote);
+  // The photo raises the post's card again: find it afresh before looking at it.
+  const raised = await openFeedCard(page, "Post for 3 platforms");
+  await expect(raised.getByRole("img", { name: "Photo 1" })).toBeVisible({ timeout: 30_000 });
+
+  // Removing the photo takes the quote card off the post.
+  await raised.getByRole("button", { name: "Remove photo 1" }).click();
+  await expect
+    .poll(async () => "quote_card" in ((await db.from("content_items").select("body").eq("id", itemId).single()).data?.body as object))
+    .toBe(false);
 });

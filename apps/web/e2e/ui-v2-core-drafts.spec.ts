@@ -19,7 +19,7 @@ const admin = () => {
   return createClient(url, service, { auth: { persistSession: false } });
 };
 
-test("the planner shows seven platforms, a logo each, and saves a change", async ({
+test("the planner shows the four post platforms, a logo each, and saves a change", async ({
   page,
 }) => {
   const { user } = await seedCoreDraft();
@@ -28,8 +28,8 @@ test("the planner shows seven platforms, a logo each, and saves a change", async
   const planner = page.getByTestId("posting-plan");
   await expect(planner).toBeVisible();
   const rows = planner.locator(".pp-row");
-  await expect(rows).toHaveCount(7);
-  for (let i = 0; i < 7; i++)
+  await expect(rows).toHaveCount(4);
+  for (let i = 0; i < 4; i++)
     await expect(rows.nth(i).locator(".pl-tile svg")).toHaveCount(1);
   await expect(planner.getByTestId("posting-plan-line")).toBeVisible();
   await expect(planner).toContainText("X, Threads and LinkedIn");

@@ -1,13 +1,12 @@
 -- P3 review fixes (20261229100000, 20261229110000): a post's runs match by item whether or not they carry the order;
--- a replan keeps a video's script and refunds a dropped brief's run; Writer never delivers or rewrites a
--- caption the founder has not seen; a Threads or LinkedIn post is marked posted with its own link and platform; a
--- new cut of a finished video gets new captions; a skip reason is remembered once.
+-- a Threads or LinkedIn post is marked posted with its own link and platform; a skip reason is remembered once.
+-- (The video script and caption cases went with wave 4b.)
 create extension if not exists pgtap with schema extensions;
 
 begin;
 set search_path to public, extensions;
 
-select plan(31);
+select plan(13);
 
 insert into auth.users (id, email) values ('e2130000-0000-4000-8000-00000000000a', 'fixes@test.local');
 update public.profiles set credit_balance = 50 where id = 'e2130000-0000-4000-8000-00000000000a';
@@ -34,93 +33,6 @@ select isnt((public.enqueue_cmo_run_for('e2130000-0000-4000-8000-00000000000a', 
   (public.enqueue_cmo_run_for('e2130000-0000-4000-8000-00000000000a', 'write_caption', '{"order_id":"e2139999-0000-4000-8000-0000000000cc"}')).id,
   'Writer''s orders still key by order');
 update public.cmo_runs set status = 'done', finished_at = now() where user_id = 'e2130000-0000-4000-8000-00000000000a' and kind in ('post_draft', 'write_caption');
-
--- F2: a replan that keeps the video keeps its script order and its run; nothing is paid twice. A week's video is a script
--- the founder records (2026-11-09): no video order is made.
-insert into public.cmo_runs (id, user_id, kind, status) values
-  ('e2131000-0000-4000-8000-000000000001', 'e2130000-0000-4000-8000-00000000000a', 'plan_week', 'running'),
-  ('e2131000-0000-4000-8000-000000000002', 'e2130000-0000-4000-8000-00000000000a', 'plan_week', 'running'),
-  ('e2131000-0000-4000-8000-000000000003', 'e2130000-0000-4000-8000-00000000000a', 'plan_week', 'running');
-select public.cmo_plan_week('e2130000-0000-4000-8000-00000000000a', 'e2131000-0000-4000-8000-000000000001',
-  jsonb_build_array(jsonb_build_object('day', current_date, 'department', 'video', 'platform', 'TikTok', 'idea', 'Cut a demo', 'reason', 'r')));
-insert into t select 'brief', id from public.work_orders where kind = 'write_video_brief' and user_id = 'e2130000-0000-4000-8000-00000000000a';
-insert into t select 'brief_run', id from public.cmo_runs where kind = 'write_video_brief' and input->>'order_id' = pg_temp.id('brief')::text;
-create temp table b (credits integer) on commit drop;
-insert into b select pg_temp.balance();
-select is((select status from public.work_orders where id = pg_temp.id('brief')), 'queued', 'the script waits to be written');
-
-select public.cmo_plan_week('e2130000-0000-4000-8000-00000000000a', 'e2131000-0000-4000-8000-000000000002',
-  jsonb_build_array(jsonb_build_object('day', current_date, 'department', 'video', 'platform', 'TikTok', 'idea', 'Cut a demo, by words', 'reason', 'r')));
-select is((select status from public.work_orders where id = pg_temp.id('brief')), 'queued', 'a replan that keeps the video does not cancel its script');
-select is((select item_id from public.work_orders where id = pg_temp.id('brief')),
-  (select id from public.content_items where run_id = 'e2131000-0000-4000-8000-000000000002' and department = 'video'),
-  'it takes over the new item');
-select is((select count(*)::int from public.work_orders where kind in ('build_video', 'write_video_brief') and user_id = 'e2130000-0000-4000-8000-00000000000a'),
-  1, 'no second script and no video');
-select is((select status from public.cmo_runs where id = pg_temp.id('brief_run')), 'queued', 'its run still waits');
-select is(pg_temp.balance(), (select credits from b), 'and nothing more was held');
-
--- A replan that drops the video cancels its script and the script's run, and gives the credit back.
-select public.cmo_plan_week('e2130000-0000-4000-8000-00000000000a', 'e2131000-0000-4000-8000-000000000003',
-  jsonb_build_array(jsonb_build_object('day', current_date, 'department', 'post', 'platform', 'X', 'idea', 'A post', 'reason', 'r')));
-select is((select status from public.work_orders where id = pg_temp.id('brief')), 'cancelled', 'a dropped script is cancelled');
-select is((select count(*)::int from public.work_orders where kind = 'build_video' and user_id = 'e2130000-0000-4000-8000-00000000000a'), 0,
-  'and no video was ever ordered');
-select is((select status from public.cmo_runs where id = pg_temp.id('brief_run')), 'failed', 'its queued run never runs');
-select is(pg_temp.balance(), (select credits from b) + 1, 'and its credit comes back');
-select is((select count(*)::int from public.work_orders where kind = 'post_draft' and status = 'queued' and user_id = 'e2130000-0000-4000-8000-00000000000a'),
-  1, 'the new plan''s post is ordered');
-insert into t select 'video', id from public.work_order_create('e2130000-0000-4000-8000-00000000000a', date_trunc('week', current_date)::date,
-  (select id from public.work_orders where parent_id is null and user_id = 'e2130000-0000-4000-8000-00000000000a'), 'cut_shorts', 'The founder''s video', '{}', 0);
-
--- F3, F4: captions are delivered only by approving the card; Writer never rewrites one the founder approved.
-insert into public.jobs (id, user_id, source_url, duration_seconds, status) values
-  ('e2132000-0000-4000-8000-00000000000a', 'e2130000-0000-4000-8000-00000000000a', 'https://a', 60, 'done');
-insert into public.clips (id, job_id, idx, hook, start_seconds, end_seconds, kind) values
-  ('e2133000-0000-4000-8000-00000000000a', 'e2132000-0000-4000-8000-00000000000a', -1, 'Cut by words', 0, 0, 'blank');
-insert into public.editor_projects (clip_id, document, manifest) values
-  ('e2133000-0000-4000-8000-00000000000a', '{"version":1,"stage":{"name":"demo"}}', '{"version":1,"folders":[],"assets":[]}');
-set local role service_role;
-set local request.jwt.claims = '{"role":"service_role"}';
-select public.cmo_save_caption('e2130000-0000-4000-8000-00000000000a', null, 'e2133000-0000-4000-8000-00000000000a',
-  'tiktok_caption', 'Cut your demo by deleting words.');
-reset role;
-insert into public.deliverables (user_id, order_id, kind, ref_kind, ref_id)
-values ('e2130000-0000-4000-8000-00000000000a', pg_temp.id('video'), 'video', 'clip', 'e2133000-0000-4000-8000-00000000000a');
-select is((select status from public.content_items where clip_id = 'e2133000-0000-4000-8000-00000000000a' and platform = 'tiktok_caption'),
-  'approved', 'approving the video approves the caption the card showed');
-set local role service_role;
-set local request.jwt.claims = '{"role":"service_role"}';
-select public.cmo_save_caption('e2130000-0000-4000-8000-00000000000a', null, 'e2133000-0000-4000-8000-00000000000a',
-  'instagram_caption', 'Written after the card was decided.');
-select public.cmo_save_caption('e2130000-0000-4000-8000-00000000000a', null, 'e2133000-0000-4000-8000-00000000000a',
-  'tiktok_caption', 'Writer again, later.');
-reset role;
-select is((select status from public.content_items where clip_id = 'e2133000-0000-4000-8000-00000000000a' and platform = 'instagram_caption'),
-  'in_review', 'a caption written after the decision is not approved by itself');
-select is((select count(*)::int from public.deliverables where kind = 'caption' and ref_id in
-  (select id from public.content_items where clip_id = 'e2133000-0000-4000-8000-00000000000a')), 1, 'nor delivered: only the one the founder saw');
-select is((select body->>'text' from public.content_items where clip_id = 'e2133000-0000-4000-8000-00000000000a' and platform = 'tiktok_caption'),
-  'Cut your demo by deleting words.', 'an approved caption keeps its words');
-
--- F6: a new cut of the finished video orders new captions; the same cut raised again does not.
-insert into public.jobs (id, user_id, source_url, duration_seconds, status) values
-  ('e2132000-0000-4000-8000-00000000000b', 'e2130000-0000-4000-8000-00000000000a', 'https://b', 60, 'done');
-insert into public.clips (id, job_id, idx, hook, start_seconds, end_seconds, kind) values
-  ('e2133000-0000-4000-8000-00000000000b', 'e2132000-0000-4000-8000-00000000000b', -1, 'Second video', 0, 0, 'blank');
-insert into public.editor_projects (clip_id, document, manifest) values
-  ('e2133000-0000-4000-8000-00000000000b', '{"version":1,"stage":{"name":"first cut"}}', '{"version":1,"folders":[],"assets":[]}');
-select public.approval_raise('e2130000-0000-4000-8000-00000000000a', 'editor_project', 'e2133000-0000-4000-8000-00000000000b');
-select is((select count(*)::int from public.work_orders where kind = 'write_caption' and brief->>'ref_id' = 'e2133000-0000-4000-8000-00000000000b'),
-  1, 'the finished video orders its captions');
-update public.approvals set status = 'cancelled' where ref_id = 'e2133000-0000-4000-8000-00000000000b' and status = 'waiting';
-select public.approval_raise('e2130000-0000-4000-8000-00000000000a', 'editor_project', 'e2133000-0000-4000-8000-00000000000b');
-select is((select count(*)::int from public.work_orders where kind = 'write_caption' and brief->>'ref_id' = 'e2133000-0000-4000-8000-00000000000b'),
-  1, 'raised again with the same cut, it does not pay for captions twice');
-update public.editor_projects set document = '{"version":1,"stage":{"name":"second cut"}}' where clip_id = 'e2133000-0000-4000-8000-00000000000b';
-select public.approval_raise('e2130000-0000-4000-8000-00000000000a', 'editor_project', 'e2133000-0000-4000-8000-00000000000b');
-select is((select count(*)::int from public.work_orders where kind = 'write_caption' and brief->>'ref_id' = 'e2133000-0000-4000-8000-00000000000b'),
-  2, 'a new cut gets captions for what it now says');
 
 -- F5: a Threads or LinkedIn post is marked posted with its own platform's link and logged under its profile.
 insert into public.content_items (id, user_id, department, platform, day, idea, status, body) values

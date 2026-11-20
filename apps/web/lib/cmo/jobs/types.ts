@@ -19,19 +19,15 @@ export type CmoJobKind =
   | "pull_metrics"
   | "summarize_memory"
   | "review_week"
-  | "write_video_brief"
   | "write_caption"
   | "publish_post"
-  | "niche_video_research"
   /** cmo-review-3 2.2: the founder's draft ratings → up to five rules, free (`cmo_rate_drafts` queues it). */
   | "distill_ratings"
   /** Daily core drafts D4: the founder's "Rewrite for <platform>" on a post card (`repurpose_post` in SQL queues it). */
   | "repurpose_post"
-  /** Daily core drafts D7: the caption of the founder's own photo post (`photo_post_caption` in SQL queues it). */
-  | "photo_caption"
   /** Free scan A5: the reply drafts of the cards a free scan saved without one, after the founder pays. */
   | "sales_reply_drafts";
-export const CMO_JOB_KINDS: CmoJobKind[] = ["plan_week", "post_draft", "sales_scan", "competitor_research", "pull_metrics", "summarize_memory", "review_week", "write_video_brief", "write_caption", "publish_post", "niche_video_research", "distill_ratings", "repurpose_post", "photo_caption", "sales_reply_drafts"];
+export const CMO_JOB_KINDS: CmoJobKind[] = ["plan_week", "post_draft", "sales_scan", "competitor_research", "pull_metrics", "summarize_memory", "review_week", "write_caption", "publish_post", "distill_ratings", "repurpose_post", "sales_reply_drafts"];
 
 /** What a weekly goal counts. Only things the product can measure itself. */
 export type GoalMetric = "posts" | "replies" | "views";
@@ -337,8 +333,6 @@ export interface CmoStore {
   variantSource(userId: string, itemId: string): Promise<{ text: string; platform: string } | null>;
   /** One platform's rewrite of a post (`cmo_save_variant`, which checks the length again); a new one replaces the old. */
   saveVariant(userId: string, runId: string, itemId: string, platform: string, text: string, gen: Record<string, unknown>): Promise<void>;
-  /** The caption of a photo post still in draft (`cmo_save_photo_caption`, which checks the caption rules again). */
-  savePhotoCaption(userId: string, runId: string, postId: string, caption: string, gen: Record<string, unknown>): Promise<void>;
   saveDraft(userId: string, runId: string, itemId: string | null, idea: string, body: Record<string, unknown>, priority: ItemRow["priority"]): Promise<ItemRow>;
   /** Thread links that already became cards (dismissed ones too): W4 never offers them again. */
   seenUrls(userId: string): Promise<Set<string>>;

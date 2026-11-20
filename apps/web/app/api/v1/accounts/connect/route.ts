@@ -5,7 +5,7 @@ import { withApi } from "@/lib/api/handler";
 import { connectUrl, publishErrorStatus } from "@/lib/departments/publish/accounts";
 import { accountsStore } from "@/lib/departments/publish/accounts-store";
 import { publishAdapter } from "@/lib/departments/publish/adapter";
-import { PublishError, PublishPlatformSchema } from "@/lib/departments/publish/types";
+import { CONNECTABLE_PLATFORMS, PublishError } from "@/lib/departments/publish/types";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +21,7 @@ function requestOrigin(request: { headers: Headers; nextUrl: URL }): string {
   return `${proto}://${host.split(",")[0]!.trim()}`;
 }
 
-const body = z.object({ platform: PublishPlatformSchema }).strict();
+const body = z.object({ platform: z.enum(CONNECTABLE_PLATFORMS) }).strict();
 
 /** Settings → Accounts "Connect" (P4 F1): Zernio's OAuth link; the founder comes back to `/accounts/callback`. */
 export const POST = withApi(

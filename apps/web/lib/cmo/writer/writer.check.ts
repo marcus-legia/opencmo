@@ -29,7 +29,7 @@ import { profileBlock, profileFromPrompt, voiceBlock, writerData } from "./conte
 import { createWriter, type WriterThink } from "./draft";
 import { writerAgent } from "./jobs";
 import { firstLine } from "./video-source";
-import { CAPTION_SYSTEM, VIDEO_BRIEF_SYSTEM, YOUTUBE_SYSTEM } from "./prompts";
+import { CAPTION_SYSTEM, YOUTUBE_SYSTEM } from "./prompts";
 import { PROFILE_KIND, VideoBriefSchema, WRITER_KINDS, type WriterContext, type WriterProfile } from "./types";
 
 assert.equal(StudioBriefSchema, VideoBriefSchema, "Studio takes Writer's video brief, not a copy");
@@ -55,7 +55,7 @@ for (const text of ["We moved the app to Next.js and Node.js.", "Our #1 rule is 
 
 // No AI Slop is a skill read by the writer, the checker, sales and CMO chat; its plain stock patterns are also a code
 // gate (lib/cmo/slop.ts, checked in slop.check.ts).
-assert.deepEqual([...CMO_SKILLS["no-ai-slop"].agents].sort(), ["brief_writer", "checker", "cmo", "director", "facebook_writer", "instagram_writer", "linkedin_writer", "onboarding", "planner", "research", "sales", "shorts", "threads_writer", "tiktok_writer", "writer", "x_writer", "youtube_writer"]);
+assert.deepEqual([...CMO_SKILLS["no-ai-slop"].agents].sort(), ["checker", "cmo", "director", "facebook_writer", "linkedin_writer", "onboarding", "planner", "research", "sales", "shorts", "threads_writer", "writer", "x_writer", "youtube_writer"]);
 assert.match(CMO_SKILLS["no-ai-slop"].license, /MIT — Copyright \(c\) 2026 Peter Yang/);
 for (const agent of ["x_writer", "checker", "sales", "cmo"] as const) assert.ok(skillIndex(agent).includes("- no-ai-slop:"), `${agent} lists no-ai-slop`);
 assert.ok(REVIEW_SYSTEM.includes('<skill name="no-ai-slop">') && /reads like AI wrote it/.test(REVIEW_SYSTEM), "the checker fails a draft that reads as AI");
@@ -90,24 +90,25 @@ const profile = (id: string): WriterProfile => {
   assert.ok(found, `profile ${id}`);
   return found;
 };
-const instagram = profile("instagram_caption");
-const tiktok = profile("tiktok_caption");
+/** A caption profile for the checks: the caption kind is generic (TikTok and Instagram left in wave 4b). */
+const captionA: WriterProfile = { id: "caption_a", label: "Short caption", platform: "youtube", kind: "caption", limit: 2200, title: null, visibleBeforeMore: 100, hashtags: 5, links: false, tone: "Short." } as WriterProfile;
+const captionB: WriterProfile = { ...captionA, id: "caption_b", label: "Long caption" };
 const youtube = profile("youtube");
 const threads = profile("threads");
-const tiktok3: WriterProfile = { ...tiktok, hashtags: 3 };
+const caption3: WriterProfile = { ...captionA, hashtags: 3 };
 assert.deepEqual(cleanHashtags(["#BuildInPublic", "buildinpublic", " #saas ", "#", "#1", "build in public"]), ["BuildInPublic", "saas"], "one tag per word, no empty or number-only tags");
 assert.equal(captionText({ text: "Hook line ", hashtags: ["saas", "#founder"] }), "Hook line\n\n#saas #founder");
-assert.deepEqual(checkCaption({ text: "Hook line", hashtags: ["a1", "b", "c", "d", "e", "f"] }, tiktok, rules), ["It has 6 hashtags; the TikTok caption takes at most 5."]);
-assert.deepEqual(checkCaption({ text: "Hook #saas line", hashtags: ["b", "c", "d"] }, tiktok3, rules), ["It has 4 hashtags; the TikTok caption takes at most 3."], "tags in the text count too");
-assert.ok(checkCaption({ text: "See paylane.app", hashtags: [] }, instagram, rules).some((issue) => issue.includes("link")));
+assert.deepEqual(checkCaption({ text: "Hook line", hashtags: ["a1", "b", "c", "d", "e", "f"] }, captionA, rules), ["It has 6 hashtags; the Short caption takes at most 5."]);
+assert.deepEqual(checkCaption({ text: "Hook #saas line", hashtags: ["b", "c", "d"] }, caption3, rules), ["It has 4 hashtags; the Short caption takes at most 3."], "tags in the text count too");
+assert.ok(checkCaption({ text: "See paylane.app", hashtags: [] }, captionA, rules).some((issue) => issue.includes("link")));
 // The founder's product may be named like a domain: its bare name is not a link; any other domain, or a path, is.
 const calRules = { ...rules, names: ["Cal.com"] };
-assert.deepEqual(checkCaption({ text: "Booked in a minute with Cal.com.", hashtags: [] }, instagram, calRules), [], "the product's own name");
-assert.ok(checkCaption({ text: "Booked with Cal.com, see acme.io", hashtags: [] }, instagram, calRules).some((issue) => issue.includes("link")), "another domain");
-assert.ok(checkCaption({ text: "Pricing at cal.com/pricing", hashtags: [] }, instagram, calRules).some((issue) => issue.includes("link")), "a path");
+assert.deepEqual(checkCaption({ text: "Booked in a minute with Cal.com.", hashtags: [] }, captionA, calRules), [], "the product's own name");
+assert.ok(checkCaption({ text: "Booked with Cal.com, see acme.io", hashtags: [] }, captionA, calRules).some((issue) => issue.includes("link")), "another domain");
+assert.ok(checkCaption({ text: "Pricing at cal.com/pricing", hashtags: [] }, captionA, calRules).some((issue) => issue.includes("link")), "a path");
 assert.ok(checkPost("We shipped it on Cal.com today.", calRules).every((issue) => !issue.includes("link")), "a post may name the product");
-assert.deepEqual(checkCaption({ text: "Built on Next.js and Node.js.", hashtags: [] }, instagram, rules), [], "a framework is not a link");
-assert.ok(checkCaption({ text: "x".repeat(2195), hashtags: ["saas"] }, instagram, rules)[0]?.includes("2202 characters"), "the limit counts the published caption with its hashtags");
+assert.deepEqual(checkCaption({ text: "Built on Next.js and Node.js.", hashtags: [] }, captionA, rules), [], "a framework is not a link");
+assert.ok(checkCaption({ text: "x".repeat(2195), hashtags: ["saas"] }, captionA, rules)[0]?.includes("2202 characters"), "the limit counts the published caption with its hashtags");
 assert.deepEqual(checkYoutube({ title: "How Paylane chases late invoices", description: "A walk through.", hashtags: ["saas"] }, youtube, rules), []);
 assert.ok(checkYoutube({ title: "t".repeat(101), description: "d", hashtags: [] }, youtube, rules)[0]?.includes("101 characters"));
 assert.ok(checkYoutube({ title: "Late invoices #saas", description: "d", hashtags: [] }, youtube, rules).some((issue) => issue.includes("title has a hashtag")));
@@ -129,7 +130,7 @@ const ctx: WriterContext = {
 };
 const data = writerData(ctx, threads, "BRIEF");
 assert.ok(data.indexOf("<platform>") < data.indexOf("<founder_rules") && data.indexOf("<founder_rules") < data.indexOf("<founder_voice") && data.indexOf("<founder_voice") < data.indexOf("<documents>") && data.endsWith("BRIEF"));
-for (const system of [CAPTION_SYSTEM, YOUTUBE_SYSTEM, VIDEO_BRIEF_SYSTEM]) {
+for (const system of [CAPTION_SYSTEM, YOUTUBE_SYSTEM]) {
   assert.ok(system.includes('<skill name="no-ai-slop">'), "every writer kind reads No AI Slop");
 }
 
@@ -150,24 +151,24 @@ async function writerChecks() {
   const caption = { text: "Your invoice is 14 days late.\n\nPaylane sends the reminder for you.", hashtags: ["#freelancer", "invoicing"], rationale: "Leads with the hook." };
   const run = scripted([caption, caption]);
   const writer = createWriter({ think: run.think, agentFor: () => "x_writer", canFix: true });
-  const ig = await writer.draft("caption", instagram, { video }, ctx);
+  const ig = await writer.draft("caption", captionA, { video }, ctx);
   assert.deepEqual(ig.hashtags, ["freelancer", "invoicing"], "hashtags cleaned, the 14 from the transcript is a known number");
-  await writer.draft("caption", tiktok, { video }, ctx);
+  await writer.draft("caption", captionB, { video }, ctx);
   assert.equal(run.calls[0]!.system, run.calls[1]!.system, "one cached prefix for every caption profile");
-  assert.ok(run.calls[0]!.prompt.includes("platform: instagram_caption") && run.calls[1]!.prompt.includes("platform: tiktok_caption"));
+  assert.ok(run.calls[0]!.prompt.includes("platform: caption_a") && run.calls[1]!.prompt.includes("platform: caption_b"));
 
   // A failed code check gets one fix round with the reasons; the fixed caption is kept.
   const tooMany = { ...caption, hashtags: ["a1", "b1", "c1", "d1", "e1", "f1"] };
   const fixed = scripted([tooMany, caption]);
-  const out = await createWriter({ think: fixed.think, agentFor: () => "x_writer", canFix: true }).draft("caption", tiktok, { video }, ctx);
+  const out = await createWriter({ think: fixed.think, agentFor: () => "x_writer", canFix: true }).draft("caption", captionA, { video }, ctx);
   assert.equal(fixed.calls.length, 2);
-  assert.match(fixed.calls[1]!.prompt, /<problems>It has 6 hashtags; the TikTok caption takes at most 5\.<\/problems>/);
-  assert.equal(fixed.calls[1]!.label, "write_caption_tiktok_caption_fix");
+  assert.match(fixed.calls[1]!.prompt, /<problems>It has 6 hashtags; the Short caption takes at most 5\.<\/problems>/);
+  assert.equal(fixed.calls[1]!.label, "write_caption_caption_a_fix");
   assert.deepEqual(out.hashtags, ["freelancer", "invoicing"]);
 
   // Still failing after the fix (or no fix allowed): the run fails with the reasons, no card.
   const stuck = scripted([tooMany]);
-  await assert.rejects(createWriter({ think: stuck.think, agentFor: () => "x_writer", canFix: false }).draft("caption", tiktok, { video }, ctx), /failed our checks\. It has 6 hashtags/);
+  await assert.rejects(createWriter({ think: stuck.think, agentFor: () => "x_writer", canFix: false }).draft("caption", captionA, { video }, ctx), /failed our checks\. It has 6 hashtags/);
 
   // Posts: the versions that pass the code are kept; a link or hashtag drops a version, never the style.
   const post = { versions: [{ text: "We send the reminder on day 3.", angle: "a" }, { text: "Try it at paylane.app", angle: "b" }, { text: "Day 7 is the second nudge #saas", angle: "c" }], rationale: "r" };
@@ -187,38 +188,12 @@ async function writerChecks() {
   const judgedOut = await createWriter({ think: judged.think, agentFor: () => "x_writer", canFix: false, postSystem: "POST SYSTEM", review: async () => [[], ["Too generic."], []] }).draft("post", threads, { idea: "Reminders" }, ctx);
   assert.equal(judgedOut.versions.length, 3, "a review note without a refused pattern still reaches the founder");
 
-  // Video brief: exactly three hooks, facts from the documents, parsed into Studio's type.
-  const brief = { objective: "Show how Paylane chases a late invoice", angle: "Show it working", hooks: ["Your invoice is late.", "Paylane sends the reminder.", "Stop chasing invoices."], keyPoints: ["Plans start at $12/month"], cta: "Try Paylane", seconds: 30, aspect: "9:16", rationale: "r", learnedFrom: [],
-    caption: "Your invoice is late.\n\nPaylane sends the reminder on the day it is due.\n\n#freelance #invoicing",
-    storyboard: [
-      { say: "Your invoice is late.", show: "You, to camera", shot: "talking_head", seconds: 5 },
-      { say: "Paylane sends the reminder for you, on the day it is due.", show: "Paylane's reminder screen", shot: "screen", seconds: 15 },
-      { say: "Try Paylane.", show: "You, to camera", shot: "talking_head", seconds: 10 },
-    ] };
-  const b = await createWriter({ think: scripted([brief]).think, agentFor: () => "x_writer", canFix: false }).draft("video_brief", null, { idea: "Late invoices" }, ctx);
-  assert.deepEqual([b.brief.hooks.length, b.brief.cta, b.brief.seconds], [3, "Try Paylane", 30]);
-  assert.equal(VideoBriefSchema.parse(b.brief).objective, brief.objective, "Studio's buildVideo takes it as is");
-  // The caption is written with the script, in the same call: there, short enough, five hashtags at most, no link.
-  assert.equal(b.brief.caption, brief.caption);
-  const briefWith = (caption: string) => createWriter({ think: scripted([{ ...brief, caption }]).think, agentFor: () => "x_writer", canFix: false }).draft("video_brief", null, { idea: "x" }, ctx);
-  await assert.rejects(briefWith("  "), /no caption/);
-  await assert.rejects(briefWith(`Your invoice is late. ${"#a #b #c #d #e #f"}`), /6 hashtags; it takes at most 5/);
-  await assert.rejects(briefWith("Your invoice is late. See https://paylane.example/pricing"), /caption has a link/);
-  await assert.rejects(briefWith(`Your invoice is late. ${"It is late. ".repeat(200)}`), /caption: /);
-  await assert.rejects(briefWith("Paylane has helped 9,000 freelancers get paid."), /9,000/);
-  await assert.rejects(createWriter({ think: scripted([{ ...brief, hooks: ["One"] }]).think, agentFor: () => "x_writer", canFix: false }).draft("video_brief", null, { idea: "x" }, ctx), /1 hooks; a brief has 3/);
-  await assert.rejects(createWriter({ think: scripted([{ ...brief, storyboard: brief.storyboard.slice(0, 2) }]).think, agentFor: () => "x_writer", canFix: false }).draft("video_brief", null, { idea: "x" }, ctx), /2 beats; a script has 3 to 8/);
-  await assert.rejects(createWriter({ think: scripted([{ ...brief, seconds: 60 }]).think, agentFor: () => "x_writer", canFix: false }).draft("video_brief", null, { idea: "x" }, ctx), /beats run 30 s; the video is 60 s/);
-  await assert.rejects(createWriter({ think: scripted([{ ...brief, storyboard: [{ ...brief.storyboard[0]!, say: "We have helped 9,000 freelancers." }, ...brief.storyboard.slice(1)] }]).think, agentFor: () => "x_writer", canFix: false }).draft("video_brief", null, { idea: "x" }, ctx), /9,000/);
-  await assert.rejects(createWriter({ think: scripted([{ ...brief, keyPoints: ["Used by 4,000 freelancers"] }]).think, agentFor: () => "x_writer", canFix: false }).draft("video_brief", null, { idea: "x" }, ctx), /4,000/);
-
   // The CI fakes pass their own checks for every kind, so fake runs and e2e reach a card.
   const fake: WriterThink = async (opts) => opts.schema.parse(opts.fake!());
   const fakeWriter = createWriter({ think: fake, agentFor: () => "x_writer", canFix: false, postSystem: "POST SYSTEM" });
   assert.equal((await fakeWriter.draft("post", threads, { idea: "Why reminders on day 3 and 7 work" }, ctx)).versions.length, 3);
-  for (const profile of [instagram, tiktok]) assert.ok((await fakeWriter.draft("caption", profile, { video }, ctx)).hashtags.length <= profile.hashtags);
+  for (const profile of [captionA, captionB]) assert.ok((await fakeWriter.draft("caption", profile, { video }, ctx)).hashtags.length <= profile.hashtags);
   assert.ok((await fakeWriter.draft("youtube", youtube, { video }, ctx)).title);
-  assert.equal((await fakeWriter.draft("video_brief", null, { idea: "Chasing a late invoice", seconds: 45 }, ctx)).brief.seconds, 45);
 
   // A kind on the wrong profile is a programming error, not a draft.
   await assert.rejects(createWriter({ think: scripted([]).think, agentFor: () => "x_writer", canFix: false }).draft("caption", threads, { video }, ctx), /caption profile/);
@@ -232,7 +207,7 @@ async function postChecks() {
   }
   assert.deepEqual([postProfile("threads").id, postProfile("linkedin").id, postProfile("x").id], ["threads", "linkedin", "x"]);
   assert.deepEqual([postProfile("Threads").id, postProfile("LinkedIn").id, postProfile("X").id, postProfile("Twitter").id], ["threads", "linkedin", "x", "x"], "the calendar's labels");
-  assert.deepEqual([postProfile(null).id, postProfile("reddit").id, postProfile("tiktok_caption").id], ["x", "x", "x"], "no item, an unknown or a caption platform: X");
+  assert.deepEqual([postProfile(null).id, postProfile("reddit").id, postProfile("youtube").id], ["x", "x", "x"], "no item, an unknown or a video platform: X");
   const linkedin = profile("linkedin");
   const x = profile("x");
   const long = `${"Late invoices are a process problem. ".repeat(11).trim()}`;
@@ -328,34 +303,11 @@ async function postChecks() {
 // W3: Writer's runs for Studio, through the runner on the fake provider.
 async function studioChecks() {
   for (const p of CAPTION_PROFILES) assert.ok(CAPTION_WRITERS[p.id] && AGENT_SPECS[CAPTION_WRITERS[p.id]!].tier === "draft", `${p.id} has its own writer agent`);
-  assert.deepEqual([writerAgent("video_brief", null), writerAgent("caption", profile("tiktok_caption")), writerAgent("youtube", youtube), writerAgent("post", threads)], ["brief_writer", "tiktok_writer", "youtube_writer", "threads_writer"]);
+  assert.deepEqual([writerAgent("youtube", youtube), writerAgent("post", threads)], ["youtube_writer", "threads_writer"]);
 
   assert.deepEqual([firstLine("Your invoice is late. Paylane sends it."), firstLine("no stop at all"), firstLine("v1.2 shipped today! More soon.")], ["Your invoice is late.", "no stop at all", "v1.2 shipped today!"], "the first sentence said, not a decimal point");
   process.env.OPENCMO_AGENT_FAKE = "1";
   const docs = { product: { name: "Paylane", pricing: "$12/month" }, brand: { avoid: ["revolutionary"] } };
-
-  // write_video_brief: SQL's input → Writer's brief, as Studio takes it.
-  const briefRun = memoryStore(docs, []);
-  const b = briefRun.enqueue("write_video_brief", { order_id: "o1", idea: "Chasing a late invoice in one take", reason: "pillar: getting paid", seconds: 30, aspect: "9:16", platform: "Reels" });
-  await drainCmoQueue(briefRun.store);
-  assert.equal(b.status, "done", `brief run (${b.error})`);
-  const out = b.output as { brief: unknown; reason: string };
-  const parsed = VideoBriefSchema.parse(out.brief);
-  assert.deepEqual([parsed.hooks.length, parsed.seconds, parsed.aspect, Boolean(parsed.cta), typeof out.reason], [3, 30, "9:16", true, "string"]);
-  assert.deepEqual(Object.keys(out.brief as object).sort(), ["angle", "aspect", "caption", "cta", "hooks", "keyPoints", "objective", "seconds", "storyboard"], "the keys SQL copies into the order");
-  assert.ok(parsed.caption.length > 0 && parsed.caption.length <= 2200 && countHashtags(parsed.caption) <= 5, "the fake script comes with its caption");
-  assert.deepEqual((b.output as { sources: string[] }).sources, [], "no niche research, no sources");
-  // P5 F8: with niche research the brief cites its videos, and only URLs the research read.
-  const nicheRun = memoryStore(docs, []);
-  const nicheVideo = (n: number) => ({ platform: "tiktok" as const, url: `https://www.tiktok.com/@a/video/${n}`, author: "@a", views: 9000, lift: 4, hook: "Stop editing on a timeline", format: "Screen demo", why: "Names the pain" });
-  await nicheRun.store.saveNicheInsight("u", "r", { topics: ["invoices"], videos: [nicheVideo(1), nicheVideo(2), nicheVideo(3)], formats: ["Screen demo"], measured_at: new Date().toISOString() });
-  const nb = nicheRun.enqueue("write_video_brief", { order_id: "o3", idea: "Chasing a late invoice in one take" });
-  await drainCmoQueue(nicheRun.store);
-  assert.equal(nb.status, "done", `brief with niche research (${nb.error})`);
-  assert.deepEqual((nb.output as { sources: string[] }).sources, [nicheVideo(1).url, nicheVideo(2).url], "the brief cites the niche videos it learned from");
-  const noIdea = briefRun.enqueue("write_video_brief", { order_id: "o2", idea: "" });
-  await drainCmoQueue(briefRun.store);
-  assert.equal(noIdea.status, "failed", "a brief with no idea fails its order");
 
   // write_caption: each edit × each profile, saved through the store with the published text.
   const cap = memoryStore(docs, []);
@@ -363,12 +315,12 @@ async function studioChecks() {
     { clipId: "s1", kind: "short", title: "Late invoices", hook: "Your invoice is 14 days late.", transcript: "Your invoice is 14 days late. Paylane sends the reminder.", seconds: 31 },
     { clipId: "s2", kind: "short", title: "The day 3 reminder", hook: "Day 3 is the first nudge.", transcript: "Day 3 is the first nudge. Then day 7.", seconds: 24 },
   );
-  cap.captions.push({ runId: "earlier", clipId: "s2", profile: "tiktok_caption", text: "The founder's own words", title: null, gen: {}, edited: true });
-  const c = cap.enqueue("write_caption", { order_id: "o3", clip_ids: ["s1", "s2", "s1"], profiles: ["instagram_caption", "tiktok_caption", "youtube", "x", "made_up"], ref_kind: "short_batch", ref_id: "b1" });
+  cap.captions.push({ runId: "earlier", clipId: "s2", profile: "youtube", text: "The founder's own words", title: null, gen: {}, edited: true });
+  const c = cap.enqueue("write_caption", { order_id: "o3", clip_ids: ["s1", "s2", "s1"], profiles: ["youtube", "x", "made_up"], ref_kind: "short_batch", ref_id: "b1" });
   await drainCmoQueue(cap.store);
   assert.equal(c.status, "done", `caption run (${c.error})`);
-  assert.equal((c.output as { saved: number }).saved, 6, "two edits × three caption profiles; X and unknown ids ignored, a repeated edit once");
-  assert.equal(cap.captions.find((row) => row.clipId === "s2" && row.profile === "tiktok_caption")!.text, "The founder's own words", "a caption the founder edited is never overwritten");
+  assert.equal((c.output as { saved: number }).saved, 2, "two edits on YouTube; X and unknown ids ignored, a repeated edit once");
+  assert.equal(cap.captions.find((row) => row.clipId === "s2" && row.profile === "youtube")!.text, "The founder's own words", "a caption the founder edited is never overwritten");
   for (const row of cap.captions.filter((r) => r.runId === c.id)) {
     const p = profile(row.profile);
     assert.ok([...row.text].length <= p.limit && countHashtags(row.text) <= p.hashtags && !/https?:\/\/|www\./i.test(row.text), `${row.profile} passes cmo_save_caption's rules`);

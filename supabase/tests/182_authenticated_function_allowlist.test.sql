@@ -64,7 +64,6 @@ insert into allowed values
   ('cmo_funnel_report(integer)'),  -- 20270126010000: refuses anyone not in app_owners, like provider_spend_report
   ('ops_failures_report(integer)'),  -- 20270128010000 (round 3, C): refuses anyone not in app_owners, like cmo_funnel_report
   ('ops_is_owner()'),  -- 20270128010000 (round 3, C): whether the caller is an owner, nothing about anyone else
-  ('cmo_order_script(text,date)'),
   ('cmo_post_myself(uuid,text,text)'),
   ('cmo_script_edit_beat(uuid,integer,text,text,timestamp with time zone)'),
   -- CMO review 3, B0: a founder asks about themselves only (another account is not found).
@@ -72,7 +71,6 @@ insert into allowed values
   -- CMO review 3, 3.2: steps on the founder's own onboarding run, and the three optional answers.
   ('cmo_onboard_step(uuid,jsonb)'),
   ('cmo_onboarding_answers(jsonb)'),
-  ('cmo_script_open(uuid)'),
   ('billing_switch_target(text)'),  -- wave 2 A7: own subscription only, read-only; the route calls Creem
   ('my_email_log(integer)'),  -- wave 2 A4: the founder's own email log, read-only
   ('my_autopilot_due()'),  -- review of #238: the founder's autopilot posts due soon, for the service worker
@@ -95,7 +93,6 @@ insert into allowed values
   ('complete_caption_translation(uuid,text)'),
   ('create_api_key(text)'),
   ('create_blank_edit(text,text)'),
-  ('create_post_image_edit(text,text,uuid)'),
   ('create_slideshow(text,text,uuid)'),
   ('create_generation(uuid,uuid,text,jsonb,text,uuid,uuid)'),
   ('credit_order_close(uuid)'),
@@ -148,12 +145,8 @@ insert into allowed values
   ('register_media_asset(uuid,text,text,uuid)'),
   ('rename_blank_edit(uuid,text)'),
   ('repurpose_post(uuid,text)'),
-  ('photo_post_caption(uuid,text)'),
-  ('photo_post_create()'),
-  ('photo_post_save(uuid,text[],text,text[])'),
-  ('photo_post_schedule(uuid)'),
   ('post_photos_save(uuid,text[],text[])'),
-  ('request_stills_export(uuid,uuid,uuid)'),
+  ('post_set_quote_card(uuid,uuid,text,text)'),
   ('sales_settings_save(text[],jsonb,text[],text)'),  -- wave 3 A5: cadence
   ('rename_project(uuid,text)'),
   ('sales_mention_count()'),
@@ -193,9 +186,6 @@ insert into allowed values
   ('start_cmo_run(text,jsonb)'),
   ('studio_step_finish(uuid,text,text,uuid,jsonb,uuid[])'),
   ('studio_step_raise(uuid,text,text,jsonb,jsonb,integer,uuid,uuid)'),
-  ('studio_post_image_rendering(uuid,uuid,uuid,uuid)'),
-  ('studio_slideshow_rendering(uuid,uuid,jsonb,jsonb,uuid,uuid)'),
-  ('studio_slideshow_rerender(uuid,uuid,uuid,jsonb)'),
   ('upload_reservation_allows(text,text,jsonb)'),
   ('upload_usage()'),
   ('use_media_transcript(uuid,uuid,numeric,numeric)'),

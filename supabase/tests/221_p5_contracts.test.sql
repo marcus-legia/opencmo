@@ -6,7 +6,7 @@ create extension if not exists pgtap with schema extensions;
 begin;
 set search_path to public, extensions;
 
-select plan(42);
+select plan(36);
 
 -- Grants and RLS.
 select ok(not has_table_privilege('authenticated', 'public.subreddit_rules', 'insert'), 'a founder does not write subreddit rules');
@@ -98,27 +98,6 @@ select is(public.approval_snapshot('opportunity', 'e2214000-0000-4000-8000-00000
 select throws_ok($$ insert into public.opportunities (user_id, url, title, score, reply, rule)
   values ('e2210000-0000-4000-8000-00000000000a', 'https://www.reddit.com/r/saas/comments/a3/', 'x', 70, null, 'help_only') $$,
   '23514', null, 'only a skipped thread goes without a draft');
-
--- Still export (B2's queue): the owner's saved revision only, one task per request id, three-level paths.
-select ok((select 'image/png' = any(allowed_mime_types) and 'application/zip' = any(allowed_mime_types)
-  from storage.buckets where id = 'exports'), 'exports takes PNG and zip');
-insert into public.editor_revisions (id, clip_id, number, source_hash, document)
-values ('e2215000-0000-4000-8000-00000000000a', (select id from s), 1, repeat('a', 64), '{"version":1}');
-set local role authenticated;
-set local request.jwt.claims = '{"sub":"e2210000-0000-4000-8000-00000000000a","role":"authenticated"}';
-create temp table st as select * from public.request_stills_export((select id from s), 'e2215000-0000-4000-8000-00000000000a',
-  'e2216000-0000-4000-8000-00000000000a');
-select is((select kind || ' ' || status from st), 'render_stills queued', 'a still export is queued');
-select is((select payload->>'object' from st),
-  'e2210000-0000-4000-8000-00000000000a/' || (select id from s) || '/' || (select id from st) || '.zip', 'the zip sits at <user>/<clip>/<task>.zip');
-select is((select id from public.request_stills_export((select id from s), 'e2215000-0000-4000-8000-00000000000a',
-  'e2216000-0000-4000-8000-00000000000a')), (select id from st), 'the same request id returns the same task');
-select throws_ok($$ select public.request_stills_export((select id from s), gen_random_uuid(), gen_random_uuid()) $$,
-  'P0002', 'Save the project before exporting it.', 'only a saved revision');
-set local request.jwt.claims = '{"sub":"e2210000-0000-4000-8000-00000000000b","role":"authenticated"}';
-select throws_ok($$ select public.request_stills_export((select id from s), 'e2215000-0000-4000-8000-00000000000a', gen_random_uuid()) $$,
-  null, null, 'another founder cannot export it');
-reset role;
 
 -- New order kinds.
 select is(public.work_order_department('build_slideshow'), 'studio', 'build_slideshow is Studio''s');

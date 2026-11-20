@@ -6,7 +6,7 @@ create extension if not exists pgtap with schema extensions;
 begin;
 set search_path to public, extensions;
 
-select plan(41);
+select plan(31);
 
 select is((public.schedule_rules()->'platforms'->'x'->>'dailyCap')::int, 5, 'X keeps five a day');
 select is((public.schedule_rules()->>'minGapHours')::int, 3, 'three hours between two posts on one platform');
@@ -74,27 +74,11 @@ insert into public.deliverables (id, user_id, order_id, kind, ref_kind, ref_id, 
   ('e2163000-0000-4000-8000-00000000000e', 'e2160000-0000-4000-8000-00000000000a', 'e2161000-0000-4000-8000-00000000000a', 'video', 'clip', 'e2165000-0000-4000-8000-00000000000a', 'decided'),
   ('e2163000-0000-4000-8000-00000000000f', 'e2160000-0000-4000-8000-00000000000a', 'e2161000-0000-4000-8000-00000000000a', 'short', 'clip', 'e2165000-0000-4000-8000-00000000000b', 'ready');
 select is(public.schedule_propose('e2163000-0000-4000-8000-00000000000f'), 0, 'a short without a caption is not proposed');
-insert into public.content_items (id, user_id, department, platform, day, idea, status, clip_id, body) values
-  ('e2162000-0000-4000-8000-00000000000e', 'e2160000-0000-4000-8000-00000000000a', 'video', 'tiktok_caption', current_date,
-   'Caption', 'approved', 'e2165000-0000-4000-8000-00000000000b', '{"text":"Cut by words"}');
-create temp table first_pick as select public.schedule_pick_time('e2160000-0000-4000-8000-00000000000a', 'tiktok',
-  'e2163000-0000-4000-8000-00000000000f') as at;
--- The long video takes TikTok that day, four hours after the short's first pick.
-insert into public.schedule_slots (user_id, deliverable_id, platform, publish_at, window_ends_at)
-select 'e2160000-0000-4000-8000-00000000000a', 'e2163000-0000-4000-8000-00000000000e', 'tiktok',
-  at + interval '4 hours', at + interval '4 hours 15 minutes' from first_pick;
-select is(public.schedule_propose('e2163000-0000-4000-8000-00000000000f'), 1, 'a short goes where it has a caption');
-select isnt((select (publish_at at time zone 'UTC')::date from public.schedule_slots where deliverable_id = 'e2163000-0000-4000-8000-00000000000f'),
-  (select (at at time zone 'UTC')::date from first_pick), 'not the day of its own long video');
-select is((select snapshot->>'text' from public.approvals where ref_id = (select id from public.schedule_slots
-  where deliverable_id = 'e2163000-0000-4000-8000-00000000000f') and status = 'waiting'), 'Cut by words',
-  'its card shows the caption for that platform');
 
 -- Deciding. As the founder.
 create temp table ids as select
   (select id from s1) as x_slot,
-  (select approval_id from s1) as x_card,
-  (select id from public.schedule_slots where deliverable_id = 'e2163000-0000-4000-8000-00000000000f') as t_slot;
+  (select approval_id from s1) as x_card;
 grant select on ids, s1 to authenticated;
 set local role authenticated;
 set local request.jwt.claims = '{"sub":"e2160000-0000-4000-8000-00000000000a"}';
@@ -123,30 +107,6 @@ select throws_ok($$ select public.schedule_change((select x_slot from ids), 'set
 select is((select snapshot->'options'->>'ai_label' from public.schedule_change((select x_slot from ids), 'set_options', '{"options":{"ai_label":true}}')),
   'true', 'the AI-generated label is the founder''s toggle');
 
--- TikTok: with no account the founder downloads the video and posts it (20270122010000); with one, its required
--- fields first.
-select is((select mode from public.schedule_slots where id = (select t_slot from ids)), 'intent',
-  'no TikTok account: the founder posts it themselves');
-reset role;
-select public.social_account_save('e2160000-0000-4000-8000-00000000000a', 'tiktok', '@founder', null, 'acc-a1-tt');
-set local role authenticated;
-set local request.jwt.claims = '{"sub":"e2160000-0000-4000-8000-00000000000a"}';
-select is((select mode from public.schedule_slots where id = (select t_slot from ids)), 'intent', 'connecting does not change a slot by itself');
-select is((select snapshot->>'handle' from public.schedule_change((select t_slot from ids), 'change_account',
-  jsonb_build_object('account_id', (select id from public.social_accounts where zernio_account_id = 'acc-a1-tt')))), '@founder',
-  'the founder picks the account');
-select throws_ok($$ select public.approval_decide((select approval_id from public.schedule_slots where id = (select t_slot from ids)), 'approve',
-  jsonb_build_object('content_hash', (select content_hash from public.approvals where id = (select approval_id from public.schedule_slots where id = (select t_slot from ids))))) $$,
-  'P0001', 'Choose who can see it on TikTok.', 'TikTok''s privacy has no default');
-select throws_ok($$ select public.schedule_change((select t_slot from ids), 'set_options', '{"options":{"privacy":"EVERYONE"}}') $$,
-  '22023', 'Choose who can see it from TikTok''s list.', 'privacy comes from TikTok''s list');
-select public.schedule_change((select t_slot from ids), 'set_options', '{"options":{"privacy":"PUBLIC_TO_EVERYONE","allow_comment":true}}');
-select is((public.approval_decide((select approval_id from public.schedule_slots where id = (select t_slot from ids)), 'approve',
-  jsonb_build_object('content_hash', (select content_hash from public.approvals where id = (select approval_id from public.schedule_slots where id = (select t_slot from ids)))))).status,
-  'approved', 'with them, the short is approved');
-select throws_ok($$ select public.schedule_change((select t_slot from ids), 'change_account', '{"account_id":"e2160000-0000-4000-8000-00000000000b"}') $$,
-  '22023', null, 'only the founder''s own account on that platform');
-
 -- Cancel, and another founder.
 select is((public.approval_decide((select approval_id from public.schedule_slots where id = (select x_slot from ids)), 'cancel',
   jsonb_build_object('content_hash', (select content_hash from public.approvals where id = (select approval_id from public.schedule_slots where id = (select x_slot from ids)))))).status,
@@ -156,7 +116,7 @@ select throws_ok($$ select public.schedule_change((select x_slot from ids), 'cha
   'P0001', 'This post is already on its way.', 'a cancelled slot is not moved');
 
 set local request.jwt.claims = '{"sub":"e2160000-0000-4000-8000-00000000000b"}';
-select throws_ok($$ select public.schedule_change((select t_slot from ids), 'cancel', '{}') $$, 'P0002', null, 'another founder cannot touch it');
+select throws_ok($$ select public.schedule_change((select x_slot from ids), 'cancel', '{}') $$, 'P0002', null, 'another founder cannot touch it');
 reset role;
 
 -- The daily cap holds for a time the founder picks.

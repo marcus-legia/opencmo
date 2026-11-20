@@ -14,7 +14,7 @@ import { z } from "zod";
 import type { Documents } from "../jobs/types";
 import type { PlatformProfile } from "../platforms";
 
-export const WRITER_KINDS = ["post", "caption", "youtube", "video_brief"] as const;
+export const WRITER_KINDS = ["post", "caption", "youtube"] as const;
 export type WriterKind = (typeof WRITER_KINDS)[number];
 
 /** A platform profile (`packages/contracts/platforms.json`, A0): limit, title limit, "more" cut, tone, hashtags, links. */
@@ -25,7 +25,6 @@ export const PROFILE_KIND: Record<WriterKind, WriterProfile["kind"] | null> = {
   post: "post",
   caption: "caption",
   youtube: "youtube",
-  video_brief: null,
 };
 
 /** Frames a video can have, the same list as `editor-core`'s `VIDEO_ASPECTS`. */
@@ -98,7 +97,6 @@ export type WriterBriefs = {
   post: { idea: string; reason?: string; itemId?: string };
   caption: { video: VideoSource };
   youtube: { video: VideoSource };
-  video_brief: { idea: string; reason?: string; seconds?: number; aspect?: VideoBrief["aspect"] };
 };
 export type WriterBrief<K extends WriterKind = WriterKind> = WriterBriefs[K];
 
@@ -189,49 +187,15 @@ export const YoutubeDraftSchema = z.object({
 });
 export type YoutubeDraft = z.infer<typeof YoutubeDraftSchema>;
 
-/** The model's video brief: exactly three hooks, the rest as `VideoBriefSchema`. */
-export const VideoBriefDraftSchema = z.object({
-  objective: z.string().describe("What the video should achieve, one sentence"),
-  angle: z.string().describe("The strategy angle it takes"),
-  hooks: z.array(z.string()).describe("Exactly three opening lines, the strongest first"),
-  keyPoints: z.array(z.string()).describe("Up to six facts from the documents the script may use"),
-  cta: z.string().describe("What the viewer should do at the end"),
-  seconds: z.number().int().describe("Length in seconds, 5 to 90"),
-  aspect: z.enum(BRIEF_ASPECTS),
-  rationale: z.string().describe("One sentence: why this video now"),
-  learnedFrom: z.array(z.string()).describe("URLs of the niche videos whose hooks or format this brief adapts, copied exactly; empty when none"),
-  caption: z.string().describe("The caption posted with the video: the hook as its first line, then what the video shows, then up to five hashtags; no link"),
-  storyboard: z
-    .array(
-      z.object({
-        say: z.string().describe("Exactly what the founder says in this beat, in their voice"),
-        show: z.string().describe("What is on screen while they say it"),
-        shot: z.enum(SCRIPT_SHOTS).describe("talking_head: to camera; screen: a screen recording of the product; broll: footage the founder can film themselves"),
-        seconds: z.number().int().describe("How long the beat runs, 1 to 30"),
-      }),
-    )
-    .describe(`${SCRIPT_BEATS.min} to ${SCRIPT_BEATS.max} beats the founder records, in order; the first says the first hook`),
-});
-export type VideoBriefDraft = z.infer<typeof VideoBriefDraftSchema>;
-
-export const SlideSchema = z.object({
-  heading: z.string().describe("A few words, one idea"),
-  body: z.string().describe("One or two short lines; empty when the heading says it all"),
-});
-export type Slide = z.infer<typeof SlideSchema>;
-
-
 export type WriterOutputs = {
   post: PostDraft;
   caption: CaptionDraft;
   youtube: YoutubeDraft;
-  /** The brief as Studio takes it (parsed), plus why. */
-  video_brief: { brief: VideoBrief; rationale: string; learnedFrom: string[] };
 };
 export type WriterOutput<K extends WriterKind = WriterKind> = WriterOutputs[K];
 
 /** The profile a kind is written for: a platform profile for posts, captions and YouTube; none for Studio's kinds. */
-export type ProfileFor<K extends WriterKind> = K extends "video_brief" ? null : WriterProfile;
+export type ProfileFor<_K extends WriterKind> = WriterProfile;
 
 /**
  * One writer for every kind. `draft` writes and checks with code; a version a code check refuses never

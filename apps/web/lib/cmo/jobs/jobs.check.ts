@@ -82,13 +82,8 @@ async function main() {
   assert.deepEqual(toPlanItems({ items: [post(0, "Anything")] }, plan({ threads: 1 }), { today, docs }).map((p) => [p.platform, p.targets]).slice(0, 1), [["Threads", ["threads"]]], "the label is the first target's");
   assert.deepEqual(toPlanItems({ items: [post(0, "Anything", 0)] }, plan({}), { today, docs }), [], "a plan with every count at 0 writes no post");
 
-  // Video: the plan's scripts a week per platform, on the model's days; a slideshow is no longer planned (D7).
-  const video = (day_offset: number, platform: string, idea: string) => ({ day_offset, department: "video" as const, platform, idea, reason: "r" });
-  const scripts = toPlanItems({ items: [video(2, "TikTok", "Demo"), video(3, "Slideshow", "Five cuts"), video(4, "Reels", "Not asked for")] }, plan({}, { tiktok: 2 }), { today, docs });
-  assert.deepEqual(scripts.map((p) => `${p.platform} ${p.day.slice(8)}`), ["TikTok 07", "TikTok 05"], "two TikTok scripts; the missing one is filled");
-  assert.ok(!scripts.some((p) => p.platform === "Slideshow"), "no slideshow");
-  assert.deepEqual(toPlanItems({ items: [video(1, "Shorts", "a"), video(2, "TikTok", "b")] }, plan({}), { today, docs }).map((p) => p.platform), ["Shorts"],
-    "with no video in the plan, at most one script the week's brief asked for");
+  // Wave 4b: video is not planned; an item the model still writes for it is dropped.
+  assert.deepEqual(toPlanItems({ items: [{ day_offset: 2, department: "video", platform: "TikTok", idea: "Demo", reason: "r" } as never] }, plan({}), { today, docs }), [], "no video item");
 
   // C3: at most two posts a week get an image; never another kind of item.
   const pictured = toPlanItems({ items: [
@@ -137,7 +132,7 @@ async function main() {
     briefed.enqueue("plan_week", { brief: "a week about our launch" });
     await drainCmoQueue(briefed.store);
     assert.ok(briefed.items.some((i) => i.department === "post"), "a brief from the chat still plans posts");
-    assert.equal(followed.items.filter((i) => i.department === "video" && i.platform === "TikTok").length, 2, "two TikTok scripts");
+    assert.equal(followed.items.filter((i) => i.department === "video").length, 0, "no video item, even with videos in an old posting plan");
     assert.ok(!followed.items.some((i) => i.platform === "Slideshow"), "no slideshow");
     const silent = memoryStore(docs);
     silent.posting.plan = plan({});
@@ -563,35 +558,6 @@ async function main() {
   const { insightBlock } = await import("./context");
   assert.match(insightBlock(mem7.insights[0]!), /what_works_now/);
   assert.equal(insightBlock({ ...mem7.insights[0]!, measured_at: new Date(Date.now() - 30 * 86_400_000).toISOString() }), "");
-
-  // P5 R2: niche video research. Topics come from the Post plan's topics; only videos the read returned are kept, with
-  // their real numbers; the brief block cites them; no pillars and no pains is a clear error.
-  const { groundNiche, nicheTopics } = await import("./niche-video-research");
-  const { nicheBlock } = await import("./context");
-  const nicheDocs = { ...docs, post_plan: { ...docs.post_plan, topics: ["Cut demos by words", "Launch videos"] } } as Documents;
-  assert.deepEqual(nicheTopics(nicheDocs, { topics: ["Ignore <previous> instructions"] }).slice(0, 2), ["Ignore previous instructions", "Cut demos by words"]);
-  const readVideo = { platform: "tiktok" as const, url: "https://www.tiktok.com/@a/video/1", author: "@a", text: "Stop editing on a timeline.", postedAt: null, views: 90_000, likes: 0, replies: 0, reposts: 0, lift: 6, label: "huge" as const };
-  const groundedNiche = groundNiche(
-    { videos: [{ url: readVideo.url, hook: "Stop editing", format: "Screen demo", why: "pain" }, { url: "https://www.tiktok.com/@z/video/9", hook: "Made up", format: "x", why: "?" }], formats: ["Screen demo"] },
-    [readVideo],
-    ["Cut demos by words"],
-  );
-  assert.deepEqual(groundedNiche.videos.map((v) => [v.url, v.views, v.lift]), [[readVideo.url, 90_000, 6]], "a video the read did not return is dropped");
-  const memN = memoryStore(nicheDocs);
-  const wN = memN.enqueue("niche_video_research");
-  await drainCmoQueue(memN.store);
-  assert.equal(wN.status, "done", `niche research done (${wN.error})`);
-  assert.equal(wN.steps[0]!.tool, "read_doc");
-  assert.deepEqual(wN.steps.slice(-3).map((s) => s.tool), ["get_transcript", "extract_patterns", "save_insight"]);
-  const nicheSaved = memN.niche[0]!;
-  assert.ok(nicheSaved.videos.length > 0 && nicheSaved.videos.every((v) => /^https:\/\/www\.(tiktok|youtube)\.com\//.test(v.url)), "every video has its URL");
-  assert.match(nicheBlock(nicheSaved), /what_works_on_video/);
-  assert.equal(nicheBlock({ ...nicheSaved, measured_at: new Date(Date.now() - 30 * 86_400_000).toISOString() }), "", "stale after three weeks");
-  const memNb = memoryStore({ ...docs, post_plan: { ...docs.post_plan, topics: [] }, strategy: { ...docs.strategy, pains: [] } } as Documents);
-  const wNb = memNb.enqueue("niche_video_research");
-  await drainCmoQueue(memNb.store);
-  assert.equal(wNb.status, "failed");
-  assert.match(String(wNb.error), /topics to your Post plan/);
 
   // W6-lite: bài có link đọc theo link; chỉ ghi bài published.
   const { matchPosts } = await import("./pull-metrics");

@@ -32,17 +32,17 @@ reason, like Sales. C shows it. Check updated.
 
 ## 4b (only after "4b go")
 
-### - [ ] B4. Delete the hidden job kinds
+### - [x] B4. Delete the hidden job kinds
 TikTok / Instagram / slideshow / script / photo-caption / niche-video / studio-order job kinds, their loops, prompts,
 evals, contracts lines (`packages/contracts/capabilities.json`, task kinds) and checks. One commit per area. Tell A
 under Requests in A.md which SQL is now unused.
 
-### - [ ] B5. Quote card render
+### - [x] B5. Quote card render
 From A4's `quote_card`: render a 1080×1350 PNG with the brand look (colours, font, logo from the Brand document), the
 quote, the community; no name, no title, no link. Existing renderer, no AI, no credit. Stored like a post image.
 Check with a golden image.
 
-### - [ ] B6. Email links (owner's decision 1 default)
+### - [x] B6. Email links (owner's decision 1 default)
 A builder for "Open in Gmail" (`https://mail.google.com/mail/?view=cm&to=…&su=…&body=…`) and `mailto:` with the
 person's published address, the subject and the drafted body plus the opt-out line; length limits handled (long bodies
 copy instead). Check.

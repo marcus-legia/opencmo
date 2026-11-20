@@ -77,7 +77,7 @@ export async function startCmoRun(supabase: SupabaseClient, kind: CmoJobKind, in
   if (cmoPausedEverywhere()) throw new ApiError(503, PAUSED_EVERYWHERE);
   // Checked BEFORE credits are held: without a Reddit reader key every run would fail.
   if (kind === "sales_scan" && !socialReaderReady()) throw new ApiError(503, "Reddit scanning is not set up on this server yet.");
-  if ((kind === "competitor_research" || kind === "niche_video_research" || kind === "pull_metrics") && !socialReaderReady()) throw new ApiError(503, "Social research is not set up on this server yet.");
+  if ((kind === "competitor_research" || kind === "pull_metrics") && !socialReaderReady()) throw new ApiError(503, "Social research is not set up on this server yet.");
   const run = firstRow(await rpcOrThrow<StartedRun | StartedRun[]>(supabase, "enqueue_cmo_run", { p_kind: kind, p_input: input }));
   if (!run) throw new ApiError(500, "Could not start this task.");
   if (run.status === "queued" && opts.kick !== false) kickCmoQueue(run.id);

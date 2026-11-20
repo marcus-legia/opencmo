@@ -94,11 +94,11 @@ async function main() {
     let sent: PublishDeliverable | null = null;
     const watching = { ...adapter, publish: async (deliverable: PublishDeliverable, slot: Parameters<typeof adapter.publish>[1]) => ((sent = deliverable), adapter.publish(deliverable, slot)) };
     const slot = fired({
-      platform: "instagram",
-      snapshot: snapshot({ deliverable_kind: "photo_post", platform: "instagram", text: "Demo day.", photos }),
+      platform: "threads",
+      snapshot: snapshot({ deliverable_kind: "post", platform: "threads", text: "Demo day.", photos }),
       current: { content_hash: HASH, text: "Demo day.", title: null, clip_id: null, photos },
     });
-    const { d } = deps([slot], { adapter: watching, startMedia: async () => assert.fail("a photo post uploads nothing") });
+    const { d } = deps([slot], { adapter: watching, startMedia: async () => assert.fail("a post with photos uploads nothing") });
     assert.equal((await runPublishPost(d, SLOT)).kind, "done");
     assert.deepEqual((sent as PublishDeliverable | null)?.media.map((m) => m.url), photos.map((o) => `https://storage.example/${o}?token=t`), "every photo, in order");
     // A photo that is gone fails the slot with a sentence the founder can act on.

@@ -1,6 +1,6 @@
 /**
  * W1 Plan the week (docs/cmo/san-pham.md §4.3; daily core drafts, owner 2026-11-12): the code builds the week's
- * skeleton from the founder's posting plan (a slot per core post a day, video scripts a week per platform) and the
+ * skeleton from the founder's posting plan (a slot per core post a day) and the
  * model fills each slot with an idea and a one-sentence reason. Nothing is posted; it only writes the calendar.
  *
  * Wave 3 B3: a post's topic comes from the Library (the themes people raised in Sales conversations in the last 14
@@ -13,7 +13,7 @@ import { z } from "zod";
 import { documentsBlock, goalBlock, insightBlock, recall } from "./context";
 import { mondayOf } from "./summarize-memory";
 import { profileIdOf, profileOf } from "../platforms";
-import { VIDEO_PLATFORMS, dayTargets, type PostingPlan, type VideoPlatform } from "../posting-plan";
+import { dayTargets, type PostingPlan } from "../posting-plan";
 import { NO_AI_SLOP, skillText } from "../skills";
 import type { JobContext, JobOutput } from "./runner";
 import { isoDay, type Documents, type PlanItem, type PostSource } from "./types";
@@ -29,16 +29,16 @@ export const PlanSchema = z.object({
     .array(
       z.object({
         day_offset: z.number().int().describe("0 = today, 6 = six days from today"),
-        department: z.enum(["post", "sales", "video"]),
+        department: z.enum(["post", "sales"]),
         slot: z.number().int().optional().describe("Posts only: the slot number from <post_slots> this idea fills"),
-        platform: z.string().describe("Post: the slot's first platform; Reddit for sales; TikTok, Reels or Shorts for a video script"),
+        platform: z.string().describe("Post: the slot's first platform; Reddit for sales"),
         idea: z.string().describe("A topic note in one plain line (what happened, what was learned, what to show), specific to this product; not a headline"),
         reason: z.string().describe("One sentence: why this, why now, citing the strategy or last week"),
         image: z.boolean().optional().describe("Posts only: true when the post is stronger with an image (a launch, a product screen, a before and after); false otherwise"),
         sources: z.array(z.string()).optional().describe("Posts only: the ids from <library> (c1, c2…) of the one to three conversations this post is written from"),
       }),
     )
-    .describe("One post per slot in <post_slots>, the video scripts in <video_scripts>, and any Reddit items"),
+    .describe("One post per slot in <post_slots>, and any Reddit items"),
 });
 type Plan = z.infer<typeof PlanSchema>;
 type Answer = Plan["items"][number];
@@ -48,7 +48,6 @@ const SYSTEM = `You are the CMO for a solo founder. Plan the next seven days of 
 Rules:
 - Posts: exactly one post idea for each slot in <post_slots>, with that slot's day_offset and slot number. One post goes to every platform its slot lists, so write an idea that stands on its own on each of them.
 - Post topics come from <library>: the problems people raised in conversations the founder's Sales scans found. Each post takes one theme, says what the founder knows about it, and lists in sources the ids of the one to three conversations it is written from. Spread the week over the themes people raised most. Never name a person, quote a post's title, or say where the founder found them. When <library> is empty and the founder wrote a brief for this week, plan from the brief and leave sources empty.
-- Video scripts: exactly the scripts <video_scripts> asks for, on the platform it names and on days you pick, spread over the week. You write the script and the storyboard; the founder records the video themselves, to camera or as a screen recording. Its idea says what the video shows. Never plan an AI-generated video. Short clips are cut from the founder's finished videos, outside this plan.
 - Reddit (department "sales"): at most one a day, where the strategy says to help on Reddit.
 - At most two posts a week get an image (image true): a launch, a product screen, a before and after. The image is the post's title on the founder's brand, or a frame of their product; nothing is generated. Every other item has image false.
 - Every item is specific to this product and its customers, and every reason cites the strategy, a pain, or what happened last week.
@@ -68,8 +67,6 @@ ${NO_AI_SLOP}`;
 export const MAX_IMAGES = 2;
 
 
-/** The calendar label of each video platform's script (`platform_profile_id` maps them back). */
-export const VIDEO_LABEL: Readonly<Record<VideoPlatform, string>> = { tiktok: "TikTok", instagram: "Reels", youtube: "Shorts" };
 
 /** A post's platform as the calendar writes it ("X", "Threads", "LinkedIn"); X for anything that is not a post platform. */
 export function postPlatform(label: string): string {
@@ -84,11 +81,6 @@ export type PostSlot = { day_offset: number; slot: number; targets: string[] };
 export function postSlots(posting: PostingPlan): PostSlot[] {
   const day = dayTargets(posting);
   return Array.from({ length: 7 }, (_, d) => day.map((targets, slot) => ({ day_offset: d, slot, targets }))).flat();
-}
-
-function videoPlatformOf(label: string): VideoPlatform | null {
-  const id = profileIdOf(label);
-  return id === "tiktok_caption" ? "tiktok" : id === "instagram_caption" ? "instagram" : id === "youtube" ? "youtube" : null;
 }
 
 /** The Post plan's topics, in order; a stand-in when it has none. */
@@ -106,10 +98,7 @@ const clampDay = (offset: number) => Math.min(6, Math.max(0, Math.round(offset))
  * pillars (as the fake plan does). Each post carries its slot's `targets`; `platform` is the first one's label, so
  * readers that know only `platform` keep working.
  *
- * Videos: `posting.video[p]` scripts a week per platform, on the model's days, filled from the pillars when the model
- * wrote fewer. With no video in the plan, at most one script, which the prompt allows only when the week's brief asks
- * for a video. A script is one the founder records (owner, 2026-11-09): SQL orders only its brief. Slideshows are no
- * longer planned (D7). Reddit: at most one a day. `image` may be missing (older answers): it means false.
+ * Video is not planned (wave 4b). Reddit: at most one a day. `image` may be missing (older answers): it means false.
  */
 export function toPlanItems(
   plan: Plan,
@@ -173,27 +162,6 @@ export function toPlanItems(
     });
   }
 
-  const scripts = plan.items.filter((i) => i.department === "video" && videoPlatformOf(i.platform) !== null);
-  const asked = VIDEO_PLATFORMS.filter((p) => posting.video[p] > 0);
-  if (!asked.length) {
-    const script = scripts[0];
-    if (script) out.push({ department: "video", platform: VIDEO_LABEL[videoPlatformOf(script.platform)!], day: isoDay(clampDay(script.day_offset), today), idea: text(script.idea) || "A video script", reason: text(script.reason) });
-  }
-  for (const p of asked) {
-    const n = posting.video[p];
-    const mine = scripts.filter((i) => videoPlatformOf(i.platform) === p).slice(0, n);
-    const days = new Set(mine.map((i) => clampDay(i.day_offset)));
-    for (const item of mine) out.push({ department: "video", platform: VIDEO_LABEL[p], day: isoDay(clampDay(item.day_offset), today), idea: text(item.idea) || "A video script", reason: text(item.reason) });
-    // Spread the missing scripts over the week, on days this platform has none yet.
-    const spread = Array.from({ length: 7 }, (_, k) => Math.floor((k * 7) / Math.max(n, 1)) % 7).concat([0, 1, 2, 3, 4, 5, 6]);
-    for (let k = mine.length; k < n; k++) {
-      const day = spread.find((d) => !days.has(d)) ?? k % 7;
-      days.add(day);
-      const fill = nextPillar();
-      out.push({ department: "video", platform: VIDEO_LABEL[p], day: isoDay(day, today), idea: `${fill.idea}, shown on screen`.slice(0, 300), reason: `From your pillar "${fill.pillar}".` });
-    }
-  }
-
   const salesDays = new Set<string>();
   for (const item of plan.items) {
     if (item.department !== "sales") continue;
@@ -222,18 +190,16 @@ export function fitStage<T extends { idea: string; reason: string }>(items: T[],
   return items.filter((item) => !NEEDS_CUSTOMERS.test(`${item.idea} ${item.reason}`));
 }
 
-/** The slots and scripts the week asks for, as the planner reads them. */
+/** The slots the week asks for, as the planner reads them. */
 function skeletonBlock(posting: PostingPlan): string {
   const slots = postSlots(posting);
   const posts = slots.length
     ? slots.map((s) => `- day_offset ${s.day_offset}, slot ${s.slot}: ${s.targets.map((t) => postPlatform(t)).join(", ")}`).join("\n")
     : "(no posts this week: the founder set every platform to 0)";
-  const videos = VIDEO_PLATFORMS.filter((p) => posting.video[p] > 0).map((p) => `- ${VIDEO_LABEL[p]}: ${posting.video[p]} a week`).join("\n")
-    || "(none: plan one script only when this week's brief asks for a video)";
-  return `<post_slots>\n${posts}\n</post_slots>\n\n<video_scripts>\n${videos}\n</video_scripts>`;
+  return `<post_slots>\n${posts}\n</post_slots>`;
 }
 
-/** The fake planner: one pillar idea per slot, the plan's scripts, one Reddit item. */
+/** The fake planner: one pillar idea per slot, one Reddit item. */
 function fakePlan(docs: Documents, posting: PostingPlan, brief?: unknown, library: LibraryTopTheme[] = []): Plan {
   const base = pillarIdeas(docs);
   const refs = libraryRefs(library);
@@ -251,15 +217,6 @@ function fakePlan(docs: Documents, posting: PostingPlan, brief?: unknown, librar
     };
   });
   items.push({ day_offset: 2, department: "sales", platform: "Reddit", idea: "Join threads where people describe the problem you solve", reason: "Your strategy says to help first on Reddit.", image: false });
-  for (const p of VIDEO_PLATFORMS) {
-    for (let k = 0; k < posting.video[p]; k++) {
-      items.push({ day_offset: (1 + k * 2) % 7, department: "video", platform: VIDEO_LABEL[p], idea: `${base[0]!.idea}, shown on screen`, reason: "Your posting plan asks for this video.", image: false });
-    }
-  }
-  // No video in the plan but asked for one this week: one script the founder records (cmo-review-3 I0).
-  if (!VIDEO_PLATFORMS.some((p) => posting.video[p] > 0) && typeof brief === "string" && /\bvideo\b/i.test(brief)) {
-    items.push({ day_offset: 1, department: "video", platform: "TikTok", idea: `${base[0]!.idea}, shown on screen`, reason: "You asked for a video this week.", image: false });
-  }
   return { items };
 }
 
@@ -294,7 +251,7 @@ export async function planWeek(ctx: JobContext): Promise<JobOutput> {
       ? recent.map((i) => `- ${i.day} ${i.department}: ${i.status} "${i.idea}"`).join("\n")
       : "(nothing yet)";
     return ctx.think({
-      title: "Plan the founder's next seven days (one idea per post slot, the video scripts, Reddit)",
+      title: "Plan the founder's next seven days (one idea per post slot, Reddit)",
       fake: () => fakePlan(docs, posting, run.input.brief, library),
       agent: "planner",
       system: SYSTEM,

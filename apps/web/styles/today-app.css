@@ -149,14 +149,14 @@ html[data-ui="v2"] .k .td-chat .cmo-chat-head h2 { font: 500 13.5px Geist, ui-sa
 .td-cardhost .v2-card-state b { font: 600 13px Geist, ui-sans-serif, system-ui, sans-serif; text-transform: none; }
 .td-cardhost .v2-chip { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 999px; border: 1px solid var(--line); background: var(--raised); color: var(--muted); font: 400 12.5px Geist, ui-sans-serif, system-ui, sans-serif; }
 .td-cardhost .v2-actions { justify-content: flex-end; gap: 8px; }
-:is(.td-cardhost, .photo-post) .v2-button { min-height: 0; height: 32px; padding: 0 12px; border-radius: 7px; font: 400 14px Geist, ui-sans-serif, system-ui, sans-serif; letter-spacing: 0; text-transform: none; }
-:is(.td-cardhost, .photo-post) .v2-button.is-primary { padding: 0 14px; border: 0; background: var(--accent); color: var(--accent-ink); font-weight: 600; }
-:is(.td-cardhost, .photo-post) .v2-button.is-primary:hover { background: var(--accent-hover); }
+.td-cardhost .v2-button { min-height: 0; height: 32px; padding: 0 12px; border-radius: 7px; font: 400 14px Geist, ui-sans-serif, system-ui, sans-serif; letter-spacing: 0; text-transform: none; }
+.td-cardhost .v2-button.is-primary { padding: 0 14px; border: 0; background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.td-cardhost .v2-button.is-primary:hover { background: var(--accent-hover); }
 .item.inv .td-cardhost .v2-button.is-primary { background: var(--inv-text); color: var(--inv); }
-:is(.td-cardhost, .photo-post) .v2-button.is-secondary { border: 1px solid var(--line-2); background: transparent; color: var(--text); }
-:is(.td-cardhost, .photo-post) .v2-button.is-secondary:hover { background: var(--hover); }
-:is(.td-cardhost, .photo-post) .v2-button.is-quiet { padding: 0 10px; border: 0; background: transparent; color: var(--muted); }
-:is(.td-cardhost, .photo-post) .v2-button.is-danger { border: 1px solid var(--line-2); background: transparent; color: var(--text); }
+.td-cardhost .v2-button.is-secondary { border: 1px solid var(--line-2); background: transparent; color: var(--text); }
+.td-cardhost .v2-button.is-secondary:hover { background: var(--hover); }
+.td-cardhost .v2-button.is-quiet { padding: 0 10px; border: 0; background: transparent; color: var(--muted); }
+.td-cardhost .v2-button.is-danger { border: 1px solid var(--line-2); background: transparent; color: var(--text); }
 .td-cardhost .v2-input { min-height: 0; height: 32px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--text); font: 400 14px Geist, ui-sans-serif, system-ui, sans-serif; }
 .td-cardhost textarea.v2-input { height: auto; min-height: 96px; font-size: 15px; line-height: 1.55; }
 .td-cardhost .v2-field { color: var(--muted); font-size: 13px; }

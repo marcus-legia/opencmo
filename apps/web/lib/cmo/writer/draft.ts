@@ -15,14 +15,12 @@ import { promptVersion } from "../jobs/edit-taxonomy";
 import { LlmError } from "../jobs/llm-error";
 import type { ThinkOptions } from "../jobs/think";
 import type { CheckRules } from "../jobs/check-post";
-import { captionText, checkCaption, checkPostFor, checkVideoBrief, checkYoutube, cleanHashtags } from "./checks";
+import { captionText, checkCaption, checkPostFor, checkYoutube, cleanHashtags } from "./checks";
 import { writerData } from "./context";
-import { CAPTION_SYSTEM, VIDEO_BRIEF_SYSTEM, YOUTUBE_SYSTEM } from "./prompts";
+import { CAPTION_SYSTEM, YOUTUBE_SYSTEM } from "./prompts";
 import {
   CaptionDraftSchema,
   PostDraftSchema,
-  VideoBriefDraftSchema,
-  VideoBriefSchema,
   YoutubeDraftSchema,
   type PostDraft,
   type ProfileFor,
@@ -59,7 +57,7 @@ const FAILURE = "We could not write this. Try again in a minute.";
 
 /** The prompt version per kind, recorded with what it wrote (`gen.prompt_version`). */
 export function writerPromptVersion(kind: WriterKind, postSystem = ""): string {
-  const system = { post: postSystem, caption: CAPTION_SYSTEM, youtube: YOUTUBE_SYSTEM, video_brief: VIDEO_BRIEF_SYSTEM }[kind];
+  const system = { post: postSystem, caption: CAPTION_SYSTEM, youtube: YOUTUBE_SYSTEM }[kind];
   return promptVersion(system);
 }
 
@@ -88,11 +86,6 @@ function briefBlock(kind: WriterKind, brief: WriterBrief): string {
       return `${videoBlock((brief as WriterBrief<"caption">).video)}\n\nWrite the caption for this platform.`;
     case "youtube":
       return `${videoBlock((brief as WriterBrief<"youtube">).video)}\n\nWrite the title and description.`;
-    case "video_brief": {
-      const b = brief as WriterBrief<"video_brief">;
-      const asks = [b.seconds ? `${b.seconds} seconds` : "", b.aspect ? `${b.aspect} frame` : ""].filter(Boolean).join(", ");
-      return `The week plan's video: "${b.idea}"${reasonOf(b)}${asks ? `\nPlanned: ${asks}.` : ""}\n\nWrite the brief.`;
-    }
   }
 }
 
@@ -128,34 +121,7 @@ function fakeOutput(kind: WriterKind, profile: WriterProfile | null, brief: Writ
         rationale: "Says what the video shows in the words people search with.",
       };
     }
-    case "video_brief": {
-      const b = brief as WriterBrief<"video_brief">;
-      return {
-        objective: b.idea.length >= 3 ? b.idea : "Show what the product does in one short video",
-        angle: "Show it working, from the founder's own screen",
-        hooks: [`${b.idea.replace(/\.$/, "")}.`, `Here is ${product} doing it in one take.`, `We built ${product} for this.`].map((hook) => hook.slice(0, 160)),
-        keyPoints: [`${product} is the founder's own product`],
-        cta: `Try ${product}`,
-        seconds: b.seconds ?? 30,
-        aspect: b.aspect ?? "9:16",
-        rationale: "From this week's video item.",
-        learnedFrom: (context.nicheUrls ?? []).slice(0, 2),
-        caption: `${b.idea.replace(/\.$/, "")}.\n\nHere is ${product} doing it, recorded in one take.\n\n#buildinpublic #founder`,
-        storyboard: fakeStoryboard(b.idea, product, b.seconds ?? 30),
-      };
-    }
   }
-}
-
-/** Four beats the fake model records, their seconds adding up to the brief's length. */
-function fakeStoryboard(idea: string, product: string, seconds: number) {
-  const quarter = Math.max(1, Math.round(seconds / 4));
-  return [
-    { say: `${idea.replace(/\.$/, "")}.`, show: "You, to camera", shot: "talking_head" as const, seconds: quarter },
-    { say: `Here is ${product} doing it.`, show: `${product} on your screen, the first step`, shot: "screen" as const, seconds: quarter },
-    { say: "That is the whole thing.", show: `${product} showing the result`, shot: "screen" as const, seconds: quarter },
-    { say: `Try ${product}.`, show: "You, to camera", shot: "talking_head" as const, seconds: Math.max(1, seconds - 3 * quarter) },
-  ];
 }
 
 type Spec = { schema: z.ZodType; system: string; label: string; title: string };
@@ -169,25 +135,7 @@ function spec(kind: WriterKind, profile: WriterProfile | null, postSystem: strin
       return { schema: CaptionDraftSchema, system: CAPTION_SYSTEM, label: `write_caption_${profile?.id}`, title: `Write the ${profile?.id} caption for a video` };
     case "youtube":
       return { schema: YoutubeDraftSchema, system: YOUTUBE_SYSTEM, label: "write_youtube", title: "Write the YouTube title and description for a video" };
-    case "video_brief":
-      return { schema: VideoBriefDraftSchema, system: VIDEO_BRIEF_SYSTEM, label: "write_video_brief", title: "Write the brief for this week's video" };
   }
-}
-
-/** The model's brief as Studio takes it: three hooks at most, six key points, a length Studio can make. */
-function toBrief(raw: z.infer<typeof VideoBriefDraftSchema>) {
-  return VideoBriefSchema.safeParse({
-    objective: raw.objective,
-    angle: raw.angle.slice(0, 300),
-    hooks: raw.hooks.map((hook) => hook.trim()).filter(Boolean),
-    keyPoints: raw.keyPoints.map((point) => point.trim()).filter(Boolean).slice(0, 6),
-    cta: raw.cta.trim().slice(0, 160),
-    seconds: Math.min(90, Math.max(5, Math.round(raw.seconds))),
-    aspect: raw.aspect,
-    // An older model answer has no caption: the brief is still a script, so it parses and the check says what is missing.
-    caption: (raw.caption ?? "").trim(),
-    storyboard: raw.storyboard.map((beat) => ({ say: beat.say.trim(), show: beat.show.trim(), shot: beat.shot, seconds: Math.min(30, Math.max(1, Math.round(beat.seconds))) })),
-  });
 }
 
 /** Code problems of one output, one list per version for posts and one list otherwise. */
@@ -199,12 +147,6 @@ function problemsOf(kind: WriterKind, profile: WriterProfile | null, output: unk
       return [checkCaption(output as z.infer<typeof CaptionDraftSchema>, profile!, rules)];
     case "youtube":
       return [checkYoutube(output as z.infer<typeof YoutubeDraftSchema>, profile!, rules)];
-    case "video_brief": {
-      const raw = output as z.infer<typeof VideoBriefDraftSchema>;
-      if (raw.hooks.filter((hook) => hook.trim()).length !== 3) return [[`It has ${raw.hooks.length} hooks; a brief has 3.`]];
-      const parsed = toBrief(raw);
-      return [parsed.success ? checkVideoBrief(parsed.data, rules) : parsed.error.issues.map((issue) => `${issue.path.join(".") || "brief"}: ${issue.message}`)];
-    }
   }
 }
 
@@ -237,11 +179,8 @@ function finish<K extends WriterKind>(kind: K, profile: WriterProfile | null, ou
       const youtube = output as z.infer<typeof YoutubeDraftSchema>;
       return { title: youtube.title.trim(), description: youtube.description.trim(), hashtags: cleanHashtags(youtube.hashtags), rationale: youtube.rationale } as WriterOutput<K>;
     }
-    default: {
-      // video_brief: a post returned above.
-      const raw = output as z.infer<typeof VideoBriefDraftSchema>;
-      return { brief: toBrief(raw).data!, rationale: raw.rationale, learnedFrom: raw.learnedFrom ?? [] } as WriterOutput<K>;
-    }
+    default:
+      throw new Error(`No writer for ${kind}.`);
   }
 }
 
@@ -251,8 +190,8 @@ export { captionText };
 export function createWriter(deps: WriterDeps): Writer {
   return {
     async draft<K extends WriterKind>(kind: K, profile: ProfileFor<K>, brief: WriterBrief<K>, context: WriterContext): Promise<WriterOutput<K>> {
-      const wanted = kind === "video_brief" ? null : kind;
-      if (wanted && profile?.kind !== wanted) throw new Error(`A ${kind} needs a ${wanted} profile, got ${profile ? profile.kind : "none"}.`);
+      const wanted = kind;
+      if (profile?.kind !== wanted) throw new Error(`A ${kind} needs a ${wanted} profile, got ${profile ? profile.kind : "none"}.`);
       const p = profile as WriterProfile | null;
       const video = kind === "caption" || kind === "youtube" ? (brief as WriterBrief<"caption">).video : undefined;
       const rules = rulesFor(context, video);

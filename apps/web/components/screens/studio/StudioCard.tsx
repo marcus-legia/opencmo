@@ -38,7 +38,6 @@ function KindArt({ card }: { card: Card }) {
       </span>
     );
   }
-  if (card.kind === "post_image") return <span className="scr-art is-image" aria-hidden="true" />;
   return <span className="scr-art is-video" aria-hidden="true" />;
 }
 
@@ -267,10 +266,6 @@ function CardState({ card, busy, actions }: { card: Card; busy: boolean; actions
             Use another video
           </ButtonLink>
         </span>
-      ) : card.kind === "post_image" ? (
-        <ButtonLink compact variant="secondary" href="/app/editor">
-          Try another prompt
-        </ButtonLink>
       ) : null;
     case "ready":
     case "finished":

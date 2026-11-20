@@ -8,6 +8,8 @@ import { PHOTO_MAX_BYTES, POST_PHOTO_TYPES } from "@/lib/photo-posts";
 import { createClient } from "@/lib/supabase/client";
 import { uploadPhoto } from "@/lib/photo-upload-client";
 
+import { QuoteCardMaker } from "./quote-card";
+
 /** `post_photos_save` holds the same number: X takes 4, and one core post serves every platform of its slot. */
 export const POST_PHOTO_LIMIT = 4;
 
@@ -146,6 +148,7 @@ export function PostPhotos({
       ) : busy ? (
         <span className="v2-card-photo-hint">{busy}</span>
       ) : null}
+      {!sample ? <QuoteCardMaker itemId={itemId} photos={photos} disabled={busy !== null} onError={onError} save={save} /> : null}
     </div>
   );
 }

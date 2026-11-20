@@ -29,12 +29,9 @@ import {
   ScheduleBody,
   ScriptBody,
   ShortsBody,
-  SlideshowBody,
 } from "./bodies";
 import { useConnectedPlatforms } from "./connected";
-import { openScript } from "./open-script";
 import { blockedReason, editCaption, type Decision } from "./decide";
-import { renderAgain, saveSlideText, slidesHref } from "./slides";
 import { NUMERAL, autoLabel, cardHead, headNote, type DraftReason } from "./labels";
 import { ReasonChips } from "./ReasonChips";
 import { approveBlocked, formatWhen, fromLocalInput, sameOptions, savedOptions, toLocalInput } from "./schedule";
@@ -69,7 +66,6 @@ const DECLINE: Partial<Record<Card["kind"], { label: string; action: "skip" | "d
   price: { label: "Cancel", action: "cancel" },
   finished_video: { label: "Send back", action: "send_back" },
   shorts_batch: { label: "Send back", action: "send_back" },
-  slideshow: { label: "Send back", action: "send_back" },
   correction: { label: "Dismiss", action: "reject" },
   schedule: { label: "Cancel", action: "cancel" },
   plan: { label: "Skip", action: "skip" },
@@ -141,10 +137,6 @@ export function ApprovalCard({
   const [moving, setMoving] = useState(false);
   const [newTime, setNewTime] = useState("");
   const [shown, setShown] = useState(() => firstText(card));
-  /** Slideshow card: a slide's words were saved, so its renders are older than the edit and a new render runs. */
-  const [slideEdited, setSlideEdited] = useState(false);
-  /** Slideshow card: a decision was refused (the slideshow was edited elsewhere since it was rendered). */
-  const [slideStale, setSlideStale] = useState(false);
   const [draft, setDraft] = useState(() => firstText(card));
   /** Week plan card: the items the founder unticked. */
   const [dropped, setDropped] = useState<ReadonlySet<string>>(() => new Set());
@@ -165,8 +157,6 @@ export function ApprovalCard({
     const ok = await onDecide(card, decision);
     // A decided card leaves the queue and unmounts; only a refused one comes back to edit.
     if (!ok) setBusy(false);
-    // A slideshow refused after an edit in the Slides view can be rendered again from here.
-    if (!ok && card.kind === "slideshow") setSlideStale(true);
     return ok;
   }
 
@@ -231,47 +221,9 @@ export function ApprovalCard({
     toast(ok ? `Post ${index + 1} copied.` : "Copy did not work here. Select the post and copy it yourself.");
   }
 
-  async function saveSlide(index: number, heading: string, words: string): Promise<boolean> {
-    try {
-      const next = await saveSlideText(card, index, heading, words, sample);
-      setChanged({ from: given, card: next });
-      setSlideEdited(true);
-      toast(sample ? "Slide saved (sample, nothing was sent)." : "Slide saved. The slideshow renders again and comes back as a new card.");
-      return true;
-    } catch (error) {
-      toast(error instanceof ApiError ? error.message : "Something went wrong. Please try again.");
-      return false;
-    }
-  }
 
-  /** A script the founder records: approved (or edited), then its blank edit opens with a marker on each beat. */
-  async function approveAndOpen() {
-    if (card.body.kind !== "script") return;
-    const words = draft.trim();
-    const decision: Decision = editing && words && words !== beats[beat]?.words ? { action: "edit", beat, text: words } : { action: "approve" };
-    const orderId = card.body.stepId;
-    if (!(await run(decision)) || sample) return;
-    try {
-      await openScript(orderId);
-    } catch (error) {
-      toast(error instanceof ApiError ? `Script approved. ${error.message}` : "Script approved, but the editor did not open. Try again from the Writer screen.");
-    }
-  }
 
-  async function rerender() {
-    if (busy) return;
-    setBusy(true);
-    try {
-      await renderAgain(card, sample);
-      setSlideEdited(true);
-      setSlideStale(false);
-      toast(sample ? "Rendering again (sample, nothing was sent)." : "Rendering again. A new card replaces this one when it is ready.");
-    } catch (error) {
-      toast(error instanceof ApiError ? error.message : "Something went wrong. Please try again.");
-    } finally {
-      setBusy(false);
-    }
-  }
+
 
   async function saveCaption(caption: Caption): Promise<boolean> {
     try {
@@ -376,7 +328,6 @@ export function ApprovalCard({
       case "goal":
         return [primary(), { label: "Edit plan", variant: "secondary", href: "/app?doc=plan" }, ...declineAction];
       case "script":
-        if (card.body.forFounder) return [{ label: editing ? "Approve edit and open" : "Approve and open in editor", variant: "primary", run: () => void approveAndOpen() }, editAction("Edit a beat"), ...declineAction];
         return [primary(editing ? "Approve edit" : PRIMARY_ACTION.script), editAction("Edit a beat"), ...declineAction];
       case "price":
         // No keyframe redo from a card: the contact sheet went with the two-card /video (2026-11-06); `redo_keyframe` does it
@@ -386,10 +337,6 @@ export function ApprovalCard({
         return [primary(), { label: "Open in editor", variant: "secondary", href: `/app/editor/${encodeURIComponent(card.body.clipId)}` }, ...declineAction];
       case "shorts_batch":
         return [primary(), ...declineAction];
-      case "slideshow":
-        // Approving words the renders do not show yet would approve a video nobody saw: wait for the new card.
-        if (slideStale && !slideEdited) return [{ label: "Render again", variant: "primary", run: () => void rerender() }, { label: "Open in Slides", variant: "secondary", href: slidesHref(card.body.clipId) }, ...declineAction];
-        return [{ ...primary(), disabled: slideEdited ? "The slideshow renders again with your words; approve the new card." : undefined }, { label: "Open in Slides", variant: "secondary", href: slidesHref(card.body.clipId) }, ...declineAction];
       case "schedule": {
         const body = card.body;
         const changeTime: Action = {
@@ -524,8 +471,6 @@ export function ApprovalCard({
             <FinishedVideoBody body={card.body} cardId={card.id} editable={captionsBlocked} onSaveCaption={saveCaption} />
           ) : card.body.kind === "shorts_batch" ? (
             <ShortsBody body={card.body} cardId={card.id} editable={captionsBlocked} onSaveCaption={saveCaption} />
-          ) : card.body.kind === "slideshow" ? (
-            <SlideshowBody body={card.body} cardId={card.id} editable={captionsBlocked} edited={slideEdited} onSaveSlide={saveSlide} onSaveCaption={saveCaption} />
           ) : card.body.kind === "schedule" ? (
             <ScheduleBody body={card.body} cardId={card.id} options={options} onOptions={setOptions} onCopyPart={(post, index) => void copyPart(post, index)} onSaveCaption={saveCaption} editable={blocked ?? (busy ? "Wait for the decision to finish." : card.body.state === "failed" || card.body.state === "no_account" || card.body.state === "unconfirmed" ? "It posts as you approved it; change the time to start again." : null)} />
           ) : card.body.kind === "plan" ? (

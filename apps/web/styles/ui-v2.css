@@ -585,3 +585,12 @@ html[data-ui="v2"] body { background: var(--v2-paper); }
 .v2-card-photo-add.is-busy { cursor: progress; }
 .v2-card-photo-add input { position: absolute; width: 1px; height: 1px; opacity: 0; }
 .v2-card-photo-hint { font-size: 12px; color: var(--v2-ink2); }
+/* Quote card maker (wave 4b C7) */
+.v2-quote-card { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border: 1px solid var(--v2-line); border-radius: 8px; max-width: 520px; }
+.v2-quote-card fieldset { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.v2-quote-card legend { font: 600 13px var(--v2-sans); margin-bottom: 4px; }
+.v2-quote-card label { display: flex; gap: 8px; align-items: flex-start; font: 400 13.5px/1.45 var(--v2-sans); color: var(--v2-ink); min-height: 44px; }
+.v2-quote-card label input { margin-top: 3px; }
+.v2-quote-card img { width: 216px; height: 270px; border: 1px solid var(--v2-line); border-radius: 6px; object-fit: cover; }
+.v2-quote-card-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+button.v2-card-photo-add { background: transparent; text-align: left; }

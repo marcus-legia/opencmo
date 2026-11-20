@@ -33,7 +33,7 @@ async function axeAndShot(page: Page, name: string, width: number) {
 const CARDS: { name: string; id: string; open?: string }[] = [
   { name: "card-threads", id: "card-post-threads" },
   { name: "card-linkedin", id: "card-post-linkedin" },
-  { name: "card-shorts-captions", id: "card-shorts", open: "Edit TikTok caption" },
+  { name: "card-shorts-captions", id: "card-shorts", open: "Edit YouTube title and description" },
   { name: "card-finished-captions", id: "card-finished", open: "Edit YouTube title and description" },
   { name: "card-correction", id: "card-correction" },
 ];
@@ -80,16 +80,16 @@ test("a caption counts its limit and hashtags per platform; too many hashtags ca
   await signIn(page, state().users.a);
   await page.goto("/app/inbox/card-shorts");
   const card = page.getByTestId("inbox-card-page").getByTestId("approval-card");
-  const tiktok = card.getByTestId("caption").filter({ hasText: "TikTok caption" }).first();
-  await expect(tiktok).toContainText("#2/5");
-  await tiktok.getByRole("button", { name: "Edit TikTok caption" }).click();
-  await tiktok.getByLabel("Caption").fill("Cut by words #a1 #b #c #d #e #f");
-  await expect(tiktok).toContainText("At most 5 hashtags here.");
-  await expect(tiktok.getByRole("button", { name: "Save caption" })).toBeDisabled();
-  await tiktok.getByLabel("Caption").fill("Cut your demo by deleting words. #editing");
-  await tiktok.getByRole("button", { name: "Save caption" }).click();
-  await expect(tiktok).toContainText("Cut your demo by deleting words. #editing");
-  await expect(tiktok).toContainText("#1/5");
+  const youtube = card.getByTestId("caption").filter({ hasText: "YouTube title and description" }).first();
+  await expect(youtube).toContainText("#1/3");
+  await youtube.getByRole("button", { name: "Edit YouTube title and description" }).click();
+  await youtube.getByLabel("Description").fill("Cut by words #a1 #b #c #d");
+  await expect(youtube).toContainText("At most 3 hashtags here.");
+  await expect(youtube.getByRole("button", { name: "Save caption" })).toBeDisabled();
+  await youtube.getByLabel("Description").fill("Cut your demo by deleting words. #editing");
+  await youtube.getByRole("button", { name: "Save caption" }).click();
+  await expect(youtube).toContainText("Cut your demo by deleting words. #editing");
+  await expect(youtube).toContainText("#1/3");
 });
 
 // ------------------------------------------------------------------ live rows
@@ -318,7 +318,7 @@ test("a caption is edited on a live shorts card: same card, new hash, a stale ha
   const taskId = randomUUID();
   await db.from("tasks").insert({ id: taskId, user_id: user.id, kind: "render_document", clip_id: shortClip, job_id: jobId, status: "running", request_id: randomUUID(), payload: {} });
   await db.from("tasks").update({ status: "done", output_path: `${user.id}/${taskId}.mp4` }).eq("id", taskId);
-  const saved = await db.rpc("cmo_save_caption", { p_user: user.id, p_run: null, p_clip: shortClip, p_profile: "tiktok_caption", p_text: "Cut your demo by deleting words. #editing #buildinpublic" });
+  const saved = await db.rpc("cmo_save_caption", { p_user: user.id, p_run: null, p_clip: shortClip, p_profile: "youtube", p_text: "Cut your demo by deleting words. #editing #buildinpublic", p_title: "Cut by words" });
   expect(saved.error).toBeNull();
   const captionId = (saved.data as { id: string }).id;
   const { data: before } = await db.from("approvals").select("id, content_hash").eq("ref_kind", "short_batch").eq("ref_id", batchId).eq("status", "waiting").single();
@@ -327,12 +327,12 @@ test("a caption is edited on a live shorts card: same card, new hash, a stale ha
   await signIn(page, user);
   await page.goto(`/app/inbox/${before!.id}`);
   const card = page.getByTestId("inbox-card-page").getByTestId("approval-card");
-  const tiktok = card.getByTestId("caption").filter({ hasText: "TikTok caption" });
-  await expect(tiktok).toContainText("#2/5");
-  await tiktok.getByRole("button", { name: "Edit TikTok caption" }).click();
-  await tiktok.getByLabel("Caption").fill("Your transcript is the timeline. #editing");
-  await tiktok.getByRole("button", { name: "Save caption" }).click();
-  await expect(tiktok).toContainText("Your transcript is the timeline. #editing");
+  const youtube = card.getByTestId("caption").filter({ hasText: "YouTube title and description" });
+  await expect(youtube).toContainText("#2/3");
+  await youtube.getByRole("button", { name: "Edit YouTube title and description" }).click();
+  await youtube.getByLabel("Description").fill("Your transcript is the timeline. #editing");
+  await youtube.getByRole("button", { name: "Save caption" }).click();
+  await expect(youtube).toContainText("Your transcript is the timeline. #editing");
   await expect.poll(async () => (await db.from("content_items").select("body").eq("id", captionId).single()).data?.body?.text).toBe("Your transcript is the timeline. #editing");
   const { data: after } = await db.from("approvals").select("id, content_hash, status").eq("id", before!.id).single();
   expect(after!.status).toBe("waiting");

@@ -126,7 +126,9 @@ const config: NextConfig = {
       destination: `/blog/category/${to}`,
       permanent: true,
     }));
-    return [...posts, ...categories];
+    // Pages deleted in wave 4b (photo posts, the script prompter): an old link lands on the app, not a 404.
+    const deleted = ["/app/photos", "/app/script/:path*"].map((source) => ({ source, destination: "/app", permanent: false }));
+    return [...posts, ...categories, ...deleted];
   },
 };
 

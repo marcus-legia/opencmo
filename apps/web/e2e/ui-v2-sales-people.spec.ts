@@ -52,6 +52,10 @@ async function seed() {
       reply: "I bill monthly and send reminders on day 3, 7 and 14.", reach_level: "reply_first", reach: reach({ dmAllowed: false, reasons: ["Says who they are", "Wants a fix now", "Has not answered you yet", "Posted today", "Hacker News has no DMs"] }) },
     { url: "https://www.reddit.com/r/freelance/comments/e2ert/forty_five_days/", platform: "reddit", community: "freelance", title: "Is it normal to wait 45 days for payment?", score: 74,
       reply: "It is common, and it can change.", reach_level: "reply_first", reach: reach({ buyer: false, asksForTools: false, reasons: ["Not clear they are a buyer like your customers", "Wants a fix now", "Has not answered you yet", "Posted today", "Reddit allows DMs"] }) },
+    { url: "https://www.reddit.com/r/consulting/comments/e2eemail/net30/", platform: "reddit", community: "consulting", title: "Net 30 keeps turning into net 60", score: 60,
+      reply: "Send the reminder before the due date, not after.", reach_level: "email_ready",
+      reach: reach({ warm: true, emailFound: "sam@example.com", reasons: ["Says who they are", "Wants a fix now", "Answered your reply", "Posted today", "Reddit allows DMs", "Published sam@example.com in the post"] }),
+      dm_draft: "Hi Sam, I saw your post about net 30 turning into net 60. I built a small tool for it." },
   ];
   const { data: opps, error } = await db
     .from("opportunities")
@@ -66,7 +70,7 @@ async function seed() {
     .single();
   must(nudged, "a person to nudge");
   const id = (url: string) => opps.find((o) => o.url === url)!.id;
-  return { user: { email, password, id: userId }, dm: id(rows[0]!.url), hn: id(rows[1]!.url), plain: id(rows[2]!.url), plainUrl: rows[2]!.url, nudged: nudged.data!.id };
+  return { user: { email, password, id: userId }, emailPerson: id(rows[3]!.url), dm: id(rows[0]!.url), hn: id(rows[1]!.url), plain: id(rows[2]!.url), plainUrl: rows[2]!.url, nudged: nudged.data!.id };
 }
 
 test("reach out: five checks, DM open or locked with why, I sent it, I replied with its link, Following up", async ({ page }) => {
@@ -140,4 +144,32 @@ test("reach out: five checks, DM open or locked with why, I sent it, I replied w
   const overflow = await sidewaysOverflow(page);
   expect(overflow.width, `sideways scroll from: ${overflow.culprits.join("; ")}`).toBeLessThanOrEqual(390);
   await page.screenshot({ path: "test-results/sales-following-390.png", fullPage: true });
+});
+
+test("email ready: the Email tab opens Gmail or the mail app with the subject, the draft and the opt-out line (wave 4b)", async ({ page }) => {
+  const s = await seed();
+  await signIn(page, s.user);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto("/app/sales");
+  const row = page.getByRole("listitem").filter({ hasText: "Net 30 keeps turning into net 60" });
+  const toggle = row.getByRole("button", { name: /Net 30 keeps turning/ }).first();
+  if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
+  const panel = row.getByTestId("sales-reach");
+  await expect(panel.getByTestId("sales-reach-level")).toHaveText("Email ready");
+  await panel.getByRole("tab", { name: /Email/ }).click();
+  const email = panel.getByTestId("sales-email");
+  await expect(email).toContainText("sam@example.com");
+  await expect(email).toContainText("About your post: Net 30 keeps turning into net 60");
+  const gmail = new URL((await email.getByTestId("sales-email-gmail").getAttribute("href"))!);
+  expect(gmail.origin).toBe("https://mail.google.com");
+  expect(gmail.searchParams.get("to")).toBe("sam@example.com");
+  expect(gmail.searchParams.get("su")).toBe("About your post: Net 30 keeps turning into net 60");
+  expect(gmail.searchParams.get("body")).toMatch(/net 30 turning into net 60[\s\S]*tell me and I will not write again\.$/);
+  expect(await email.getByTestId("sales-email-mailto").getAttribute("href")).toMatch(/^mailto:sam@example\.com\?subject=/);
+  // A body too long for a link offers Copy only.
+  await email.getByRole("textbox", { name: "Email" }).fill("word ".repeat(600));
+  await expect(email.getByTestId("sales-email-long")).toBeVisible();
+  await expect(email.getByTestId("sales-email-gmail")).toHaveCount(0);
+  expect((await sidewaysOverflow(page)).culprits).toEqual([]);
+  await page.screenshot({ path: "test-results/sales-email-1440.png" });
 });

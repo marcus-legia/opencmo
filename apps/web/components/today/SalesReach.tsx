@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { api, jsonBody } from "@/components/clipping/api";
+import { emailBody, emailSubject, mailLinks } from "@/lib/cmo/email-links";
 import { PERSON_STATUSES, type PersonStatus, type ReachCheck } from "@/lib/cmo/reach";
 import { PLATFORM_LABEL, type SalesPlatform } from "@/lib/cmo/social/conversations";
 import type { SalesScreen } from "@/lib/screens/sales";
@@ -82,6 +83,8 @@ export function ReachPanel({ t, publicReply, onSent }: { t: Thread; publicReply:
       : !person.dmDraft
         ? "No DM drafted for this person yet."
         : null;
+  const subject = emailSubject(t.title);
+  const links = reach?.emailFound ? mailLinks(reach.emailFound, subject, dm) : { gmail: null, mailto: null };
   const emailLock = level !== "email_ready" || !reach?.emailFound ? "Reply in public first. An email opens only when they published an address and answered you." : null;
 
   async function sent(via: "dm" | "email") {
@@ -196,20 +199,35 @@ export function ReachPanel({ t, publicReply, onSent }: { t: Thread; publicReply:
               {reach!.emailFound}
             </div>
             <p className="meta" style={{ margin: "0" }}>
-              An address they published themselves. Write from your own mailbox, one email, and say how they can tell you no.
+              An address they published themselves. Send it from your own mailbox, once. Ferreto adds a last line so they can tell you no.
             </p>
+            <div style={{ fontSize: "13.5px" }}>
+              <span className="meta">Subject </span>
+              {subject}
+            </div>
             <textarea aria-label="Email" className="reply" rows={5} value={dm} onChange={(e) => setDm(e.target.value)} style={{ width: "100%", resize: "vertical", font: "inherit", fontSize: "15px", lineHeight: "1.55", color: "var(--text)" }} />
             <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "flex-end", alignItems: "center" }}>
               {note ? <span className="meta">{note}</span> : null}
+              {dm.trim() && !links.gmail ? <span className="meta" data-testid="sales-email-long">Too long for a link. Copy it into your mail.</span> : null}
               <button type="button" className="ghost" disabled={busy} onClick={() => void sent("email")}>
                 I sent it
               </button>
               <button type="button" className="ghost" onClick={async () => setNote((await copy(reach!.emailFound!)) ? "Address copied." : "Select the address and copy it.")}>
                 Copy address
               </button>
-              <button type="button" className="primary" disabled={!dm.trim()} onClick={async () => setNote((await copy(dm)) ? "Email copied." : "Select the email and copy it.")}>
+              <button type="button" className="ghost" disabled={!dm.trim()} onClick={async () => setNote((await copy(emailBody(dm))) ? "Email copied." : "Select the email and copy it.")}>
                 Copy
               </button>
+              {links.mailto ? (
+                <a className="ghost" data-testid="sales-email-mailto" href={links.mailto} style={{ textDecoration: "none" }}>
+                  Open in your mail app
+                </a>
+              ) : null}
+              {links.gmail ? (
+                <a className="primary" data-testid="sales-email-gmail" href={links.gmail} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none" }}>
+                  Open in Gmail
+                </a>
+              ) : null}
             </div>
           </div>
         )

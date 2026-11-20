@@ -24,7 +24,7 @@ type CmoRunRow = {
   created_at: string;
 };
 
-const JOB_OF: Record<CmoRunRow["kind"], JobId> = { onboard: "W0", plan_week: "W1", post_draft: "W2", sales_scan: "W4", pull_metrics: "W6", competitor_research: "W7", summarize_memory: "W8", review_week: "W9", write_video_brief: "W5", write_caption: "W5", write_slides: "W5", publish_post: "W3", niche_video_research: "W7", distill_ratings: "W8", repurpose_post: "W2", photo_caption: "W5", sales_reply_drafts: "W4" };
+const JOB_OF: Record<CmoRunRow["kind"], JobId> = { onboard: "W0", plan_week: "W1", post_draft: "W2", sales_scan: "W4", pull_metrics: "W6", competitor_research: "W7", summarize_memory: "W8", review_week: "W9", write_caption: "W5", write_slides: "W5", publish_post: "W3", distill_ratings: "W8", repurpose_post: "W2", sales_reply_drafts: "W4" };
 
 type OpportunityRow = {
   id: string;
@@ -53,7 +53,8 @@ function runToLog(run: CmoRunRow): LogEntry {
         ]
       : [];
   const detail = run.status === "failed" ? run.error : run.status === "queued" ? "Waiting to start" : (run.input.site ?? (run.input.source === "schedule" ? "Scheduled" : null));
-  return { id: run.id, job: JOB_OF[run.kind], title: run.kind, status: run.status, startedAt: run.created_at, detail, steps };
+  // A run of a kind removed since (video briefs, niche research, photo captions) keeps a badge.
+  return { id: run.id, job: JOB_OF[run.kind] ?? "W5", title: run.kind, status: run.status, startedAt: run.created_at, detail, steps };
 }
 
 function toPostCard(item: ItemRow): PostCard {

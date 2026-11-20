@@ -15,7 +15,6 @@ import {
   ScheduleSnapshotSchema,
   ScriptSnapshotSchema,
   ShortsBatchSnapshotSchema,
-  SlideshowSnapshotSchema,
   type ApprovalCard,
   type Caption,
   type CardKind,
@@ -228,14 +227,13 @@ function build(row: ApprovalRow): Built | null {
       const parsed = ScriptSnapshotSchema.safeParse(s);
       if (!parsed.success || parsed.data.beats.length === 0) return null;
       const v = parsed.data;
-      const forFounder = v.tool === "script_item";
+      // A script the founder recorded themselves (video briefs, removed in wave 4b): an old card is not shown.
+      if (v.tool === "script_item") return null;
       return {
         title: clip(`Script for “${v.title}” · ${v.beats.length} ${v.beats.length === 1 ? "beat" : "beats"}`, 300),
-        summary: forFounder
-          ? "You record this video yourself. Approve the script, or change a beat's words, and it opens in the editor with a marker on each beat."
-          : "Approve the words and pictures; the whole video (keyframes, shots, voice-over, music) is made at the price below.",
-        meta: forFounder ? "Free: nothing is generated" : "Nothing spent until you approve",
-        body: { kind: "script", stepId: v.step_id, seconds: v.seconds, aspect: v.aspect, beats: v.beats, nextPriceCredits: forFounder ? null : v.price_credits, forFounder },
+        summary: "Approve the words and pictures; the whole video (keyframes, shots, voice-over, music) is made at the price below.",
+        meta: "Nothing spent until you approve",
+        body: { kind: "script", stepId: v.step_id, seconds: v.seconds, aspect: v.aspect, beats: v.beats, nextPriceCredits: v.price_credits },
       };
     }
     case "price": {
@@ -305,29 +303,6 @@ function build(row: ApprovalRow): Built | null {
         },
       };
     }
-    case "slideshow": {
-      const parsed = SlideshowSnapshotSchema.safeParse(s);
-      if (!parsed.success) return null;
-      const v = parsed.data;
-      const n = v.slides.length;
-      return {
-        title: clip(`${v.title || v.slides[0].text} · ${n} ${n === 1 ? "slide" : "slides"}`, 300),
-        summary: "An MP4 and a PNG set from one document. Edit a slide's text here or open it in Slides.",
-        meta: "No generation credits",
-        body: {
-          kind: "slideshow",
-          stepId: v.step_id,
-          clipId: v.clip_id,
-          documentHash: v.document_hash,
-          aspect: v.aspect,
-          slides: v.slides.map((x) => ({ text: x.text, stillUrl: null, seconds: x.seconds })),
-          previewUrl: null,
-          pngSetUrl: null,
-          captions: captionsOf(v.captions, v.clip_id),
-          ...(v.look?.note ? { lookNote: v.look.note } : {}),
-        },
-      };
-    }
     case "schedule": {
       const parsed = ScheduleSnapshotSchema.safeParse(s);
       if (!parsed.success) return null;
@@ -336,9 +311,7 @@ function build(row: ApprovalRow): Built | null {
       const what =
         v.deliverable_kind === "post"
           ? firstSentence(v.text ?? "").head || "Your post"
-          : v.deliverable_kind === "photo_post"
-            ? `Your ${v.photos?.length ?? 0} photos: ${firstSentence(v.text ?? "").head || "no caption"}`
-            : v.title || firstSentence(v.text ?? "").head || "Your short";
+          : v.title || firstSentence(v.text ?? "").head || "Your short";
       return {
         title: clip(`${what} · ${where}${v.handle ? ` ${v.handle}` : ""}`, 300),
         summary: v.last_error

@@ -41,7 +41,6 @@ export const studioFixture: StudioScreen = {
     { ...studioItem, id: "st-5", kind: "short", title: "3 shorts · Editor launch", subtitle: "Cut from a finished edit · 9:16", status: "waiting_founder", createdAt: at("2026-10-29", "08:00"), approvalId: "card-shorts" },
     { ...studioItem, id: "st-6", kind: "video", title: "Cut by words · explainer", subtitle: "Explainer · 45 s · 2 shorts posted", status: "finished", createdAt: at("2026-10-22", "10:00"), editorHref: "/app/editor/clip-explainer" },
     { ...studioItem, id: "st-7", kind: "slideshow", title: "3 ways to cut a demo", subtitle: "Slideshow · 6 slides · MP4 + PNG set · posted Wed", status: "finished", createdAt: at("2026-10-27", "10:00") },
-    { ...studioItem, id: "st-8", kind: "post_image", title: "Post image · launch card", subtitle: "Render failed", status: "failed", createdAt: at("2026-10-28", "12:00"), failure: "Moderation blocked one frame · credits refunded" },
   ],
   team: {
     title: "Editor launch · long take",
