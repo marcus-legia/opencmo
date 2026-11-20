@@ -19,6 +19,12 @@ export type PublishPlatform = z.infer<typeof PublishPlatformSchema>;
 
 export const isPublishPlatform = (p: string): p is PublishPlatform => (PUBLISH_PLATFORMS as readonly string[]).includes(p);
 
+/**
+ * What a founder can connect now (wave 4b): TikTok and Instagram are no longer offered. They stay in
+ * `PUBLISH_PLATFORMS` only so an account or slot made before reads back; nothing new can reach them.
+ */
+export const CONNECTABLE_PLATFORMS = ["x", "threads", "linkedin", "facebook", "youtube"] as const satisfies readonly PublishPlatform[];
+
 /** TikTok's privacy levels, as its creator info lists them; the card offers only the ones the account allows. */
 export const TIKTOK_PRIVACY = ["PUBLIC_TO_EVERYONE", "MUTUAL_FOLLOW_FRIENDS", "FOLLOWER_OF_CREATOR", "SELF_ONLY"] as const;
 export const TikTokPrivacySchema = z.enum(TIKTOK_PRIVACY);

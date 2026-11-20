@@ -13,7 +13,7 @@ import { storedSources } from "@/lib/cmo/jobs/library-sources";
 import { mondayOf } from "@/lib/cmo/jobs/summarize-memory";
 import { planOrDefault } from "@/lib/cmo/posting-plan";
 import { localDay, localMidnight, localMonday } from "@/lib/time-zone";
-import { PUBLISH_PLATFORMS } from "@/lib/departments/publish/types";
+import { CONNECTABLE_PLATFORMS, PUBLISH_PLATFORMS } from "@/lib/departments/publish/types";
 import { isPaidPlan } from "@/lib/pricing";
 import { SITE_URL } from "@/lib/site";
 
@@ -730,6 +730,8 @@ function accountList(rows: SocialAccountDb[], all: boolean): SettingsScreen["acc
   const byPlatform = new Map(rows.map((r) => [r.platform, r]));
   return PUBLISH_PLATFORMS.flatMap((platform): SettingsScreen["accounts"] => {
     const r = byPlatform.get(platform);
+    // An old TikTok or Instagram account still shows (to disconnect it); a missing one is not offered.
+    if (!r && !(CONNECTABLE_PLATFORMS as readonly string[]).includes(platform)) return [];
     if (!r) return all ? [{ id: `connect-${platform}`, platform, handle: "", status: "not_connected" as const, syncedAt: null, noDataSince: null, avatarUrl: null }] : [];
     const connected = r.status === "connected";
     return [{
