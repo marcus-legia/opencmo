@@ -29,7 +29,7 @@ export function Hero({ action }: { action: string }) {
         <p data-intro="1" className="lv-eyebrow">For founders who sell software to businesses</p>
         <h1 className="lv-hero-title is-long">
           <span className="lv-mask"><span data-intro-line="1">Find the people</span></span>
-          <span className="lv-mask"><span data-intro-line="1">already asking for</span></span>
+          <span className="lv-mask"><span data-intro-line="1"><span className="lv-key">already asking</span> for</span></span>
           <span className="lv-mask"><span data-intro-line="1">what you built<span aria-hidden="true" className="lv-dot" /></span></span>
         </h1>
         <p data-intro="1" className="lv-hero-sub">
@@ -43,6 +43,7 @@ export function Hero({ action }: { action: string }) {
           <input id="hero-site" name="site" type="text" inputMode="url" autoComplete="url" required placeholder="yourcompany.com" />
           <button type="submit" className="lv-btn-terra">See who&apos;s asking</button>
         </form>
+        <p data-intro="1" className="lv-hero-note">Free scan. No card.</p>
       </section>
 
       <ScrollEssay beats={BEATS} label="How it works" />

@@ -14,7 +14,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import { currentUser } from "@/lib/supabase/user";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "AI CMO" };
+export const metadata: Metadata = { title: "Feed" };
 
 type Params = { site?: string; url?: string; source?: string; count?: string; length?: string; paid?: string };
 

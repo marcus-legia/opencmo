@@ -1,7 +1,7 @@
 import { CATEGORIES } from "@/content/blog/categories";
 import { getAllPosts } from "@/lib/blog";
 import { plansOnSale } from "@/lib/billing-catalog";
-import { SITE_DESCRIPTION, absoluteUrl } from "@/lib/site";
+import { absoluteUrl, blogUrl, SITE_DESCRIPTION } from "@/lib/site";
 
 // Prices are read at request time, like the pricing page: a build-time copy would print last month's numbers.
 export const dynamic = "force-dynamic";
@@ -19,18 +19,20 @@ export async function GET() {
     "",
     `> ${SITE_DESCRIPTION}`,
     "",
-    "Ferreto is software for founders. You enter your website; an AI CMO reads it, writes a strategy and plans your week, and three departments draft the work: Post (posts for X, Threads and LinkedIn in your voice, plus slides and video scripts), Video (slideshows and post images from the approved words, short clips cut from videos you recorded and finished in the editor, where you cut by words and add captions and a voice-over) and Sales (public conversations where people describe the problem you solve, with a reply drafted for you to post yourself). Nothing is published without your approval, and only to accounts you connect. Your first plan and drafts are free. Pick a plan to approve and post them.",
+    "Ferreto is a customer-finding tool for founders who sell software to businesses. You enter your website; Ferreto reads it and writes down what you sell, who buys it and the problems they describe. Sales then searches Reddit, Hacker News, Threads and Facebook groups for people describing those problems. Each person comes with a score out of 100, the quote that earned it, and a reply drafted from your business plan that helps first and follows the community's rules. When someone is ready for more, it drafts a DM, or an email to an address they published. You send everything yourself, from your own accounts: Ferreto never replies, DMs, likes or follows on its own. After you reply, it rereads the thread, tracks who answered, and drafts one follow-up after four quiet days. Post plans a week of posts for X, LinkedIn and Threads from the questions Sales found; you approve the week once, and only accounts you connect are posted to. A video editor for clips from videos you record is included.",
+    "",
+    "Your first scan is free, with no card: you see the people asking, in their own words. Replies, DMs, emails and further scans come with the paid plan.",
     "",
     "## Pricing",
     "",
     ...paid.map((plan) => `- ${plan.name}: $${plan.price}/month${plan.interval === "year" ? ` (billed $${plan.billedPrice} yearly)` : ""} — ${plan.features.join(", ")}`),
     ...(paid.length ? [] : [`- See ${absoluteUrl("/#pricing")} for current prices.`]),
-    "- Credits are spent per piece of work (for example 1 credit per post draft).",
+    "- The AI work spends the plan's monthly credits, shown in the app. When they run out, new scans pause until the next month; drafts keep working.",
     "",
     "## Links",
     "",
     `- [Home](${absoluteUrl("/")}): product overview and pricing`,
-    `- [Blog](${absoluteUrl("/blog")}): marketing how-to guides, tips and playbooks for founders`,
+    `- [Blog](${blogUrl()}): guides on finding customers, positioning, launching and posting, for founders`,
     "",
     ...CATEGORIES.flatMap((category) => {
       const inCategory = posts.filter((post) => post.category === category.slug);
@@ -38,7 +40,7 @@ export async function GET() {
       return [
         `## ${category.name}`,
         "",
-        ...inCategory.map((post) => `- [${post.title}](${absoluteUrl(`/blog/${post.slug}`)}): ${post.description}`),
+        ...inCategory.map((post) => `- [${post.title}](${blogUrl(`/${post.slug}`)}): ${post.description}`),
         "",
       ];
     }),

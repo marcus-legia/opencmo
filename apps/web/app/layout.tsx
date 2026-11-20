@@ -10,17 +10,17 @@ import "@/styles/app.css";
 import "@/styles/cmo.css";
 
 import { ClientErrorReporter } from "@/components/ClientErrorReporter";
-import { SITE_DESCRIPTION, SITE_NAME, SITE_URL } from "@/lib/site";
+import { SITE_DESCRIPTION, SITE_NAME, SITE_URL, blogUrl } from "@/lib/site";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   icons: { icon: "/icon.svg" },
-  title: { default: "Ferreto — the AI video editor you edit by asking", template: "%s · Ferreto" },
+  title: { default: "Ferreto: find the people asking for what you built", template: "%s · Ferreto" },
   description: SITE_DESCRIPTION,
   applicationName: SITE_NAME,
   openGraph: { type: "website", siteName: SITE_NAME, locale: "en_US", url: "/" },
   twitter: { card: "summary_large_image" },
-  alternates: { types: { "application/rss+xml": [{ url: "/blog/rss.xml", title: "Ferreto Blog" }] } },
+  alternates: { types: { "application/rss+xml": [{ url: blogUrl("/rss.xml"), title: "Ferreto Blog" }] } },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

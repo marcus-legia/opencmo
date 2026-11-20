@@ -13,7 +13,8 @@
 html:has(.landing) { overflow-x: clip; background: #f3f3ee; }
 body:has(.landing) { overflow-x: clip; background: transparent; }
 
-.landing {
+/* The landing's tokens are the whole public site's: the blog, the legal pages and the 404 wear `.site` (2026-11-20). */
+.landing, .site {
   --paper: #f3f3ee;
   --paper2: #fafaf8;
   --paper3: #e8e8de;
@@ -26,6 +27,10 @@ body:has(.landing) { overflow-x: clip; background: transparent; }
   --brand: #ef4a1a;
   --brand-deep: #c93a0f;
   --brand-soft: #ffd8c6;
+  /* The second accent: keywords and the few places that matter, about a fifth of the colour on a page. Orange stays
+     the brand. */
+  --blue: #2557d6;
+  --blue-soft: #dfe7fb;
   --char: #26282c;
   --char2: #34363b;
   --char-ink: #f3f3ee;
@@ -43,8 +48,8 @@ body:has(.landing) { overflow-x: clip; background: transparent; }
 /* Dark follows the visitor's system setting (owner, 2026-11-09): the same layout, the tokens swapped.
    Brand orange stays as it is, so white text on it keeps its contrast. */
 @media (prefers-color-scheme: dark) {
-  html:has(.landing) { background: #1a1917; color-scheme: dark; }
-  .landing {
+  html:has(:is(.landing, .site)) { background: #1a1917; color-scheme: dark; }
+  :is(.landing, .site) {
     --paper: #1a1917;
     --paper2: #222120;
     --paper3: #2c2a27;
@@ -55,6 +60,8 @@ body:has(.landing) { overflow-x: clip; background: transparent; }
     --line: #36332f;
     --line2: #4b4741;
     --brand-soft: #5a2414;
+    --blue: #7f9dff;
+    --blue-soft: #1f2a4a;
     --char: #2a2c31;
     --char2: #36383e;
     --char-ink: #efece6;
@@ -69,7 +76,7 @@ body:has(.landing) { overflow-x: clip; background: transparent; }
 .landing h1, .landing h2, .landing h3, .landing p { margin: 0; }
 .landing ul, .landing ol { margin: 0; padding: 0; list-style: none; }
 /* Icons keep their `stroke` attribute for other pages; on the landing they follow the text colour. */
-.landing .lv-icon { stroke: currentColor; }
+:is(.landing, .site) .lv-icon { stroke: currentColor; }
 
 .lv-field { position: fixed; inset: 0; z-index: -1; width: 100%; height: 100%; display: block; pointer-events: none; }
 .lv-logo, .lv-icon { display: block; flex: none; }
@@ -96,12 +103,12 @@ body:has(.landing) { overflow-x: clip; background: transparent; }
 
 /* buttons + inputs: mono uppercase labels, brand fill or outline */
 .lv-btn-terra, .lv-btn-light, .lv-btn-ghost { border: 1px solid transparent; border-radius: 999px; cursor: pointer; white-space: nowrap; font: 500 13px var(--mono); letter-spacing: .08em; text-transform: uppercase; transition: background .25s, color .25s, border-color .25s; }
-.landing .lv-btn-terra { padding: 13px 22px; background: var(--brand); color: #fff; }
-.landing .lv-btn-terra:hover { background: var(--ink); }
-.landing .lv-btn-light { padding: 9px 18px; border-color: var(--brand); background: transparent; color: var(--brand); }
-.landing .lv-btn-light:hover { background: var(--brand); color: #fff; }
-.landing .lv-btn-ghost { padding: 9px 16px; background: transparent; color: var(--ink2); }
-.landing .lv-btn-ghost:hover { color: var(--ink); }
+:is(.landing, .site) .lv-btn-terra { padding: 13px 22px; background: var(--brand); color: #fff; }
+:is(.landing, .site) .lv-btn-terra:hover { background: var(--ink); }
+:is(.landing, .site) .lv-btn-light { padding: 9px 18px; border-color: var(--brand); background: transparent; color: var(--brand); }
+:is(.landing, .site) .lv-btn-light:hover { background: var(--brand); color: #fff; }
+:is(.landing, .site) .lv-btn-ghost { padding: 9px 16px; background: transparent; color: var(--ink2); }
+:is(.landing, .site) .lv-btn-ghost:hover { color: var(--ink); }
 
 .lv-pill-form { display: flex; gap: 6px; max-width: 520px; padding: 6px 6px 6px 20px; border-radius: 999px; background: var(--paper2); border: 1px solid var(--line2); transition: border-color .25s; }
 .lv-pill-form:focus-within { border-color: var(--ink); }
@@ -118,25 +125,25 @@ body:has(.landing) { overflow-x: clip; background: transparent; }
 .lv-segment button { padding: 8px 16px; border: 0; border-radius: 999px; background: transparent; color: var(--ink2); font: 500 12px var(--mono); letter-spacing: .08em; text-transform: uppercase; cursor: pointer; }
 .lv-segment button.is-on { background: var(--ink); color: var(--paper); }
 .lv-segment.is-billing .is-annual { display: flex; align-items: center; gap: 8px; padding-right: 8px; }
-.lv-save { padding: 3px 8px; border-radius: 999px; background: var(--brand); color: #fff; font: 500 10.5px var(--mono); letter-spacing: .04em; }
+.lv-save { padding: 3px 8px; border-radius: 999px; background: var(--blue); color: var(--paper); font: 500 10.5px var(--mono); letter-spacing: .04em; }
 
 /* nav */
 .lv-nav { position: fixed; top: 0; left: 0; right: 0; z-index: 40; display: flex; align-items: center; gap: clamp(16px, 3vw, 48px); height: 68px; padding: 0 var(--gutter); background: transparent; border-bottom: 1px solid transparent; transition: background .4s, border-color .4s; }
 .lv-nav.is-scrolled, .lv-nav.is-menu { background: rgb(243 243 238 / .92); border-bottom-color: var(--line); backdrop-filter: blur(10px); }
-.landing .lv-nav-brand { display: flex; align-items: center; gap: 10px; color: var(--ink); }
+:is(.landing, .site) .lv-nav-brand { display: flex; align-items: center; gap: 10px; color: var(--ink); }
 .lv-nav-brand > span { font: 600 21px var(--sans); letter-spacing: -.04em; }
 .lv-nav-menus { min-width: 0; display: flex; align-items: center; margin-left: auto; }
 .lv-nav-trig { position: relative; height: 68px; display: flex; align-items: center; }
-.landing .lv-nav-item { display: flex; align-items: center; gap: 7px; padding: 8px clamp(8px, 1vw, 14px); white-space: nowrap; color: var(--ink2); font: 400 12.5px var(--mono); letter-spacing: .1em; text-transform: uppercase; transition: color .25s; }
-.landing .lv-nav-item:hover, .landing .lv-nav-item.is-open { color: var(--brand); }
+:is(.landing, .site) .lv-nav-item { display: flex; align-items: center; gap: 7px; padding: 8px clamp(8px, 1vw, 14px); white-space: nowrap; color: var(--ink2); font: 400 12.5px var(--mono); letter-spacing: .1em; text-transform: uppercase; transition: color .25s; }
+:is(.landing, .site) .lv-nav-item:hover, .landing .lv-nav-item.is-open { color: var(--brand); }
 .lv-nav-dot { width: 5px; height: 5px; background: var(--line2); transition: background .25s; }
 .lv-nav-item.is-open .lv-nav-dot { background: var(--brand); }
 .lv-nav-actions { flex: none; display: flex; align-items: center; gap: 6px; white-space: nowrap; }
 .lv-menu-wrap { position: absolute; top: 100%; }
 .lv-menu { position: relative; display: grid; gap: 2px; padding: 10px; border: 1px solid var(--line); border-top: 0; background: var(--paper); }
 .lv-menu-ear { display: none; }
-.landing .lv-menu-item { display: flex; align-items: center; gap: 14px; padding: 8px 12px 8px 8px; color: var(--ink); transition: background .2s; }
-.landing .lv-menu-item:hover { background: var(--paper3); color: var(--ink); }
+:is(.landing, .site) .lv-menu-item { display: flex; align-items: center; gap: 14px; padding: 8px 12px 8px 8px; color: var(--ink); transition: background .2s; }
+:is(.landing, .site) .lv-menu-item:hover { background: var(--paper3); color: var(--ink); }
 .lv-menu-tile { flex: none; width: 44px; height: 44px; background: var(--paper2); border: 1px solid var(--line); color: var(--brand); display: grid; place-items: center; overflow: hidden; }
 .lv-menu-tile.is-social { border: 0; }
 .lv-menu-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
@@ -148,6 +155,7 @@ body:has(.landing) { overflow-x: clip; background: transparent; }
 /* hero: everything centred */
 .lv-hero { min-height: min(100svh, 980px); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: clamp(28px, 4vh, 40px); padding: 120px var(--gutter) 80px; text-align: center; }
 .lv-hero .lv-eyebrow { justify-content: center; }
+.lv-hero-note { margin-top: -16px; font: 400 12px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--ink2); }
 .lv-hero-title { font: 500 clamp(48px, 10.5vw, 168px)/.86 var(--sans); letter-spacing: -.055em; color: var(--ink); }
 .lv-hero-title .lv-mask { padding-bottom: .14em; margin-bottom: -.09em; }
 .lv-dot { display: inline-block; width: .22em; aspect-ratio: 1; margin-left: .06em; border-radius: 50%; background: var(--brand); }
@@ -158,7 +166,17 @@ body:has(.landing) { overflow-x: clip; background: transparent; }
 .lv-essay-line { font: 500 clamp(30px, 3.6vw, 52px)/1.12 var(--sans); letter-spacing: -.035em; color: var(--ink); text-wrap: pretty; }
 .lv-essay-body { color: var(--ink2); }
 .lv-essay-num { display: block; margin-bottom: 14px; font: 400 13px var(--mono); letter-spacing: .12em; color: var(--brand); }
-.lv-essay[data-armed] .lv-w { color: var(--ghost); }
+/* Words light up as the reader scrolls: `--lit` (0 → 1) is the only thing GSAP moves, the colour comes from the theme's
+   tokens here, so it stays right when the theme changes mid-read. The title lights to --ink, the body to --ink2. */
+.lv-essay-line { --to: var(--ink); }
+.lv-essay-body { --to: var(--ink2); }
+.lv-essay .lv-w.is-key { --to: var(--blue); color: var(--blue); }
+/* The second accent (blue): a keyword in a headline. */
+.lv-key { color: var(--blue); }
+/* A browser without color-mix() keeps the words in full ink: nothing else would ever darken them. */
+@supports (color: color-mix(in srgb, red 50%, blue)) {
+  .lv-essay[data-armed] .lv-w { --lit: 0; color: color-mix(in srgb, var(--to) calc(var(--lit) * 100%), var(--ghost)); }
+}
 
 /* shared */
 .lv-chips { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -180,6 +198,7 @@ body:has(.landing) { overflow-x: clip; background: transparent; }
 .lv-pains.is-promises li { font-size: clamp(17px, 1.4vw, 20px); }
 .lv-fit-line { font: 400 16px/1.6 var(--sans); color: var(--ink2); }
 .lv-fit-line b { font-weight: 600; color: var(--ink); }
+.lv-fit-line:not(.is-poor) b { color: var(--blue); }
 .lv-fit-line.is-poor b { color: var(--brand); }
 
 /* steps: five cards on one ruled strip */
@@ -255,19 +274,19 @@ body:has(.landing) { overflow-x: clip; background: transparent; }
 .lv-foot-brand > span > span { font: 600 22px var(--sans); letter-spacing: -.04em; }
 .lv-foot-brand p { font: 400 14px/1.6 var(--sans); color: var(--ink2); }
 .lv-foot-support { justify-self: end; display: flex; flex-direction: column; gap: 10px; }
-.landing .lv-foot-support a { font: 500 18px var(--sans); letter-spacing: -.02em; color: var(--ink); }
-.landing .lv-foot-support a:hover { color: var(--brand); }
+:is(.landing, .site) .lv-foot-support a { font: 500 18px var(--sans); letter-spacing: -.02em; color: var(--ink); }
+:is(.landing, .site) .lv-foot-support a:hover { color: var(--brand); }
 .lv-foot-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 36px 24px; padding-top: 32px; border-top: 1px solid var(--ink); }
 .lv-foot-cols > div { display: flex; flex-direction: column; gap: 16px; }
 .lv-foot-cols h3 { font: 400 12px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--ink2); }
 .lv-foot-cols ul { display: flex; flex-direction: column; gap: 12px; }
-.landing .lv-foot-cols a { display: flex; align-items: center; gap: 9px; font: 400 14px var(--sans); color: var(--ink); }
-.landing .lv-foot-cols a:hover { color: var(--brand); }
+:is(.landing, .site) .lv-foot-cols a { display: flex; align-items: center; gap: 9px; font: 400 14px var(--sans); color: var(--ink); }
+:is(.landing, .site) .lv-foot-cols a:hover { color: var(--brand); }
 .lv-foot-bottom { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; flex-wrap: wrap; padding-top: 28px; border-top: 1px solid var(--line); }
 .lv-foot-bottom p { max-width: 620px; font: 400 12.5px/1.7 var(--sans); color: var(--mute); }
 .lv-foot-legal { display: flex; gap: 22px; flex-wrap: wrap; font: 400 12px var(--mono); letter-spacing: .06em; text-transform: uppercase; }
-.landing .lv-foot-legal a { color: var(--ink2); }
-.landing .lv-foot-legal a:hover { color: var(--brand); }
+:is(.landing, .site) .lv-foot-legal a { color: var(--ink2); }
+:is(.landing, .site) .lv-foot-legal a:hover { color: var(--brand); }
 .lv-wordmark { pointer-events: none; user-select: none; padding: 0 var(--gutter) .14em; font: 600 clamp(88px, 21vw, 380px)/.8 var(--sans); letter-spacing: -.07em; text-align: center; white-space: nowrap; color: var(--brand); }
 @media (max-width: 719px) { .lv-foot-support { justify-self: start; } }
 
@@ -281,3 +300,76 @@ body:has(.landing) { overflow-x: clip; background: transparent; }
   .lv-nav.is-scrolled, .lv-nav.is-menu { background: rgb(26 25 23 / .92); }
   .lv-panel-section.is-pricing { background: rgb(34 33 32 / .7); }
 }
+
+/* ── The rest of the public site: blog, legal pages, 404 (`.site`, 2026-11-20) ─────────────────────────────────────
+   Those pages were drawn with the app's older design system (serif titles, navy, gold) and looked like another
+   product. Their CSS still reads `--ds-*`; here each of those names points at a landing token, so the same rules
+   draw paper, ink, orange and blue, in light and dark alike. Aliases are set here too: `var()` in a custom property
+   resolves where it is declared, so `:root`'s `--ds-bg: var(--ds-marble-50)` would keep the old colour. */
+.site {
+  --ds-bg: var(--paper);
+  --ds-text: var(--ink);
+  --ds-panel: var(--paper2);
+  --ds-marble-50: var(--paper);
+  --ds-marble-100: var(--paper3);
+  --ds-ink-900: var(--ink);
+  --ds-fg-2: var(--ink);
+  --ds-fg-3: var(--ink2);
+  --ds-fg-4: var(--mute);
+  --ds-fg-5: var(--mute);
+  --ds-fg-6: var(--mute);
+  --ds-muted: var(--ink2);
+  --ds-stone-600: var(--ink2);
+  --ds-line: var(--line);
+  --ds-line-2: var(--line2);
+  --ds-line-4: var(--line2);
+  --ds-line-5: var(--line2);
+  --ds-gold-line: var(--line);
+  --ds-gold-500: var(--brand);
+  --ds-gold-text: var(--brand);
+  --ds-gold-100: var(--brand-soft);
+  --ds-amber: var(--brand);
+  --ds-lapis-900: var(--char);
+  --ds-lapis-700: var(--ink);
+  --ds-lapis-500: var(--brand);
+  --ds-lapis-100: var(--paper3);
+  --ds-accent-ink: var(--paper);
+  --ds-focus: var(--brand);
+  --ds-font-display: var(--sans);
+  --ds-font-sans: var(--sans);
+  --ds-font-mono: var(--mono);
+  --ds-shadow-card: none;
+  --ds-shadow-media: none;
+  --ds-radius-frame: 0;
+  --ds-radius-panel: 0;
+
+  min-height: 100vh;
+  padding-top: 68px;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-feature-settings: "ss01", "cv11";
+}
+.site .marketing { background: transparent; }
+.site :is(h1, h2, h3) { font-family: var(--sans); font-weight: 500; letter-spacing: -.035em; color: var(--ink); }
+.site .blog-header h1, .site .blog-article-header h1, .site .legal-page h1 { font-weight: 500; letter-spacing: -.045em; line-height: .98; }
+.site .section-kicker { display: flex; align-items: center; gap: 12px; font: 400 12px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--ink2); }
+.site .section-kicker::before { content: ""; flex: none; width: 7px; height: 7px; background: var(--brand); }
+.site ::selection { background: var(--blue-soft); }
+/* Blue marks what matters in reading: links in a post or a policy, and the short answer at the top of a post. */
+.site :is(.blog-prose, .legal-page) a { color: var(--blue); text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--blue) 40%, transparent); text-underline-offset: 3px; }
+.site :is(.blog-prose, .legal-page) a:hover { text-decoration-color: var(--blue); }
+.site .blog-answer { border-color: var(--blue); }
+.site .blog-answer-label { color: var(--blue); }
+.site .lv-nav { background: color-mix(in srgb, var(--paper) 92%, transparent); border-bottom-color: var(--line); backdrop-filter: blur(10px); }
+.site .lv-nav-item[aria-current="page"] { color: var(--brand); }
+.site .lv-footer { margin-top: 48px; border-top: 1px solid var(--line); }
+/* Dark surfaces (covers, code, the storyboard, the closing call to action) wrote their light text as `--ds-marble-50`,
+   which is now the page colour and turns dark in dark mode: inside them it is the light ink of a dark surface. */
+.site :is(.post-cover, .blog-run pre, .bk-storyboard, .blog-cta, .bk-callout-glyph, .bk-compare-label span) { --ds-marble-50: var(--char-ink); }
+.site .blog-cta-form { background: var(--char-ink); }
+.site .blog-cta-form input { color: #2b2723; }
+.site .blog-cta-form button { background: var(--brand); color: #fff; }
+.site .blog-cta-form button:hover { background: var(--brand-deep); }
+.site .blog-cta-inline-link { background: var(--brand); color: #fff; }
+.site .blog-cta h2 { color: var(--char-ink); }
