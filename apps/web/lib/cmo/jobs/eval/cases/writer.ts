@@ -13,8 +13,7 @@
 import type { CaseResult } from "@/lib/eval/compare";
 
 import { CAPTION_PROFILES, countHashtags, profileOf } from "../../../platforms";
-import { checkPostFor, checkVideoBrief } from "../../../writer/checks";
-import { VideoBriefSchema } from "../../../writer/types";
+import { checkPostFor } from "../../../writer/checks";
 import { checkRules } from "../../context";
 import { cascade } from "../../judge";
 import { memoryStore } from "../../memory-store";
@@ -81,22 +80,6 @@ function platformCase(platform: (typeof PLATFORMS)[number]): EvalCase {
 
 export const platformPostCases = PLATFORMS.map(platformCase);
 
-const briefCase: EvalCase = {
-  job: "w3-brief",
-  async run(fixture, env) {
-    const mem = memoryStore(fixture.docs, []);
-    const run = mem.enqueue("write_video_brief", { order_id: "eval-brief", idea: fixture.brief, reason: "From the content strategy", seconds: 30, aspect: "9:16" });
-    await env.drain(mem.store, { runId: run.id, budgetMs: BUDGET_MS });
-    const parsed = VideoBriefSchema.safeParse((run.output as { brief?: unknown } | null)?.brief);
-    const results: CaseResult[] = [{ id: `w3-brief:${fixture.name}:run`, epoch: env.epoch, pass: run.status === "done", decided_by: "code", ...(run.error ? { notes: [run.error] } : {}) }];
-    const rules = checkRules(fixture.docs);
-    const issues = parsed.success ? checkVideoBrief(parsed.data, rules) : ["no brief"];
-    const text = parsed.success ? [`Objective: ${parsed.data.objective}`, `Hooks: ${parsed.data.hooks.join(" | ")}`, `Key points: ${parsed.data.keyPoints.join(" | ")}`, `Call to action: ${parsed.data.cta}`].join("\n") : "";
-    env.log(text);
-    results.push(await cascade(`w3-brief:${fixture.name}:brief`, env.epoch, issues, env.judge, { job: `The brief a short video about "${fixture.brief}" is made from: three hooks, facts from the documents, one call to action`, docs: fixture.docs, output: text }));
-    return results;
-  },
-};
 
 const captionCase: EvalCase = {
   job: "w3-caption",
@@ -127,4 +110,4 @@ const captionCase: EvalCase = {
   },
 };
 
-registerCases([...platformPostCases, briefCase, captionCase]);
+registerCases([...platformPostCases, captionCase]);

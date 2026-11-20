@@ -24,7 +24,7 @@ type CmoRunRow = {
   created_at: string;
 };
 
-const JOB_OF: Record<CmoRunRow["kind"], JobId> = { onboard: "W0", plan_week: "W1", post_draft: "W2", sales_scan: "W4", pull_metrics: "W6", competitor_research: "W7", summarize_memory: "W8", review_week: "W9", write_video_brief: "W5", write_caption: "W5", write_slides: "W5", publish_post: "W3", niche_video_research: "W7", distill_ratings: "W8", repurpose_post: "W2", photo_caption: "W5", sales_reply_drafts: "W4" };
+const JOB_OF: Record<CmoRunRow["kind"], JobId> = { onboard: "W0", plan_week: "W1", post_draft: "W2", sales_scan: "W4", pull_metrics: "W6", competitor_research: "W7", summarize_memory: "W8", review_week: "W9", write_caption: "W5", write_slides: "W5", publish_post: "W3", distill_ratings: "W8", repurpose_post: "W2", sales_reply_drafts: "W4" };
 
 type OpportunityRow = {
   id: string;

@@ -328,34 +328,11 @@ async function postChecks() {
 // W3: Writer's runs for Studio, through the runner on the fake provider.
 async function studioChecks() {
   for (const p of CAPTION_PROFILES) assert.ok(CAPTION_WRITERS[p.id] && AGENT_SPECS[CAPTION_WRITERS[p.id]!].tier === "draft", `${p.id} has its own writer agent`);
-  assert.deepEqual([writerAgent("video_brief", null), writerAgent("caption", profile("tiktok_caption")), writerAgent("youtube", youtube), writerAgent("post", threads)], ["brief_writer", "tiktok_writer", "youtube_writer", "threads_writer"]);
+  assert.deepEqual([writerAgent("caption", profile("tiktok_caption")), writerAgent("youtube", youtube), writerAgent("post", threads)], ["tiktok_writer", "youtube_writer", "threads_writer"]);
 
   assert.deepEqual([firstLine("Your invoice is late. Paylane sends it."), firstLine("no stop at all"), firstLine("v1.2 shipped today! More soon.")], ["Your invoice is late.", "no stop at all", "v1.2 shipped today!"], "the first sentence said, not a decimal point");
   process.env.OPENCMO_AGENT_FAKE = "1";
   const docs = { product: { name: "Paylane", pricing: "$12/month" }, brand: { avoid: ["revolutionary"] } };
-
-  // write_video_brief: SQL's input → Writer's brief, as Studio takes it.
-  const briefRun = memoryStore(docs, []);
-  const b = briefRun.enqueue("write_video_brief", { order_id: "o1", idea: "Chasing a late invoice in one take", reason: "pillar: getting paid", seconds: 30, aspect: "9:16", platform: "Reels" });
-  await drainCmoQueue(briefRun.store);
-  assert.equal(b.status, "done", `brief run (${b.error})`);
-  const out = b.output as { brief: unknown; reason: string };
-  const parsed = VideoBriefSchema.parse(out.brief);
-  assert.deepEqual([parsed.hooks.length, parsed.seconds, parsed.aspect, Boolean(parsed.cta), typeof out.reason], [3, 30, "9:16", true, "string"]);
-  assert.deepEqual(Object.keys(out.brief as object).sort(), ["angle", "aspect", "caption", "cta", "hooks", "keyPoints", "objective", "seconds", "storyboard"], "the keys SQL copies into the order");
-  assert.ok(parsed.caption.length > 0 && parsed.caption.length <= 2200 && countHashtags(parsed.caption) <= 5, "the fake script comes with its caption");
-  assert.deepEqual((b.output as { sources: string[] }).sources, [], "no niche research, no sources");
-  // P5 F8: with niche research the brief cites its videos, and only URLs the research read.
-  const nicheRun = memoryStore(docs, []);
-  const nicheVideo = (n: number) => ({ platform: "tiktok" as const, url: `https://www.tiktok.com/@a/video/${n}`, author: "@a", views: 9000, lift: 4, hook: "Stop editing on a timeline", format: "Screen demo", why: "Names the pain" });
-  await nicheRun.store.saveNicheInsight("u", "r", { topics: ["invoices"], videos: [nicheVideo(1), nicheVideo(2), nicheVideo(3)], formats: ["Screen demo"], measured_at: new Date().toISOString() });
-  const nb = nicheRun.enqueue("write_video_brief", { order_id: "o3", idea: "Chasing a late invoice in one take" });
-  await drainCmoQueue(nicheRun.store);
-  assert.equal(nb.status, "done", `brief with niche research (${nb.error})`);
-  assert.deepEqual((nb.output as { sources: string[] }).sources, [nicheVideo(1).url, nicheVideo(2).url], "the brief cites the niche videos it learned from");
-  const noIdea = briefRun.enqueue("write_video_brief", { order_id: "o2", idea: "" });
-  await drainCmoQueue(briefRun.store);
-  assert.equal(noIdea.status, "failed", "a brief with no idea fails its order");
 
   // write_caption: each edit × each profile, saved through the store with the published text.
   const cap = memoryStore(docs, []);

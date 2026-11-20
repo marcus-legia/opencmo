@@ -4,19 +4,13 @@
  *
  *   s4-shorts    — the Clip editor (`pickShorts`) on a fixed 90 s founder talk: `reviewShorts` (15–60 s,
  *                  whole sentences, the hook in the first 3 s, the right count), then the judge per short
- *   s4-long-take — the video brief → `create_video` request (`briefRequest`): the Director's input has the
- *                  goal, the hooks and the key points; the render-level measures (frozen shots, jumps at shot
- *                  boundaries, look-check pass rate) need a render on the worker, so they are reported as
- *                  pending here and measured by the look check at runtime
  *
  * Judge questions are constants below; they go into the report word for word.
  */
 
 import type { CaseResult } from "@/lib/eval/compare";
 import { pickShorts, reviewShorts, shortCount, candidates, type Word } from "@/lib/departments/studio/shorts/squad";
-import { briefRequest } from "@/lib/departments/studio/video";
 
-import { VideoBriefSchema } from "../../../writer/types";
 import { checkRules } from "../../context";
 import { cascade } from "../../judge";
 import { memoryStore } from "../../memory-store";
@@ -30,7 +24,6 @@ export const SHORT_QUESTIONS = [
   "The short makes sense on its own: someone who never saw the full video understands it.",
   "Its first sentence is a hook that makes a founder want to keep watching.",
 ] as const;
-export const LONG_TAKE_QUESTIONS = ["The request tells a video team exactly what to show, for whom, and what the viewer should do after."] as const;
 
 /** A fixed 90 s founder talk (Paylane, the first fixture): sentences timed at about 2.5 words a second. */
 export const TALK = [
@@ -91,33 +84,8 @@ const shortsCase: EvalCase = {
   },
 };
 
-const longTakeCase: EvalCase = {
-  job: "s4-long-take",
-  async run(fixture, env) {
-    const id = (output: string) => caseId("long_take", fixture.name, output);
-    const mem = memoryStore(fixture.docs, []);
-    const run = mem.enqueue("write_video_brief", { order_id: "eval-long-take", idea: fixture.brief, reason: "From the content strategy", seconds: 60, aspect: "9:16" });
-    await env.drain(mem.store, { runId: run.id, budgetMs: BUDGET_MS });
-    const brief = VideoBriefSchema.safeParse((run.output as { brief?: unknown } | null)?.brief);
-    if (run.status !== "done" || !brief.success) return [fail(id("run"), env.epoch, run.error ?? "no brief")];
-    const request = briefRequest(brief.data, { avoid: checkRules(fixture.docs).avoid ?? [] });
-    const issues = [
-      ...(!/^Goal: /.test(request.prompt) ? ["the request has no goal"] : []),
-      ...(brief.data.hooks.length && !request.prompt.includes(brief.data.hooks[0]!) ? ["the first hook is not in the request"] : []),
-      ...brief.data.keyPoints.filter((p) => !request.prompt.includes(p)).map((p) => `key point missing: ${p.slice(0, 60)}`),
-      ...(request.seconds > 90 ? [`${request.seconds} s is over the 90 s cap`] : []),
-    ];
-    env.log(request.prompt);
-    return [
-      { id: id("run"), epoch: env.epoch, pass: true, decided_by: "code" },
-      await cascade(id("request"), env.epoch, issues, env.judge, { job: "The request a video team makes a 60 s marketing video from", docs: fixture.docs, output: request.prompt, criteria: [...LONG_TAKE_QUESTIONS] }),
-      { id: id("render"), epoch: env.epoch, pass: null, decided_by: "code", pending: "needs a render on the worker: frozen shots, jumps at shot boundaries and the look check are measured at runtime" },
-    ];
-  },
-};
-
 /** Shared for a check: the fake env runs the three cases end to end without a network. */
-export const STUDIO_CASES: readonly EvalCase[] = [shortsCase, longTakeCase];
+export const STUDIO_CASES: readonly EvalCase[] = [shortsCase];
 export type { EvalEnv };
 
 registerCases([...STUDIO_CASES]);

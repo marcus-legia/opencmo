@@ -11,7 +11,6 @@ import { join } from "node:path";
 import { DIRECTOR } from "@/lib/agent/create-video";
 import { WRITER } from "@/lib/agent/motion-guide";
 import { SYSTEM_PROMPT } from "@/lib/agent/prompt";
-import { PHOTO_CAPTION_SYSTEM } from "@/lib/cmo/jobs/photo-caption";
 import { REPURPOSE_SYSTEM } from "@/lib/cmo/jobs/repurpose-post";
 import { DM_SYSTEM, NUDGE_SYSTEM, SCORE_SYSTEM } from "@/lib/cmo/jobs/sales-scan";
 import { COMPETITORS_SYSTEM } from "@/lib/agent/cmo-competitors";
@@ -32,7 +31,6 @@ const prompts: Record<string, string> = {
   "YouTube writer": YOUTUBE_SYSTEM,
   "Video brief writer": VIDEO_BRIEF_SYSTEM,
   "Repurpose writer": REPURPOSE_SYSTEM,
-  "Photo caption writer": PHOTO_CAPTION_SYSTEM,
   "Sales scorer (Library summary and theme)": SCORE_SYSTEM,
   "DM writer (wave 3 B2)": DM_SYSTEM,
   "Nudge writer (wave 3 B2)": NUDGE_SYSTEM,
