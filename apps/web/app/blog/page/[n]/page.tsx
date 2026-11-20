@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { CategoryChips, Pagination } from "@/components/blog/BlogChrome";
 import { PostList } from "@/components/blog/PostList";
 import { POSTS_PER_PAGE, getAllPosts, pageCount } from "@/lib/blog";
+import { blogUrl } from "@/lib/site";
 
 export const dynamicParams = false;
 
@@ -17,7 +18,7 @@ export async function generateMetadata({ params }: { params: Promise<{ n: string
   const { n } = await params;
   return {
     title: `Blog — page ${n}`,
-    alternates: { canonical: `/blog/page/${n}` },
+    alternates: { canonical: blogUrl(`/page/${n}`) },
   };
 }
 

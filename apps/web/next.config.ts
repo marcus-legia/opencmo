@@ -5,6 +5,7 @@ import type { NextConfig } from "next";
 import { CATEGORY_REDIRECTS } from "./content/blog/categories";
 import blogRedirects from "./content/blog/redirects.json";
 import { assertSentryDsn } from "./lib/ops/sentry-dsn";
+import { blogBase, blogHost } from "./lib/site";
 
 /**
  * Security headers.
@@ -44,7 +45,8 @@ function securityHeaders(): { key: string; value: string }[] {
   const csp = [
     "default-src 'self'",
     "base-uri 'self'",
-    "form-action 'self'",
+    // The blog's own host (`blog.ferreto.io`) sends its sign-up form to the site's `/login`: another origin.
+    `form-action 'self' ${(process.env.NEXT_PUBLIC_SITE_URL || "https://ferreto.io").replace(/\/$/, "")}`,
     "frame-ancestors 'none'",
     "object-src 'none'",
     `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""}`,
@@ -112,23 +114,69 @@ const config: NextConfig = {
     return [{ source: "/:path*", headers: [...securityHeaders(), ...deployHeaders()] }];
   },
   /**
-   * Slug bài viết là bất biến; đổi slug thì slug cũ phải vào
-   * `content/blog/redirects.json` (cũ → mới). 308 giữ thứ hạng và link ngoài.
+   * Post slugs never change; a renamed slug goes into `content/blog/redirects.json` (old → new). A 308 keeps the
+   * ranking and outside links.
+   *
+   * The blog moved to its own host (`blog.ferreto.io`, owner 2026-11-20; `lib/site.ts` `blogBase`): every old
+   * `ferreto.io/blog/...` address goes there with a 308, and a `/blog/...` address on the blog host (a link inside a
+   * post) drops the prefix. Off production the blog stays a path and only the slug redirects apply. Env is read here,
+   * not in the module body, for the reason given at `securityHeaders`.
    */
   async redirects() {
-    const posts = Object.entries(blogRedirects as Record<string, string>).map(([from, to]) => ({
-      source: `/blog/${from}`,
-      destination: `/blog/${to}`,
-      permanent: true,
-    }));
-    const categories = Object.entries(CATEGORY_REDIRECTS).map(([from, to]) => ({
-      source: `/blog/category/${from}`,
-      destination: `/blog/category/${to}`,
-      permanent: true,
-    }));
+    const site = (process.env.NEXT_PUBLIC_SITE_URL || "https://ferreto.io").replace(/\/$/, "");
+    const blog = blogBase(site, process.env.NEXT_PUBLIC_BLOG_URL, process.env.VERCEL_ENV);
+    const host = blogHost(blog);
+    // Moved blog addresses, relative to the blog's root.
+    const moved = [
+      ...Object.entries(blogRedirects as Record<string, string>).map(([from, to]) => [`/${from}`, `/${to}`]),
+      ...Object.entries(CATEGORY_REDIRECTS).map(([from, to]) => [`/category/${from}`, `/category/${to}`]),
+    ];
+    const siteHost = new URL(site).host;
+    // On a preview (or any other host) the blog stays a path, so a moved slug stays on that host too.
+    const legacy = [
+      ...(host ? moved.map(([from, to]) => ({ source: `/blog${from}`, has: [{ type: "host" as const, value: siteHost }], destination: `${blog}${to}`, permanent: true })) : []),
+      ...moved.map(([from, to]) => ({ source: `/blog${from}`, destination: `/blog${to}`, permanent: true })),
+    ];
+    const onBlogHost = host
+      ? [
+          ...moved.map(([from, to]) => ({ source: from, has: [{ type: "host" as const, value: host }], destination: to, permanent: true })),
+          { source: "/blog", has: [{ type: "host" as const, value: host }], destination: "/", permanent: true },
+          { source: "/blog/:path*", has: [{ type: "host" as const, value: host }], destination: "/:path*", permanent: true },
+        ]
+      : [];
+    // Only the site's own host: a preview deployment keeps serving `/blog` so it can be checked before a merge.
+    const toBlogHost = host
+      ? [
+          { source: "/blog", has: [{ type: "host" as const, value: siteHost }], destination: blog, permanent: true },
+          { source: "/blog/:path*", has: [{ type: "host" as const, value: siteHost }], destination: `${blog}/:path*`, permanent: true },
+        ]
+      : [];
     // Pages deleted in wave 4b (photo posts, the script prompter): an old link lands on the app, not a 404.
     const deleted = ["/app/photos", "/app/script/:path*"].map((source) => ({ source, destination: "/app", permanent: false }));
-    return [...posts, ...categories, ...deleted];
+    return [...legacy, ...onBlogHost, ...toBlogHost, ...deleted];
+  },
+  /**
+   * On the blog host, every page address maps onto the `app/blog` routes: `/` is the index, `/write-x-thread` a post,
+   * `/robots.txt` and `/sitemap.xml` the blog's own. Files with an extension (icons, images) and `/_next/`, `/fonts/`
+   * stay at the root, where they are served from.
+   */
+  async rewrites() {
+    const site = (process.env.NEXT_PUBLIC_SITE_URL || "https://ferreto.io").replace(/\/$/, "");
+    const host = blogHost(blogBase(site, process.env.NEXT_PUBLIC_BLOG_URL, process.env.VERCEL_ENV));
+    if (!host) return [];
+    const has = [{ type: "host" as const, value: host }];
+    return {
+      beforeFiles: [
+        { source: "/", has, destination: "/blog" },
+        { source: "/robots.txt", has, destination: "/blog/robots.txt" },
+        { source: "/sitemap.xml", has, destination: "/blog/sitemap.xml" },
+        { source: "/rss.xml", has, destination: "/blog/rss.xml" },
+        // Not `/blog` itself: rewrites chain, and `/` → `/blog` would become `/blog/blog`.
+        { source: "/:path((?!_next/|fonts/|api/|blog(?:/|$))[^.]+)", has, destination: "/blog/:path" },
+      ],
+      afterFiles: [],
+      fallback: [],
+    };
   },
 };
 

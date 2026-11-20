@@ -1,29 +1,32 @@
-# Writing an OpenCMO blog post
+# Writing a Ferreto blog post
 
 This is the contract for anyone writing a post, including the scheduled Claude run. Each post is
 **one file**, `content/blog/<slug>.html`. The blog is static: a post goes live when it lands on
-`main` and Vercel deploys.
+`main` and Vercel deploys. On production the blog is served at `blog.ferreto.io` (`lib/site.ts`
+`blogBase`); links inside a post stay root paths (`/blog/<slug>`, `/` for the home page) and are
+turned into absolute addresses when the page is built.
 
 `npm run check:blog` enforces every rule below (it also runs in CI). Red means no merge.
 
 ## Topic: teach marketing, don't advertise
 
-The blog is a school of marketing and selling for **solo founders, creators and small teams**,
-not a feature page. A reader must learn how to do the thing even if they never use OpenCMO.
+The blog is a school of finding customers and marketing for **founders and small teams who sell
+software to businesses**, not a feature page. A reader must learn how to do the thing even if
+they never use Ferreto.
 
-- **Write about:** education content marketing (teaching as marketing), building a personal or
-  company brand, video and short-form video, writing on X, content calendars and repurposing,
-  selling online courses and digital products, community and newsletters, positioning, ICP,
-  landing pages, pricing pages, launches, measurement, joining Reddit the right way.
-- **Don't write:** a post about an OpenCMO feature (clipping, editor, captions…), a "best tools"
+- **Write about:** finding your first customers, joining Reddit, Hacker News and other
+  communities the right way, replying to people who need what you built, following up, ICP,
+  positioning, landing pages, pricing pages, launches, writing on X and LinkedIn, content
+  calendars and repurposing, measuring conversations rather than views, founder brand.
+- **Don't write:** a post about a Ferreto feature, a "best tools"
   comparison, a post that attacks a competitor.
-- Mention OpenCMO at most once, lightly, only when it is truly relevant. The page adds the CTA
+- Mention Ferreto at most once, lightly, only when it is truly relevant. The page adds the CTA
   box at the end.
 
 ## Language and voice
 
 - Posts are in **English**: the customers are global.
-- Scheduled posts are written by `"author": "opencmo"` (OpenCMO Team) in a **teacher's voice**:
+- Scheduled posts are written by `"author": "opencmo"` (the Ferreto team; the id stays) in a **teacher's voice**:
   clear, warm, concrete, one idea at a time, an example for every principle, and a step the
   reader can try today. Never invent a first-person story ("when I launched…").
 
@@ -130,12 +133,15 @@ code pre hr br sup sub mark small`
 
 - **Never invent numbers, studies or quotes.** No source, no number. A made-up number that an AI
   quotes back is a real risk to the brand.
-- About OpenCMO, only say what the product does today: an AI CMO with three departments (Video,
-  Post, Sales) where the user approves everything that goes out — see "Product rules" in
-  `CLAUDE.md`. Video today: **upload** a video the user owns (do NOT write "paste a YouTube
-  link"), automatic or manual moment picking, 9:16 framing that follows the speaker, branded
-  burned-in captions, editing a clip by asking, Brand Kit. Prices: `lib/pricing.ts` (the billing
-  catalogue; never write a price by hand). If a department isn't live, don't write as if it is.
+- About Ferreto, only say what the product does today (the landing copy in
+  `components/landing/data.ts` is the reference): it reads the founder's website, finds people on
+  Reddit, Hacker News, Threads and Facebook groups who describe the problem they solve, scores
+  each with the quote that shows why, and drafts a reply (and a DM or an email when someone is
+  ready) that the founder sends from their own account. It plans a week of posts for X, LinkedIn
+  and Threads from those questions. A video editor for clips the user recorded is included
+  (**upload** only, never "paste a YouTube link"). Never write that Ferreto sends, posts replies
+  or messages on its own, and never call it an "AI CMO" or a "marketing team". Prices:
+  `lib/pricing.ts` (the billing catalogue; never write a price by hand).
 - Avoid words payment providers flag: "lead generation", "leads", "outreach", "growth hack",
   "get rich", income figures.
 - Don't name competitors to put them down.

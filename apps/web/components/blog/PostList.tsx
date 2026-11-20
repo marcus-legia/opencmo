@@ -3,6 +3,7 @@ import Link from "next/link";
 import type { Post } from "@/lib/blog";
 
 import { PostCard } from "./PostCard";
+import { blogUrl } from "@/lib/site";
 
 /** Bài đầu tiên của trang 1 thành thẻ nổi bật; còn lại vào lưới 3 cột. */
 export function PostList({ posts, feature }: { posts: Post[]; feature: boolean }) {
@@ -10,7 +11,7 @@ export function PostList({ posts, feature }: { posts: Post[]; feature: boolean }
     // Không hứa "sắp có" (luật sản phẩm 1): chỉ trỏ về bài đang có.
     return (
       <p className="blog-empty">
-        No posts in this category yet. <Link href="/blog">Read all posts</Link>.
+        No posts in this category yet. <Link href={blogUrl()}>Read all posts</Link>.
       </p>
     );
   }

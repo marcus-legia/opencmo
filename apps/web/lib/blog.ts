@@ -17,6 +17,7 @@ import { z } from "zod";
 import { AUTHORS, type AuthorId } from "@/content/blog/authors";
 import { CATEGORIES, type CategorySlug } from "@/content/blog/categories";
 import { BLOCK_MARKER, splitBlocks, type Segment } from "@/lib/blog-blocks";
+import { absoluteUrl, blogUrl } from "@/lib/site";
 
 export const BLOG_DIR = path.join(process.cwd(), "content/blog");
 export const POSTS_PER_PAGE = 12;
@@ -107,9 +108,8 @@ export function parsePost(slug: string, source: string): Post {
 }
 
 /**
- * Thêm phần trình bày mà người viết bài không phải nhớ: neo `#` cho tiêu đề,
- * khung cuộn ngang cho bảng (bảng rộng không được đẩy trang tràn ngang trên
- * điện thoại), ảnh tải lười.
+ * Adds what a post's author should not have to remember: `#` anchors on headings, a horizontal scroll frame for
+ * tables (a wide table must not push the page sideways on a phone), lazy images, and absolute addresses for links.
  */
 function enhance(html: string): string {
   return html
@@ -117,7 +117,18 @@ function enhance(html: string): string {
       `<h${level} id="${id}"${attrs}>${inner}<a class="heading-anchor" href="#${id}" aria-label="Link to this section">#</a></h${level}>`)
     .replace(/<table/g, '<div class="blog-table"><table')
     .replace(/<\/table>/g, "</table></div>")
-    .replace(/<img(?![^>]*\sloading=)/g, '<img loading="lazy" decoding="async"');
+    .replace(/<img(?![^>]*\sloading=)/g, '<img loading="lazy" decoding="async"')
+    // Posts link with root paths (`/blog/<slug>`, `/` for the home page). The blog may live on its own host, where `/`
+    // is the blog itself, so each becomes the absolute address it means.
+    .replace(/href="(\/(?!\/)[^"]*)"/g, (_all, href: string) => `href="${siteHref(href)}"`);
+}
+
+/** A root path written in a post → its absolute address: `/blog/...` on the blog, anything else on the site. */
+export function siteHref(href: string): string {
+  const blog = href.match(/^\/blog([/?#].*)?$/);
+  if (!blog) return absoluteUrl(href);
+  const rest = blog[1] ?? "";
+  return rest.startsWith("/") ? blogUrl(rest) : `${blogUrl()}${rest}`;
 }
 
 let cache: Post[] | null = null;
