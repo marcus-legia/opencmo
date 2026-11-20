@@ -481,7 +481,7 @@ function ThreadRow({ t, free, open, onToggle, onBack, onPlan, onDecide, onSent }
             </div>
           ) : t.draft === null ? (
             <div className="meta">No reply yet. Write the replies above, or reply in your own words and mark it replied.</div>
-          ) : !done && t.person ? (
+          ) : t.person && t.status !== "dismissed" ? (
             <ReachPanel
               t={t}
               onSent={(via) => onSent(t, via)}
@@ -490,7 +490,7 @@ function ThreadRow({ t, free, open, onToggle, onBack, onPlan, onDecide, onSent }
                   <label className="meta" htmlFor={`reply-${t.id}`} style={{ display: "block", marginBottom: "6px" }}>
                     Draft reply
                   </label>
-                  <textarea id={`reply-${t.id}`} className="reply" value={draft} onChange={(e) => setDraft(e.target.value)} rows={4} style={{ width: "100%", resize: "vertical", font: "inherit", fontSize: "15px", lineHeight: "1.55", color: "var(--text)" }} />
+                  <textarea id={`reply-${t.id}`} className="reply" value={draft} onChange={(e) => setDraft(e.target.value)} disabled={done} rows={4} style={{ width: "100%", resize: "vertical", font: "inherit", fontSize: "15px", lineHeight: "1.55", color: "var(--text)" }} />
                   {t.draftChecks ? (
                     <div className="meta" style={{ marginTop: "6px" }}>
                       {t.draftChecks}

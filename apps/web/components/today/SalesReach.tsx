@@ -34,7 +34,11 @@ const CHAT_URL: Partial<Record<SalesPlatform, string>> = {
  * The five checks of "Ready to reach out", each with its line from the scan (`reasons`, in the same order as
  * `sales-scan.ts` writes them). Read from the post and its thread only, never a profile.
  */
-function checksOf(reach: ReachCheck): { label: string; ok: boolean; why: string }[] {
+const CHECK_LABELS = ["A buyer like your customers", "Wants it now", "Warm", "Fresh", "A way to reach them"] as const;
+
+function checksOf(reach: ReachCheck | null): { label: string; ok: boolean | null; why: string }[] {
+  // Found before the checks existed (or a check that did not parse): the five checks show as not checked yet.
+  if (!reach) return CHECK_LABELS.map((label) => ({ label, ok: null, why: "Not checked yet" }));
   const r = reach.reasons;
   const way = reach.dmAllowed || reach.emailFound !== null;
   return [
@@ -56,6 +60,32 @@ async function copy(text: string): Promise<boolean> {
 }
 
 type Tab = "public" | "dm" | "email";
+
+/**
+ * A tab that is not open yet still shows what it is for (owner, 2026-11-20): why it is closed, what opens it, and
+ * where the draft will be, dimmed. Nothing in it can be copied or sent.
+ */
+function LockedTab({ kind, why, opens, testId }: { kind: "dm" | "email"; why: string; opens: string; testId: string }) {
+  return (
+    <div className="reach-locked" role="note" data-testid={testId}>
+      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+        <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
+          <rect width="18" height="11" x="3" y="11" rx="2" />
+          <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+        </svg>
+        <b>{kind === "dm" ? "DM not open yet" : "Email not open yet"}</b>
+      </div>
+      <p className="meta" style={{ margin: "0" }}>{why}</p>
+      <p className="meta" style={{ margin: "0" }}>
+        <span style={{ fontWeight: "500", color: "var(--text)" }}>Opens when </span>
+        {opens}
+      </p>
+      <div className="reach-locked-draft" aria-hidden="true">
+        {kind === "dm" ? "One short message, written from their post. You send it from your own account." : "To: the address they published · Subject: about their post · One email, with a line to say no."}
+      </div>
+    </div>
+  );
+}
 
 /** Read by a screen reader, not shown. */
 const SR: React.CSSProperties = { position: "absolute", width: "1px", height: "1px", overflow: "hidden", clip: "rect(0 0 0 0)", whiteSpace: "nowrap" };
@@ -79,13 +109,13 @@ export function ReachPanel({ t, publicReply, onSent }: { t: Thread; publicReply:
   const dmLock = !hasDms
     ? `${PLATFORM_LABEL[t.platform]} has no private messages. Reply in public.`
     : level === "reply_first"
-      ? "Reply in public first. A DM opens once they answer you, or when the post asks for tools."
+      ? "Reply in public first: they have not answered you yet, and their post does not ask for tools."
       : !person.dmDraft
         ? "No DM drafted for this person yet."
         : null;
   const subject = emailSubject(t.title);
   const links = reach?.emailFound ? mailLinks(reach.emailFound, subject, dm) : { gmail: null, mailto: null };
-  const emailLock = level !== "email_ready" || !reach?.emailFound ? "Reply in public first. An email opens only when they published an address and answered you." : null;
+  const emailLock = level !== "email_ready" || !reach?.emailFound ? (reach?.emailFound ? "They have not answered you yet." : "No address they published themselves was found.") : null;
 
   async function sent(via: "dm" | "email") {
     setBusy(true);
@@ -104,8 +134,8 @@ export function ReachPanel({ t, publicReply, onSent }: { t: Thread; publicReply:
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "12px" }} data-testid="sales-reach">
-      {reach ? (
-        <section aria-label="Ready to reach out" className="card" style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+      {(
+        <section aria-label="Ready to reach out" className="card" data-testid="sales-reach-card" style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
             <b>Ready to reach out</b>
             <span className="chip" data-testid="sales-reach-level">
@@ -113,6 +143,11 @@ export function ReachPanel({ t, publicReply, onSent }: { t: Thread; publicReply:
             </span>
             <span className="meta">From their post and thread only</span>
           </div>
+          {!reach ? (
+            <p className="meta" data-testid="sales-reach-unchecked" style={{ margin: "0" }}>
+              Found before Ferreto checked who is ready for a DM or an email. Your next scan checks the people it finds.
+            </p>
+          ) : null}
           <ul style={{ listStyle: "none", margin: "0", padding: "0", display: "flex", flexDirection: "column", gap: "3px" }}>
             {checksOf(reach).map((c) => (
               <li key={c.label} data-testid="sales-reach-check" data-ok={c.ok} style={{ display: "flex", gap: "8px", fontSize: "13.5px" }}>
@@ -123,7 +158,7 @@ export function ReachPanel({ t, publicReply, onSent }: { t: Thread; publicReply:
                 <span style={{ display: "flex", flexWrap: "wrap", gap: "0 8px", minWidth: "0", flex: "1 1 auto" }}>
                   <span style={{ fontWeight: "500", whiteSpace: "nowrap" }}>{c.label}</span>
                   <span className="meta" style={{ minWidth: "0" }}>
-                    <span style={SR}>{c.ok ? "yes" : "no"}: </span>
+                    <span style={SR}>{c.ok === null ? "not checked" : c.ok ? "yes" : "no"}: </span>
                     {c.why}
                   </span>
                 </span>
@@ -131,7 +166,7 @@ export function ReachPanel({ t, publicReply, onSent }: { t: Thread; publicReply:
             ))}
           </ul>
         </section>
-      ) : null}
+      )}
 
       <div role="tablist" aria-label="How to reach them" className="reach-tabs" style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
         {tabs.map(([id, label, lock]) => (
@@ -157,9 +192,12 @@ export function ReachPanel({ t, publicReply, onSent }: { t: Thread; publicReply:
 
       {tab === "dm" ? (
         dmLock ? (
-          <p className="meta" role="note" data-testid="sales-dm-locked" style={{ margin: "0" }}>
-            {dmLock}
-          </p>
+          <LockedTab
+            kind="dm"
+            testId="sales-dm-locked"
+            why={dmLock}
+            opens={hasDms ? "they answer your public reply, or their post asks for tools. Ferreto drafts the DM then." : "never on this platform: reply in public."}
+          />
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: "8px" }} data-testid="sales-dm">
             <label className="meta" htmlFor={`dm-${t.id}`}>
@@ -189,9 +227,12 @@ export function ReachPanel({ t, publicReply, onSent }: { t: Thread; publicReply:
 
       {tab === "email" ? (
         emailLock ? (
-          <p className="meta" role="note" data-testid="sales-email-locked" style={{ margin: "0" }}>
-            {emailLock}
-          </p>
+          <LockedTab
+            kind="email"
+            testId="sales-email-locked"
+            why={emailLock}
+            opens="they published an email address themselves (in the post, the thread or their own site) and answered you."
+          />
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: "8px" }} data-testid="sales-email">
             <div style={{ fontSize: "13.5px" }}>
