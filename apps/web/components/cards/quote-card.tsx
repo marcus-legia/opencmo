@@ -6,19 +6,24 @@ import { ApiError, WEB_BASE, api, jsonBody } from "@/components/clipping/api";
 import type { QuoteCardChoices } from "@/lib/cmo/library";
 import { uploadPhoto } from "@/lib/photo-upload-client";
 
+import { POST_PHOTO_LIMIT } from "./post-photos";
+
 /**
  * "Make a quote card" (wave 4b C7): pick a quote from the post's Library sources, see the card on the brand look, add
  * it as one of the post's photos. Removing it is removing the photo. No AI, no credit.
  */
 export function QuoteCardMaker({
   itemId,
-  onAdd,
+  photos,
+  save,
   onError,
   disabled,
 }: {
   itemId: string;
-  /** Uploads went through; saves the photo list with `object` added and answers once the card carries it. */
-  onAdd: (object: string) => Promise<void>;
+  /** The post's photos as the card shows them. */
+  photos: readonly string[];
+  /** Saves the post's photo list (`post_photos_save`) and answers once the card carries it. */
+  save: (next: string[]) => Promise<void>;
   onError: (message: string) => void;
   disabled: boolean;
 }) {
@@ -44,6 +49,8 @@ export function QuoteCardMaker({
 
   async function add() {
     if (!chosen || !preview) return;
+    const replacing = Boolean(choices?.current?.object && photos.includes(choices.current.object));
+    if (!replacing && photos.length >= POST_PHOTO_LIMIT) return onError(`A post takes up to ${POST_PHOTO_LIMIT} photos. Remove one to add a quote card.`);
     setBusy("Making the card…");
     try {
       const response = await fetch(preview, { credentials: "same-origin" });
@@ -52,8 +59,17 @@ export function QuoteCardMaker({
       setBusy("Uploading…");
       const object = await uploadPhoto(`/cmo/items/${encodeURIComponent(itemId)}/photos/uploads`, file);
       setBusy("Saving…");
-      await onAdd(object);
-      await api(base, jsonBody({ entryId: chosen.entryId, quote: chosen.text, object }));
+      // A new quote card takes the place of the one the post carries, so only one goes out with it.
+      const old = choices?.current?.object;
+      const next = old && photos.includes(old) ? photos.map((p) => (p === old ? object : p)) : [...photos, object];
+      await save(next);
+      try {
+        await api(base, jsonBody({ entryId: chosen.entryId, quote: chosen.text, object }));
+      } catch (error) {
+        // The image without its quote record would go out untracked: take it back off the post.
+        await save([...photos]).catch(() => undefined);
+        throw error;
+      }
       setChoices(null);
     } catch (error) {
       onError(error instanceof ApiError || error instanceof Error ? error.message : "Could not add the card. Try again.");

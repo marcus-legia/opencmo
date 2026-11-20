@@ -106,15 +106,38 @@ where a.ref_kind = 'schedule_slot' and a.ref_id = s.id and a.status in ('waiting
 
 update public.schedule_slots s set status = 'cancelled'
 from public.deliverables d
-where d.id = s.deliverable_id and s.status in ('waiting', 'due', 'reminded')
+where d.id = s.deliverable_id and s.status in ('proposed', 'waiting', 'due', 'reminded')
   and (s.platform in ('tiktok', 'instagram') or d.kind in ('photo_post', 'slideshow'));
 
 update public.work_orders set status = 'cancelled'
 where kind in ('build_slideshow', 'build_post_image', 'write_video_brief', 'write_slides', 'niche_video_research')
   and status in ('queued', 'running', 'deferred', 'waiting_order', 'waiting_founder');
 
-update public.cmo_runs set status = 'failed', error = 'This task is no longer part of Ferreto.'
-where kind in ('write_video_brief', 'niche_video_research', 'photo_caption', 'write_slides') and status in ('queued', 'running', 'deferred');
+-- A run still open gives back the credit `enqueue_cmo_run` held, like any run that fails (`cmo_refund_run`).
+do $$
+declare
+  v_run public.cmo_runs;
+begin
+  for v_run in
+    update public.cmo_runs set status = 'failed', error = 'This task is no longer part of Ferreto. Its credit was refunded.',
+      finished_at = now(), lease_until = null
+    where kind in ('write_video_brief', 'niche_video_research', 'photo_caption', 'write_slides')
+      and status in ('queued', 'running', 'deferred')
+    returning *
+  loop
+    perform public.cmo_refund_run(v_run);
+  end loop;
+end;
+$$;
+
+-- Slideshow and post-image steps still rendering: their settle functions go below, so they would stay `running`.
+update public.tasks t set status = 'cancelled'
+where t.status in ('awaiting_input', 'queued', 'running')
+  and (t.kind = 'render_stills'
+       or (t.kind = 'render_document' and exists (select 1 from public.studio_steps st
+             where st.clip_id = t.clip_id and st.kind in ('slideshow', 'post_image') and st.status in ('waiting', 'approved', 'running'))));
+update public.studio_steps set status = 'cancelled', error = 'Slideshows and post images are no longer part of Ferreto.'
+where kind in ('slideshow', 'post_image') and status in ('waiting', 'approved', 'running');
 
 -- 3. Photo posts: the rows are kept in a legacy table no founder can read (support can), then the table goes.
 create table public.legacy_photo_posts as select * from public.photo_posts;
@@ -253,6 +276,8 @@ begin
     and not exists (select 1 from public.content_items c
                     where c.id::text = (storage.foldername(o.name))[2] and c.status not in ('skipped', 'failed')
                       and o.name = any (c.photos))
+    -- The photos of a deleted photo post stay with its row in `legacy_photo_posts`, for support.
+    and not exists (select 1 from public.legacy_photo_posts l where o.name = any (l.photos))
     and not exists (select 1 from public.storage_deletions d where d.bucket = 'photos' and d.path = o.name)
   limit 1000
   on conflict (bucket, path) do nothing;

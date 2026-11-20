@@ -333,8 +333,6 @@ export interface CmoStore {
   variantSource(userId: string, itemId: string): Promise<{ text: string; platform: string } | null>;
   /** One platform's rewrite of a post (`cmo_save_variant`, which checks the length again); a new one replaces the old. */
   saveVariant(userId: string, runId: string, itemId: string, platform: string, text: string, gen: Record<string, unknown>): Promise<void>;
-  /** The caption of a photo post still in draft (`cmo_save_photo_caption`, which checks the caption rules again). */
-  savePhotoCaption(userId: string, runId: string, postId: string, caption: string, gen: Record<string, unknown>): Promise<void>;
   saveDraft(userId: string, runId: string, itemId: string | null, idea: string, body: Record<string, unknown>, priority: ItemRow["priority"]): Promise<ItemRow>;
   /** Thread links that already became cards (dismissed ones too): W4 never offers them again. */
   seenUrls(userId: string): Promise<Set<string>>;

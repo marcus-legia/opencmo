@@ -55,7 +55,7 @@ async function brandLook(supabase: SupabaseClient) {
  * Quote cards (wave 4b B5/C7). Without `entry`: the quotes the post can use (from its sources in the Library) and the
  * card it carries. With `entry` and `quote`: the card as a PNG, to preview and then upload as one of the post's photos.
  */
-export const GET = withApi({ rateLimit: { bucket: "presets", limit: 60, windowSeconds: 3600 } }, async ({ supabase, params, request }) => {
+export const GET = withApi({ rateLimit: { bucket: "quote-cards", limit: 300, windowSeconds: 3600 } }, async ({ supabase, params, request }) => {
   if (!UUID.test(params.id ?? "")) throw new ApiError(404, "Post not found.");
   const { entries, current } = await postEntries(supabase, params.id!);
   const entryId = request.nextUrl.searchParams.get("entry");
@@ -77,7 +77,7 @@ export const GET = withApi({ rateLimit: { bucket: "presets", limit: 60, windowSe
 const setBody = z.object({ entryId: z.uuid(), quote: z.string().min(1).max(LIBRARY_LIMITS.quoteChars), object: z.string().min(1).max(500) });
 
 /** Marks one of the post's photos as its quote card; `post_set_quote_card` checks the entry, the quote and the photo. */
-export const POST = withApi({ body: setBody, rateLimit: { bucket: "presets", limit: 60, windowSeconds: 3600 } }, async ({ supabase, params, body }) => {
+export const POST = withApi({ body: setBody, rateLimit: { bucket: "quote-cards", limit: 300, windowSeconds: 3600 } }, async ({ supabase, params, body }) => {
   if (!UUID.test(params.id ?? "")) throw new ApiError(404, "Post not found.");
   const card = await rpcOrThrow(supabase, "post_set_quote_card", { p_item: params.id, p_entry: body.entryId, p_quote: body.quote, p_object: body.object });
   return { card };

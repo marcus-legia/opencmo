@@ -49,7 +49,7 @@ test("a photo added on the post card goes out with the post on every platform", 
   const { user, itemId } = await seedCoreDraft();
   await signIn(page, user);
   await page.goto("/app");
-  const card = await openFeedCard(page, "Post for 3 platforms");
+  let card = await openFeedCard(page, "Post for 3 platforms");
   const photos = card.getByTestId("post-photos");
   await expect(photos).toContainText("Add photos");
   await photos.locator('input[type="file"]').setInputFiles({ name: "desk.png", mimeType: "image/png", buffer: png() });
@@ -57,6 +57,9 @@ test("a photo added on the post card goes out with the post on every platform", 
   await expect
     .poll(async () => ((await db.from("content_items").select("photos").eq("id", itemId).single()).data?.photos as string[] | undefined)?.length)
     .toBe(1);
+  // Saving the photos raises the post's card again (they are part of what is approved): find it afresh.
+  card = await openFeedCard(page, "Post for 3 platforms");
+  await expect(card.getByRole("img", { name: "Photo 1" })).toBeVisible({ timeout: 30_000 });
   await card.screenshot({ path: testInfo.outputPath("post-card-photo.png") });
 
   await card.getByRole("button", { name: "Approve", exact: true }).click();

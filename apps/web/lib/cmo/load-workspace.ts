@@ -53,7 +53,8 @@ function runToLog(run: CmoRunRow): LogEntry {
         ]
       : [];
   const detail = run.status === "failed" ? run.error : run.status === "queued" ? "Waiting to start" : (run.input.site ?? (run.input.source === "schedule" ? "Scheduled" : null));
-  return { id: run.id, job: JOB_OF[run.kind], title: run.kind, status: run.status, startedAt: run.created_at, detail, steps };
+  // A run of a kind removed since (video briefs, niche research, photo captions) keeps a badge.
+  return { id: run.id, job: JOB_OF[run.kind] ?? "W5", title: run.kind, status: run.status, startedAt: run.created_at, detail, steps };
 }
 
 function toPostCard(item: ItemRow): PostCard {

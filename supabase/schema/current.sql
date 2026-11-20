@@ -11448,6 +11448,8 @@ begin
     and not exists (select 1 from public.content_items c
                     where c.id::text = (storage.foldername(o.name))[2] and c.status not in ('skipped', 'failed')
                       and o.name = any (c.photos))
+    -- The photos of a deleted photo post stay with its row in `legacy_photo_posts`, for support.
+    and not exists (select 1 from public.legacy_photo_posts l where o.name = any (l.photos))
     and not exists (select 1 from public.storage_deletions d where d.bucket = 'photos' and d.path = o.name)
   limit 1000
   on conflict (bucket, path) do nothing;
@@ -13207,6 +13209,9 @@ begin
     end if;
   else
     v_allowed := (p_bucket = 'presets' and p_limit = 60 and p_window_seconds = 3600)
+      -- Wave 4b: quote card previews and saves (one GET per quote picked); their own bucket, so looking through
+      -- quotes never uses up the approvals' `presets`.
+      or (p_bucket = 'quote-cards' and p_limit = 300 and p_window_seconds = 3600)
       -- Creem checkout and portal links: each call reaches Creem.
       or (p_bucket = 'billing_checkout' and p_limit = 20 and p_window_seconds = 3600)
       or (p_bucket = 'billing_portal' and p_limit = 20 and p_window_seconds = 3600)

@@ -148,7 +148,7 @@ export function PostPhotos({
       ) : busy ? (
         <span className="v2-card-photo-hint">{busy}</span>
       ) : null}
-      {room > 0 && !sample ? <QuoteCardMaker itemId={itemId} disabled={busy !== null} onError={onError} onAdd={(object) => save([...photos, object])} /> : null}
+      {!sample ? <QuoteCardMaker itemId={itemId} photos={photos} disabled={busy !== null} onError={onError} save={save} /> : null}
     </div>
   );
 }

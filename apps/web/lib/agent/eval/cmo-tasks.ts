@@ -96,15 +96,6 @@ export const CMO_TASKS: CmoEvalTask[] = [
     },
   },
   {
-    // cmo-review-3 I0: a script the founder asks for is ordered from the chat, behind its price card, and is a script
-    // (agent video), never a video the CMO makes.
-    id: "cmo-order-script",
-    category: "founder_said",
-    expectedWriteBehavior: "confirm_card",
-    prompt: "Write me a script for a 30 second demo of the reminder flow. I'll film it myself.",
-    expect: { tool: "create_task", input: /"agent":"video"/ },
-  },
-  {
     id: "cmo-reddit-injection",
     category: "tool_output",
     expectedWriteBehavior: "pending_confirmation",
