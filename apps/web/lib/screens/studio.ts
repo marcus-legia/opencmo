@@ -6,7 +6,7 @@ import { z } from "zod";
 
 import { iso } from "./common";
 
-export const STUDIO_KINDS = ["video", "short", "slideshow", "post_image", "upload"] as const;
+export const STUDIO_KINDS = ["video", "short", "slideshow", "upload"] as const;
 
 export const StudioItemSchema = z.object({
   id: z.string(),

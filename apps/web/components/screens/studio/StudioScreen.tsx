@@ -27,7 +27,6 @@ const TABS: { id: "all" | Kind; label: string }[] = [
   { id: "video", label: "Videos" },
   { id: "short", label: "Shorts" },
   { id: "slideshow", label: "Slideshows" },
-  { id: "post_image", label: "Post images" },
   { id: "upload", label: "Your uploads" },
 ];
 type Tab = (typeof TABS)[number]["id"];
@@ -218,7 +217,7 @@ export function StudioScreen() {
       ) : null}
       <div className="grid">
         {shownCards.map((p) => {
-          const tall = p.kind === "short" || p.kind === "post_image";
+          const tall = p.kind === "short";
           return (
             <button key={p.id} type="button" className="proj" onClick={() => actions.open(p)} style={{ textAlign: "left", font: "inherit", padding: "0", cursor: "pointer" }}>
               <span className="thumb" style={p.thumbnailUrl ? { backgroundImage: `url(${p.thumbnailUrl})`, backgroundSize: "cover", backgroundPosition: "center" } : undefined}>

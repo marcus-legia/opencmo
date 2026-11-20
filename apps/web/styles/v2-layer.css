@@ -375,20 +375,6 @@ html[data-ui="v2"] body { background: var(--v2-paper); -webkit-font-smoothing: a
 .td-steps li[data-done] .n { background: var(--v2-ok-soft); color: var(--v2-ok); }
 .td-steps li[aria-current="step"] .n { background: var(--v2-brand); color: var(--v2-brand-ink); }
 
-/* Prompter (canvas Prompter.dc.html): the script on a phone held upright. */
-.td-prompter { min-height: 100dvh; display: flex; flex-direction: column; background: var(--v2-paper); color: var(--v2-ink); }
-.td-prompter-head { display: flex; align-items: center; gap: 4px; padding: 12px 8px 8px 16px; }
-.td-prompter-segs { display: flex; gap: 4px; }
-.td-prompter-segs i { flex: 1 1 0; height: 4px; border-radius: 2px; background: var(--v2-line2); }
-.td-prompter-segs i[data-on] { background: var(--v2-ink); }
-.td-prompter-stage { position: relative; flex: 1 1 auto; display: flex; flex-direction: column; gap: 16px; padding: 28px 20px 16px; min-height: 0; overflow: auto; }
-.td-prompter-kind { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 999px; background: var(--v2-brand-soft); color: var(--v2-brand-deep); font-size: 13px; font-weight: 600; }
-.td-prompter-words { margin: 0; font-size: 34px; line-height: 1.3; font-weight: 500; letter-spacing: -.01em; white-space: pre-line; }
-.td-prompter-foot { display: flex; flex-direction: column; gap: 10px; padding: 12px 16px calc(16px + env(safe-area-inset-bottom)); border-top: 1px solid var(--v2-line); background: var(--v2-paper2); }
-.v2 .td-prompter-nav { display: inline-flex; align-items: center; justify-content: center; width: 56px; height: 56px; border-radius: 16px; border: 1px solid var(--v2-line2); background: var(--v2-paper2); color: var(--v2-ink); cursor: pointer; flex: none; }
-.v2 .td-prompter-nav:disabled { opacity: .4; cursor: default; }
-.v2 .td-prompter-play { flex: 1 1 auto; height: 56px; border-radius: 16px; border: 0; background: var(--v2-ink); color: var(--v2-paper); font: 600 15px var(--v2-sans); display: inline-flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; }
-.v2 .td-prompter-play[aria-pressed="true"] { background: var(--v2-brand); color: var(--v2-brand-ink); }
 
 /* Feed (Dashboard) */
 .v2 .td-hello { flex-wrap: nowrap; align-items: flex-start; justify-content: flex-start; gap: 14px; }
@@ -538,12 +524,7 @@ html[data-ui="v2"] body { background: var(--v2-paper); -webkit-font-smoothing: a
 .v2 .td-setup .v2-input { min-height: 44px; font-size: 15px; }
 .td-setup-next { flex: 1 1 300px; max-width: 400px; }
 .td-setup-list { margin: 10px 0 0; padding-left: 20px; display: flex; flex-direction: column; gap: 10px; font-size: 13px; line-height: 1.5; color: var(--v2-ink2); }
-.td-prompter-title { font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.td-prompter-count { display: flex; justify-content: space-between; margin-top: 8px; font-size: 12px; color: var(--v2-ink3); }
-.td-prompter-show { margin: 0; font-size: 15px; color: var(--v2-ink2); }
-.td-prompter-note { margin: 0; text-align: center; }
 /* Vertical scrolling stays the browser's; a horizontal swipe reaches the page as pointer events. */
-.td-prompter-stage { touch-action: pan-y; cursor: pointer; user-select: none; }
 .v2 .td-sales { align-items: stretch; flex-wrap: nowrap; }
 /* Remaining mono labels in screens.css: sentence case, sans. */
 .scr :is(.scr-status, .scr-mono-link, .scr-off-links a, .scr-pill-note, .scr-team-mark) { font-family: var(--v2-sans); letter-spacing: 0; text-transform: none; }

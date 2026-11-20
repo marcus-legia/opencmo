@@ -7,9 +7,8 @@ import { openFeedCard, signIn, state } from "./helpers";
 import { seedCoreDraft } from "./ui-v2-seed";
 
 /**
- * Photos on a text post and the slideshow page (owner, 2026-11-13; `docs/plans/cmo/2026-11-13-post-photos-plan.md`).
- * The founder adds their own photo on the post's card, approves, and every slot carries it; a slideshow or carousel
- * is made on /app/photos, not on the Calendar. The SQL is `supabase/tests/313_post_photos.test.sql`.
+ * Photos on a text post (owner, 2026-11-13; `docs/plans/cmo/2026-11-13-post-photos-plan.md`). The founder adds their
+ * own photo on the post's card, approves, and every slot carries it. The SQL is `supabase/tests/313_post_photos.test.sql`.
  */
 test.skip(process.env.NEXT_PUBLIC_OPENCMO_UI !== "v2", "v2 UI only: run with npm run test:e2e:v2");
 
@@ -76,30 +75,20 @@ test("a photo added on the post card goes out with the post on every platform", 
   await waiting.screenshot({ path: testInfo.outputPath("schedule-card-photo.png") });
 });
 
-test("the photo-post page still works by its address (hidden from the bar since 2026-11-18)", async ({ page }, testInfo) => {
+test("the old photo-post and prompter addresses land on the app (deleted in wave 4b)", async ({ page }) => {
   const { user } = await seedCoreDraft();
   await signIn(page, user);
-  await page.goto("/app/schedule");
-  await expect(page.getByTestId("v2-schedule")).toBeVisible();
-  await expect(page.getByTestId("photo-post")).toHaveCount(0);
-  await page.goto("/app/photos");
-  await expect(page.getByRole("heading", { name: "Slideshows and carousels" })).toBeVisible();
-  await expect(page.getByTestId("photo-post")).toBeVisible();
-  await page.screenshot({ path: testInfo.outputPath("photos-page.png") });
-
-  // A picked photo shows once uploaded, from its signed link (never a link made from the picked file).
-  const panel = page.getByTestId("photo-post");
-  await panel.getByRole("button", { name: "New photo post" }).click();
-  await expect(panel.locator('input[type="file"]')).toBeEnabled();
-  await panel.locator('input[type="file"]').setInputFiles({ name: "desk.png", mimeType: "image/png", buffer: png() });
-  await expect(panel.getByRole("img", { name: "Photo 1: desk.png" })).toHaveAttribute("src", /^http/, { timeout: 30_000 });
+  for (const path of ["/app/photos", "/app/script/00000000-0000-4000-8000-000000000000/prompter"]) {
+    await page.goto(path);
+    await expect(page).toHaveURL(/\/app$/);
+  }
+  await expect(page.locator(".td-views").getByRole("link", { name: "Photos" })).toHaveCount(0);
 
   // Four views in the bar: on a phone the row fits, never the page scrolling sideways.
   await page.setViewportSize({ width: 390, height: 844 });
-  for (const path of ["/app", "/app/schedule", "/app/photos"]) {
+  for (const path of ["/app", "/app/schedule"]) {
     await page.goto(path);
     await expect(page.locator(".td-views")).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth), `no sideways scroll on ${path}`).toBeLessThanOrEqual(390);
   }
-  await expect(page.locator(".td-views").getByRole("link", { name: "Photos" })).toHaveCount(0);
 });

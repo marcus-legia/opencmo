@@ -49,8 +49,6 @@ type Props = {
 
 /** Segments that keep today's shell. `video` only redirects to the editor. */
 const CLASSIC: ReadonlySet<string> = new Set(["video"]);
-/** The script prompter on the founder's phone, drawn without any frame. */
-const PROMPTER = "script";
 
 /**
  * `view`: one of the four views of the working screen (owner, 2026-11-12). They share one frame: the Context column on
@@ -105,8 +103,6 @@ export function ShellV2(props: Props) {
     const { hideSample: _hideSample, chatLive: _chatLive, usage: _usage, ...account } = props;
     return <WebShell {...account} />;
   }
-  // The prompter fills the phone: no frame around it (cmo-review-3 I2).
-  if (segment === PROMPTER) return <>{props.children}</>;
   return <TodayFrame {...props} segment={segment} />;
 }
 

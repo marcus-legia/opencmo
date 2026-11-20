@@ -1305,53 +1305,6 @@ async function studioScreen({ supabase }: LoadContext): Promise<Partial<StudioSc
           edits: [],
         };
       });
-      // P5 S3: the Slideshow and Post image squads' orders, each with the step that holds its edit and card.
-      const made = must(
-        await supabase
-          .from("work_orders")
-          .select("id, kind, title, status, created_at, error")
-          .in("kind", ["build_slideshow", "build_post_image"])
-          .neq("status", "cancelled")
-          .order("created_at", { ascending: false })
-          .limit(20),
-        "work_orders",
-      ) as { id: string; kind: "build_slideshow" | "build_post_image"; title: string; status: OrderDb["status"]; created_at: string; error: { message?: string } | null }[];
-      const madeSteps = made.length
-        ? (must(await supabase.from("studio_steps").select("id, order_id, clip_id, kind, status").in("order_id", made.map((o) => o.id)).order("created_at", { ascending: true }), "studio_steps") as {
-            id: string;
-            order_id: string;
-            clip_id: string;
-            kind: string;
-            status: string;
-          }[])
-        : [];
-      const madeItems = made.map((o) => {
-        const step = madeSteps.filter((s) => s.order_id === o.id).at(-1);
-        const slideshow = o.kind === "build_slideshow";
-        const status: StudioItem["status"] =
-          o.status === "done" ? "finished" : o.status === "failed" ? "failed" : o.status === "waiting_founder" ? "waiting_founder" : "running";
-        const now = step?.status === "running" ? "rendering" : status === "running" ? "building" : status === "finished" ? (slideshow ? "approved" : "ready for its post") : "";
-        return {
-          id: o.id,
-          kind: slideshow ? ("slideshow" as const) : ("post_image" as const),
-          title: o.title.slice(0, 200),
-          subtitle: `${slideshow ? "Slideshow · MP4 + PNG set" : "Post image"}${now ? ` · ${now}` : ""}`.slice(0, 200),
-          status,
-          progress: null,
-          favorite: false,
-          createdAt: new Date(o.created_at).toISOString(),
-          editedAt: step ? (editOf.get(step.clip_id) ? new Date(editOf.get(step.clip_id)!.updated_at).toISOString() : null) : null,
-          failure: o.status === "failed" ? (o.error?.message ?? (slideshow ? "The slideshow could not be made." : "The image could not be made.")).slice(0, 200) : null,
-          projectId: null,
-          editorHref: step ? `/app/editor/${step.clip_id}` : null,
-          approvalId: step ? (stepCards.get(step.id) ?? null) : null,
-          canMarkFinished: false,
-          clipId: step?.clip_id ?? null,
-          documentHash: step ? (editOf.get(step.clip_id)?.document_hash ?? null) : null,
-          canCutShorts: false,
-          edits: [],
-        };
-      });
       // The founder's own edits made in the editor (/video, New edit, slideshows, shorts): saved from the first save,
       // finished or not, so a video in progress is never only in an editor tab. Edits a work order or a shorts batch
       // made already have their card above; an upload's edit ("full") is on its upload card.
@@ -1391,7 +1344,7 @@ async function studioScreen({ supabase }: LoadContext): Promise<Partial<StudioSc
             edits: [],
           };
         });
-      return [...videoItems, ...batchItems, ...madeItems, ...editItems].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      return [...videoItems, ...batchItems, ...editItems].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     },
     team: async () => {
       const [orders, stepRows, [, editCards]] = await Promise.all([videos, steps, cards]);
