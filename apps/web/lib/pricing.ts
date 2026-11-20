@@ -71,8 +71,8 @@ export const PLANS: Plan[] = [
     watermark: false,
     quota: { previews: 100, exports: 30, storageBytes: 10 * 1024 ** 3, storageObjects: 1000 },
     features: [
-      "Sales: people asking on Reddit, Hacker News, Threads and Facebook groups, with reply drafts",
-      "Post: posts for X, LinkedIn and Threads, sent only after you approve them",
+      "Sales: people asking on Reddit, Hacker News, Threads and Facebook groups, with drafted replies, DMs and emails",
+      "Post: a week of posts for X, LinkedIn and Threads from what those people asked",
       "Monthly credits",
       "The video editor, 1080p exports with no watermark",
     ],

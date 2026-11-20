@@ -95,7 +95,7 @@ function Consent({ title, text, children }: { title: string; text: string; child
           {children}
         </section>
       </div>
-      <p className="auth-footer">Ferreto · The AI CMO for founders.</p>
+      <p className="auth-footer">Ferreto · Find the people asking for what you built.</p>
     </main>
   );
 }

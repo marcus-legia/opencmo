@@ -7,9 +7,9 @@ import { MarketingNav } from "@/components/marketing/MarketingNav";
  */
 export default function BlogLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="marketing blog">
+    <div className="site">
       <MarketingNav section="blog" />
-      {children}
+      <div className="marketing blog">{children}</div>
       <MarketingFooter />
     </div>
   );

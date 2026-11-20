@@ -1,27 +1,36 @@
-import Link from "next/link";
-
-import { Brand } from "@/components/brand/Brand";
+import { LogoMark } from "@/components/landing/Glyphs";
+import { absoluteUrl, blogUrl } from "@/lib/site";
 
 /**
- * Nav dùng chung cho landing và blog.
+ * The nav of the blog, the legal pages and the 404: the landing's nav (`lv-nav`), always on its solid background.
  *
- * Trang blog render TĨNH nên không biết ai đang đăng nhập: `user` bỏ trống thì
- * nút là "Sign in" — người đã đăng nhập bấm vào vẫn được middleware đưa thẳng
- * vào app. Ở landing, link mục là `#…`; ở trang khác là `/#…`.
+ * These pages are rendered STATICALLY and do not know who is signed in, so the button is "Log in"; a signed-in reader
+ * who presses it is sent straight into the app by the middleware. Links to the site are absolute: on the blog's own
+ * host (`blog.ferreto.io`) a `/login` would be a blog address.
  */
-export function MarketingNav({ user, onLanding = false, section }: { user?: boolean; onLanding?: boolean; section?: "blog" }) {
-  const base = onLanding ? "" : "/";
+export function MarketingNav({ section }: { section?: "blog" }) {
+  const items = [
+    { label: "How it works", href: absoluteUrl("/#departments") },
+    { label: "Pricing", href: absoluteUrl("/#pricing") },
+    { label: "FAQ", href: absoluteUrl("/#faq") },
+    { label: "Blog", href: blogUrl(), current: section === "blog" },
+  ];
   return (
-    <nav className="marketing-nav" aria-label="Main">
-      <Link href="/" aria-label="Ferreto home"><Brand /></Link>
-      <div>
-        <a href={`${base}#how-it-works`}>How it works</a>
-        <a href={`${base}#departments`}>Departments</a>
-        <Link href="/blog" aria-current={section === "blog" ? "page" : undefined}>Blog</Link>
-        <a href={`${base}#pricing`}>Pricing</a>
-        <Link href={user ? "/app" : "/login"} className="marketing-nav-cta">
-          {user ? "Open app" : "Sign in"}
-        </Link>
+    <nav aria-label="Main" className="lv-nav">
+      <a href={absoluteUrl("/")} className="lv-nav-brand" aria-label="Ferreto home">
+        <LogoMark size={28} />
+        <span>Ferreto</span>
+      </a>
+      <div className="lv-nav-menus">
+        {items.map((it) => (
+          <div key={it.label} className="lv-nav-trig is-plain">
+            <a href={it.href} className="lv-nav-item" aria-current={it.current ? "page" : undefined}>{it.label}</a>
+          </div>
+        ))}
+      </div>
+      <div className="lv-nav-actions">
+        <a href={absoluteUrl("/login")} className="lv-btn-ghost">Log in</a>
+        <a href={absoluteUrl("/login")} className="lv-btn-light">Get started</a>
       </div>
     </nav>
   );

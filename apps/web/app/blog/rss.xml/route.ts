@@ -1,6 +1,6 @@
 import { findCategory } from "@/content/blog/categories";
 import { getAllPosts } from "@/lib/blog";
-import { SITE_NAME, absoluteUrl } from "@/lib/site";
+import { blogUrl, SITE_NAME } from "@/lib/site";
 
 export const dynamic = "force-static";
 
@@ -14,8 +14,8 @@ export function GET() {
   const items = posts
     .map((post) => `    <item>
       <title>${escape(post.title)}</title>
-      <link>${absoluteUrl(`/blog/${post.slug}`)}</link>
-      <guid isPermaLink="true">${absoluteUrl(`/blog/${post.slug}`)}</guid>
+      <link>${blogUrl(`/${post.slug}`)}</link>
+      <guid isPermaLink="true">${blogUrl(`/${post.slug}`)}</guid>
       <pubDate>${new Date(`${post.date}T00:00:00Z`).toUTCString()}</pubDate>
       <category>${escape(findCategory(post.category)?.name ?? post.category)}</category>
       <description>${escape(post.description)}</description>
@@ -26,8 +26,8 @@ export function GET() {
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
     <title>${SITE_NAME} Blog</title>
-    <link>${absoluteUrl("/blog")}</link>
-    <atom:link href="${absoluteUrl("/blog/rss.xml")}" rel="self" type="application/rss+xml" />
+    <link>${blogUrl()}</link>
+    <atom:link href="${blogUrl("/rss.xml")}" rel="self" type="application/rss+xml" />
     <description>Short, visual marketing lessons for founders who run their own marketing.</description>
     <language>en</language>
 ${posts[0] ? `    <lastBuildDate>${new Date(`${posts[0].updated}T00:00:00Z`).toUTCString()}</lastBuildDate>\n` : ""}${items}

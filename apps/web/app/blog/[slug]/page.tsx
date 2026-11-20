@@ -11,7 +11,7 @@ import { JsonLd } from "@/components/seo/JsonLd";
 import { AUTHORS } from "@/content/blog/authors";
 import { findCategory } from "@/content/blog/categories";
 import { formatDate, getAllPosts, getPost, getRelatedPosts } from "@/lib/blog";
-import { OG_DEFAULTS, SITE_NAME, SITE_URL, absoluteUrl } from "@/lib/site";
+import { absoluteUrl, blogUrl, OG_DEFAULTS, SITE_NAME, SITE_URL } from "@/lib/site";
 
 export const dynamicParams = false;
 // The closing call to action prints the plan's price from the catalogue: rebuilt every 10 minutes, not frozen at build.
@@ -30,20 +30,22 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     description: post.description,
     keywords: post.keywords,
     authors: [{ name: author.name, url: author.url }],
-    alternates: { canonical: `/blog/${post.slug}` },
+    alternates: { canonical: blogUrl(`/${post.slug}`) },
     openGraph: {
       ...OG_DEFAULTS,
       type: "article",
       title: post.title,
       description: post.description,
-      url: `/blog/${post.slug}`,
+      url: blogUrl(`/${post.slug}`),
       publishedTime: post.date,
       modifiedTime: post.updated,
       authors: [author.name],
       section: findCategory(post.category)?.name,
       tags: post.keywords,
+      // Named on the blog's own host: the file-convention address resolves against the site, a 308 away.
+      images: [{ url: blogUrl(`/${post.slug}/opengraph-image`), width: 1200, height: 630 }],
     },
-    twitter: { card: "summary_large_image", title: post.title, description: post.description },
+    twitter: { card: "summary_large_image", title: post.title, description: post.description, images: [{ url: blogUrl(`/${post.slug}/opengraph-image`), width: 1200, height: 630 }] },
   };
 }
 
@@ -52,7 +54,7 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
   if (!post) notFound();
   const category = findCategory(post.category)!;
   const author = AUTHORS[post.author];
-  const url = absoluteUrl(`/blog/${post.slug}`);
+  const url = blogUrl(`/${post.slug}`);
   const related = getRelatedPosts(post);
   const toc = post.toc.filter((item) => item.level === 2);
 
@@ -66,7 +68,7 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
       abstract: post.answer,
       url,
       mainEntityOfPage: url,
-      image: absoluteUrl(`/blog/${post.slug}/opengraph-image`),
+      image: blogUrl(`/${post.slug}/opengraph-image`),
       datePublished: post.date,
       dateModified: post.updated,
       author: author.type === "Organization"
@@ -82,8 +84,8 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
       "@context": "https://schema.org",
       "@type": "BreadcrumbList",
       itemListElement: [
-        { "@type": "ListItem", position: 1, name: "Blog", item: absoluteUrl("/blog") },
-        { "@type": "ListItem", position: 2, name: category.name, item: absoluteUrl(`/blog/category/${category.slug}`) },
+        { "@type": "ListItem", position: 1, name: "Blog", item: blogUrl() },
+        { "@type": "ListItem", position: 2, name: category.name, item: blogUrl(`/category/${category.slug}`) },
         { "@type": "ListItem", position: 3, name: post.title, item: url },
       ],
     },
@@ -106,8 +108,8 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
       <JsonLd data={ld} />
       <article className="blog-article">
         <header className="blog-article-header">
-          <Breadcrumbs items={[{ name: "Blog", href: "/blog" }, { name: category.name, href: `/blog/category/${category.slug}` }, { name: post.title }]} />
-          <Link href={`/blog/category/${category.slug}`} className="blog-article-category">{category.name}</Link>
+          <Breadcrumbs items={[{ name: "Blog", href: blogUrl() }, { name: category.name, href: blogUrl(`/category/${category.slug}`) }, { name: post.title }]} />
+          <Link href={blogUrl(`/category/${category.slug}`)} className="blog-article-category">{category.name}</Link>
           <h1>{post.title}</h1>
           <p className="blog-article-dek">{post.description}</p>
           <div className="blog-byline">

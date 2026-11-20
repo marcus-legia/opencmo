@@ -4,13 +4,14 @@ import { findCategory } from "@/content/blog/categories";
 import { formatDate, type Post } from "@/lib/blog";
 
 import { PostCover } from "./PostCover";
+import { blogUrl } from "@/lib/site";
 
 /** Cả thẻ là một link; tiêu đề là `h2`/`h3` để trang danh sách có dàn ý đúng. */
 export function PostCard({ post, featured = false, headingLevel = 3 }: { post: Post; featured?: boolean; headingLevel?: 2 | 3 }) {
   const Heading = `h${headingLevel}` as "h2" | "h3";
   return (
     <article className={`post-card ${featured ? "is-featured" : ""}`}>
-      <Link href={`/blog/${post.slug}`} className="post-card-link">
+      <Link href={blogUrl(`/${post.slug}`)} className="post-card-link">
         <PostCover title={post.title} category={post.category} size={featured ? "feature" : "card"} />
         <div className="post-card-body">
           <span className="post-card-category">{findCategory(post.category)?.name}</span>

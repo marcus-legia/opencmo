@@ -2,14 +2,15 @@ import Link from "next/link";
 
 import { CATEGORIES } from "@/content/blog/categories";
 import { getPostsByCategory } from "@/lib/blog";
+import { blogUrl } from "@/lib/site";
 
 /** Hàng chip category; chip đang xem có `aria-current`. Category chưa có bài thì không hiện chip. */
 export function CategoryChips({ active }: { active?: string }) {
   return (
     <nav className="blog-chips" aria-label="Categories">
-      <Link href="/blog" aria-current={active ? undefined : "page"}>All posts</Link>
+      <Link href={blogUrl()} aria-current={active ? undefined : "page"}>All posts</Link>
       {CATEGORIES.filter((c) => c.slug === active || getPostsByCategory(c.slug).length > 0).map((c) => (
-        <Link key={c.slug} href={`/blog/category/${c.slug}`} aria-current={active === c.slug ? "page" : undefined}>
+        <Link key={c.slug} href={blogUrl(`/category/${c.slug}`)} aria-current={active === c.slug ? "page" : undefined}>
           {c.name}
         </Link>
       ))}
@@ -17,8 +18,8 @@ export function CategoryChips({ active }: { active?: string }) {
   );
 }
 
-/** Phân trang: trang 1 là `/blog` (không có `/blog/page/1` — một nội dung, một URL). */
-export function Pagination({ page, pages, base = "/blog" }: { page: number; pages: number; base?: string }) {
+/** Pagination: page 1 is the blog's index (there is no `/page/1`: one piece of content, one address). */
+export function Pagination({ page, pages, base = blogUrl() }: { page: number; pages: number; base?: string }) {
   if (pages <= 1) return null;
   const href = (n: number) => (n === 1 ? base : `${base}/page/${n}`);
   return (

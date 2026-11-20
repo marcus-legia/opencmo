@@ -6,8 +6,26 @@ import type { Beat } from "./data";
 import { SocialTile } from "./Glyphs";
 import { gsap, prefersReducedMotion, ScrollTrigger } from "./motion";
 
+/**
+ * One span per word, so each lights up on its own. A phrase between asterisks ("You built it. *Then nobody came.*")
+ * is the beat's keyword: its words light up in blue instead of ink. The asterisks never reach the page.
+ */
 function words(text: string) {
-  return text.split(" ").map((w, i) => <span key={i} className="lv-w">{w} </span>);
+  let key = false;
+  return text.split(" ").map((raw, i) => {
+    let w = raw;
+    if (w.startsWith("*")) {
+      key = true;
+      w = w.slice(1);
+    }
+    const end = w.match(/^(.*)\*([.,;:!?]*)$/);
+    const inKey = key;
+    if (end) {
+      w = end[1] + end[2];
+      key = false;
+    }
+    return <span key={i} className={inKey ? "lv-w is-key" : "lv-w"}>{w} </span>;
+  });
 }
 
 /**
@@ -23,12 +41,12 @@ export function ScrollEssay({ beats, label, id, eyebrow }: { beats: Beat[]; labe
     const essay = essayRef.current!;
     essay.dataset.armed = "1";
     const ctx = gsap.context(() => {
-      // GSAP cannot tween `var()`, so resolve the two target inks once.
-      const css = getComputedStyle(essay);
-      const ink = css.getPropertyValue("--ink").trim(), ink2 = css.getPropertyValue("--ink2").trim();
+      // Each word tweens only `--lit` (0 → 1); CSS mixes its colour from the theme's tokens. Tweening `color` baked the
+      // inks of the theme at load into every word, so a switch to dark (or back) left dark words on a dark page.
       gsap.to(essay.querySelectorAll(".lv-w"), {
-        color: (_: number, el: Element) => (el.closest(".lv-essay-body") ? ink2 : ink),
+        "--lit": 1,
         ease: "none",
+        duration: 0.3,
         stagger: 0.1,
         scrollTrigger: { trigger: essay, start: "top 70%", end: "bottom 55%", scrub: 1.5 },
       });

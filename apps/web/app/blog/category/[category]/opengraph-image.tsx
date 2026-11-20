@@ -1,5 +1,6 @@
 import { CATEGORIES, findCategory } from "@/content/blog/categories";
 import { OG_SIZE, ogCard } from "@/lib/og/card";
+import { BLOG_URL } from "@/lib/site";
 
 export const alt = "Ferreto Blog category";
 export const size = OG_SIZE;
@@ -14,6 +15,6 @@ export default async function Image({ params }: { params: Promise<{ category: st
   return ogCard({
     kicker: "Ferreto Blog",
     title: category ? `${category.name}: guides and playbooks` : "Ferreto Blog",
-    footer: "ferreto.io/blog",
+    footer: BLOG_URL.replace(/^https?:\/\//, ""),
   });
 }

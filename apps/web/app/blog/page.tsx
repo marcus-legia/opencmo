@@ -4,17 +4,19 @@ import { CategoryChips, Pagination } from "@/components/blog/BlogChrome";
 import { PostList } from "@/components/blog/PostList";
 import { JsonLd } from "@/components/seo/JsonLd";
 import { POSTS_PER_PAGE, getAllPosts, pageCount } from "@/lib/blog";
-import { OG_DEFAULTS, absoluteUrl } from "@/lib/site";
+import { blogUrl, OG_DEFAULTS } from "@/lib/site";
 
-const TITLE = "Blog — marketing lessons from an AI CMO";
+const TITLE = "Blog: finding your first customers, for founders";
 const DESCRIPTION =
-  "Short, visual lessons on content, brand, video and selling, for founders and small teams who run their own marketing.";
+  "Practical guides on finding customers, positioning, launching and posting, for founders and small teams who sell software and run their own marketing.";
 
 export const metadata: Metadata = {
   title: TITLE,
   description: DESCRIPTION,
-  alternates: { canonical: "/blog" },
-  openGraph: { ...OG_DEFAULTS, type: "website", title: TITLE, description: DESCRIPTION, url: "/blog" },
+  alternates: { canonical: blogUrl() },
+  // The OG image is named on the blog's own host: the file-convention address resolves against the site, a 308 away.
+  openGraph: { ...OG_DEFAULTS, type: "website", title: TITLE, description: DESCRIPTION, url: blogUrl(), images: [{ url: blogUrl("/opengraph-image"), width: 1200, height: 630 }] },
+  twitter: { card: "summary_large_image", images: [{ url: blogUrl("/opengraph-image"), width: 1200, height: 630 }] },
 };
 
 export default function BlogIndex() {
@@ -27,18 +29,18 @@ export default function BlogIndex() {
           "@type": "CollectionPage",
           name: TITLE,
           description: DESCRIPTION,
-          url: absoluteUrl("/blog"),
+          url: blogUrl(),
           hasPart: posts.slice(0, POSTS_PER_PAGE).map((post) => ({
             "@type": "BlogPosting",
             headline: post.title,
-            url: absoluteUrl(`/blog/${post.slug}`),
+            url: blogUrl(`/${post.slug}`),
             datePublished: post.date,
           })),
         }}
       />
       <header className="blog-header">
         <p className="section-kicker">The Ferreto Blog</p>
-        <h1>Think like a CMO. Ship like a founder.</h1>
+        <h1>Find your first customers without becoming a marketer.</h1>
         <p>{DESCRIPTION}</p>
       </header>
       <CategoryChips />

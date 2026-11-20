@@ -6,6 +6,8 @@
  * leads, Post comes with it, video is a side tool. Every claim here must be true of the product today (CLAUDE.md
  * "Don't ship coming soon"); Sales reads exactly the platforms in `lib/cmo/social/conversations.ts` SALES_PLATFORMS.
  */
+import { blogUrl } from "@/lib/site";
+
 import { LUCIDE, STEP_ICON, type SocialKey } from "./icons";
 
 /**
@@ -21,20 +23,20 @@ export const POST_CHANNELS: SocialKey[] = ["x", "linkedin", "threads"];
 
 export type Beat = { num: string; title: string; body: string; logos?: SocialKey[] };
 
-/** The story I–IV under the hero, darkened word by word as the reader scrolls (ScrollEssay). */
+/** The story I–IV under the hero, darkened word by word as the reader scrolls (ScrollEssay). `*…*` marks a beat's keyword, drawn in blue. */
 export const BEATS: Beat[] = [
-  { num: "I.", title: "You built it, then waited a hundred years.", body: "You posted on X every day for a month and got views but no signups." },
-  { num: "II.", title: "Someone is asking for it today.", body: "A founder on Reddit wants a tool like yours. Someone on Hacker News is comparing alternatives. By the time you find the thread by hand, it is two days old." },
+  { num: "I.", title: "You built it, then *waited a hundred years.*", body: "You posted on X every day for a month and got views but no signups." },
+  { num: "II.", title: "Someone is *asking for it today.*", body: "A founder on Reddit wants a tool like yours. Someone on Hacker News is comparing alternatives. By the time you find the thread by hand, it is two days old." },
   {
     num: "III.",
-    title: `${BRAND} finds them first.`,
+    title: `${BRAND} *finds them first.*`,
     body: "It reads your website, learns what you sell and who buys it, and checks Reddit, Hacker News, Threads and Facebook groups through the week. Each person comes with the quote that shows they need it.",
     logos: SALES_SOURCES,
   },
   {
     num: "IV.",
-    title: "You reach out as yourself.",
-    body: "It drafts a reply that helps first, checked against the community's rules. You edit it and post it from your account. Then it plans your posts for the week on X, LinkedIn and Threads.",
+    title: "You reach out *as yourself.*",
+    body: "It drafts a reply, a DM or an email that helps first, checked against the community's rules. You edit it and send it from your account. Then it plans your posts for the week on X, LinkedIn and Threads.",
     logos: POST_CHANNELS,
   },
 ];
@@ -56,16 +58,16 @@ export const FIT = {
 export const STEPS = [
   { icon: STEP_ICON.find, title: "Find", body: "Through the week, or whenever you ask, it searches Reddit, Hacker News, Threads and Facebook groups for people describing the problem you solve." },
   { icon: STEP_ICON.score, title: "Score", body: "Each thread gets a score out of 100, with the quote that earned it: the pain, the fit with what you sell, how fresh it is." },
-  { icon: STEP_ICON.reach, title: "Reach", body: "It drafts a reply that helps first, using what it knows about your product, and tells you when a community allows no self-promotion. You edit it and post it yourself." },
-  { icon: STEP_ICON.followUp, title: "Follow up", body: "Three days later it reads the thread again and shows what your reply got." },
+  { icon: STEP_ICON.reach, title: "Reach", body: "It drafts a reply, a DM or an email that helps first, using what it knows about your product, and tells you when a community allows no self-promotion. You edit it and send it yourself." },
+  { icon: STEP_ICON.followUp, title: "Follow up", body: "Once you reply, it rereads the thread to see if they answered, and you mark who signed up or became a customer. If they go quiet for four days, it drafts one short follow-up." },
   { icon: STEP_ICON.post, title: "Post", body: "It plans a week of posts for X, LinkedIn and Threads. You approve the week once." },
 ];
 
 /** The scroll-darkened walkthrough that replaced the demo videos: Sales, then Post, then video. */
 export const SHOWCASE: Beat[] = [
-  { num: "Sales", title: "The people who need what you built.", body: "Sales searches Reddit, Hacker News, Threads and Facebook groups and brings them back with the quote and a drafted reply.", logos: SALES_SOURCES },
-  { num: "Post", title: "A week of posts, approved once.", body: "One update from your week becomes a post for each platform, waiting for your approval.", logos: POST_CHANNELS },
-  { num: "Video", title: "Clips from what you record.", body: "Finish a video you recorded: tighten the hook, restyle the captions or add a voice-over." },
+  { num: "Sales", title: "The people who *need what you built.*", body: "Sales searches Reddit, Hacker News, Threads and Facebook groups and brings back the people who need what you built, with the quote and a drafted reply.", logos: SALES_SOURCES },
+  { num: "Post", title: "Posts about *what people asked.*", body: "The questions Sales found become the week's posts for X, LinkedIn and Threads, each citing the conversations behind it. You approve the week once.", logos: POST_CHANNELS },
+  { num: "Video", title: "Clips from *what you record.*", body: "Upload a video you recorded, cut it by editing its transcript, and add captions in your brand's style." },
 ];
 
 /** What the product never does: assist, never act (CLAUDE.md "Product rules"). */
@@ -94,21 +96,21 @@ export const USUAL_WAY = [
 export const INCLUDED = [
   { icon: STEP_ICON.find, title: "Searches on four platforms", body: "Reddit, Hacker News, Threads and Facebook groups" },
   { icon: STEP_ICON.score, title: "Scored threads", body: "Each with the quote that shows why" },
-  { icon: STEP_ICON.reach, title: "Drafted replies", body: "From your business plan, checked against each community's rules" },
+  { icon: STEP_ICON.reach, title: "Replies, DMs and emails", body: "Drafted from your business plan, checked against each community's rules" },
   { icon: STEP_ICON.post, title: "A week of posts", body: "For X, LinkedIn and Threads, approved in one go" },
-    { icon: LUCIDE.wand, title: "Fair use, no per-click prices", body: "One allowance you can see in Settings" },
+  { icon: LUCIDE.wand, title: "Monthly credits for the AI work", body: "One allowance you can see in Settings, no per-click prices" },
 ];
 
 export function faqs(p: Prices | null): { q: string; a: string }[] {
   const price = p ? ` $${p.annual} a month billed annually, or $${p.monthly} month to month.` : "";
   return [
-    { q: `What does ${BRAND} do?`, a: `${BRAND} reads your website, then searches Reddit, Hacker News, Threads and Facebook groups for people describing the problem you solve. Each one comes with the quote that shows why, and a draft reply based on your business plan. You post it from your own account. It also plans a week of posts for X, LinkedIn and Threads.` },
+    { q: `What does ${BRAND} do?`, a: `${BRAND} reads your website, then searches Reddit, Hacker News, Threads and Facebook groups for people describing the problem you solve. Each one comes with the quote that shows why, and a draft reply based on your business plan; when someone is ready for more, a DM or an email too. You send it from your own account. It also plans a week of posts for X, LinkedIn and Threads from what those people asked.` },
     { q: `Does ${BRAND} post anything without me?`, a: "Not unless you ask it to. Every reply and post waits for you to approve, edit or skip it. If you turn on autopilot for X, Threads or LinkedIn, a single post you leave untouched goes out at the time its card shows. Replies always wait for you." },
     { q: "Which platforms does Sales search?", a: "Reddit, Hacker News, Threads and Facebook groups. It drafts a reply; you post it yourself." },
-    { q: "Will it like, follow or DM people for me?", a: `No. There are no automated likes, follows, DMs or replies. ${BRAND} drafts; you decide what to say and where.` },
-    { q: "Is there a free trial?", a: `Your first scan is free, with no card. Give it your website, and within minutes you see the people asking for what you built, each with the words they wrote. Pick a plan and it writes a reply to each one. You post each reply yourself; nothing is posted for you.${price}` },
+    { q: "Will it like, follow or DM people for me?", a: `No. There are no automated likes, follows, DMs or replies. ${BRAND} drafts a reply, and a DM or an email when someone is ready for one; you decide what to send and where.` },
+    { q: "Is there a free trial?", a: `Your first scan is free, with no card. Give it your website, and within minutes you see the people asking for what you built, each with the words they wrote. If no one has asked in the last 30 days, it tells you so, with the searches it ran. Pick a plan and it writes a reply to each one. You post each reply yourself; nothing is posted for you.${price}` },
     { q: "What does the plan include?", a: `The searches, the drafted replies and the weekly posts, under a fair-use allowance. A bar in the app shows how much of this month's allowance you used. If it runs out, new searches pause until it resets; your drafts and posts keep working.${price}` },
-    { q: "Can I cancel?", a: "Yes, anytime. Annual plans are refunded for the unused months." },
+    { q: "Can I cancel?", a: "Yes, anytime, from Settings in the app. If it was not right for you, ask for a full refund within 14 days of your first charge." },
   ];
 }
 
@@ -119,7 +121,7 @@ export const MENUS: Menu[] = [
   { id: "how", label: "How it works", width: 0, cols: 1, href: "#departments" },
   { id: "pricing", label: "Pricing", width: 0, cols: 1, href: "#pricing" },
   { id: "faq", label: "FAQ", width: 0, cols: 1, href: "#faq" },
-  { id: "blog", label: "Blog", width: 0, cols: 1, href: "/blog" },
+  { id: "blog", label: "Blog", width: 0, cols: 1, href: blogUrl() },
 ];
 
 export type FootLink = { t: string; href: string; social?: SocialKey };
@@ -128,5 +130,5 @@ const fl = (t: string, href: string, social?: SocialKey): FootLink => ({ t, href
 
 export const FOOTER_COLUMNS: { title: string; links: FootLink[] }[] = [
   { title: "Product", links: [fl("How it works", "#departments"), fl("Pricing", "#pricing"), fl("FAQ", "#faq")] },
-  { title: "Resources", links: [fl("Blog", "/blog")] },
+  { title: "Resources", links: [fl("Blog", blogUrl())] },
 ];

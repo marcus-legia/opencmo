@@ -16,6 +16,7 @@ export default function AcceptableUsePage() {
           body: (
             <ul>
               <li>Spam, bulk messaging, or contacting people who have asked not to be contacted.</li>
+              <li>Sending the direct messages or emails Ferreto drafts in bulk, from a list, or to anyone other than the person whose post Ferreto showed you.</li>
               <li>Fake engagement: automated likes, follows, comments or reviews, or running several or fake accounts.</li>
               <li>Breaking a community’s rules, including posting product mentions where self-promotion is not allowed.</li>
               <li>Pretending to be someone else, or hiding that a product you recommend is yours where the community asks you to say so.</li>
@@ -37,8 +38,8 @@ export default function AcceptableUsePage() {
           ),
         },
         {
-          heading: "Images",
-          body: <p>Images Ferreto makes for your posts are screened before and after they are created. Requests and results that break this policy are refused. You may not create realistic images of real, identifiable people, or anything that imitates a brand, logo or product you do not own.</p>,
+          heading: "Images and video",
+          body: <p>Images and video Ferreto generates for you are screened before and after they are created. Requests and results that break this policy are refused. You may not create realistic images of real, identifiable people, or anything that imitates a brand, logo or product you do not own.</p>,
         },
         {
           heading: "Reporting",
