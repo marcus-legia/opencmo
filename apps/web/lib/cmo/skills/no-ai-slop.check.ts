@@ -14,7 +14,7 @@ import { SYSTEM_PROMPT } from "@/lib/agent/prompt";
 import { REPURPOSE_SYSTEM } from "@/lib/cmo/jobs/repurpose-post";
 import { DM_SYSTEM, NUDGE_SYSTEM, SCORE_SYSTEM } from "@/lib/cmo/jobs/sales-scan";
 import { COMPETITORS_SYSTEM } from "@/lib/agent/cmo-competitors";
-import { CAPTION_SYSTEM, VIDEO_BRIEF_SYSTEM, YOUTUBE_SYSTEM } from "@/lib/cmo/writer/prompts";
+import { CAPTION_SYSTEM, YOUTUBE_SYSTEM } from "@/lib/cmo/writer/prompts";
 import { CLIP_EDITOR } from "@/lib/departments/studio/shorts/squad";
 
 import { NO_AI_SLOP, skillText } from "./index";
@@ -29,7 +29,6 @@ const prompts: Record<string, string> = {
   "Shorts clip editor": CLIP_EDITOR,
   "Caption writer": CAPTION_SYSTEM,
   "YouTube writer": YOUTUBE_SYSTEM,
-  "Video brief writer": VIDEO_BRIEF_SYSTEM,
   "Repurpose writer": REPURPOSE_SYSTEM,
   "Sales scorer (Library summary and theme)": SCORE_SYSTEM,
   "DM writer (wave 3 B2)": DM_SYSTEM,
@@ -45,7 +44,6 @@ const sources = [
   "lib/cmo/jobs/plan-week.ts",
   "lib/cmo/jobs/review-week.ts",
   "lib/cmo/jobs/competitor-research.ts",
-  "lib/cmo/jobs/niche-video-research.ts",
   "lib/cmo/jobs/draft-post.ts",
   "lib/cmo/jobs/draft-thread.ts",
   "lib/cmo/jobs/sales-scan.ts",

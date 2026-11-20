@@ -47,7 +47,7 @@ export function profileOf(id: string): PlatformProfile | null {
 }
 
 /**
- * The profile a calendar label names (`content_items.platform`: the plan writes "X", "LinkedIn", "Reels", "Shorts")
+ * The profile a calendar label names (`content_items.platform`: the plan writes "X", "LinkedIn", "Shorts")
  * or a profile id itself; null for Reddit and anything unknown. SQL's `platform_profile_id` maps the same labels
  * (check:contracts compares them).
  */
@@ -57,11 +57,6 @@ export const PLATFORM_LABELS: Readonly<Record<string, string>> = {
   threads: "threads",
   linkedin: "linkedin",
   facebook: "facebook",
-  instagram: "instagram_caption",
-  instagram_caption: "instagram_caption",
-  reels: "instagram_caption",
-  tiktok: "tiktok_caption",
-  tiktok_caption: "tiktok_caption",
   youtube: "youtube",
   shorts: "youtube",
   "youtube shorts": "youtube",

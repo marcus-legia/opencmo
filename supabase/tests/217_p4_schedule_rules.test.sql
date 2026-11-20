@@ -5,7 +5,7 @@ create extension if not exists pgtap with schema extensions;
 begin;
 set search_path to public, extensions;
 
-select plan(8);
+select plan(7);
 
 insert into auth.users (id, email) values ('e2170000-0000-4000-8000-00000000000a', 'p4a3@test.local');
 update public.profiles set timezone = 'Asia/Ho_Chi_Minh' where id = 'e2170000-0000-4000-8000-00000000000a';
@@ -54,12 +54,6 @@ select is((select platform from public.schedule_slots where deliverable_id = 'e2
   'an approved short: a YouTube slot for its caption');
 select is((select snapshot->>'title' from public.approvals a join public.schedule_slots s on s.id = a.ref_id
   where s.deliverable_id = 'e2173000-0000-4000-8000-00000000000b' and a.status = 'waiting'), 'Cut by words', 'the card carries the YouTube title');
-insert into public.content_items (id, user_id, department, platform, day, idea, status, clip_id, body) values
-  ('e2172000-0000-4000-8000-00000000000c', 'e2170000-0000-4000-8000-00000000000a', 'video', 'tiktok_caption', current_date,
-   'Caption', 'drafting', 'e2175000-0000-4000-8000-00000000000a', '{"text":"Cut by words"}');
-update public.content_items set status = 'approved' where id = 'e2172000-0000-4000-8000-00000000000c';
-select is((select string_agg(platform, ',' order by platform) from public.schedule_slots where deliverable_id = 'e2173000-0000-4000-8000-00000000000b'),
-  'tiktok,youtube', 'a caption approved later adds its platform');
 
 select * from finish();
 rollback;

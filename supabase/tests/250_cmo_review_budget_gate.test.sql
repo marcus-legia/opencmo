@@ -30,7 +30,7 @@ update public.profiles set weekly_credit_budget = 25, credit_balance = 100 where
 select public.work_order_week_root('e2500000-0000-4000-8000-00000000000b');
 select public.cmo_enqueue('e2500000-0000-4000-8000-00000000000b', 'sales_scan', '{"source":"schedule","brief":"a"}');
 select public.cmo_enqueue('e2500000-0000-4000-8000-00000000000b', 'competitor_research', '{"source":"schedule"}');
-select public.cmo_enqueue('e2500000-0000-4000-8000-00000000000b', 'niche_video_research', '{"source":"event"}');
+select public.cmo_enqueue('e2500000-0000-4000-8000-00000000000b', 'competitor_research', '{"source":"event"}');
 select public.cmo_enqueue('e2500000-0000-4000-8000-00000000000b', 'post_draft', '{"source":"schedule"}');
 select is((select cmo_paused_at is not null from public.profiles where id = 'e2500000-0000-4000-8000-00000000000b'), false,
   '10 credits in an hour is at the limit, not past it');

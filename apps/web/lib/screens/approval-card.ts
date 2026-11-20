@@ -43,7 +43,7 @@ export const CardProblemSchema = z.object({
   text: z.string().max(200),
 });
 
-/** A platform profile id from `packages/contracts/platforms.json` (`x`, `threads`, `tiktok_caption`…). */
+/** A platform profile id from `packages/contracts/platforms.json` (`x`, `threads`, `youtube`…). */
 export const ProfileIdSchema = z.string().refine((id) => profileOf(id) !== null, "Unknown platform profile.");
 
 const PostBody = z.object({

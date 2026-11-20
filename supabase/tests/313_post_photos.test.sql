@@ -53,7 +53,7 @@ set local request.jwt.claims = '{"sub":"e3130000-0000-4000-8000-00000000000a","r
 select lives_ok($$ select public.reserve_upload('photos', 'e3130000-0000-4000-8000-00000000000a/e3132000-0000-4000-8000-000000000001/new.jpg',
   2000000, 'image/jpeg', 'e3132000-0000-4000-8000-000000000001') $$, 'a photo upload is reserved under a post in review');
 select throws_ok($$ select public.reserve_upload('photos', 'e3130000-0000-4000-8000-00000000000a/e3132000-0000-4000-8000-000000000003/new.jpg',
-  2000000, 'image/jpeg', 'e3132000-0000-4000-8000-000000000003') $$, 'P0002', 'Photo post not found.', 'not under a post not written yet');
+  2000000, 'image/jpeg', 'e3132000-0000-4000-8000-000000000003') $$, 'P0002', 'Post not found.', 'not under a post not written yet');
 select throws_ok(format($$ select public.post_photos_save('e3132000-0000-4000-8000-000000000001', %L) $$, pg_temp.photos(1, 5)),
   '22023', 'A post takes up to 4 photos.', 'five photos are refused');
 select throws_ok(format($$ select public.post_photos_save('e3132000-0000-4000-8000-000000000001', %L) $$, pg_temp.photos(2, 1)),

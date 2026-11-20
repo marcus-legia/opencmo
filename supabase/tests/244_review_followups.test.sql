@@ -7,16 +7,16 @@ set search_path to public, extensions;
 
 select plan(20);
 
-select throws_ok($$ select public.caption_check('tiktok_caption', 'https://acme.io', null) $$, '22023', 'Captions carry no links.', 'a URL');
-select throws_ok($$ select public.caption_check('tiktok_caption', 'see www.acme.io', null) $$, '22023', 'Captions carry no links.', 'a www address');
-select throws_ok($$ select public.caption_check('tiktok_caption', 'opencmo.io/pricing', null) $$, '22023', 'Captions carry no links.', 'a domain with a path');
-select throws_ok($$ select public.caption_check('tiktok_caption', 'Read acme.com/blog now', null) $$, '22023', 'Captions carry no links.', 'inside a sentence');
-select throws_ok($$ select public.caption_check('tiktok_caption', 'go to example.fr/start', null) $$, '22023', 'Captions carry no links.', 'any TLD');
-select lives_ok($$ select public.caption_check('tiktok_caption', 'Built with Next.js/React', null) $$, 'a framework name is not a link');
-select lives_ok($$ select public.caption_check('tiktok_caption', 'Next.js and Node.js', null) $$, 'nor two of them');
-select lives_ok($$ select public.caption_check('tiktok_caption', 'Ship the app.tsx/hooks folder', null) $$, 'nor a code path');
-select lives_ok($$ select public.caption_check('tiktok_caption', 'a 50/50 split', null) $$, 'nor a fraction');
-select lives_ok($$ select public.caption_check('tiktok_caption', 'Version 2.0/3.0', null) $$, 'nor version numbers');
+select throws_ok($$ select public.caption_check('youtube', 'https://acme.io', 'A title') $$, '22023', 'Captions carry no links.', 'a URL');
+select throws_ok($$ select public.caption_check('youtube', 'see www.acme.io', 'A title') $$, '22023', 'Captions carry no links.', 'a www address');
+select throws_ok($$ select public.caption_check('youtube', 'opencmo.io/pricing', 'A title') $$, '22023', 'Captions carry no links.', 'a domain with a path');
+select throws_ok($$ select public.caption_check('youtube', 'Read acme.com/blog now', 'A title') $$, '22023', 'Captions carry no links.', 'inside a sentence');
+select throws_ok($$ select public.caption_check('youtube', 'go to example.fr/start', 'A title') $$, '22023', 'Captions carry no links.', 'any TLD');
+select lives_ok($$ select public.caption_check('youtube', 'Built with Next.js/React', 'A title') $$, 'a framework name is not a link');
+select lives_ok($$ select public.caption_check('youtube', 'Next.js and Node.js', 'A title') $$, 'nor two of them');
+select lives_ok($$ select public.caption_check('youtube', 'Ship the app.tsx/hooks folder', 'A title') $$, 'nor a code path');
+select lives_ok($$ select public.caption_check('youtube', 'a 50/50 split', 'A title') $$, 'nor a fraction');
+select lives_ok($$ select public.caption_check('youtube', 'Version 2.0/3.0', 'A title') $$, 'nor version numbers');
 
 -- R2: the dead allowlist entries and consume_daily_task_quota are gone; the buckets in use still work.
 select hasnt_function('public', 'consume_daily_task_quota', array['text'], 'consume_daily_task_quota is gone');

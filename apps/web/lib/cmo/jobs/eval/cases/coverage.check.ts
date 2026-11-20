@@ -58,12 +58,7 @@ async function main() {
   assert.ok(planIssues(early, [...ok.slice(0, 4), { ...ok[4]!, idea: "Share a customer story from a happy user" }]).some((i) => i.includes("needs customers")), "stage fit");
   assert.ok(planIssues(early, ok.slice(0, 3)).includes("3 items"));
   assert.ok(planIssues(early, [...ok.slice(0, 4), { ...ok[4]!, idea: "We saved founders 4,000 hours" }]).some((i) => i.includes("says 4,000")), "invented number");
-  const script = { department: "video" as const, platform: "Shorts", day: day(6), idea: "A demo you record", reason: "Show it" };
-  assert.deepEqual(planIssues(early, [...ok, script]), [], "one script a week is the founder's video");
-  assert.ok(planIssues(early, [...ok, script, { ...script, day: day(7) }]).includes("more than one script in the week"), "one script a week");
-  const asked = BRAIN_PROFILES.find((p) => p.brief && /\bvideo\b/i.test(p.brief))!;
-  assert.ok(planIssues(asked, ok).includes("no script for the video the founder asked for"), "asked for a video, the plan holds its script");
-  assert.deepEqual(planIssues(asked, [...ok, script]), []);
+  assert.ok(planIssues(early, [...ok, { department: "video" as never, platform: "Shorts", day: day(6), idea: "A demo", reason: "Show it" }]).includes("a video item in the plan"), "no video in a plan");
 
   // The whole path on the fake provider: every case that can pass today does.
   const env: EvalEnv = { drain: drainCmoQueue, provider: "fake", judge: fakeJudge(), epoch: 0, log: () => undefined, recordGen: () => undefined };

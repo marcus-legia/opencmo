@@ -22,6 +22,7 @@ insert into intended values
   ('creem_subscriptions'),
   ('creem_transactions'),
   ('creem_webhook_receipts'),
+  ('legacy_photo_posts'),  -- wave 4b A3: deleted photo posts, kept for support only
   ('mcp_confirms'),
   ('orphan_scan_cursors'),
   ('product_events'),

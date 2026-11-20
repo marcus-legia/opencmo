@@ -3,8 +3,6 @@
  * SQL starts each run for its work order (`writer_order_start`, never with `brain`), charges its credit and reads
  * what it returns:
  *
- *   write_video_brief  {idea, reason, seconds, aspect, platform} → { brief: VideoBrief, reason }; SQL copies the brief
- *                      into the `build_video` order that waits on it (the Director's input)
  *   write_caption      {clip_ids, profiles}                      → each caption saved with `cmo_save_caption` (it
  *                      refreshes the card and keeps a caption the founder edited) → { reason, saved, failed }
  *
@@ -23,10 +21,9 @@ import { writerMemory } from "./context";
 import { createWriter, writerPromptVersion, type WriterDeps } from "./draft";
 import { BRIEF_ASPECTS, type VideoSource, type WriterContext, type WriterKind, type WriterProfile } from "./types";
 
-/** The registry agent for a kind and profile: one per platform profile, one for briefs. */
+/** The registry agent for a kind and profile: one per platform profile. */
 export function writerAgent(kind: WriterKind, profile: WriterProfile | null): AgentId {
-  if (kind === "video_brief") return "brief_writer";
-  return (profile && (kind === "post" ? POST_WRITERS : CAPTION_WRITERS)[profile.id]) || (kind === "post" ? "x_writer" : "instagram_writer");
+  return (profile && (kind === "post" ? POST_WRITERS : CAPTION_WRITERS)[profile.id]) || (kind === "post" ? "x_writer" : "youtube_writer");
 }
 
 /** At most this many edits per caption run: a shorts batch has three, a finished video one. */
@@ -68,27 +65,6 @@ async function readContext(ctx: JobContext, topic: "post" | "video", withInsight
       ...(video ? { niche: video, nicheUrls: niche!.videos.map((v) => v.url) } : {}),
     };
   });
-}
-
-export async function writeVideoBrief(ctx: JobContext): Promise<JobOutput> {
-  const input = ctx.run.input;
-  const idea = text(input.idea, 300);
-  if (idea.length < 3) throw new LlmError("This video has no idea to write a brief for.");
-  const seconds = typeof input.seconds === "number" && Number.isFinite(input.seconds) ? Math.min(90, Math.max(5, Math.round(input.seconds))) : undefined;
-  const aspect = (BRIEF_ASPECTS as readonly unknown[]).includes(input.aspect) ? (input.aspect as (typeof BRIEF_ASPECTS)[number]) : undefined;
-  const reason = text(input.reason, 300);
-  const context = await readContext(ctx, "video", true, true);
-  const { writer } = runWriter(ctx);
-  const out = await ctx.step(
-    "write_brief",
-    "Writing the video brief",
-    () => writer.draft("video_brief", null, { idea, ...(reason ? { reason } : {}), ...(seconds ? { seconds } : {}), ...(aspect ? { aspect } : {}) }, context),
-    (done) => `Brief: ${done.brief.hooks.length} hooks, ${done.brief.seconds} s, ${done.brief.aspect}`,
-  );
-  // Only links the research read: a URL the model wrote itself is dropped (P5 F8). SQL copies them into the video order.
-  const known = new Set(context.nicheUrls ?? []);
-  const sources = [...new Set(out.learnedFrom.filter((url) => known.has(url)))].slice(0, 6);
-  return { brief: out.brief, reason: out.rationale, sources };
 }
 
 const CAPTION_CONCURRENCY = 3;

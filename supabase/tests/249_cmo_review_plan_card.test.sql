@@ -5,7 +5,7 @@ create extension if not exists pgtap with schema extensions;
 begin;
 set search_path to public, extensions;
 
-select plan(13);
+select plan(12);
 
 select ok(not has_function_privilege('authenticated', 'public.plan_card_decide(public.approvals,text,jsonb)', 'execute'), 'decided only through approval_decide');
 select ok(not has_function_privilege('authenticated', 'public.plan_snapshot(uuid)', 'execute'), 'snapshots are internal');
@@ -43,7 +43,6 @@ select is((public.approval_decide((select id from t where name = 'card'), 'appro
 
 reset role;
 select is((select count(*)::int from public.content_items where id = (select id from t where name = 'video_item')), 0, 'the dropped item is gone');
-select is((select status from public.work_orders where id = (select id from t where name = 'video_order')), 'cancelled', 'and its script order is cancelled');
 select is((select count(*)::int from public.approvals where user_id = 'e2490000-0000-4000-8000-00000000000a' and kind = 'plan' and status = 'waiting'),
   0, 'the resync raises no new plan card');
 select is((select count(*)::int from public.work_orders where user_id = 'e2490000-0000-4000-8000-00000000000a' and kind = 'post_draft' and status = 'queued'),

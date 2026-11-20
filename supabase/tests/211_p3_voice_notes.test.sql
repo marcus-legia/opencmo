@@ -20,7 +20,7 @@ select ok(not has_function_privilege('authenticated', 'public.correction_from_ed
 -- Labels resolve to profiles.
 select is(public.platform_profile_id('X'), 'x', 'the plan''s X');
 select is(public.platform_profile_id('LinkedIn'), 'linkedin', 'LinkedIn');
-select is(public.platform_profile_id('Reels'), 'instagram_caption', 'Reels are an Instagram caption');
+select is(public.platform_profile_id('Reels'), null, 'Reels are no longer a profile (wave 4b)');
 select is(public.platform_profile_id('Reddit'), null, 'Reddit has no profile');
 
 insert into auth.users (id, email) values

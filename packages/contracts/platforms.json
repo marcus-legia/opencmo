@@ -63,30 +63,6 @@
       "tone": "A post of substance that stands on its own on X, LinkedIn and Facebook: the plain true line first, short paragraphs, one real story or lesson with its details. It may be long; it never pads."
     },
     {
-      "id": "instagram_caption",
-      "label": "Instagram caption",
-      "platform": "instagram",
-      "kind": "caption",
-      "limit": 2200,
-      "title": null,
-      "visibleBeforeMore": 125,
-      "hashtags": 5,
-      "links": false,
-      "tone": "The hook in the first line."
-    },
-    {
-      "id": "tiktok_caption",
-      "label": "TikTok caption",
-      "platform": "tiktok",
-      "kind": "caption",
-      "limit": 2200,
-      "title": null,
-      "visibleBeforeMore": 100,
-      "hashtags": 5,
-      "links": false,
-      "tone": "Short, matching the video's hook."
-    },
-    {
       "id": "youtube",
       "label": "YouTube title and description",
       "platform": "youtube",

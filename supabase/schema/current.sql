@@ -3260,7 +3260,7 @@ declare
   v_tags integer;
 begin
   if v_profile is null or v_profile->>'kind' not in ('caption', 'youtube') then
-    raise exception 'Captions are for Instagram, TikTok and YouTube.' using errcode = '22023';
+    raise exception 'Captions are for YouTube.' using errcode = '22023';
   end if;
   if p_text is null or char_length(trim(p_text)) = 0 or char_length(p_text) > (v_profile->>'limit')::integer then
     raise exception 'A % is 1 to % characters.', v_label, to_char((v_profile->>'limit')::integer, 'FM999,999') using errcode = '22023';
@@ -3357,7 +3357,7 @@ $$;
 CREATE FUNCTION public.caption_profiles() RETURNS text[]
     LANGUAGE sql IMMUTABLE
     SET search_path TO ''
-    AS $$ select array['instagram_caption', 'tiktok_caption', 'youtube'] $$;
+    AS $$ select array['youtube'] $$;
 
 
 --
@@ -4551,39 +4551,6 @@ $$;
 
 
 --
--- Name: cmo_drop_write_slides(); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.cmo_drop_write_slides() RETURNS integer
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public'
-    AS $$
-declare
-  v_run public.cmo_runs;
-  v_order uuid;
-  v_n integer := 0;
-begin
-  for v_run in
-    update public.cmo_runs set status = 'failed', finished_at = now(), lease_until = null,
-      error = 'OpenCMO no longer writes slideshows. Your credits were refunded; a photo post with a caption replaces it.'
-    where kind = 'write_slides' and status in ('queued', 'running')
-    returning *
-  loop
-    perform public.cmo_refund_run(v_run);
-    v_n := v_n + 1;
-  end loop;
-  for v_order in
-    select id from public.work_orders
-    where kind = 'write_slides' and status in ('queued', 'running', 'deferred', 'waiting_order', 'waiting_founder')
-  loop
-    perform public.work_order_move(v_order, 'cancelled', 'OpenCMO no longer writes slideshows');
-  end loop;
-  return v_n;
-end;
-$$;
-
-
---
 -- Name: cmo_edit_correction(uuid, text, boolean); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -4926,11 +4893,10 @@ CREATE FUNCTION public.cmo_job_daily_limit(p_kind text) RETURNS integer
     AS $$
   select case p_kind when 'plan_week' then 5 when 'post_draft' then 10 when 'sales_scan' then 3
     when 'competitor_research' then 2 when 'pull_metrics' then 2 when 'summarize_memory' then 1 when 'review_week' then 1
-    when 'write_caption' then 20 when 'write_video_brief' then 25 when 'publish_post' then 100 when 'niche_video_research' then 2
+    when 'write_caption' then 20 when 'publish_post' then 100
     -- cmo-review-3 2.2: one rating round a day (`cmo_rate_drafts`), with room for a retry.
     when 'distill_ratings' then 2
     when 'repurpose_post' then 20
-    when 'photo_caption' then 20
     when 'sales_reply_drafts' then 5
     else 0 end
 $$;
@@ -5271,51 +5237,6 @@ begin
   perform public.cmo_apply_onboarding_answers(v_user, v_handle is not null, v_sells is not null);
 end;
 $_$;
-
-
---
--- Name: cmo_order_script(text, date); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.cmo_order_script(p_brief text, p_day date DEFAULT NULL::date) RETURNS jsonb
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public'
-    AS $$
-declare
-  v_user uuid := public.require_user();
-  v_item public.content_items;
-  v_root public.work_orders;
-  v_order public.work_orders;
-  v_run public.cmo_runs;
-  v_free integer;
-  v_price integer := public.cmo_job_price('write_video_brief');
-  v_input jsonb;
-begin
-  v_item := public.cmo_add_item('video', p_brief, coalesce(p_day, current_date), 'Asked in the CMO chat', '{}'::jsonb);
-  v_root := public.work_order_week_root(v_user);
-  v_free := v_root.budget_credits - v_root.spent_credits - coalesce((
-    select sum(budget_credits - spent_credits) from public.work_orders
-    where parent_id = v_root.id and status not in ('done', 'failed', 'cancelled')), 0);
-  -- The founder confirmed this price on the chat's card, so it is theirs to spend, not the brain's weekly budget: when
-  -- the week has less than the price left, the root grows by what is missing and the order spends exactly that. The
-  -- brain gets no more room for its own work, and the order is never "over budget" for a charge the founder chose.
-  if greatest(v_free, 0) < v_price then
-    update public.work_orders set budget_credits = budget_credits + (v_price - greatest(v_free, 0)), updated_at = now()
-    where id = v_root.id;
-  end if;
-  v_order := public.work_order_create(v_user, v_root.week, v_root.id, 'write_video_brief',
-    left('Script for “' || v_item.idea || '”', 200),
-    jsonb_build_object('objective', v_item.idea, 'reason', 'Asked in the CMO chat', 'platform', v_item.platform,
-      'done_when', 'The founder approved the script.'),
-    v_price, (v_item.day + interval '23 hours 59 minutes') at time zone 'UTC', '{}', 'chat',
-    v_item.id);
-  v_input := jsonb_build_object('idea', v_item.idea, 'reason', 'Asked in the CMO chat', 'seconds', public.cmo_video_seconds(),
-    'aspect', '9:16', 'platform', v_item.platform, 'order_id', v_order.id, 'source', 'chat');
-  v_run := public.cmo_enqueue(v_user, 'write_video_brief', v_input);
-  return jsonb_build_object('item_id', v_item.id, 'order_id', v_order.id, 'run_id', v_run.id, 'status', v_run.status,
-    'day', v_item.day, 'credits', v_run.credits);
-end;
-$$;
 
 
 --
@@ -6478,53 +6399,6 @@ $$;
 
 
 --
--- Name: photo_posts; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.photo_posts (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    user_id uuid NOT NULL,
-    photos text[] DEFAULT '{}'::text[] NOT NULL,
-    caption text DEFAULT ''::text NOT NULL,
-    platforms text[] DEFAULT '{}'::text[] NOT NULL,
-    status text DEFAULT 'draft'::text NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT photo_posts_caption_check CHECK ((char_length(caption) <= 2200)),
-    CONSTRAINT photo_posts_photos_check CHECK ((cardinality(photos) <= 35)),
-    CONSTRAINT photo_posts_platforms_check CHECK ((platforms <@ ARRAY['tiktok'::text, 'instagram'::text, 'threads'::text])),
-    CONSTRAINT photo_posts_status_check CHECK ((status = ANY (ARRAY['draft'::text, 'scheduled'::text, 'cancelled'::text])))
-);
-
-
---
--- Name: cmo_save_photo_caption(uuid, uuid, uuid, text); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.cmo_save_photo_caption(p_user uuid, p_run uuid, p_id uuid, p_caption text) RETURNS public.photo_posts
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public'
-    AS $$
-declare
-  v_row public.photo_posts;
-  v_text text := btrim(coalesce(p_caption, ''), E' \t\n\r');
-begin
-  if not exists (select 1 from public.cmo_runs where id = p_run and user_id = p_user and kind = 'photo_caption') then
-    raise exception 'Run not found.' using errcode = 'P0002';
-  end if;
-  perform public.caption_check('instagram_caption', v_text, null);
-  update public.photo_posts set caption = v_text, updated_at = now()
-  where id = p_id and user_id = p_user and status = 'draft'
-  returning * into v_row;
-  if not found then
-    raise exception 'This photo post can no longer take a caption.' using errcode = 'P0001';
-  end if;
-  return v_row;
-end;
-$$;
-
-
---
 -- Name: cmo_save_reach(uuid, uuid, jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -6763,43 +6637,6 @@ begin
   insert into public.work_order_events (user_id, order_id, department, kind, text)
   values (v_user, v_order.id, 'writer', 'note', left('You edited beat ' || p_beat || ' of “' || coalesce(v_order.title, 'the script') || '”', 200));
   return jsonb_build_object('version', v_order.updated_at, 'beat', p_beat, 'say', v_beat->>'say', 'show', v_beat->>'show');
-end;
-$$;
-
-
---
--- Name: cmo_script_open(uuid); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.cmo_script_open(p_order uuid) RETURNS uuid
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public'
-    AS $$
-declare
-  v_user uuid := public.require_user();
-  v_order public.work_orders;
-  v_clip uuid;
-begin
-  select * into v_order from public.work_orders
-  where id = p_order and user_id = v_user and kind = 'write_video_brief' for update;
-  if not found or jsonb_typeof(v_order.brief->'storyboard') is distinct from 'array' then
-    raise exception 'Script not found.' using errcode = 'P0002';
-  end if;
-  if not exists (select 1 from public.approvals where user_id = v_user and ref_kind = 'work_order' and ref_id = v_order.id
-                 and kind = 'script' and status in ('approved', 'edited')) then
-    raise exception 'Approve the script first.' using errcode = 'P0001';
-  end if;
-  if v_order.brief->>'clip_id' is not null then
-    select c.id into v_clip from public.clips c join public.jobs j on j.id = c.job_id
-    where c.id::text = v_order.brief->>'clip_id' and j.user_id = v_user and j.purging_at is null;
-    if v_clip is not null then
-      return v_clip;
-    end if;
-  end if;
-  v_clip := public.create_blank_edit(left(coalesce(v_order.brief->>'objective', v_order.title), 60),
-    case when v_order.brief->>'aspect' in ('9:16', '1:1', '16:9') then v_order.brief->>'aspect' else '9:16' end);
-  update public.work_orders set brief = brief || jsonb_build_object('clip_id', v_clip), updated_at = now() where id = v_order.id;
-  return v_clip;
 end;
 $$;
 
@@ -7756,48 +7593,6 @@ $$;
 
 
 --
--- Name: content_items_post_image(); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.content_items_post_image() RETURNS trigger
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public'
-    AS $_$
-declare
-  v_root public.work_orders;
-  v_profile text;
-begin
-  if new.department <> 'post' or not new.wants_image or new.status <> 'approved' or old.status = 'approved' then
-    return new;
-  end if;
-  begin
-    -- The founder added their own photos: no generated image (owner, 2026-11-13).
-    if public.cmo_paused(new.user_id) or cardinality(new.photos) > 0
-       or exists (select 1 from public.deliverables where post_id = new.id and kind = 'image')
-       or exists (select 1 from public.work_orders where user_id = new.user_id and kind = 'build_post_image'
-                  and brief->>'postId' = new.id::text and status not in ('failed', 'cancelled')) then
-      return new;
-    end if;
-    v_profile := coalesce(public.platform_profile_id(new.platform), 'x');
-    v_root := public.work_order_week_root(new.user_id);
-    perform public.work_order_create(new.user_id, v_root.week, v_root.id, 'build_post_image',
-      left('Image for “' || new.idea || '”', 200),
-      -- The image's title is one slide heading (`SLIDE_TEXT_MAX.heading`, 60): cut at a word, not inside one.
-      jsonb_build_object('postId', new.id, 'title', case when char_length(new.idea) <= 60 then new.idea
-          else left(coalesce(nullif(rtrim(regexp_replace(left(new.idea, 61), '\s+\S*$', '')), ''), new.idea), 60) end,
-        'platform', v_profile,
-        'done_when', 'The post''s schedule card shows the image.'),
-      0, null, '{}', 'event');
-  exception when others then
-    -- An image is never a reason to undo the founder's approval of the post.
-    raise warning 'post image rule failed for content item %: %', new.id, sqlerrm;
-  end;
-  return new;
-end;
-$_$;
-
-
---
 -- Name: content_items_post_proposal(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -7831,6 +7626,23 @@ begin
   end;
   new.body := coalesce(new.body, '{}'::jsonb) - 'proposed'
     || case when v_proposed is null then '{}'::jsonb else jsonb_build_object('proposed', v_proposed) end;
+  return new;
+end;
+$$;
+
+
+--
+-- Name: content_items_quote_card_gone(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.content_items_quote_card_gone() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO ''
+    AS $$
+begin
+  if new.body ? 'quote_card' and not (coalesce(new.body->'quote_card'->>'object', '') = any (coalesce(new.photos, '{}'))) then
+    new.body := new.body - 'quote_card';
+  end if;
   return new;
 end;
 $$;
@@ -8201,51 +8013,6 @@ begin
   return jsonb_build_object('generation', to_jsonb(v_generation), 'reused', false);
 end;
 $_$;
-
-
---
--- Name: create_post_image_edit(text, text, uuid); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.create_post_image_edit(p_name text, p_aspect text, p_source_clip uuid DEFAULT NULL::uuid) RETURNS uuid
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public'
-    AS $$
-declare
-  v_user uuid := public.require_user();
-  v_name text := coalesce(nullif(left(btrim(coalesce(p_name, '')), 120), ''), 'Post image');
-  v_source public.clips;
-  v_job uuid;
-  v_idx integer := -1;
-  v_clip uuid;
-begin
-  if not public.studio_brain_call() then
-    raise exception 'Only OpenCMO''s Studio team can do this.' using errcode = '42501';
-  end if;
-  if p_aspect is null or p_aspect not in ('9:16', '1:1', '16:9') then
-    raise exception 'Choose a frame: 9:16, 1:1 or 16:9.' using errcode = '22023';
-  end if;
-  if (select count(*) from public.jobs where user_id = v_user and kind = 'edit' and created_at > now() - interval '1 hour') >= 60 then
-    raise exception 'You have created many edits in the last hour. Try again later.' using errcode = 'P0001';
-  end if;
-  if p_source_clip is not null then
-    v_source := public.owned_clip(p_source_clip, v_user);
-    v_job := v_source.job_id;
-    -- Another edit in the same job: the lowest free index below the job's own clips.
-    perform pg_advisory_xact_lock(hashtextextended(v_job::text, 1731));
-    select least(-1, min(idx) - 1) into v_idx from public.clips where job_id = v_job;
-  else
-    insert into public.jobs (user_id, kind, source_url, title, status, aspect, clips_requested, duration_seconds, finished_at, watermark)
-    values (v_user, 'edit', 'editor://blank', v_name, 'done', p_aspect, 0, 0, now(),
-      (select coalesce(plan, 'free') = 'free' from public.profiles where id = v_user))
-    returning id into v_job;
-  end if;
-  insert into public.clips (job_id, idx, hook, start_seconds, end_seconds, source_start, source_end, kind)
-  values (v_job, v_idx, v_name, 0, 0, null, null, 'slideshow')
-  returning id into v_clip;
-  return v_clip;
-end;
-$$;
 
 
 --
@@ -11182,266 +10949,6 @@ $$;
 
 
 --
--- Name: photo_draft_release(uuid, text[]); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.photo_draft_release(p_post uuid, p_photos text[] DEFAULT NULL::text[]) RETURNS integer
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public', 'storage'
-    AS $$
-declare
-  v_row public.photo_posts;
-  v_n integer;
-begin
-  -- Locked first, so the statement below sees a post scheduled meanwhile in another tab as scheduled.
-  select * into v_row from public.photo_posts where id = p_post for update;
-  -- Only a draft is ever cancelled, so a cancelled post is an abandoned draft whose photos may go too.
-  if not found or v_row.status not in ('draft', 'cancelled') then
-    return 0;
-  end if;
-  insert into public.storage_deletions (bucket, path, user_id)
-  select 'photos', o.name, v_row.user_id from storage.objects o
-  where o.bucket_id = 'photos'
-    and o.name like v_row.user_id::text || '/' || v_row.id::text || '/%'
-    and (p_photos is null or o.name = any (p_photos))
-    -- A photo of a scheduled post is never deleted, whichever post it was uploaded for.
-    and not exists (select 1 from public.photo_posts s where s.status = 'scheduled' and o.name = any (s.photos))
-  on conflict (bucket, path) do nothing;
-  get diagnostics v_n = row_count;
-  return v_n;
-end;
-$$;
-
-
---
--- Name: photo_drafts_sweep(integer); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.photo_drafts_sweep(p_days integer DEFAULT 7) RETURNS integer
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public', 'storage'
-    AS $$
-declare
-  v_since timestamptz;
-  v_id uuid;
-  v_n integer := 0;
-begin
-  if p_days is null or p_days < 1 or p_days > 365 then
-    raise exception 'p_days must be between 1 and 365.' using errcode = '22023';
-  end if;
-  v_since := now() - make_interval(days => p_days);
-  for v_id in
-    select p.id from public.photo_posts p
-    where p.status = 'draft' and p.updated_at < v_since
-      and not exists (select 1 from storage.objects o where o.bucket_id = 'photos'
-        and o.name like p.user_id::text || '/' || p.id::text || '/%' and o.created_at >= v_since)
-    order by p.updated_at
-    limit 500
-    for update of p skip locked
-  loop
-    perform public.photo_draft_release(v_id);
-    update public.photo_posts set status = 'cancelled', updated_at = now() where id = v_id;
-    v_n := v_n + 1;
-  end loop;
-  return v_n;
-end;
-$$;
-
-
---
--- Name: photo_post_caption(uuid, text); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.photo_post_caption(p_id uuid, p_notes text) RETURNS jsonb
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public'
-    AS $$
-declare
-  v_user uuid := public.require_user();
-  v_row public.photo_posts;
-  v_run public.cmo_runs;
-begin
-  select * into v_row from public.photo_posts where id = p_id and user_id = v_user;
-  if not found then
-    raise exception 'Photo post not found.' using errcode = 'P0002';
-  end if;
-  if v_row.status <> 'draft' then
-    raise exception 'This photo post is already scheduled.' using errcode = 'P0001';
-  end if;
-  if char_length(btrim(coalesce(p_notes, ''))) not between 3 and 1000 then
-    raise exception 'Say in a few words what the photos show (3 to 1,000 characters).' using errcode = '22023';
-  end if;
-  v_run := public.cmo_enqueue(v_user, 'photo_caption',
-    jsonb_build_object('photo_post_id', p_id, 'notes', btrim(p_notes), 'photos', cardinality(v_row.photos)));
-  return jsonb_build_object('run_id', v_run.id, 'status', v_run.status, 'credits', v_run.credits);
-end;
-$$;
-
-
---
--- Name: photo_post_check(integer, text[]); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.photo_post_check(p_count integer, p_platforms text[]) RETURNS void
-    LANGUAGE plpgsql IMMUTABLE
-    SET search_path TO 'public'
-    AS $$
-begin
-  if 'tiktok' = any (p_platforms) and p_count > 35 then
-    raise exception 'TikTok takes up to 35 photos.' using errcode = '22023';
-  end if;
-  if 'instagram' = any (p_platforms) and p_count > 20 then
-    raise exception 'Instagram takes up to 20 photos.' using errcode = '22023';
-  end if;
-  if 'threads' = any (p_platforms) and p_count > 20 then
-    raise exception 'Threads takes up to 20 photos.' using errcode = '22023';
-  end if;
-  if p_count > 35 then
-    raise exception 'A photo post has 35 photos at most.' using errcode = '22023';
-  end if;
-  if not (coalesce(p_platforms, '{}') <@ array['tiktok', 'instagram', 'threads']) then
-    raise exception 'A photo post goes to TikTok, Instagram or Threads.' using errcode = '22023';
-  end if;
-end;
-$$;
-
-
---
--- Name: photo_post_create(); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.photo_post_create() RETURNS uuid
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public'
-    AS $$
-declare
-  v_user uuid := public.require_user();
-  v_id uuid;
-begin
-  perform pg_advisory_xact_lock(hashtextextended(v_user::text || ':photo_post', 1719));
-  -- Locked: a draft scheduled meanwhile in another tab is not emptied, and its photos are not released.
-  select id into v_id from public.photo_posts where user_id = v_user and status = 'draft' order by created_at desc limit 1
-  for update;
-  if v_id is not null then
-    -- Starting again empties the draft: its photos are deleted (F3), so they stop counting toward storage.
-    perform public.photo_draft_release(v_id);
-    update public.photo_posts set photos = '{}', caption = '', platforms = '{}', updated_at = now() where id = v_id;
-    -- Drafts left over from before this rule are closed, so they stop counting.
-    perform public.photo_draft_release(id) from public.photo_posts
-    where user_id = v_user and status = 'draft' and id <> v_id;
-    update public.photo_posts set status = 'cancelled', updated_at = now()
-    where user_id = v_user and status = 'draft' and id <> v_id;
-    return v_id;
-  end if;
-  insert into public.photo_posts (user_id) values (v_user) returning id into v_id;
-  return v_id;
-end;
-$$;
-
-
---
--- Name: photo_post_save(uuid, text[], text, text[]); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.photo_post_save(p_id uuid, p_photos text[], p_caption text, p_platforms text[]) RETURNS public.photo_posts
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public', 'storage'
-    AS $$
-declare
-  v_user uuid := public.require_user();
-  v_row public.photo_posts;
-  v_photos text[] := coalesce(p_photos, '{}');
-  v_platforms text[] := array(select distinct p from unnest(coalesce(p_platforms, '{}')) p order by p);
-begin
-  select * into v_row from public.photo_posts where id = p_id and user_id = v_user for update;
-  if not found then
-    raise exception 'Photo post not found.' using errcode = 'P0002';
-  end if;
-  if v_row.status = 'cancelled' then
-    raise exception 'This draft was closed. Start a new photo post.' using errcode = 'P0001';
-  end if;
-  if v_row.status <> 'draft' then
-    raise exception 'This photo post is already scheduled.' using errcode = 'P0001';
-  end if;
-  perform public.photo_post_check(cardinality(v_photos), v_platforms);
-  if (select count(distinct p) from unnest(v_photos) p) <> cardinality(v_photos) then
-    raise exception 'The same photo is in the post twice.' using errcode = '22023';
-  end if;
-  if exists (select 1 from unnest(v_photos) p
-             where p not like v_user::text || '/' || p_id::text || '/%'
-                or not exists (select 1 from storage.objects o where o.bucket_id = 'photos' and o.name = p)) then
-    raise exception 'A photo is missing. Upload it again.' using errcode = '22023';
-  end if;
-  if char_length(coalesce(p_caption, '')) > 2200 then
-    raise exception 'A caption is 2,200 characters at most.' using errcode = '22023';
-  end if;
-  -- A photo already queued for deletion is as good as gone: the cleanup would delete it under a scheduled post.
-  if exists (select 1 from public.storage_deletions where bucket = 'photos' and path = any (v_photos)) then
-    raise exception 'A photo is missing. Upload it again.' using errcode = '22023';
-  end if;
-  -- A photo dropped from the list is deleted.
-  perform public.photo_draft_release(p_id, array(select p from unnest(v_row.photos) p where p <> all (v_photos)));
-  update public.photo_posts set photos = v_photos, caption = coalesce(p_caption, ''), platforms = v_platforms, updated_at = now()
-  where id = p_id returning * into v_row;
-  return v_row;
-end;
-$$;
-
-
---
--- Name: photo_post_schedule(uuid); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.photo_post_schedule(p_id uuid) RETURNS integer
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public'
-    AS $$
-declare
-  v_user uuid := public.require_user();
-  v_row public.photo_posts;
-  v_platform text;
-  v_d uuid;
-begin
-  select * into v_row from public.photo_posts where id = p_id and user_id = v_user for update;
-  if not found then
-    raise exception 'Photo post not found.' using errcode = 'P0002';
-  end if;
-  if v_row.status = 'cancelled' then
-    raise exception 'This draft was closed. Start a new photo post.' using errcode = 'P0001';
-  end if;
-  if v_row.status <> 'draft' then
-    raise exception 'This photo post is already scheduled.' using errcode = 'P0001';
-  end if;
-  if cardinality(v_row.photos) = 0 then
-    raise exception 'Add at least one photo.' using errcode = '22023';
-  end if;
-  if cardinality(v_row.platforms) = 0 then
-    raise exception 'Pick at least one platform.' using errcode = '22023';
-  end if;
-  perform public.photo_post_check(cardinality(v_row.photos), v_row.platforms);
-  -- The caption rules of a video caption: 1 to 2,200 characters, five hashtags at most, no link.
-  perform public.caption_check('instagram_caption', v_row.caption, null);
-  -- Threads takes 500 characters a post, and a post with photos is never cut into a chain.
-  if 'threads' = any (v_row.platforms) and char_length(btrim(v_row.caption)) > 500 then
-    raise exception 'Threads takes up to 500 characters with photos. Shorten the caption, or leave Threads out.'
-      using errcode = '22023';
-  end if;
-  foreach v_platform in array v_row.platforms loop
-    if not exists (select 1 from public.social_accounts where user_id = v_user and platform = v_platform and status = 'connected') then
-      raise exception 'Connect your % account first: photos go out only from a connected account.',
-        public.schedule_platform_label(v_platform) using errcode = 'P0001';
-    end if;
-  end loop;
-  update public.photo_posts set status = 'scheduled', updated_at = now() where id = p_id;
-  insert into public.deliverables (user_id, order_id, kind, ref_kind, ref_id, status)
-  values (v_user, (public.work_order_week_root(v_user)).id, 'photo_post', 'photo_post', p_id, 'decided')
-  returning id into v_d;
-  return public.schedule_propose(v_d);
-end;
-$$;
-
-
---
 -- Name: plan_card_decide(public.approvals, text, jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -11661,8 +11168,6 @@ CREATE FUNCTION public.platform_profile(p_id text) RETURNS jsonb
     when 'linkedin' then '{"kind": "post", "limit": 3000, "title": null, "hashtags": 0, "label": "LinkedIn"}'::jsonb
     when 'facebook' then '{"kind": "post", "limit": 4000, "title": null, "hashtags": 0, "label": "Facebook"}'::jsonb
     when 'core' then '{"kind": "core", "limit": 3000, "title": null, "hashtags": 0, "label": "Post"}'::jsonb
-    when 'instagram_caption' then '{"kind": "caption", "limit": 2200, "title": null, "hashtags": 5, "label": "Instagram caption"}'::jsonb
-    when 'tiktok_caption' then '{"kind": "caption", "limit": 2200, "title": null, "hashtags": 5, "label": "TikTok caption"}'::jsonb
     when 'youtube' then '{"kind": "youtube", "limit": 5000, "title": 100, "hashtags": 3, "label": "YouTube title and description"}'::jsonb
   end
 $$;
@@ -11682,11 +11187,6 @@ CREATE FUNCTION public.platform_profile_id(p_label text) RETURNS text
     when 'threads' then 'threads'
     when 'linkedin' then 'linkedin'
     when 'facebook' then 'facebook'
-    when 'instagram' then 'instagram_caption'
-    when 'instagram_caption' then 'instagram_caption'
-    when 'reels' then 'instagram_caption'
-    when 'tiktok' then 'tiktok_caption'
-    when 'tiktok_caption' then 'tiktok_caption'
     when 'youtube' then 'youtube'
     when 'shorts' then 'youtube'
     when 'youtube shorts' then 'youtube'
@@ -11945,9 +11445,6 @@ begin
   from storage.objects o
   join public.profiles f on f.id::text = (storage.foldername(o.name))[1]
   where o.bucket_id = 'photos' and o.created_at < now() - make_interval(days => p_days)
-    and not exists (select 1 from public.photo_posts p
-                    where p.id::text = (storage.foldername(o.name))[2] and p.status = 'draft')
-    and not exists (select 1 from public.photo_posts p where p.status = 'scheduled' and o.name = any (p.photos))
     and not exists (select 1 from public.content_items c
                     where c.id::text = (storage.foldername(o.name))[2] and c.status not in ('skipped', 'failed')
                       and o.name = any (c.photos))
@@ -12043,6 +11540,54 @@ CREATE FUNCTION public.post_schedules(p_status text, p_deliverable uuid) RETURNS
     AS $$
   select p_status = 'approved' or (p_status = 'published' and exists (select 1 from public.schedule_slots s
     where s.deliverable_id = p_deliverable and s.status = 'published'))
+$$;
+
+
+--
+-- Name: post_set_quote_card(uuid, uuid, text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.post_set_quote_card(p_item uuid, p_entry uuid, p_quote text, p_object text DEFAULT NULL::text) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_user uuid := public.require_user();
+  v_row public.content_items;
+  v_entry public.library_entries;
+  v_card jsonb;
+begin
+  select * into v_row from public.content_items where id = p_item and user_id = v_user and department = 'post' for update;
+  if not found then
+    raise exception 'Post not found.' using errcode = 'P0002';
+  end if;
+  if p_entry is null then
+    if v_row.body ? 'quote_card' then
+      update public.content_items set body = body - 'quote_card', updated_at = now() where id = p_item;
+    end if;
+    return null;
+  end if;
+  if v_row.status not in ('in_review', 'approved') then
+    raise exception '%', case when v_row.status = 'published' then 'This post is already posted; its images cannot change.'
+      else 'Make a quote card once the post is written.' end using errcode = 'P0001';
+  end if;
+  select * into v_entry from public.library_entries where opportunity_id = p_entry and user_id = v_user;
+  if not found then
+    raise exception 'This conversation is not in your Library.' using errcode = 'P0002';
+  end if;
+  if p_quote is null or char_length(p_quote) not between 1 and 280
+     or not exists (select 1 from jsonb_array_elements(v_entry.quotes) q where q->>'text' = p_quote) then
+    raise exception 'Pick one of the quotes kept from this conversation.' using errcode = '22023';
+  end if;
+  if p_object is null or not (p_object = any (v_row.photos)) then
+    raise exception 'The quote card image is missing. Make it again.' using errcode = '22023';
+  end if;
+  v_card := jsonb_build_object('entryId', p_entry, 'quote', p_quote, 'community', v_entry.community,
+    'platform', v_entry.platform, 'object', p_object);
+  update public.content_items set body = body || jsonb_build_object('quote_card', v_card), updated_at = now()
+  where id = p_item;
+  return v_card;
+end;
 $$;
 
 
@@ -14638,78 +14183,6 @@ $$;
 
 
 --
--- Name: request_stills_export(uuid, uuid, uuid); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.request_stills_export(p_clip_id uuid, p_revision_id uuid, p_request_id uuid) RETURNS public.tasks
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public'
-    AS $$
-declare
-  v_user uuid := public.require_user();
-  v_plan text;
-  v_quota record;
-  v_revision public.editor_revisions;
-  v_manifest jsonb;
-  v_job_id uuid;
-  v_task public.tasks;
-  v_task_id uuid := gen_random_uuid();
-  v_prefix text;
-begin
-  if p_request_id is null then
-    raise exception 'Missing request id.' using errcode = '22023';
-  end if;
-  perform public.owned_clip(p_clip_id, v_user);
-  select r.* into v_revision from public.editor_revisions r where r.id = p_revision_id and r.clip_id = p_clip_id;
-  if not found then
-    raise exception 'Save the project before exporting it.' using errcode = 'P0002';
-  end if;
-  select c.job_id into v_job_id from public.clips c where c.id = p_clip_id;
-  select p.manifest into v_manifest from public.editor_projects p where p.clip_id = p_clip_id;
-
-  perform pg_advisory_xact_lock(hashtextextended(p_request_id::text, 1701));
-  select * into v_task from public.tasks where request_id = p_request_id;
-  if found then
-    if v_task.user_id is distinct from v_user or v_task.kind <> 'render_stills'
-       or v_task.clip_id is distinct from p_clip_id or v_task.editor_revision_id is distinct from p_revision_id then
-      raise exception 'This export request was already used for another clip or revision.' using errcode = '22023';
-    end if;
-    return v_task;
-  end if;
-
-  perform pg_advisory_xact_lock(hashtextextended(v_user::text, 1702));
-  if (select count(*) from public.tasks
-      where user_id = v_user
-        and kind in ('preview', 'export', 'client_export', 'finalize', 'render_document', 'render_stills')
-        and status in ('awaiting_upload', 'queued', 'running')) >= 20 then
-    raise exception 'You already have 20 previews or exports in progress. Please wait for one to finish.' using errcode = 'P0001';
-  end if;
-  if not public.studio_brain_call() then
-    select coalesce(plan, 'free') into v_plan from public.profiles where id = v_user;
-    select * into v_quota from public.plan_quota(v_plan);
-    if not public.rate_limit_hit('export', v_quota.exports_per_day, 86400) then
-      raise exception 'You have reached today''s limit for this plan.' using errcode = 'P0001';
-    end if;
-  end if;
-
-  v_prefix := v_user::text || '/' || p_clip_id::text || '/' || v_task_id::text;
-  insert into public.tasks (id, user_id, kind, clip_id, editor_revision_id, settings_hash, job_id, payload, status, request_id)
-  values (v_task_id, v_user, 'render_stills', p_clip_id, p_revision_id, v_revision.source_hash, v_job_id,
-    jsonb_build_object('bucket', 'exports', 'object', v_prefix || '.zip', 'still_prefix', v_prefix,
-      'editor_revision_id', p_revision_id, 'source_hash', v_revision.source_hash,
-      'manifest', coalesce(v_manifest, '{"version":1,"folders":[],"assets":[]}'::jsonb)),
-    'queued', p_request_id)
-  on conflict do nothing
-  returning * into v_task;
-  if not found then
-    raise exception 'Could not start the export. Please try again.' using errcode = 'P0001';
-  end if;
-  return v_task;
-end;
-$$;
-
-
---
 -- Name: require_user(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -14746,8 +14219,8 @@ declare
   v_row public.upload_reservations;
   v_parts text[] := string_to_array(coalesce(p_object_name, ''), '/');
 begin
-  -- A photo of a photo post (20270120060000) or of a text post (20270121040000): a JPEG, PNG or WebP of 10 MB at most,
-  -- under the founder's draft, or under a post of theirs that is in review or approved.
+  -- A photo of a text post (20270121040000): a JPEG or PNG of 10 MB at most, under a post of the founder's that is in
+  -- review or approved. Photo posts were deleted in wave 4b.
   if p_bucket = 'photos' then
     if p_size is null or p_size <= 0 or p_size > 10485760
        or coalesce(p_content_type, '') not in ('image/jpeg', 'image/png', 'image/webp') then
@@ -14755,14 +14228,12 @@ begin
     end if;
     if p_project_id is null or array_length(v_parts, 1) <> 3 or v_parts[1] is distinct from v_user::text
        or v_parts[2] is distinct from p_project_id::text
-       or not (exists (select 1 from public.photo_posts where id = p_project_id and user_id = v_user and status = 'draft')
-               or exists (select 1 from public.content_items where id = p_project_id and user_id = v_user
-                            and department = 'post' and status in ('in_review', 'approved'))) then
-      raise exception 'Photo post not found.' using errcode = 'P0002';
+       or not exists (select 1 from public.content_items where id = p_project_id and user_id = v_user
+                        and department = 'post' and status in ('in_review', 'approved')) then
+      raise exception 'Post not found.' using errcode = 'P0002';
     end if;
     -- A text post's photos go to every platform of its slot, and Threads and LinkedIn do not take WebP.
-    if p_content_type = 'image/webp'
-       and not exists (select 1 from public.photo_posts where id = p_project_id and user_id = v_user and status = 'draft') then
+    if p_content_type = 'image/webp' then
       raise exception 'Use a JPEG or PNG photo: Threads and LinkedIn do not take WebP.' using errcode = '22023';
     end if;
     -- The post is in the path; `upload_reservations.project_id` points at jobs, so the reservation names none.
@@ -17478,97 +16949,6 @@ CREATE FUNCTION public.studio_plan_hold() RETURNS integer
 
 
 --
--- Name: studio_post_image_rendering(uuid, uuid, uuid, uuid); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.studio_post_image_rendering(p_order_id uuid, p_clip_id uuid, p_post_id uuid, p_stills_task uuid) RETURNS uuid
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public'
-    AS $$
-declare
-  v_user uuid := public.require_user();
-  v_clip public.clips;
-  v_id uuid;
-begin
-  if not public.studio_brain_call() then
-    raise exception 'Only OpenCMO''s Studio team can do this.' using errcode = '42501';
-  end if;
-  v_clip := public.owned_clip(p_clip_id, v_user);
-  if v_clip.kind <> 'slideshow' then
-    raise exception 'A post image is made in its own edit.' using errcode = '22023';
-  end if;
-  if not exists (select 1 from public.work_orders where id = p_order_id and user_id = v_user and kind = 'build_post_image'
-                 and status not in ('done', 'failed', 'cancelled')) then
-    raise exception 'Order not found.' using errcode = 'P0002';
-  end if;
-  if not exists (select 1 from public.content_items where id = p_post_id and user_id = v_user and department = 'post') then
-    raise exception 'Post not found.' using errcode = 'P0002';
-  end if;
-  if not exists (select 1 from public.tasks where id = p_stills_task and user_id = v_user and clip_id = p_clip_id and kind = 'render_stills') then
-    raise exception 'Queue the image of this edit first.' using errcode = '22023';
-  end if;
-  insert into public.studio_steps (user_id, clip_id, tool, kind, input, card, price_credits, order_id, status)
-  values (v_user, p_clip_id, 'make_post_image', 'post_image',
-    jsonb_build_object('post_id', p_post_id, 'stills_task', p_stills_task), '{}', 0, p_order_id, 'running')
-  returning id into v_id;
-  perform public.studio_post_image_settle(v_id);
-  return v_id;
-end;
-$$;
-
-
---
--- Name: studio_post_image_settle(uuid); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.studio_post_image_settle(p_step uuid) RETURNS void
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public'
-    AS $$
-declare
-  v_step public.studio_steps;
-  v_stills public.tasks;
-  v_hash text;
-  v_why text;
-begin
-  select * into v_step from public.studio_steps where id = p_step and kind = 'post_image' and status = 'running' for update;
-  if not found then
-    return;
-  end if;
-  select * into v_stills from public.tasks where id = (v_step.input->>'stills_task')::uuid;
-  if v_stills.status not in ('done', 'failed', 'cancelled') then
-    return;
-  end if;
-  select public.editor_document_hash(document) into v_hash from public.editor_projects where clip_id = v_step.clip_id;
-  if v_stills.status <> 'done' then
-    v_why := left(coalesce(nullif(v_stills.error, ''), 'The post image could not be drawn.'), 200);
-  elsif v_stills.settings_hash is distinct from v_hash then
-    v_why := 'The post image changed while it was rendering.';
-  end if;
-  if v_why is not null then
-    update public.studio_steps set status = 'failed', error = v_why where id = v_step.id;
-    if exists (select 1 from public.work_orders where id = v_step.order_id and status not in ('done', 'failed', 'cancelled')) then
-      perform public.work_order_move(v_step.order_id, 'failed', null, jsonb_build_object('code',
-        case when v_stills.status = 'done' then 'document_changed' else 'render_failed' end, 'message', v_why, 'retryable', true));
-    end if;
-    return;
-  end if;
-  update public.studio_steps set status = 'done', decided_at = now() where id = v_step.id;
-  -- A post may get a new image later; the publish step takes its newest (`created_at`).
-  insert into public.deliverables (user_id, order_id, kind, ref_kind, ref_id, status, post_id)
-  values (v_step.user_id, v_step.order_id, 'image', 'clip', v_step.clip_id, 'ready', (v_step.input->>'post_id')::uuid)
-  on conflict (ref_kind, ref_id) do nothing;
-  if exists (select 1 from public.work_orders where id = v_step.order_id and status = 'queued') then
-    perform public.work_order_move(v_step.order_id, 'running');
-  end if;
-  if exists (select 1 from public.work_orders where id = v_step.order_id and status not in ('done', 'failed', 'cancelled')) then
-    perform public.work_order_move(v_step.order_id, 'done', 'Post image ready');
-  end if;
-end;
-$$;
-
-
---
 -- Name: studio_record_usage(uuid, text, integer, integer, integer, integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -17609,172 +16989,6 @@ begin
     end if;
   end if;
   return v_credits;
-end;
-$$;
-
-
---
--- Name: studio_slideshow_fresh(); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.studio_slideshow_fresh() RETURNS trigger
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public'
-    AS $$
-begin
-  if new.kind = 'slideshow' and old.status = 'waiting' and new.status = 'done' and new.input ? 'mp4_task'
-     and (select settings_hash from public.tasks where id = (new.input->>'mp4_task')::uuid)
-       is distinct from (select public.editor_document_hash(document) from public.editor_projects where clip_id = new.clip_id) then
-    raise exception 'The slideshow changed since it was rendered. Render it again.' using errcode = 'P0001';
-  end if;
-  return new;
-end;
-$$;
-
-
---
--- Name: studio_slideshow_rendering(uuid, uuid, jsonb, jsonb, uuid, uuid); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.studio_slideshow_rendering(p_order_id uuid, p_clip_id uuid, p_input jsonb, p_card jsonb, p_mp4_task uuid, p_stills_task uuid) RETURNS uuid
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public'
-    AS $$
-declare
-  v_user uuid := public.require_user();
-  v_clip public.clips;
-  v_id uuid;
-begin
-  if not public.studio_brain_call() then
-    raise exception 'Only OpenCMO''s Studio team can do this.' using errcode = '42501';
-  end if;
-  v_clip := public.owned_clip(p_clip_id, v_user);
-  if v_clip.kind <> 'slideshow' then
-    raise exception 'Only a slideshow gets a slideshow card.' using errcode = '22023';
-  end if;
-  if not exists (select 1 from public.work_orders where id = p_order_id and user_id = v_user and kind = 'build_slideshow'
-                 and status not in ('done', 'failed', 'cancelled')) then
-    raise exception 'Order not found.' using errcode = 'P0002';
-  end if;
-  if p_input is null or jsonb_typeof(p_input) <> 'object' or p_card is null or jsonb_typeof(p_card) <> 'object'
-     or jsonb_typeof(p_card->'slides') is distinct from 'array' or jsonb_array_length(p_card->'slides') not between 1 and 20 then
-    raise exception 'This step is malformed.' using errcode = '22023';
-  end if;
-  if not exists (select 1 from public.tasks where id = p_mp4_task and user_id = v_user and clip_id = p_clip_id and kind = 'render_document')
-     or not exists (select 1 from public.tasks where id = p_stills_task and user_id = v_user and clip_id = p_clip_id and kind = 'render_stills') then
-    raise exception 'Queue the MP4 and the PNG set of this slideshow first.' using errcode = '22023';
-  end if;
-  if (select count(*) from public.studio_steps where user_id = v_user and status = 'waiting') >= 20 then
-    raise exception 'Too many Studio cards are waiting. Decide some first.' using errcode = 'P0001';
-  end if;
-  insert into public.studio_steps (user_id, clip_id, tool, kind, input, card, price_credits, order_id, status)
-  values (v_user, p_clip_id, 'make_slideshow', 'slideshow',
-    p_input || jsonb_build_object('mp4_task', p_mp4_task, 'stills_task', p_stills_task), p_card, 0, p_order_id, 'running')
-  returning id into v_id;
-  -- Both renders may already have ended (a fast worker): settle now rather than wait for a status change.
-  perform public.studio_slideshow_settle(v_id);
-  return v_id;
-end;
-$$;
-
-
---
--- Name: studio_slideshow_rerender(uuid, uuid, uuid, jsonb); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.studio_slideshow_rerender(p_step uuid, p_mp4_task uuid, p_stills_task uuid, p_card jsonb) RETURNS uuid
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public'
-    AS $$
-declare
-  v_user uuid := public.require_user();
-  v_step public.studio_steps;
-  v_hash text;
-begin
-  select * into v_step from public.studio_steps where id = p_step and user_id = v_user and kind = 'slideshow' for update;
-  if not found then
-    raise exception 'Slideshow not found.' using errcode = 'P0002';
-  end if;
-  if v_step.status <> 'waiting' then
-    raise exception 'This slideshow is not waiting on you, so there is nothing to render again.' using errcode = 'P0001';
-  end if;
-  if p_card is null or jsonb_typeof(p_card) <> 'object' or jsonb_typeof(p_card->'slides') is distinct from 'array'
-     or jsonb_array_length(p_card->'slides') not between 1 and 20 then
-    raise exception 'This step is malformed.' using errcode = '22023';
-  end if;
-  select public.editor_document_hash(document) into v_hash from public.editor_projects where clip_id = v_step.clip_id;
-  if not exists (select 1 from public.tasks where id = p_mp4_task and user_id = v_user and clip_id = v_step.clip_id
-                   and kind = 'render_document' and settings_hash = v_hash)
-     or not exists (select 1 from public.tasks where id = p_stills_task and user_id = v_user and clip_id = v_step.clip_id
-                   and kind = 'render_stills' and settings_hash = v_hash) then
-    raise exception 'Queue the MP4 and the PNG set of the slideshow as it is now first.' using errcode = '22023';
-  end if;
-  -- Leaving `waiting` closes the old card (`studio_steps_sync`); the new card keeps its captions from the clip.
-  update public.studio_steps
-  set status = 'running',
-      input = input || jsonb_build_object('mp4_task', p_mp4_task, 'stills_task', p_stills_task),
-      card = p_card
-  where id = v_step.id;
-  perform public.studio_slideshow_settle(v_step.id);
-  return v_step.id;
-end;
-$$;
-
-
---
--- Name: studio_slideshow_settle(uuid); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.studio_slideshow_settle(p_step uuid) RETURNS void
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public'
-    AS $$
-declare
-  v_step public.studio_steps;
-  v_mp4 public.tasks;
-  v_stills public.tasks;
-  v_hash text;
-begin
-  select * into v_step from public.studio_steps where id = p_step and kind = 'slideshow' and status = 'running' for update;
-  if not found then
-    return;
-  end if;
-  select * into v_mp4 from public.tasks where id = (v_step.input->>'mp4_task')::uuid;
-  select * into v_stills from public.tasks where id = (v_step.input->>'stills_task')::uuid;
-  if v_mp4.status in ('failed', 'cancelled') or v_stills.status in ('failed', 'cancelled') then
-    update public.studio_steps set status = 'failed',
-      error = left(coalesce(nullif(case when v_mp4.status in ('failed', 'cancelled') then v_mp4.error else v_stills.error end, ''),
-        'The slideshow render failed.'), 500)
-    where id = v_step.id;
-    if v_step.order_id is not null then
-      perform public.work_order_move(v_step.order_id, 'failed', null, jsonb_build_object('code', 'render_failed',
-        'message', left(coalesce(nullif(case when v_mp4.status in ('failed', 'cancelled') then v_mp4.error else v_stills.error end, ''),
-          'The slideshow render failed.'), 200), 'retryable', true));
-    end if;
-    return;
-  end if;
-  if v_mp4.status <> 'done' or v_stills.status <> 'done' then
-    return;
-  end if;
-  select public.editor_document_hash(document) into v_hash from public.editor_projects where clip_id = v_step.clip_id;
-  if v_mp4.settings_hash is distinct from v_hash or v_stills.settings_hash is distinct from v_hash then
-    update public.studio_steps set status = 'failed', error = 'The slideshow changed while it was rendering.' where id = v_step.id;
-    if v_step.order_id is not null then
-      perform public.work_order_move(v_step.order_id, 'failed', null, jsonb_build_object('code', 'document_changed',
-        'message', 'The slideshow changed while it was rendering.', 'retryable', true));
-    end if;
-    return;
-  end if;
-  -- P6 S4: the look check reads the MP4 first; `look_check_raise` turns the step `waiting` when it is done.
-  if public.look_check_begin(v_step.user_id, 'studio_step', v_step.id, v_step.order_id, v_hash,
-      jsonb_build_array(jsonb_build_object('path', v_mp4.output_path, 'clip_id', v_step.clip_id))) then
-    return;
-  end if;
-  -- `studio_steps_sync` raises the card when the step turns `waiting`.
-  update public.studio_steps set status = 'waiting' where id = v_step.id;
-  if v_step.order_id is not null then
-    perform public.work_order_wait_founder(v_step.order_id, 'Your slideshow is rendered');
-  end if;
 end;
 $$;
 
@@ -20185,6 +19399,22 @@ CREATE TABLE public.generations (
 
 
 --
+-- Name: legacy_photo_posts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.legacy_photo_posts (
+    id uuid,
+    user_id uuid,
+    photos text[],
+    caption text,
+    platforms text[],
+    status text,
+    created_at timestamp with time zone,
+    updated_at timestamp with time zone
+);
+
+
+--
 -- Name: library_entries; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -21395,14 +20625,6 @@ ALTER TABLE ONLY public.page_captures
 
 
 --
--- Name: photo_posts photo_posts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.photo_posts
-    ADD CONSTRAINT photo_posts_pkey PRIMARY KEY (id);
-
-
---
 -- Name: post_metrics post_metrics_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -22501,13 +21723,6 @@ CREATE INDEX page_captures_user_recent_idx ON public.page_captures USING btree (
 
 
 --
--- Name: photo_posts_user_idx; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX photo_posts_user_idx ON public.photo_posts USING btree (user_id, created_at DESC);
-
-
---
 -- Name: post_metrics_item_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -23005,17 +22220,17 @@ CREATE TRIGGER content_items_paywall BEFORE INSERT OR UPDATE OF status ON public
 
 
 --
--- Name: content_items content_items_post_image; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER content_items_post_image AFTER UPDATE OF status ON public.content_items FOR EACH ROW EXECUTE FUNCTION public.content_items_post_image();
-
-
---
 -- Name: content_items content_items_post_proposal; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER content_items_post_proposal BEFORE INSERT OR UPDATE OF status, body, platform ON public.content_items FOR EACH ROW EXECUTE FUNCTION public.content_items_post_proposal();
+
+
+--
+-- Name: content_items content_items_quote_card_gone; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER content_items_quote_card_gone BEFORE UPDATE OF photos ON public.content_items FOR EACH ROW EXECUTE FUNCTION public.content_items_quote_card_gone();
 
 
 --
@@ -23177,13 +22392,6 @@ CREATE TRIGGER schedule_follow_deliverable AFTER INSERT OR UPDATE OF status ON p
 --
 
 CREATE TRIGGER schedule_slots_paywall BEFORE INSERT OR UPDATE OF status ON public.schedule_slots FOR EACH ROW EXECUTE FUNCTION public.paywall_on_send();
-
-
---
--- Name: studio_steps studio_slideshow_fresh; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER studio_slideshow_fresh BEFORE UPDATE OF status ON public.studio_steps FOR EACH ROW EXECUTE FUNCTION public.studio_slideshow_fresh();
 
 
 --
@@ -23991,14 +23199,6 @@ ALTER TABLE ONLY public.page_captures
 
 
 --
--- Name: photo_posts photo_posts_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.photo_posts
-    ADD CONSTRAINT photo_posts_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
-
-
---
 -- Name: post_metrics post_metrics_item_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -24681,6 +23881,12 @@ ALTER TABLE public.generations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.jobs ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: legacy_photo_posts; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.legacy_photo_posts ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: library_entries; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -24764,12 +23970,6 @@ ALTER TABLE public.orphan_scan_cursors ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.page_captures ENABLE ROW LEVEL SECURITY;
-
---
--- Name: photo_posts; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.photo_posts ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: post_metrics; Type: ROW SECURITY; Schema: public; Owner: -
@@ -24969,13 +24169,6 @@ CREATE POLICY "read own order usage" ON public.work_order_usage FOR SELECT TO au
 --
 
 CREATE POLICY "read own page captures" ON public.page_captures FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
-
-
---
--- Name: photo_posts read own photo posts; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "read own photo posts" ON public.photo_posts FOR SELECT TO authenticated USING ((user_id = ( SELECT auth.uid() AS uid)));
 
 
 --

@@ -147,8 +147,7 @@ export const SHORTS_CARD: ApprovalCard = {
         reason: "Opens on the pain every founder knows",
         previewUrl: null,
         captions: [
-          { id: "caption-1-tiktok", profile: "tiktok_caption", text: "Cut your demo by deleting words. #editing #buildinpublic", title: null },
-          { id: "caption-1-instagram", profile: "instagram_caption", text: "Your transcript is the timeline: delete a word and the cut follows. #videoediting #saas #founders", title: null },
+          { id: "caption-1-youtube", profile: "youtube", text: "Your transcript is the timeline: delete a word and the cut follows. #editing", title: "Cut your demo by deleting words" },
         ],
       },
       {
@@ -158,7 +157,7 @@ export const SHORTS_CARD: ApprovalCard = {
         hook: "B-roll on the line",
         reason: "Shows the slash command working",
         previewUrl: null,
-        captions: [{ id: "caption-2-tiktok", profile: "tiktok_caption", text: "Ask for B-roll on the exact line you mean. #editing", title: null }],
+        captions: [{ id: "caption-2-youtube", profile: "youtube", text: "Ask for B-roll on the exact line you mean. #editing", title: "B-roll on the line you mean" }],
       },
       { shortClipId: "short-sample-3", start: 38, end: 60, hook: "Edit by asking", reason: "Ends on the strongest demo moment", previewUrl: null, captions: [] },
     ],

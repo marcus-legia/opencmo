@@ -7,14 +7,7 @@
  */
 import assert from "node:assert/strict";
 
-import { toPlanItems } from "./plan-week";
-import { defaultPostingPlan } from "../posting-plan";
 import { briefOf } from "./studio-orders";
-
-const video = (idea: string) => ({ day_offset: 1, department: "video" as const, platform: "Shorts", idea, reason: "why" });
-const post = { day_offset: 0, department: "post" as const, platform: "X", idea: "A post", reason: "why" };
-
-assert.equal(toPlanItems({ items: [post, video("a"), video("b")] }, defaultPostingPlan([])).filter((i) => i.department === "video").length, 1, "one script a week; SQL orders its brief, never a video (owner, 2026-11-09)");
 
 const order = (brief: Record<string, unknown>) => ({ id: "o", user_id: "u", kind: "build_video", brief });
 const b = briefOf(order({ objective: "How the CMO plans a week", angle: "Launch week", seconds: 45, aspect: "16:9" }));
@@ -30,4 +23,4 @@ assert.deepEqual([w.hooks, w.keyPoints, w.cta, w.seconds], [["Cut by words.", "N
   "Writer's hooks, key points and call to action reach the Director");
 assert.equal(briefOf(order({ objective: "A plan item" })).cta, "", "a plan item alone has no call to action");
 
-console.log("studio-orders.check: no AI video in a plan, brief ok");
+console.log("studio-orders.check: brief ok");

@@ -82,13 +82,8 @@ async function main() {
   assert.deepEqual(toPlanItems({ items: [post(0, "Anything")] }, plan({ threads: 1 }), { today, docs }).map((p) => [p.platform, p.targets]).slice(0, 1), [["Threads", ["threads"]]], "the label is the first target's");
   assert.deepEqual(toPlanItems({ items: [post(0, "Anything", 0)] }, plan({}), { today, docs }), [], "a plan with every count at 0 writes no post");
 
-  // Video: the plan's scripts a week per platform, on the model's days; a slideshow is no longer planned (D7).
-  const video = (day_offset: number, platform: string, idea: string) => ({ day_offset, department: "video" as const, platform, idea, reason: "r" });
-  const scripts = toPlanItems({ items: [video(2, "TikTok", "Demo"), video(3, "Slideshow", "Five cuts"), video(4, "Reels", "Not asked for")] }, plan({}, { tiktok: 2 }), { today, docs });
-  assert.deepEqual(scripts.map((p) => `${p.platform} ${p.day.slice(8)}`), ["TikTok 07", "TikTok 05"], "two TikTok scripts; the missing one is filled");
-  assert.ok(!scripts.some((p) => p.platform === "Slideshow"), "no slideshow");
-  assert.deepEqual(toPlanItems({ items: [video(1, "Shorts", "a"), video(2, "TikTok", "b")] }, plan({}), { today, docs }).map((p) => p.platform), ["Shorts"],
-    "with no video in the plan, at most one script the week's brief asked for");
+  // Wave 4b: video is not planned; an item the model still writes for it is dropped.
+  assert.deepEqual(toPlanItems({ items: [{ day_offset: 2, department: "video", platform: "TikTok", idea: "Demo", reason: "r" } as never] }, plan({}), { today, docs }), [], "no video item");
 
   // C3: at most two posts a week get an image; never another kind of item.
   const pictured = toPlanItems({ items: [
@@ -137,7 +132,7 @@ async function main() {
     briefed.enqueue("plan_week", { brief: "a week about our launch" });
     await drainCmoQueue(briefed.store);
     assert.ok(briefed.items.some((i) => i.department === "post"), "a brief from the chat still plans posts");
-    assert.equal(followed.items.filter((i) => i.department === "video" && i.platform === "TikTok").length, 2, "two TikTok scripts");
+    assert.equal(followed.items.filter((i) => i.department === "video").length, 0, "no video item, even with videos in an old posting plan");
     assert.ok(!followed.items.some((i) => i.platform === "Slideshow"), "no slideshow");
     const silent = memoryStore(docs);
     silent.posting.plan = plan({});
