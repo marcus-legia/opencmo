@@ -79,3 +79,9 @@ export type LibrarySaveItem = z.infer<typeof LibrarySaveItemSchema>;
 
 /** A theme the week plan and post drafts write from (`cmo_library_top_themes`): recent entries only, newest first. */
 export type LibraryTopTheme = { id: string; name: string; count: number; entries: Omit<LibraryEntry, "themeId">[] };
+
+/** What "Make a quote card" offers (wave 4b): the quotes of the post's sources, and the card the post carries. */
+export type QuoteCardChoices = {
+  quotes: { entryId: string; community: string; text: string }[];
+  current: { entryId: string; quote: string; object: string } | null;
+};
