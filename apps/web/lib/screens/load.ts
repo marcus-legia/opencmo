@@ -1060,15 +1060,13 @@ async function writer({ supabase }: LoadContext): Promise<Partial<WriterScreen>>
       };
       const columns = "id, day, idea, platform, status, body, final_text, published_at, clip_id";
       const statuses = ["planned", "drafting", "in_review", "approved", "published"];
-      const [posts, captions, briefs, cards, videoCards, batchCards, shorts, scriptCards, slotTimes, videoSlots, slotCards] = await Promise.all([
+      const [posts, captions, cards, videoCards, batchCards, shorts, slotTimes, videoSlots, slotCards] = await Promise.all([
         supabase.from("content_items").select(columns).eq("department", "post").in("status", statuses).gte("day", since).order("day").limit(100),
         supabase.from("content_items").select(columns).eq("department", "video").not("clip_id", "is", null).in("status", statuses).gte("day", since).order("day").limit(60),
-        supabase.from("work_orders").select("id, status, brief, due_at, created_at").eq("kind", "write_video_brief").in("status", ["queued", "running", "deferred", "done"]).gte("created_at", `${since}T00:00:00Z`).order("created_at").limit(20),
         liveByRef(supabase, "content_item"),
         liveByRef(supabase, "editor_project"),
         liveByRef(supabase, "short_batch"),
         supabase.from("shorts").select("short_clip_id, batch_id").not("short_clip_id", "is", null).gte("created_at", `${since}T00:00:00Z`).limit(200),
-        supabase.from("approvals").select("id, ref_id, status").eq("ref_kind", "work_order").eq("kind", "script").gte("created_at", `${since}T00:00:00Z`).limit(40),
         // The time an approved post goes out: its slot's, not only the day the plan gave it.
         supabase.from("schedule_slots").select("publish_at, deliverable:deliverables(ref_kind, ref_id)").in("status", ["waiting", "due", "publishing", "reminded"]).gte("publish_at", `${since}T00:00:00Z`).order("publish_at").limit(200),
         // A video goes out one card per platform (owner, 2026-11-13): each caption's row follows its platform's slot.
@@ -1167,39 +1165,7 @@ async function writer({ supabase }: LoadContext): Promise<Partial<WriterScreen>>
           text: null,
         };
       });
-      // A script the founder records (2026-11-09): its card while it waits, then "Open in editor" once approved.
-      // A script can have older cards (a refreshed card cancels the one before): the live one, else the decision, wins.
-      const rank = (status: string) => (status === "waiting" || status === "held" ? 2 : status === "approved" || status === "edited" ? 1 : 0);
-      const scriptCard = new Map<string, { id: string; ref_id: string; status: string }>();
-      for (const c of must(scriptCards, "approvals") as { id: string; ref_id: string; status: string }[]) {
-        const seen = scriptCard.get(c.ref_id);
-        if (!seen || rank(c.status) > rank(seen.status)) scriptCard.set(c.ref_id, c);
-      }
-      const briefDrafts = (must(briefs, "work_orders") as { id: string; status: string; brief: { objective?: string; platform?: string; storyboard?: unknown }; due_at: string | null; created_at: string }[]).map((o) => {
-        const card = Array.isArray(o.brief.storyboard) ? scriptCard.get(o.id) : undefined;
-        const waiting = card?.status === "waiting" || card?.status === "held";
-        const approved = card?.status === "approved" || card?.status === "edited";
-        return {
-          id: o.id,
-          kind: "video_brief" as const,
-          platform: screenPlatform(o.brief.platform, "youtube"),
-          at: null,
-          dayText: dayText((o.due_at ?? o.created_at).slice(0, 10)),
-          day: (o.due_at ?? o.created_at).slice(0, 10),
-          title: (typeof o.brief.objective === "string" && o.brief.objective ? o.brief.objective : "This week's video").slice(0, 300),
-          // An approved script is the founder's next video to record, not something posted.
-          column: waiting ? ("waiting" as const) : approved ? ("scheduled" as const) : o.status === "done" ? ("posted" as const) : ("drafting" as const),
-          versions: 1,
-          note: card ? (waiting ? "Your script" : approved ? "Approved: you record it" : card.status === "skipped" ? "You skipped it" : "Dropped from the plan") : o.status === "done" ? "Fed the Studio team" : null,
-          approvalId: card?.status === "waiting" ? card.id : null,
-          cardState: card?.status === "waiting" ? ("waiting" as const) : card?.status === "held" ? ("held" as const) : null,
-          heldUntil: null,
-          ref: card?.status === "held" ? { kind: "work_order" as const, id: o.id } : null,
-          text: null,
-          scriptId: approved ? o.id : null,
-        };
-      });
-      return [...postDrafts, ...captionDrafts, ...briefDrafts];
+      return [...postDrafts, ...captionDrafts];
     },
     // What Writer reads first: the rules the founder approved, then their heaviest voice notes; the product rule.
     voice: async () => {

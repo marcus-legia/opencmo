@@ -9,7 +9,6 @@ import { NewMenu } from "@/components/editor/slides/NewMenu";
 import { Icon } from "@/components/icons";
 import { useShellState } from "@/components/shell-v2/ShellState";
 import { Button, ButtonLink, EmptyState, SampleTag, Tabs } from "@/components/ui";
-import type { ApprovedScript } from "@/app/api/v1/cmo/scripts/route";
 import type { Project } from "@/lib/clipping-types";
 import { STUDIO_KINDS, type StudioScreen as Data, type TeamStep } from "@/lib/screens/studio";
 
@@ -191,7 +190,6 @@ export function StudioScreen() {
         </Link>
       </div>
 
-      <ScriptsToFilm />
 
       {(error || projects.error) ? <p className="meta" role="alert">{error ?? projects.error}</p> : null}
       {sampleItems && cards.some((c) => !c.project) ? <p className="meta">Generated videos, shorts and slides below are sample data; your uploads are real.</p> : null}
@@ -300,68 +298,3 @@ export function TeamSteps({ steps, compact = false }: { steps: TeamStep[]; compa
   );
 }
 
-/**
- * Scripts the founder approved in Writer and still has to film (canvas Projects.dc.html): the founder makes the videos,
- * so the editor's home starts with what to record. Nothing shows when there is none.
- */
-function ScriptsToFilm() {
-  const [scripts, setScripts] = useState<ApprovedScript[]>([]);
-  useEffect(() => {
-    let alive = true;
-    // A small list of its own: Studio does not load Writer's whole screen for it. No list rather than an error here.
-    void api<{ scripts: ApprovedScript[] }>("/cmo/scripts")
-      .then((r) => alive && setScripts(r.scripts))
-      .catch(() => {});
-    return () => {
-      alive = false;
-    };
-  }, []);
-  if (scripts.length === 0) return null;
-  return (
-    <>
-      <div className="sec">
-        <h2>Scripts to film</h2>
-        <span className="meta">approved in Writer</span>
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "28px" }}>
-        {scripts.map((d) => {
-          const total = d.beats.reduce((sum, b) => sum + b.seconds, 0);
-          const camera = d.beats.filter((b) => b.shot === "talking_head").length;
-          return (
-            <div key={d.id} className="script">
-              <span className="st">
-                <svg className="i" viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5" />
-                  <rect x="2" y="6" width="14" height="12" rx="2" />
-                </svg>
-              </span>
-              <div style={{ flex: "1 1 280px", minWidth: "0" }}>
-                <div style={{ fontWeight: "500", fontSize: "14.5px" }}>{d.title}</div>
-                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "4px" }}>
-                  <div className="beatbar" aria-hidden="true">
-                    {d.beats.map((b, i) => (
-                      <i key={i} style={{ width: `${Math.max(8, Math.round(b.seconds * 2.2))}px` }}></i>
-                    ))}
-                  </div>
-                  <span className="meta">
-                    {d.beats.length} beats · {total} s · {camera === d.beats.length ? "all to camera" : `${camera} to camera, ${d.beats.length - camera} screen`}
-                  </span>
-                </div>
-              </div>
-              <Link href={`/app/script/${encodeURIComponent(d.id)}/prompter`} className="ghost" style={{ textDecoration: "none" }}>
-                <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
-                  <rect width="14" height="20" x="5" y="2" rx="2" ry="2" />
-                  <path d="M12 18h.01" />
-                </svg>
-                Read on your phone
-              </Link>
-              <Link href="/app/editor?panel=upload" className="primary" style={{ textDecoration: "none" }}>
-                Upload the take
-              </Link>
-            </div>
-          );
-        })}
-      </div>
-    </>
-  );
-}

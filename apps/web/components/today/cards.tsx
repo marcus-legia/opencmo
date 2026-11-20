@@ -83,13 +83,6 @@ export const KIND_ICON: Record<CardKind, ReactNode> = {
       <path d="M14.8 14.8 20 20" />
     </svg>
   ),
-  slideshow: (
-    <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
-      <rect width="18" height="18" x="3" y="3" rx="2" />
-      <path d="M3 9h18" />
-      <path d="M9 21V9" />
-    </svg>
-  ),
   schedule: (
     <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
       <rect width="18" height="18" x="3" y="4" rx="2" />
@@ -139,8 +132,6 @@ export function kindLabel(card: Card): string {
       return "Finished video";
     case "shorts_batch":
       return "Shorts";
-    case "slideshow":
-      return "Slideshow";
     case "schedule":
       return platform ? `${platform} · time` : "Time";
     case "correction":

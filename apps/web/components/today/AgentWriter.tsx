@@ -6,7 +6,6 @@ import { useState } from "react";
 import { AllowanceBanner, FreeLockedCard, useUsageState } from "@/components/billing/UsageNotice";
 import { ApprovalCard } from "@/components/cards/ApprovalCard";
 import { ApiError, api, jsonBody } from "@/components/clipping/api";
-import { openScript } from "@/components/cards/open-script";
 import { fillChat } from "@/components/dashboard/TodayBlock";
 import { useShellState } from "@/components/shell-v2/ShellState";
 import { useScreen } from "@/components/screens/useScreen";
@@ -25,7 +24,7 @@ import { dayLabel, draftsLeftOver, draftsThisWeek } from "./week";
 type Draft = WriterScreen["drafts"][number];
 type Tab = "week" | "drafts" | "voice";
 
-const KIND_LABEL: Record<Draft["kind"], string> = { post: "post", caption: "Caption", video_brief: "Script · you film", slide_text: "Slideshow" };
+const KIND_LABEL: Record<Draft["kind"], string> = { post: "post", caption: "Caption" };
 const BADGE: Record<Draft["column"], [string, string]> = { planned: ["Planned", "badge b-plan"], waiting: ["Waiting", "badge b-wait"], drafting: ["Drafting", "badge b-new"], scheduled: ["Scheduled", "badge b-ok"], posted: ["Posted", "badge b-ok"] };
 const ASK_KINDS = [
   { id: "post", label: "X post", prompt: "Write an X post" },
@@ -40,7 +39,7 @@ const when = (d: Draft) => {
 const badgeOf = (d: Draft): [string, string] =>
   d.column === "waiting" && d.cardState === "held" ? ["Held", "badge b-plan"] : d.column === "waiting" && d.cardState === "missing" ? ["No card", "badge b-plan"] : BADGE[d.column];
 const kindOf = (d: Draft) => (d.kind === "post" ? `${PLATFORM_LABEL[d.platform]} post` : KIND_LABEL[d.kind]);
-const iconOf = (d: Draft) => (d.kind === "video_brief" ? KIND_ICON.script : d.kind === "slide_text" ? KIND_ICON.slideshow : d.kind === "caption" ? KIND_ICON.price : (PLATFORM_ICON[d.platform] ?? KIND_ICON.post));
+const iconOf = (d: Draft) => (d.kind === "caption" ? KIND_ICON.price : (PLATFORM_ICON[d.platform] ?? KIND_ICON.post));
 
 /**
  * The Writer agent page (AgentWriter.dc.html). Asking for a post goes through the CMO chat, which shows its price card
@@ -141,7 +140,7 @@ export function AgentWriter() {
   const renderRow = (d: Draft) => {
     const card = d.approvalId ? queue.find((c) => c.id === d.approvalId) : undefined;
     // A waiting draft always opens: its card, or (held, lost, or not loaded yet) its words and "Show it now".
-    const opens = Boolean(card) || Boolean(d.scriptId) || d.column === "waiting";
+    const opens = Boolean(card) || d.column === "waiting";
     const badge = badgeOf(d);
     const isOpen = opens && firstOpen === d.id;
     return (
@@ -170,7 +169,7 @@ export function AgentWriter() {
             {d.sources?.length ? <SourceList sources={d.sources} /> : null}
           </div>
         ) : null}
-        {isOpen && !card && !d.scriptId && d.column === "waiting" ? (
+        {isOpen && !card && d.column === "waiting" ? (
           <div className="detail" data-testid="writer-show-now">
             {d.text ? <p className="post">{d.text}</p> : null}
             {d.sources?.length ? <SourceList sources={d.sources} /> : null}
@@ -190,24 +189,6 @@ export function AgentWriter() {
                 </button>
               </div>
             ) : null}
-          </div>
-        ) : null}
-        {isOpen && !card && d.scriptId ? (
-          <div className="detail">
-            <div className="meta">{d.note ?? "Approved: you record it."} Film it, then upload the take in the editor.</div>
-            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
-              <Link href={`/app/script/${encodeURIComponent(d.scriptId)}/prompter`} className="ghost" style={{ textDecoration: "none" }}>
-                <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
-                  <rect width="14" height="20" x="5" y="2" rx="2" ry="2" />
-                  <path d="M12 18h.01" />
-                </svg>
-                Read on your phone
-              </Link>
-              <div style={{ flex: "1 1 auto" }}></div>
-              <button type="button" className="primary" onClick={() => void openScript(d.scriptId!)}>
-                Open in editor
-              </button>
-            </div>
           </div>
         ) : null}
       </div>

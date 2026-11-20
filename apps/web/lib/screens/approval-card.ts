@@ -22,7 +22,6 @@ export const CARD_KINDS = [
   "price",
   "finished_video",
   "shorts_batch",
-  "slideshow",
   "schedule",
   "correction",
   "plan",
@@ -203,36 +202,10 @@ export const PriceSnapshotSchema = z.object({
   price_credits: z.number().int().min(0),
 });
 
-/** One slide on a slideshow card: its text layer, its still (PNG) once rendered, and how long it shows. */
 /** What `approval_snapshot` (SQL, 20270101100000) adds when the look check still found a problem on this render. */
 export const LookSnapshotSchema = z.object({ pass: z.literal(false), round: z.number().int().min(0).max(1), note: z.string().max(200) });
 
-export const SlideSnapshotSchema = z.object({
-  text: z.string().max(300),
-  /** `exports` bucket path of the slide's PNG from `render_stills`; null until the stills are rendered. */
-  still_path: z.string().max(500).nullable(),
-  seconds: z.number().positive(),
-});
 
-/**
- * The slideshow card (P5 S3, `studio_steps.kind = 'slideshow'`): the slides as built, the MP4 (`render_document`) and
- * the PNG set (`render_stills`, zipped) of this exact document. `document_hash` is read live from the edit, so any
- * change in the Slides view supersedes the card.
- */
-export const SlideshowSnapshotSchema = z.object({
-  kind: z.literal("slideshow"),
-  step_id: z.string(),
-  clip_id: z.string(),
-  title: z.string().max(200),
-  aspect: z.enum(["9:16", "16:9", "1:1"]).nullable(),
-  slides: z.array(SlideSnapshotSchema).min(1).max(20),
-  document_hash: sha256.nullable(),
-  mp4_path: z.string().max(500).nullable(),
-  png_set_path: z.string().max(500).nullable(),
-  /** P5 A3: captions per platform, ordered when the card is raised and approved with it, as a finished video's. */
-  captions: z.array(CaptionSnapshotSchema).max(12).optional(),
-  look: LookSnapshotSchema.optional(),
-});
 
 /** Card 3: the render of the edit as it is now (`ref_kind = 'editor_project'`, `ref_id` = clip id). */
 export const FinishedVideoSnapshotSchema = z.object({
@@ -279,7 +252,6 @@ export const StudioSnapshotSchema = z.discriminatedUnion("kind", [
   PriceSnapshotSchema,
   FinishedVideoSnapshotSchema,
   ShortsBatchSnapshotSchema,
-  SlideshowSnapshotSchema,
 ]);
 export type StudioSnapshot = z.infer<typeof StudioSnapshotSchema>;
 
@@ -289,7 +261,6 @@ export const STUDIO_REF_KIND = {
   price: "studio_step",
   finished_video: "editor_project",
   shorts_batch: "short_batch",
-  slideshow: "studio_step",
 } as const;
 
 const ScriptBody = z.object({
@@ -300,13 +271,6 @@ const ScriptBody = z.object({
   beats: z.array(StoryBeatSchema).min(1),
   /** Price of the next stage (keyframes), shown before anything is spent. */
   nextPriceCredits: z.number().int().min(0).nullable(),
-  /** A script the founder records (owner, 2026-11-09): free, and approving it opens the editor. `stepId` is its order. */
-  forFounder: z.boolean().default(false),
-  /**
-   * The caption written with the script, read from its order when the card loads (`schedule-enrich.ts`): the founder
-   * posts it with the video they record. Not part of what the card approves; the editor's Script tab has it too.
-   */
-  caption: z.string().max(2200).optional(),
 });
 
 const PriceBody = z.object({
@@ -373,27 +337,6 @@ const ShortsBatchBody = z.object({
   lookNote: z.string().max(200).optional(),
 });
 
-const SlideshowBody = z.object({
-  kind: z.literal("slideshow"),
-  stepId: z.string(),
-  clipId: z.string(),
-  /** Sent back with the decision: an edit in the Slides view after the card was raised refuses it. */
-  documentHash: sha256.nullable(),
-  aspect: z.enum(["9:16", "16:9", "1:1"]).nullable(),
-  /** Quick text edits per slide happen on the card; "Open in Slides" opens `clipId` in the Slides view. */
-  slides: z
-    .array(z.object({ text: z.string().max(300), stillUrl: z.url().nullable(), seconds: z.number().positive() }))
-    .min(1)
-    .max(20),
-  /** Signed URLs; null until rendered. */
-  previewUrl: z.url().nullable(),
-  pngSetUrl: z.url().nullable(),
-  /** P5 A3: one per platform it will be posted to, editable before approving (`edit_caption`), as on a finished video. */
-  captions: z.array(CaptionSchema).max(12).optional(),
-  // --- look-note field (P6, owner A) ---
-  /** P6 S4: what the look check still found after one send-back (`snapshot.look.note`); absent when it passed or did not run. */
-  lookNote: z.string().max(200).optional(),
-});
 
 /**
  * The platform's own fields on a schedule card (P4 F4), stored on the slot (`schedule_slots.options`) and part of what
@@ -426,7 +369,7 @@ export const ScheduleSnapshotSchema = z.object({
   kind: z.literal("schedule"),
   slot_id: z.string(),
   deliverable_id: z.string(),
-  deliverable_kind: z.enum(["post", "video", "short", "slideshow", "photo_post"]),
+  deliverable_kind: z.enum(["post", "video", "short"]),
   platform: PlatformSchema.exclude(["reddit"]),
   /** `intent`: no connected account for the platform, so the founder copies and opens it themselves. */
   mode: z.enum(["publish", "intent"]),
@@ -562,7 +505,6 @@ export const CardBodySchema = z.discriminatedUnion("kind", [
   PriceBody,
   FinishedVideoBody,
   ShortsBatchBody,
-  SlideshowBody,
   ScheduleBody,
   CorrectionBody,
   PlanBody,
@@ -608,7 +550,6 @@ export const PRIMARY_ACTION: Record<CardKind, string> = {
   price: "Approve price",
   finished_video: "Approve: finished",
   shorts_batch: "Approve batch",
-  slideshow: "Approve",
   schedule: "Approve time",
   correction: "Keep as a rule",
   plan: "Approve week",
@@ -641,7 +582,6 @@ export const DECIDABLE_IN_WAVE_1: ReadonlySet<CardKind> = new Set([
   "price",
   "finished_video",
   "shorts_batch",
-  "slideshow",
   "schedule",
   "plan",
 ]);

@@ -9,7 +9,7 @@ import { SALES_PLATFORMS } from "../cmo/social/conversations";
 
 import { PlatformSchema, iso } from "./common";
 
-export const WRITER_KINDS = ["post", "caption", "video_brief", "slide_text"] as const;
+export const WRITER_KINDS = ["post", "caption"] as const;
 export const WRITER_COLUMNS = ["planned", "drafting", "waiting", "scheduled", "posted"] as const;
 /** Where a waiting draft's card is: in the queue, held past the day's card budget, or gone (its post still in review). */
 export const CARD_STATES = ["waiting", "held", "missing"] as const;
@@ -38,8 +38,6 @@ export const DraftSchema = z.object({
   /** "You edited 2 lines · results tomorrow", "Approved as drafted". */
   note: z.string().max(120).nullable(),
   approvalId: z.string().nullable(),
-  /** An approved script the founder records (2026-11-09): its order, which "Open in editor" opens. */
-  scriptId: z.string().nullable().optional(),
   /** Set on a waiting draft only: a held or missing card is not in the queue, so the row offers "Show it now". */
   cardState: z.enum(CARD_STATES).nullable().optional(),
   /** When a held card comes in on its own. */

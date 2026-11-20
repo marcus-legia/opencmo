@@ -214,11 +214,6 @@ export const VideoBriefDraftSchema = z.object({
 });
 export type VideoBriefDraft = z.infer<typeof VideoBriefDraftSchema>;
 
-export const SlideSchema = z.object({
-  heading: z.string().describe("A few words, one idea"),
-  body: z.string().describe("One or two short lines; empty when the heading says it all"),
-});
-export type Slide = z.infer<typeof SlideSchema>;
 
 
 export type WriterOutputs = {

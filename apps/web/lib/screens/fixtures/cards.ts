@@ -319,7 +319,6 @@ export const SCRIPT_CARD: ApprovalCard = {
       { words: "Ask for B-roll.", picture: "Slash command, shot drops in.", motion: null },
     ],
     nextPriceCredits: 6,
-    forFounder: false,
   },
 };
 
@@ -349,29 +348,6 @@ export const FINISHED_CARD: ApprovalCard = {
   },
 };
 
-export const SLIDESHOW_CARD: ApprovalCard = {
-  ...base,
-  id: "card-slideshow",
-  kind: "slideshow",
-  department: "studio",
-  title: "3 ways to cut a demo · 6 slides",
-  summary: "MP4 and a PNG set, ready for Threads and LinkedIn.",
-  meta: "MP4 + PNG",
-  body: {
-    kind: "slideshow",
-    stepId: "step-slideshow",
-    clipId: "clip-slideshow",
-    documentHash: "b".repeat(64),
-    aspect: "9:16",
-    slides: [
-      { text: "3 ways to cut a demo", stillUrl: null, seconds: 3 },
-      { text: "1. Cut by words", stillUrl: null, seconds: 3 },
-      { text: "2. Ask for B-roll", stillUrl: null, seconds: 3 },
-    ],
-    previewUrl: "https://example.com/slideshow.mp4",
-    pngSetUrl: "https://example.com/slideshow.zip",
-  },
-};
 
 export const CORRECTION_CARD: ApprovalCard = {
   ...base,
@@ -478,7 +454,6 @@ export const ALL_KINDS: ApprovalCard[] = [
   PRICE_CARD,
   FINISHED_CARD,
   SHORTS_CARD,
-  SLIDESHOW_CARD,
   SCHEDULE_CARD,
   CORRECTION_CARD,
   PLAN_CARD,
@@ -535,21 +510,6 @@ export const STUDIO_SNAPSHOTS: StudioSnapshot[] = [
       { short_id: "s1", short_clip_id: "short-sample-1", start: 0, end: 22, hook: "Cut by words", reason: "Opens on the pain every founder knows" },
       { short_id: "s2", short_clip_id: null, start: 18, end: 41, hook: "B-roll on the line", reason: "Shows the slash command working" },
     ],
-  },
-  // As `approval_snapshot('studio_step', …)` writes a slideshow step (P5 A0; pgTAP 221 makes the same).
-  {
-    kind: "slideshow",
-    step_id: "e2213000-0000-4000-8000-00000000000a",
-    clip_id: "clip-slideshow",
-    title: "Launch",
-    aspect: "9:16",
-    slides: [
-      { text: "Cut by words", still_path: null, seconds: 3 },
-      { text: "Ask for B-roll", still_path: "u/clip-slideshow/task-01.png", seconds: 3 },
-    ],
-    document_hash: "2".repeat(64),
-    mp4_path: null,
-    png_set_path: null,
   },
 ];
 

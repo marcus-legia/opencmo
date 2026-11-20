@@ -12,7 +12,6 @@ import { THREADS_LIMIT, X_FREE_LIMIT, chainFor, xLength } from "@/lib/department
 
 import { CaptionList, charCount, type SaveCaption } from "./captions";
 import { PhotoStrip } from "./post-photos";
-import { joinSlideText, slideTextProblem, splitSlideText } from "./slides";
 import { formatSeconds } from "./labels";
 import { AI_LABEL_PLATFORMS, PRIVACY_LABEL, TIKTOK_MUSIC_TERMS, formatWhen } from "./schedule";
 
@@ -382,28 +381,10 @@ export function ScriptBody({
         {body.aspect ? <span>{body.aspect}</span> : null}
         {body.nextPriceCredits !== null ? <span>Whole video: {body.nextPriceCredits} credits</span> : null}
       </div>
-      {body.caption ? <CopyCaption caption={body.caption} /> : null}
     </>
   );
 }
 
-/** The caption written with a script: shown under it with Copy, for the day the founder posts the video. */
-function CopyCaption({ caption }: { caption: string }) {
-  const [copied, setCopied] = useState<boolean | null>(null);
-  const copy = async () => setCopied(navigator.clipboard ? await navigator.clipboard.writeText(caption).then(() => true, () => false) : false);
-  return (
-    <div className="v2-card-caption" data-testid="script-caption">
-      <div className="v2-card-caption-head">
-        <b>Caption to post with the video</b>
-        <Button variant="quiet" compact onClick={() => void copy()}>
-          {copied ? "Copied" : "Copy"}
-        </Button>
-      </div>
-      <p className="v2-card-text">{caption}</p>
-      {copied === false ? <p className="v2-muted">Copy did not work here. Select the caption and copy it yourself.</p> : null}
-    </div>
-  );
-}
 
 export function PriceBody({ body, price }: { body: Body<"price">; price: number | null }) {
   return (
@@ -491,127 +472,6 @@ export function ShortsBody({ body, cardId, editable, onSaveCaption }: { body: Bo
           onSave={onSaveCaption}
         />
       ))}
-    </>
-  );
-}
-
-/** Saves one slide's words; resolves false when the save was refused (the reason is toasted). */
-export type SaveSlide = (index: number, heading: string, body: string) => Promise<boolean>;
-
-/**
- * Slideshow: every slide as rendered (its PNG, or its words until the stills exist), the MP4, the PNG set, and a quick
- * text edit per slide. `edited`: a slide's words were saved since the card was made, so the renders above are older.
- */
-export function SlideshowBody({
-  body,
-  cardId,
-  editable,
-  edited,
-  onSaveSlide,
-  onSaveCaption,
-}: {
-  body: Body<"slideshow">;
-  cardId: string;
-  /** null when the words may be changed now, else why not. */
-  editable: string | null;
-  edited: boolean;
-  onSaveSlide: SaveSlide;
-  onSaveCaption: SaveCaption;
-}) {
-  const [picked, setPicked] = useState<number | null>(null);
-  const [heading, setHeading] = useState("");
-  const [words, setWords] = useState("");
-  const [saving, setSaving] = useState(false);
-  const total = body.slides.reduce((sum, slide) => sum + slide.seconds, 0);
-  const problem = picked === null ? null : slideTextProblem(heading, words);
-  const unchanged = picked !== null && joinSlideText(heading, words) === body.slides[picked]?.text;
-
-  function pick(index: number) {
-    const parts = splitSlideText(body.slides[index]?.text ?? "");
-    setPicked(index);
-    setHeading(parts.heading);
-    setWords(parts.body);
-  }
-
-  return (
-    <>
-      <ol className="v2-card-slides is-strip" aria-label={`${body.slides.length} slides`} data-aspect={body.aspect ?? undefined}>
-        {body.slides.map((slide, index) => (
-          <li key={index} className={index === 0 ? "is-cover" : undefined} aria-current={picked === index || undefined}>
-            <button
-              type="button"
-              className="v2-card-slide"
-              aria-label={`Slide ${index + 1}, ${formatSeconds(slide.seconds)}: ${slide.text}. Edit its text`}
-              disabled={!!editable}
-              title={editable ?? undefined}
-              onClick={() => pick(index)}
-            >
-              {slide.stillUrl ? <img src={slide.stillUrl} alt="" loading="lazy" /> : <span>{slide.text}</span>}
-              <span className="v2-card-slide-n" aria-hidden="true">
-                {index + 1} · {formatSeconds(slide.seconds)}
-              </span>
-            </button>
-          </li>
-        ))}
-      </ol>
-      {body.previewUrl ? (
-        <div className={`v2-card-player${body.aspect === "9:16" ? " is-tall" : ""}`}>
-          <video src={body.previewUrl} controls preload="metadata" playsInline aria-label="Slideshow MP4 preview" />
-        </div>
-      ) : null}
-      <div className="v2-card-meta">
-        {/* The head already names the slide count and the formats. */}
-        {formatSeconds(total)} in all
-        {body.pngSetUrl ? (
-          <>
-            {" · "}
-            <a href={body.pngSetUrl} download data-testid="slideshow-png-set">
-              Download PNG set
-            </a>
-          </>
-        ) : null}
-      </div>
-      {edited ? (
-        <p className="v2-card-state is-expired" data-testid="slideshow-edited">
-          <b>Rendering again</b>
-          <span>The MP4 and PNGs above show the old words. A new card with your changes replaces this one when it is ready.</span>
-        </p>
-      ) : null}
-      {body.captions?.length ? (
-        <CaptionList captions={body.captions} idBase={`${cardId}-captions`} heading="Captions" editable={editable} onSave={onSaveCaption} />
-      ) : null}
-      {picked !== null ? (
-        <form
-          className="v2-card-decline"
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (problem || unchanged || saving) return;
-            setSaving(true);
-            void onSaveSlide(picked, heading, words).then((ok) => {
-              setSaving(false);
-              if (ok) setPicked(null);
-            });
-          }}
-        >
-          <label className="v2-field" htmlFor={`${cardId}-slide-heading`}>
-            Slide {picked + 1} heading
-            <input id={`${cardId}-slide-heading`} className="v2-input is-compact" value={heading} maxLength={200} autoFocus onChange={(event) => setHeading(event.target.value)} />
-          </label>
-          <label className="v2-field" htmlFor={`${cardId}-slide-body`}>
-            Slide {picked + 1} text under it (optional)
-            <textarea id={`${cardId}-slide-body`} className="v2-input" rows={2} value={words} maxLength={600} onChange={(event) => setWords(event.target.value)} />
-          </label>
-          {problem ? <p className="v2-card-meta" role="status">{problem}</p> : null}
-          <div className="v2-actions">
-            <Button type="submit" variant="primary" compact disabled={!!problem || unchanged || saving}>
-              Save slide {picked + 1}
-            </Button>
-            <Button variant="quiet" compact onClick={() => setPicked(null)}>
-              Keep it
-            </Button>
-          </div>
-        </form>
-      ) : null}
     </>
   );
 }

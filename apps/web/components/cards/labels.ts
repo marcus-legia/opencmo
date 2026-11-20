@@ -16,7 +16,6 @@ const KIND_LABEL: Record<ApprovalCard["kind"], string> = {
   price: "Price",
   finished_video: "Finished video",
   shorts_batch: "Shorts",
-  slideshow: "Slideshow",
   schedule: "Time",
   correction: "Correction",
   plan: "Week plan",
@@ -68,8 +67,6 @@ export function headNote(card: ApprovalCard, now = Date.now()): string | null {
       return formatSeconds(body.seconds);
     case "shorts_batch":
       return `${body.shorts.length} × 9:16`;
-    case "slideshow":
-      return `${body.slides.length} slides · ${[body.previewUrl && "MP4", body.pngSetUrl && "PNG"].filter(Boolean).join(" + ") || "rendering"}`;
     case "schedule":
       return card.expiresAt ? untilLabel(card.expiresAt, now) : null;
     case "correction":
@@ -97,8 +94,6 @@ export function approvedLine(card: ApprovalCard): string {
       return "You marked the video finished";
     case "shorts_batch":
       return `You approved ${body.shorts.length} shorts`;
-    case "slideshow":
-      return "You approved the slideshow";
     case "schedule":
       return "You approved the time";
     case "correction":
