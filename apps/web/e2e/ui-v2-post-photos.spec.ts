@@ -121,13 +121,15 @@ test("a quote card from the post's Library source is made, previewed, added as a
   await expect.poll(() => preview.evaluate((img: HTMLImageElement) => img.naturalWidth), { timeout: 30_000 }).toBe(1080);
   await maker.screenshot({ path: testInfo.outputPath("quote-card-maker.png") });
   await maker.getByTestId("quote-card-add").click();
-  await expect(card.getByRole("img", { name: "Photo 1" })).toBeVisible({ timeout: 30_000 });
   await expect
-    .poll(async () => ((await db.from("content_items").select("body").eq("id", itemId).single()).data?.body as { quote_card?: { quote?: string } }).quote_card?.quote)
+    .poll(async () => ((await db.from("content_items").select("body").eq("id", itemId).single()).data?.body as { quote_card?: { quote?: string } }).quote_card?.quote, { timeout: 30_000 })
     .toBe(quote);
+  // The photo raises the post's card again: find it afresh before looking at it.
+  const raised = await openFeedCard(page, "Post for 3 platforms");
+  await expect(raised.getByRole("img", { name: "Photo 1" })).toBeVisible({ timeout: 30_000 });
 
   // Removing the photo takes the quote card off the post.
-  await card.getByRole("button", { name: "Remove photo 1" }).click();
+  await raised.getByRole("button", { name: "Remove photo 1" }).click();
   await expect
     .poll(async () => "quote_card" in ((await db.from("content_items").select("body").eq("id", itemId).single()).data?.body as object))
     .toBe(false);
