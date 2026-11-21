@@ -1,3 +1,4 @@
+import { FirstTouch } from "@/components/FirstTouch";
 import { MarketingFooter } from "@/components/marketing/MarketingFooter";
 import { MarketingNav } from "@/components/marketing/MarketingNav";
 
@@ -8,6 +9,7 @@ import { MarketingNav } from "@/components/marketing/MarketingNav";
 export default function BlogLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="site">
+      <FirstTouch />
       <MarketingNav section="blog" />
       <div className="marketing blog">{children}</div>
       <MarketingFooter />
