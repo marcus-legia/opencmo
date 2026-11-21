@@ -322,7 +322,7 @@ function AccountPanel() {
                 {formatBytes(account.quota.storage.bytes)} / {formatBytes(account.quota.storage.limit)}
               </b>
             </span>
-            <a href="/app/billing">Credits and daily limits →</a>
+            <a href="/app/billing">Usage and limits →</a>
           </span>
         )}
       </div>

@@ -193,8 +193,8 @@ const MORE = (
   <>
     <Link href="/app/business">Your business</Link>
     <Link href="/app/research">Research: competitors</Link>
-    <Link href="/app?doc=plan">Plan and orders</Link>
-    <Link href="/app?doc=voice">Voice and skills</Link>
+    <Link href="/app?doc=plan">This week's plan</Link>
+    <Link href="/app?doc=voice">How you write</Link>
     <Link href="/app/settings">Settings</Link>
   </>
 );

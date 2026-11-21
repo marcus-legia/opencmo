@@ -38,7 +38,7 @@ test("Brain and the old Library tabs open as panes of the Context drawer over th
   await signIn(page, state().users.a);
   await page.setViewportSize({ width: 1440, height: 900 });
   for (const [from, to, title] of [
-    ["/app/brain", "/app?doc=plan", "Plan and orders"],
+    ["/app/brain", "/app?doc=plan", "This week's plan"],
     ["/app/brain?tab=memory", "/app?doc=learned", "What it learned"],
     ["/app/library?tab=business", "/app?doc=product", "Product"],
     ["/app/library?tab=voice", "/app?doc=voice", "Voice"],
@@ -54,9 +54,9 @@ test("Brain and the old Library tabs open as panes of the Context drawer over th
   // The drawer's own list reaches every pane without leaving the feed.
   await page.getByRole("dialog", { name: "Competitors" }).press("Escape");
   await page.goto("/app?doc=product");
-  await page.getByRole("button", { name: /^Plan and orders/ }).click();
+  await page.getByRole("button", { name: /^This week's plan/ }).click();
   await expect(page).toHaveURL(/\/app\?doc=plan$/);
-  await expect(page.getByRole("dialog", { name: "Plan and orders" })).toContainText("Orders");
+  await expect(page.getByRole("dialog", { name: "This week's plan" })).toContainText("Orders");
 });
 
 test("old project routes redirect to Studio", async ({ page }) => {

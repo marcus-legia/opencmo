@@ -176,7 +176,7 @@ export async function requireCredits(supabase: SupabaseClient, needed: number): 
   const { data, error } = await supabase.from("profiles").select("credit_balance").maybeSingle<{ credit_balance: number | null }>();
   if (error) throw error;
   const left = Number(data?.credit_balance ?? 0);
-  if (left < needed) throw new ApiError(409, `Not enough credits: ${needed} needed, ${left} left. Top up on the Credits page.`);
+  if (left < needed) throw new ApiError(409, `Not enough credits: ${needed} needed, ${left} left. Top up on the Billing page.`);
 }
 
 /**

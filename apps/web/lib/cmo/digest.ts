@@ -180,7 +180,7 @@ export function buildDigest(input: DigestInput): Digest {
           "",
         ]
       : []),
-    ...(postsLine ? ["POSTS", `${postsLine} ${posts.firstId ? card(posts.firstId) : `${base}/app/post`}`, ""] : []),
+    ...(postsLine ? ["POSTS", `${postsLine} ${posts.firstId ? card(posts.firstId) : `${base}/app/writer`}`, ""] : []),
     "--",
     ...footerLines,
     `Change when it comes: ${settingsUrl}`,
@@ -222,7 +222,7 @@ export function buildDigest(input: DigestInput): Digest {
           )
           .join("")
       : "",
-    postsLine ? h2("Posts") + `<p style="margin:0">${a(posts.firstId ? card(posts.firstId) : `${base}/app/post`, postsLine, "#2b2723")}</p>` : "",
+    postsLine ? h2("Posts") + `<p style="margin:0">${a(posts.firstId ? card(posts.firstId) : `${base}/app/writer`, postsLine, "#2b2723")}</p>` : "",
     `<p style="font:12px/1.5 Inter,sans-serif;color:${muted};margin-top:28px;border-top:1px solid #e3e1da;padding-top:12px">` +
       footerLines.map(escapeHtml).join(" ") +
       ` ${a(settingsUrl, "Change when it comes", muted)} · ${a(stopUrl, "Stop these emails", muted)} · ${a(`mailto:${SUPPORT}`, SUPPORT, muted)}</p>`,

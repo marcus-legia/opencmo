@@ -147,7 +147,7 @@ export function SetupScreen() {
       <div style={{ maxWidth: "1080px", margin: "0 auto", padding: "56px 24px 48px" }} data-testid="v2-setup">
         {params.get("paid") === "1" && (
           <p role="status" className="meta" data-testid="setup-paid" style={{ marginBottom: "16px" }}>
-            Payment received. Credits arrive within a minute.
+            Payment received. Your plan turns on within a minute.
           </p>
         )}
         {params.get("paid") === "pending" && (

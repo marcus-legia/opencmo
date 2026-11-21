@@ -30,6 +30,21 @@ test("AI CMO: lập lịch, soạn bài X, duyệt, đánh dấu đã đăng, qu
     const { error: insertError } = await admin.from("marketing_documents").insert({ user_id: userId, kind, version: 1, body, created_by: "agent" });
     if (insertError) throw new Error(insertError.message);
   }
+  // Wave 3 B3: the week's posts are written from the Library, and an empty one plans none. Two conversations under one
+  // theme give the planner something to write from.
+  const { data: theme, error: themeError } = await admin.from("library_themes").insert({ user_id: userId, name: "Late payments" }).select("id").single();
+  if (themeError || !theme) throw new Error(themeError?.message ?? "no theme");
+  for (const n of [1, 2]) {
+    const { data: opp, error: oppError } = await admin
+      .from("opportunities")
+      .insert({ user_id: userId, platform: "reddit", url: `https://www.reddit.com/r/freelance/comments/e2e${n}${Date.now()}/late/`, community: "freelance", title: "Clients pay late", score: 70, reply: "" })
+      .select("id")
+      .single();
+    if (oppError || !opp) throw new Error(oppError?.message ?? "no opportunity");
+    const { error: entryError } = await admin.from("library_entries").insert({ opportunity_id: opp.id, user_id: userId, theme_id: theme.id,
+      summary: "Clients pay invoices weeks late", quotes: [{ kind: "pain", text: "I chase every invoice three times." }], platform: "reddit", community: "r/freelance" });
+    if (entryError) throw new Error(entryError.message);
+  }
 
   await signIn(page, { email, password, id: userId });
   await page.setViewportSize({ width: 1600, height: 1000 });

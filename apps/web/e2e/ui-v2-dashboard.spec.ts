@@ -45,11 +45,11 @@ test("on the fixture, approving drops every count and empties the feed", async (
   await expect(waiting).toContainText("4");
   await expect(feed).toContainText("4 items need your attention today.");
 
-  // Dismissing asks for an optional reason before the card leaves.
+  // Not a fit asks for an optional reason before the card leaves.
   const reply = await openRow(page.getByTestId("approval-queue").locator('[data-card-id="card-reply"]'));
-  await reply.getByRole("button", { name: "Dismiss" }).click();
+  await reply.getByRole("button", { name: "Not a fit" }).click();
   await reply.getByLabel(/Why\?/).fill("Not my audience");
-  await reply.locator(".v2-card-decline").getByRole("button", { name: "Dismiss" }).click();
+  await reply.locator(".v2-card-decline").getByRole("button", { name: "Not a fit" }).click();
   await expect(rows).toHaveCount(3);
 
   while ((await rows.count()) > 0) {

@@ -234,7 +234,7 @@ assert.match(INSTRUCTIONS, /Never confirm on your own/);
   const free = await post({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "c", version: "1" } } }, "free_plan");
   assert.equal(free.status, 403, "free accounts cannot use MCP, initialize included");
   assert.deepEqual(await free.json(), { jsonrpc: "2.0", id: null, error: PAID_PLAN_ERROR });
-  assert.equal(PAID_PLAN_ERROR.message, "OpenCMO's MCP connection is part of the paid plans. Upgrade on the Credits page.");
+  assert.equal(PAID_PLAN_ERROR.message, "Ferreto's MCP connection is part of the paid plans. Pick a plan on the Billing page.");
 
   assert.equal((await post(pings(1), "rate_limited")).status, 429);
   assert.equal((await post(pings(1), "something else")).status, 503, "an unknown answer fails closed");

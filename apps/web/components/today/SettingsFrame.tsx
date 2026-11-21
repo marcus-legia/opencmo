@@ -5,7 +5,8 @@ import type { ReactNode } from "react";
 
 /** The Settings menu (Settings.dc.html). Billing has its own route (server data); the rest are parts of one page. */
 const NAV = [
-  { id: "general", label: "General", href: "/app/settings#settings-your-cmo" },
+  { id: "account", label: "Account", href: "/app/settings#settings-account" },
+  { id: "general", label: "Planning", href: "/app/settings#settings-your-cmo" },
   { id: "accounts", label: "Accounts", href: "/app/settings#settings-connected-accounts" },
   { id: "sales", label: "Sales scans", href: "/app/settings#settings-sales-scans" },
   { id: "tracking", label: "Tracking", href: "/app/settings#settings-tracking" },

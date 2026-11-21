@@ -19,6 +19,7 @@ import {
   type Caption,
   type CardKind,
 } from "./approval-card";
+import { matchLabel } from "../cmo/match";
 import { salesNeeds, salesRuleKind, type Department, type ScorePart } from "./common";
 
 /** The columns of `approvals` the app reads (RLS: the founder's own). */
@@ -146,7 +147,7 @@ function build(row: ApprovalRow): Built | null {
         // The card's head already names the platform and community: the title is the thread's own.
         title: clip(`“${str(s.title)}”`, 300),
         summary: clip(quotes[0] ? `“${quotes[0].text}” Reply drafted, help first.` : "Reply drafted, help first.", 400),
-        meta: `Score ${score} · you post it yourself`,
+        meta: `${matchLabel(score)} · you post it yourself`,
         body: {
           kind: "reply",
           community,
