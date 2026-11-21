@@ -218,11 +218,11 @@ export function AgentWriter() {
               </span>
             </div>
             <p style={{ margin: "4px 0 8px", color: "var(--muted)", fontSize: "14px", maxWidth: "640px" }}>
-              Posts for X, LinkedIn and Threads, written from your strategy. Nothing is posted until you approve it.
+              Posts for X, LinkedIn and Threads, written from what people asked in Sales. Nothing is posted until you approve it.
             </p>
             <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
               <span className="meta">Reads</span>
-              <span className="chip">Strategy</span>
+              <span className="chip">Library</span>
               <span className="chip">Post plan</span>
               <span className="chip">Product</span>
               <span className="chip">Brand</span>
