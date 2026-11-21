@@ -9,7 +9,7 @@ import { ONBOARDING_DOCUMENT } from "./ui-v2-seed";
 
 /**
  * Visual regression of the CMO loop's v2 screens (web hardening round 4, session C): setup → today → Writer → a post
- * card waiting for approval → the slideshow page → Schedule, at 1440 × 900 and 390 × 844 in light, plus today in dark.
+ * card waiting for approval → Schedule (the slideshow page left in wave 4b), at 1440 × 900 and 390 × 844 in light, plus today in dark.
  * A layout that moves fails the nightly `full-v2` run with an expected/actual/diff image in the job's artifact.
  *
  * Baselines live in `ui-v2-visual.spec.ts-snapshots/` without the OS in their name (`playwright.config.ts`), and come
@@ -72,17 +72,6 @@ const LOOP: Shot[] = [
   { name: "today", path: "/app?sample=1", ready: "v2-dashboard" },
   { name: "writer", path: "/app/writer?sample=1", ready: "v2-writer" },
   { name: "post-card", path: "/app/inbox/card-post", ready: "inbox-card-page" },
-  {
-    name: "slideshow",
-    path: "/app/photos",
-    ready: "v2-photos",
-    // The page's form, not just its button: the form is what a founder fills.
-    open: async (page) => {
-      await page.getByTestId("photo-post").getByRole("button", { name: "New photo post" }).click();
-      // Enabled once the draft post exists (POST /photo-posts): the shot never catches the request in flight.
-      await expect(page.getByTestId("photo-post").locator('input[type="file"]')).toBeEnabled();
-    },
-  },
   { name: "schedule", path: "/app/schedule?sample=1", ready: "v2-schedule" },
 ];
 
