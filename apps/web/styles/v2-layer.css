@@ -576,7 +576,13 @@ html[data-ui="v2"] .v2-main-body:has(.ed2) {
 
 /* CMO review 3, session B: the plan sheet (components/billing/PlanSheet.tsx) and the Today block. */
 .plan-sheet { width: min(560px, calc(100vw - 32px)); }
-.plan-sheet-list { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+.plan-sheet-sub { margin: 4px 0 0; }
+.plan-sheet-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+.plan-sheet-options .td-plan { gap: 2px; text-align: left; font: inherit; color: inherit; cursor: pointer; }
+.plan-sheet-included { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
+.plan-sheet-included li { display: flex; gap: 10px; }
+.plan-sheet-check { color: var(--v2-brand); }
+.plan-sheet-fine { margin: 0; text-align: center; font-size: 12px; }
 .td-today { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
 .td-today-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
 .v2 .td-today-head .v2-panel-title { font-size: 13px; font-weight: 600; }
