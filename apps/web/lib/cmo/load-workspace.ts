@@ -108,12 +108,12 @@ function statusLine(runs: CmoRunRow[], awaiting: number): Workspace["status"] {
   const active = runs.find((r) => r.status === "running" || r.status === "queued");
   if (active) {
     const what = { plan_week: "planning your week", post_draft: "drafting a post for X", sales_scan: "scanning Reddit for conversations", onboard: "building your plan", competitor_research: "studying your competitors on X", pull_metrics: "reading the numbers on your posts", summarize_memory: "writing this week's lessons", review_week: "reviewing your week", write_video_brief: "writing a video brief", write_caption: "writing captions for your video", write_slides: "writing slide text", publish_post: "posting what you approved", niche_video_research: "studying short videos in your niche", distill_ratings: "learning from your ratings", repurpose_post: "rewriting a post for one platform", photo_caption: "writing the caption of your photos", sales_reply_drafts: "writing replies for your Sales cards" }[active.kind];
-    return { text: `Your CMO is ${what}. Follow along in Activity.`, tone: "running" };
+    return { text: `Ferreto is ${what}. Follow along in Activity.`, tone: "running" };
   }
   const latest = runs[0];
   if (latest?.status === "failed") return { text: `Last task failed: ${latest.error ?? "unknown error"}`, tone: "error" };
   if (awaiting) return { text: `${awaiting} ${awaiting === 1 ? "item is" : "items are"} waiting for you in Approvals.`, tone: "ok" };
-  return { text: "Your marketing plan is ready. Ask your CMO, or plan the week.", tone: "ok" };
+  return { text: "Your documents are ready. Ask Ferreto, or plan the week.", tone: "ok" };
 }
 
 /**

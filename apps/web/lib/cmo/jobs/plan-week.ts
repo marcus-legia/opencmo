@@ -255,7 +255,7 @@ export async function planWeek(ctx: JobContext): Promise<JobOutput> {
       fake: () => fakePlan(docs, posting, run.input.brief, library),
       agent: "planner",
       system: SYSTEM,
-      prompt: `${documentsBlock(docs)}\n\n${memories}\n\n${goalBlock(goal)}${insightBlock(insight)}\n\n<last_week>\n${lastWeek}\n</last_week>\n\n${libraryBlock(library)}\n\n${skeletonBlock(posting)}\n\n${typeof run.input.brief === "string" && run.input.brief ? `Your CMO's brief for this week: "${run.input.brief.slice(0, 300)}"\n\n` : ""}Today is ${isoDay()}. Plan the next seven days.`,
+      prompt: `${documentsBlock(docs)}\n\n${memories}\n\n${goalBlock(goal)}${insightBlock(insight)}\n\n<last_week>\n${lastWeek}\n</last_week>\n\n${libraryBlock(library)}\n\n${skeletonBlock(posting)}\n\n${typeof run.input.brief === "string" && run.input.brief ? `The brief from the chat for this week: "${run.input.brief.slice(0, 300)}"\n\n` : ""}Today is ${isoDay()}. Plan the next seven days.`,
       schema: PlanSchema,
       label: "plan_week",
       failure: "We could not plan your week. Try again in a minute.",

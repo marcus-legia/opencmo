@@ -99,6 +99,9 @@ export const HEARD_FROM = [
   { id: "youtube", label: "YouTube" },
   { id: "friend", label: "A friend" },
   { id: "newsletter", label: "A newsletter" },
+  { id: "product_hunt", label: "Product Hunt" },
+  { id: "hacker_news", label: "Hacker News" },
+  { id: "threads", label: "Threads" },
   { id: "other", label: "Other" },
 ] as const;
 

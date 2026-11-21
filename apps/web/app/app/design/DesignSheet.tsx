@@ -79,7 +79,7 @@ export function DesignSheet() {
           <Button variant="primary">Primary</Button>
           <Button variant="secondary">Secondary</Button>
           <Button variant="quiet">Quiet</Button>
-          <Button variant="danger">Pause CMO</Button>
+          <Button variant="danger">Pause Ferreto</Button>
           <Button variant="on-dark">On dark</Button>
         </div>
         <div className="v2-design-row">

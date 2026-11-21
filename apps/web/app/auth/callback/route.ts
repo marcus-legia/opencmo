@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { safeNext } from "@/lib/auth/next";
+import { FIRST_TOUCH_COOKIE, decodeFirstTouch } from "@/lib/ops/first-touch";
 import { createServerClient } from "@/lib/supabase/server";
 
 /**
@@ -40,9 +41,17 @@ export async function GET(request: NextRequest) {
     return redirectTo("/login?error=expired");
   }
 
+  // First touch (`lib/ops/first-touch.ts`): from the login page's `ft`, else this host's cookie. Kept once, for a new
+  // account only (the SQL decides); a failure never blocks the sign-in.
+  const touch = decodeFirstTouch(searchParams.get("ft") ?? request.cookies.get(FIRST_TOUCH_COOKIE)?.value ?? null);
+  if (touch) {
+    const { error: touchError } = await supabase.rpc("profile_set_first_touch", { p_touch: touch });
+    if (touchError) console.error("[auth] first touch not kept", touchError.code);
+  }
+
   // `next` is untrusted user input; `safeNext` keeps it on this site (security fixes plan, fix 3).
   const target = new URL(safeNext(searchParams.get("next")), "http://redirect.invalid");
-  // A website typed in the hero goes to `/app` (AI CMO), where W0 Onboarding reads it.
+  // A website typed in the hero goes to `/app`, where onboarding reads it.
   if (site) target.searchParams.set("site", site);
   return redirectTo(`${target.pathname}${target.search}`);
 }

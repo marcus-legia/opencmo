@@ -47,6 +47,8 @@ body:has(.landing) { overflow-x: clip; background: transparent; }
 }
 /* Dark follows the visitor's system setting (owner, 2026-11-09): the same layout, the tokens swapped.
    Brand orange stays as it is, so white text on it keeps its contrast. */
+/* The page behind the public site is paper too, so nothing shows past a short page or an overscroll. */
+html:has(:is(.landing, .site)) { background: #f3f3ee; }
 @media (prefers-color-scheme: dark) {
   html:has(:is(.landing, .site)) { background: #1a1917; color-scheme: dark; }
   :is(.landing, .site) {

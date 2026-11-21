@@ -43,7 +43,7 @@ export function ContextPanel({ ws, actions, onCollapse }: { ws: Workspace; actio
       hint: "Build your marketing plan to fill this in",
       usedBy: USED_BY[kind],
     })),
-    { view: "calendar", icon: "calendar", title: "Content calendar", ready: ws.calendar.length > 0, hint: "Fills in when the CMO plans your first week", usedBy: USED_BY.calendar },
+    { view: "calendar", icon: "calendar", title: "Content calendar", ready: ws.calendar.length > 0, hint: "Fills in when Ferreto plans your first week", usedBy: USED_BY.calendar },
     // Brand kit là màn công cụ riêng của Video (editor đọc nó), không phải văn bản để đọc.
     { view: null, href: "/app/brand", icon: "palette", title: "Design Guide", ready: true, hint: "", usedBy: ["Editor"] },
   ];
@@ -159,7 +159,7 @@ export function ContextPanel({ ws, actions, onCollapse }: { ws: Workspace; actio
             </ol>
           ) : (
             <div className="cmo-plan-empty">
-              <p className="cmo-muted">Your CMO plans the next seven days from your strategy, one line of reasoning per item. Nothing is posted.</p>
+              <p className="cmo-muted">Ferreto plans the next seven days from your strategy, one line of reasoning per item. Nothing is posted.</p>
               <button type="button" className="primary-button" onClick={plan} disabled={planning || busy} data-testid="cmo-plan-week">
                 {busy ? "Planning your week…" : "Plan my week"}
               </button>

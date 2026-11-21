@@ -1,12 +1,12 @@
 "use client";
 
 /**
- * Cột Your CMO: chat với agent DUY NHẤT của tầng CMO (scope `cmo` trên vòng lặp
- * Assistant có sẵn). Agent trả lời từ tài liệu và giao việc cho workflow bằng
- * `create_task`; khi thấy tool đó chạy, màn làm mới để thẻ/lịch hiện ra.
+ * The chat column: the one agent of the CMO layer (scope `cmo` on the existing Assistant loop). It answers from the
+ * documents and hands work to the workflows with `create_task`; when that tool runs, the screen refreshes so the card or
+ * the calendar shows up.
  *
- * Server chưa có model (`live.chat` false): ở demo thì chat giả nói thẳng là
- * demo; còn lại ô nhập tắt và nói rõ lý do.
+ * With no model on the server (`live.chat` false), the demo chat says plainly that it is a demo; otherwise the box is
+ * disabled and says why.
  */
 
 import { usePathname, useRouter } from "next/navigation";
@@ -323,7 +323,7 @@ export function ChatPanel({
       } catch (error) {
         // The free first run is over (CMO review 3, 3.1): the chat answers with the plan sheet, not an error.
         if (isPlanRequired(error)) {
-          append("What your CMO found and wrote for free stays here. Pick a plan to keep talking to your CMO.");
+          append("What Ferreto found and wrote for free stays here. Pick a plan to keep asking Ferreto.");
           setPlanSheet(true);
         } else append(error instanceof ApiError ? error.message : "Connection lost. Check your internet and try again.");
       } finally {
@@ -372,7 +372,7 @@ export function ChatPanel({
       setMessages((m) => [
         ...m,
         { id: `${id}-u`, role: "user", text: value },
-        { id: `${id}-c`, role: "cmo", text: "This is demo data, so I can't answer for real yet. Once the CMO is connected, I'll answer from your documents and plan the work." },
+        { id: `${id}-c`, role: "cmo", text: "This is demo data, so I can't answer for real yet. Once the chat is connected, I'll answer from your documents and plan the work." },
       ]);
       return;
     }
@@ -391,7 +391,7 @@ export function ChatPanel({
         setSession(current);
       }
     } catch (error) {
-      onToast(error instanceof ApiError ? error.message : "Your CMO is not available right now.");
+      onToast(error instanceof ApiError ? error.message : "Ferreto is not available right now.");
       return;
     }
     await stream(current.id, "turns", { prompt: value, ...(drivesPanel ? screenAttachment() : {}) }, value);
@@ -428,11 +428,11 @@ export function ChatPanel({
 
   return (
     <section className="cmo-panel cmo-chat" aria-labelledby="cmo-chat-title">
-      <PlanSheet open={planSheet} onClose={() => setPlanSheet(false)} action="keep talking to your CMO" />
+      <PlanSheet open={planSheet} onClose={() => setPlanSheet(false)} action="keep asking Ferreto" />
       <header className="cmo-chat-head">
         <span className="cmo-chat-tab">
           <Icon name="message-circle" size={15} />
-          <h2 id="cmo-chat-title">{title ?? "Your CMO"}</h2>
+          <h2 id="cmo-chat-title">{title ?? "Ask Ferreto"}</h2>
         </span>
         <span className={`cmo-gem ${enabled ? "is-on" : ""}`} title={enabled ? "Connected" : "Not connected yet"} />
         <button type="button" className="cmo-icon-btn" aria-label="New conversation" title="New conversation" disabled={!enabled || busy || messages.length === 0} onClick={() => void newChat()}>
@@ -599,11 +599,11 @@ export function ChatPanel({
           void send(draft);
         }}
       >
-        <label htmlFor="cmo-ask-input" className="sr-only">Ask your CMO</label>
+        <label htmlFor="cmo-ask-input" className="sr-only">Ask Ferreto</label>
         <textarea
           id="cmo-ask-input"
           rows={3}
-          placeholder={enabled ? "Ask your CMO…" : "Chat is not connected yet"}
+          placeholder={enabled ? "Ask Ferreto…" : "Chat is not connected yet"}
           value={draft}
           disabled={!enabled}
           onChange={(e) => setDraft(e.target.value)}
@@ -615,7 +615,7 @@ export function ChatPanel({
           }}
         />
         <div className="cmo-ask-bar">
-          <span className="cmo-muted">{!enabled ? "" : busy ? "Your CMO is answering…" : "Enter to send"}</span>
+          <span className="cmo-muted">{!enabled ? "" : busy ? "Ferreto is answering…" : "Enter to send"}</span>
           <button type="submit" className="cmo-send" aria-label="Send" disabled={!enabled || busy || !draft.trim()}>
             <Icon name="arrow-up" size={18} />
           </button>

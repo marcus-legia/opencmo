@@ -350,11 +350,37 @@ function ScanProblem({ testId, title, detail, action }: { testId: string; title:
   );
 }
 
-function NoOneAsked({ scan, onEdit }: { scan: NonNullable<SalesScreen["lastScan"]>; onEdit: () => void }) {
+/**
+ * The free scan's result (canvas FreeResult): how many people it found, why their replies are locked, one way on.
+ * The count is the threads on screen worth a reply; nothing here is estimated.
+ */
+function FreeResult({ count, onPlan }: { count: number; onPlan: () => void }) {
+  return (
+    <section className="card" data-testid="sales-free-result" style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "10px" }}>
+      <b style={{ fontSize: "16px" }}>
+        {count} {count === 1 ? "person asked" : "people asked"} about the problem you solve in the last 30 days.
+      </b>
+      <p className="meta" style={{ margin: "0" }}>
+        Read what each one wrote below. With a plan, Ferreto writes a reply to each, checked against the community&apos;s rules, and a DM or an email when someone is ready for one.
+      </p>
+      <div>
+        <button type="button" className="primary" onClick={onPlan}>
+          See plans
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function NoOneAsked({ scan, onEdit, freeLeft }: { scan: NonNullable<SalesScreen["lastScan"]>; onEdit: () => void; freeLeft: boolean }) {
   const answered = scan.platforms.filter((p) => !scan.failed.includes(p));
+  // Review 2026-11-21: with a place down, "no one asked" would claim more than was read. Say where we looked.
+  const headline = scan.failed.length && answered.length
+    ? `No one asked on ${places(answered)} in the last 30 days. ${places(scan.failed)} did not answer, so this is not the whole picture.`
+    : "No one asked about this in the last 30 days.";
   return (
     <section className="card" data-testid="sales-none" style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "14px" }}>
-      <h2 style={{ margin: "0", fontSize: "16px", fontWeight: "600" }}>No one asked about this in the last 30 days.</h2>
+      <h2 style={{ margin: "0", fontSize: "16px", fontWeight: "600" }}>{headline}</h2>
       {scan.queries.length ? (
         <div>
           <div className="meta" style={{ marginBottom: "6px" }}>
@@ -375,7 +401,15 @@ function NoOneAsked({ scan, onEdit }: { scan: NonNullable<SalesScreen["lastScan"
       <p style={{ margin: "0", fontSize: "14px", color: "var(--muted)" }}>
         Sales searched with the words it took from your website. If your customers describe the problem differently, tell it what to look for.
       </p>
-      <div>
+      {freeLeft ? (
+        <p style={{ margin: "0", fontSize: "14px" }} data-testid="sales-none-free-left">
+          This scan did not use up your free scan: you can run it again, after changing what Sales looks for if you like.
+        </p>
+      ) : null}
+      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+        <a className="ghost" href="/app/business?d=strategy" style={{ textDecoration: "none" }}>
+          Edit Strategy
+        </a>
         <button type="button" className="ghost" onClick={onEdit}>
           Edit what Sales looks for
         </button>
@@ -864,8 +898,9 @@ export function AgentSales() {
               <span className="meta">Sort</span>
               <span className="pill">Score</span>
             </div>
+            {free && worth.length > 0 ? <FreeResult count={worth.length} onPlan={() => setPlanFor("reply to these people")} /> : null}
             {live && undrafted > 0 ? <WriteReplies count={undrafted} busy={scanActive(scan) && scan.kind === "sales_reply_drafts"} onPlan={setPlanFor} onStarted={startedScan} /> : null}
-            {list.length === 0 && data.lastScan?.verdict === "none" ? <NoOneAsked scan={data.lastScan} onEdit={openSettings} /> : null}
+            {list.length === 0 && data.lastScan?.verdict === "none" ? <NoOneAsked scan={data.lastScan} onEdit={openSettings} freeLeft={freeLeft} /> : null}
             {list.length === 0 && data.lastScan?.verdict !== "none" ? <div className="meta">No threads yet. Sales scans the communities your customers use and scores what it finds.</div> : null}
             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }} role={list.length ? "list" : undefined} aria-label={list.length ? "Threads" : undefined}>
               {list.map((t) => (

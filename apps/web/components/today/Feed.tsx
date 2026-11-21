@@ -81,7 +81,7 @@ function firstName(email: string | null | undefined): string | null {
 /** The artboard's robot at the planning board, as drawn there. */
 function Robot() {
   return (
-    <svg width="56" height="56" viewBox="0 0 56 56" role="img" aria-label="Your CMO at the planning board" style={{ flexShrink: "0" }}>
+    <svg width="56" height="56" viewBox="0 0 56 56" role="img" aria-label="Ferreto at the planning board" style={{ flexShrink: "0" }}>
       <rect className="rb-bg" x="0.75" y="0.75" width="54.5" height="54.5" rx="12" strokeWidth="1.5" />
       <rect className="rb-m" x="31" y="11" width="17" height="14" rx="2" fill="none" strokeWidth="1.5" />
       <line className="r-l1 rb-a" x1="34" y1="15" x2="44" y2="15" strokeWidth="1.5" strokeLinecap="round" />
@@ -485,7 +485,7 @@ export function Feed({ email }: { email?: string | null }) {
                 <h1 data-testid="dash-headline" style={{ margin: "0", fontSize: "22px", fontWeight: "600", letterSpacing: "-0.4px", lineHeight: "28px" }}>
                   {name ? `Welcome back, ${name}.` : "Welcome back."}
                 </h1>
-                <span className="live" title="Your CMO is working"></span>
+                <span className="live" title="Ferreto is working"></span>
               </div>
               <p style={{ margin: "4px 0 0", color: "var(--muted)", fontSize: "14px", lineHeight: "18px" }}>
                 {state.status === "loading"
@@ -595,14 +595,14 @@ export function Feed({ email }: { email?: string | null }) {
                       sample={!live.queue}
                     />
                   ) : (
-                    <Row key={item.row.id} icon={ICON_SPARK} kind={item.row.department === "brain" ? "Your CMO" : item.row.department.charAt(0).toUpperCase() + item.row.department.slice(1)} title={item.row.title} meta={item.row.detail ?? undefined} actions={<TodayAction row={item.row} onAsk={focusChat} />} />
+                    <Row key={item.row.id} icon={ICON_SPARK} kind={item.row.department === "brain" ? "Ferreto" : item.row.department.charAt(0).toUpperCase() + item.row.department.slice(1)} title={item.row.title} meta={item.row.detail ?? undefined} actions={<TodayAction row={item.row} onAsk={focusChat} />} />
                   ),
                 )
               )
             ) : null}
             {step === "scheduled" ? (scheduledRows.length ? scheduledRows : emptyRow("Nothing is scheduled yet. Approve a post and it shows here with its time.")) : null}
             {step === "posted" ? (postedRows.length ? postedRows : emptyRow("Nothing went out this week yet.")) : null}
-            {step === "planned" ? (drafts.length ? drafts.map(weekRow) : emptyRow(writer.status === "loading" ? "Loading this week…" : "Nothing is planned for this week yet. Ask your CMO to plan the week.")) : null}
+            {step === "planned" ? (drafts.length ? drafts.map(weekRow) : emptyRow(writer.status === "loading" ? "Loading this week…" : "Nothing is planned for this week yet. Ask Ferreto to plan the week.")) : null}
             {step === "making" && data
               ? working.length
                 ? working.map((n) => (

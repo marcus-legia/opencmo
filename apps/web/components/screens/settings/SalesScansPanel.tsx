@@ -58,7 +58,7 @@ export function SalesScansPanel() {
           </select>
         </label>
         <p className="scr-small scr-muted" style={{ margin: "0" }}>
-          Each scan uses credits from your plan. You can still press Scan now on the Sales page any day. Where Sales looks is in Sales › Settings.
+          Scans are part of your plan&apos;s monthly allowance. You can still press Scan now on the Sales page any day. Where Sales looks is in Sales › Settings.
         </p>
         {note ? (
           <p role="status" className="scr-small" style={{ margin: "0" }}>

@@ -7,4 +7,4 @@ export function cmoPausedEverywhere(): boolean {
   return process.env.OPENCMO_CMO_PAUSED === "1";
 }
 
-export const PAUSED_EVERYWHERE = "The CMO is paused for maintenance. Your work is kept; try again later.";
+export const PAUSED_EVERYWHERE = "Ferreto is paused for maintenance. Your work is kept; try again later.";

@@ -63,7 +63,7 @@ async function coreDraftDay() {
   assert.equal(created.error, null);
   const userId = created.data.user!.id;
   ok(await admin.from("profiles").update({ plan: "starter", timezone: "UTC", credit_balance: 200 }).eq("id", userId), "profile");
-  ok(await admin.from("marketing_documents").insert({ user_id: userId, kind: "product", version: 1, created_by: "user", body: { name: "Ferreto", one_liner: "An AI CMO for solo founders." } }), "document");
+  ok(await admin.from("marketing_documents").insert({ user_id: userId, kind: "product", version: 1, created_by: "user", body: { name: "Ferreto", one_liner: "A customer-finding tool for founders." } }), "document");
   ok(await clientFor(userId).rpc("save_posting_plan", { p_plan: { text: { x: 1, threads: 1, linkedin: 1, facebook: 0 }, video: { tiktok: 0, instagram: 0, youtube: 0 } } }), "the founder's plan");
   ok(await admin.rpc("zernio_profile_save", { p_user: userId, p_profile: `prof-${userId.slice(0, 8)}` }), "zernio profile");
   for (const platform of ["x", "threads"]) {
@@ -100,7 +100,7 @@ async function main() {
   const userId = created.data.user!.id;
   await admin.from("profiles").update({ timezone: "UTC", credit_balance: 200 }).eq("id", userId);
   await admin.from("marketing_documents").insert([
-    { user_id: userId, kind: "product", version: 1, created_by: "user", body: { name: "Ferreto", one_liner: "An AI CMO for solo founders." } },
+    { user_id: userId, kind: "product", version: 1, created_by: "user", body: { name: "Ferreto", one_liner: "A customer-finding tool for founders." } },
     { user_id: userId, kind: "strategy", version: 1, created_by: "user", body: { pains: ["editing demos takes hours"], avoid: [] } },
   ]);
   ok(await admin.rpc("zernio_profile_save", { p_user: userId, p_profile: `prof-${userId.slice(0, 8)}` }), "zernio profile");

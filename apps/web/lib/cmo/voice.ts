@@ -114,7 +114,7 @@ export async function ratingSheet(supabase: SupabaseClient, now = new Date()): P
 // ------------------------------------------------------------------ the Voice page (2.3)
 
 /** Who changed it, as the page names it (`cmo_voice_events.source`). */
-export const VOICE_SOURCE_LABEL = { setup: "Setup", you: "You", cmo: "Your CMO", edits: "Learned from your edits", ratings: "From your ratings" } as const;
+export const VOICE_SOURCE_LABEL = { setup: "Setup", you: "You", cmo: "Ferreto", edits: "Learned from your edits", ratings: "From your ratings" } as const;
 export type VoiceSource = keyof typeof VOICE_SOURCE_LABEL;
 
 export type VoiceRule = { id: string; rule: string; on: boolean; source: VoiceSource };

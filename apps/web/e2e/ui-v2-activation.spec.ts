@@ -66,7 +66,7 @@ test("the free first run: website → documents, plan and drafts with no payment
   const card = await openFeedCard(page, /\bpost · /i);
   await card.getByRole("button", { name: /^Approve( for this time)?$/ }).click();
   await expect(page.getByTestId("plan-sheet")).toBeVisible();
-  await expect(page.getByTestId("plan-sheet")).toContainText("What your CMO found and wrote for free stays here");
+  await expect(page.getByTestId("plan-sheet")).toContainText("One plan. Everything included.");
   const { count: waiting } = await db.from("approvals").select("id", { count: "exact", head: true }).eq("user_id", user.id).eq("kind", "post").eq("status", "waiting");
   expect(waiting).toBeGreaterThan(0);
 });

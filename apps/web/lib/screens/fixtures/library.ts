@@ -5,7 +5,7 @@ import { at } from "./shared";
 export const libraryFixture: LibraryScreen = {
   site: "ferreto.io",
   documents: [
-    { kind: "product", title: "Product Information", summary: "An AI CMO for solo founders: a video editor, post drafts and Reddit leads you approve.", fields: 9, editedBy: "user", editedAt: at("2026-10-14", "10:00"), note: null },
+    { kind: "product", title: "Product Information", summary: "A customer-finding tool for founders: people asking for what you built, and drafts you approve.", fields: 9, editedBy: "user", editedAt: at("2026-10-14", "10:00"), note: null },
     { kind: "strategy", title: "Marketing Strategy", summary: "Who you are talking to, where they ask, and this week's focus.", fields: 6, editedBy: "user", editedAt: at("2026-10-20", "10:00"), note: null },
     { kind: "competitors", title: "Competitor Analysis", summary: "4 competitors and the accounts Research watches each Sunday.", fields: 4, editedBy: "agent", editedAt: at("2026-10-25", "07:00"), note: "Research updates the outliers · you pick the competitors" },
     { kind: "post_plan", title: "Post plan", summary: "What to post about, where, and how often.", fields: 3, editedBy: "agent", editedAt: at("2026-10-12", "09:00"), note: null },
@@ -33,7 +33,7 @@ export const libraryFixture: LibraryScreen = {
   },
   skills: {
     writing: [
-      { id: "no-ai-slop", name: "Plain writing (No AI Slop)", origin: "built_in", note: "Guidance on stock phrases and patterns to avoid, never a hard filter", readBy: ["Writer", "Checker", "Sales", "CMO chat"] },
+      { id: "no-ai-slop", name: "Plain writing (No AI Slop)", origin: "built_in", note: "Guidance on stock phrases and patterns to avoid, never a hard filter", readBy: ["Writer", "Checker", "Sales", "Chat"] },
       { id: "post", name: "Writing a post", origin: "built_in", note: "One true thing in your voice, a plain first line, no links and no hashtags", readBy: ["Writer", "Checker"] },
       { id: "s-launch", name: "Launch threads", origin: "yours", note: "Saved from a chat on Oct 18", readBy: ["Writer"] },
     ],

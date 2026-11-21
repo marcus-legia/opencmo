@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 
 type Row = { weekly_credit_budget: number; timezone: string; digest_hour: number | null; digest_days: (typeof DIGEST_DAYS)[number] };
 
-// Each panel saves its own fields (Your CMO: budget and time zone; Notifications: the morning email's days and hour):
+// Each panel saves its own fields (Planning: the weekly limit and time zone; Notifications: the morning email's days and hour):
 // a field left out is not touched (`save_cmo_settings_patch`), so one panel never writes back another's copy.
 const body = z
   .object({

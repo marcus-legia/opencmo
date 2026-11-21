@@ -313,7 +313,7 @@ async function runMessages(fixture: RedditFixture, env: EvalEnv): Promise<CaseRe
   const ctx = { now: new Date(), think: (call: Parameters<JobContext["think"]>[0]) => think(call) } as unknown as JobContext;
   const fit = fixture.threads.filter((t) => t.expect === "fit").slice(0, 2).map((t) => ({ ...toThread(t), platform: "reddit" as const }));
   const reply = "Put the due date and the late fee on the invoice itself, then send the same short reminder on day 3, 7 and 14.";
-  const targets = [{ thread: fit[0]!, reply }, { thread: fit[1]!, reply: null }];
+  const targets = [{ thread: fit[0]!, reply, posted: true }, { thread: fit[1]!, reply: null }];
   const dms = await draftMessages(ctx, "dm", { docs: fixture.docs, voice: "", targets });
   const nudges = await draftMessages(ctx, "nudge", { docs: fixture.docs, voice: "", targets: [{ thread: fit[0]!, reply }] });
   const out: CaseResult[] = [...graders, result("dm:drafted", dms.textFor.size === 2, [`${dms.textFor.size} of 2 passed the checks`]), result("nudge:drafted", nudges.textFor.size === 1)];
@@ -364,7 +364,8 @@ async function runReachScan(fixture: RedditFixture, env: EvalEnv): Promise<CaseR
   const r = mem.people.get(reddit.url);
   const h = mem.people.get(hn.url);
   const products = [String(fixture.docs.product?.name ?? "")];
-  const dmIssues = r?.dm ? dmProblems(r.dm, products, true) : ["no DM drafted"];
+  // The scan writes a first contact: the founder has posted nothing yet, so the DM may not say it replied.
+  const dmIssues = r?.dm ? dmProblems(r.dm, products, false) : ["no DM drafted"];
   if (env.provider !== "fake" && r?.dm) env.log(`dm: ${r.dm}`);
   return [
     { id: id("run"), epoch: env.epoch, pass: true, decided_by: "code" },

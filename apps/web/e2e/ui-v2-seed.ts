@@ -10,7 +10,7 @@ export const ONBOARDING_DOCUMENT = {
   kind: "product",
   version: 1,
   created_by: "user",
-  body: { name: "Ferreto", one_liner: "An AI CMO for solo founders." },
+  body: { name: "Ferreto", one_liner: "A customer-finding tool for founders." },
 } as const;
 
 /**
@@ -47,7 +47,7 @@ export async function seedCoreDraft(): Promise<{ user: E2EUser; itemId: string; 
   must(await db.from("profiles").update({ plan: "starter", timezone: "UTC", credit_balance: 20,
     posting_plan: { text: { x: 1, threads: 1, linkedin: 1, facebook: 0 }, video: { tiktok: 0, instagram: 0, youtube: 0 } } }).eq("id", user.id), "the plan");
   must(await db.from("marketing_documents").insert({ user_id: user.id, kind: "product", version: 1, created_by: "user",
-    body: { name: "Ferreto", one_liner: "An AI CMO for solo founders." } }), "a document");
+    body: { name: "Ferreto", one_liner: "A customer-finding tool for founders." } }), "a document");
   must(await db.rpc("zernio_profile_save", { p_user: user.id, p_profile: `prof-${user.id}` }), "the Zernio profile");
   for (const platform of ["x", "threads"]) {
     must(await db.rpc("social_account_save", { p_user: user.id, p_platform: platform, p_handle: "@founder", p_avatar_url: null, p_zernio_account_id: `acc-${platform}-${user.id}` }), platform);

@@ -35,7 +35,7 @@ import { safeForSales } from "../sales/ban-risk";
 import { NO_AI_SLOP, skillText } from "../skills";
 import { fakeAllowed, LlmError } from "./llm";
 import { LIBRARY_LIMITS, type LibraryQuote, type LibrarySaveItem } from "../library";
-import { isFresh, platformHasDms, reachLevel, type ReachCheck, type ReachLevel, type ReachSaveItem } from "../reach";
+import { isFresh, personKey, platformHasDms, reachLevel, type ReachCheck, type ReachLevel, type ReachSaveItem } from "../reach";
 import type { JobContext, JobOutput } from "./runner";
 import { mayMention, toVerdict, type Documents, type Opportunity, type SalesScanOutput, type SalesSettings, type ScorePart, type SubredditVerdict } from "./types";
 
@@ -666,17 +666,25 @@ export const DmSchema = z.object({
 /** What a founder's DM or nudge is for, and what it may say (B2). */
 export type DmTarget = {
   thread: ScanThread;
-  /** The founder's public reply, when they replied: the DM refers to it. */
+  /** The founder's public reply: the one they posted for a DM, the one a nudge follows up. */
   reply: string | null;
   /** Their reply's link, when they gave it. */
   replyUrl?: string | null;
+  /**
+   * The founder really posted `reply` (the card is marked replied, or its link is saved). Only then may a DM say "I
+   * replied in the thread": a reply still in draft is not a reply (review 2026-11-21). A nudge always follows one.
+   */
+  posted?: boolean;
 };
+
+/** Whether the message may refer to a public reply: one the founder posted, never a draft. */
+const repliedIn = (t: DmTarget, kind: "dm" | "nudge") => t.reply !== null && (kind === "nudge" || t.posted === true || Boolean(t.replyUrl));
 
 export const DM_SYSTEM = `You draft one private message from a founder to a person who posted about a problem the founder's product solves. The founder reads it, edits it if they like, and sends it from their own account. It is one message, never the start of a sequence.
 Rules:
 - Short: under 80 words. Plain, warm, one person to another. No greeting card phrases, no hype, no sales pitch.
 - Open with what they wrote, in a few of your own words, so it is clear this is not a mass message.
-- When the founder already replied in the thread (replied="yes"), say so in a few words ("I replied in the thread about your late invoices"). When they did not (replied="no"), never say or hint that they did.
+- When the founder already replied in the thread (replied="yes"), say so in a few words ("I replied in the thread about your late invoices"). When replied="no", the founder has posted nothing there yet: write it as a first contact, and never say or hint that they replied, commented or answered.
 - Say plainly that the product is the founder's own ("I make X"). Name it at most once.
 - No links. Ask before sending one ("Want me to send the link?"), so the person chooses.
 - Never invent experiences, customers, numbers or results. Never pretend to be anything but the founder.
@@ -730,9 +738,13 @@ export function nudgeProblems(text: string, products: string[]): string[] {
   return problems;
 }
 
-function dmBlock(t: DmTarget, i: number): string {
-  const reply = t.reply ? `\n<reply>${escapeForTag(cleanUntrusted(t.reply))}</reply>` : "";
-  return threadBlock(t.thread, i).replace(`<thread index="${i}"`, `<thread index="${i}" replied="${t.reply ? "yes" : "no"}"`) + reply;
+function dmBlock(kind: "dm" | "nudge") {
+  return (t: DmTarget, i: number): string => {
+    // A draft the founder never posted stays out of the prompt: the model cannot refer to what it does not see.
+    const replied = repliedIn(t, kind);
+    const reply = replied ? `\n<reply>${escapeForTag(cleanUntrusted(t.reply!))}</reply>` : "";
+    return threadBlock(t.thread, i).replace(`<thread index="${i}"`, `<thread index="${i}" replied="${replied ? "yes" : "no"}"`) + reply;
+  };
 }
 
 /**
@@ -755,13 +767,13 @@ export async function draftMessages(
         messages: targets.map((t, index) => ({
           index,
           text: kind === "dm"
-            ? `Saw your post about clients paying late${t.reply ? " and replied in the thread" : ""}. I make ${product}, which sends the reminders for you, so I'm biased. Want me to send the link?`
+            ? `Saw your post about clients paying late${repliedIn(t, kind) ? " and replied in the thread" : ""}. I make ${product}, which sends the reminders for you, so I'm biased. Want me to send the link?`
             : "One more thing that helps: put the late fee in the first reminder, not the third, so it reads as policy rather than a threat.",
         })),
       }),
       agent: "sales",
       system: kind === "dm" ? DM_SYSTEM : NUDGE_SYSTEM,
-      prompt: `${documentsBlock({ product: docs.product, strategy: docs.strategy, brand: docs.brand })}\n\n${founderWritingBlock(docs) ? `${founderWritingBlock(docs)}\n\n` : ""}${voice ? `${voice}\n\n` : ""}${avoid.length ? `Words to avoid: ${avoid.join(", ")}\n\n` : ""}${targets.map(dmBlock).join("\n\n")}\n\nDraft one ${kind === "dm" ? "message" : "follow-up"} per thread.`,
+      prompt: `${documentsBlock({ product: docs.product, strategy: docs.strategy, brand: docs.brand })}\n\n${founderWritingBlock(docs) ? `${founderWritingBlock(docs)}\n\n` : ""}${voice ? `${voice}\n\n` : ""}${avoid.length ? `Words to avoid: ${avoid.join(", ")}\n\n` : ""}${targets.map(dmBlock(kind)).join("\n\n")}\n\nDraft one ${kind === "dm" ? "message" : "follow-up"} per thread.`,
       schema: DmSchema,
       onUsage: (usage) => {
         answered = usage.model;
@@ -777,7 +789,7 @@ export async function draftMessages(
       .filter(([index, text]) => {
         const target = targets[index];
         if (!target || !text) return false;
-        return !(kind === "dm" ? dmProblems(text, products, target.reply !== null) : nudgeProblems(text, products)).length;
+        return !(kind === "dm" ? dmProblems(text, products, repliedIn(target, kind)) : nudgeProblems(text, products)).length;
       }),
   );
   return { textFor, gen: { model: genModel(answered, fakeAllowed()), prompt_version: kind === "dm" ? DM_VERSION : NUDGE_VERSION } };
@@ -787,7 +799,7 @@ export async function salesScan(ctx: JobContext): Promise<SalesScanOutput & JobO
   const { store, run } = ctx;
   // A brief from the CMO chat or a Reddit item on the calendar (H3): it steers the searches, not the scoring rules.
   const brief = typeof run.input.brief === "string" ? run.input.brief.slice(0, 300) : "";
-  const { docs, memories, seen, settings, mentionsUsed, mentionsWaiting = 0, voice, paid = true, themes = [] } = await ctx.step(
+  const { docs, memories, seen, authors, settings, mentionsUsed, mentionsWaiting = 0, voice, paid = true, themes = [] } = await ctx.step(
     "read_doc",
     "Read your product and strategy",
     async () => ({
@@ -796,6 +808,8 @@ export async function salesScan(ctx: JobContext): Promise<SalesScanOutput & JobO
       // the check or written by a job.
       memories: await recall(store, run.user_id, 15, "sales", (text) => safeForSales(text, true)),
       seen: await store.seenUrls(run.user_id),
+      // One card per person: everyone the founder already has a card for is skipped before scoring (and SQL holds it).
+      authors: await store.seenAuthors(run.user_id),
       settings: await store.salesSettings(run.user_id),
       mentionsUsed: await store.recentMentions(run.user_id),
       mentionsWaiting: await store.waitingMentions(run.user_id),
@@ -828,11 +842,20 @@ export async function salesScan(ctx: JobContext): Promise<SalesScanOutput & JobO
   // a seen card must stay seen under any of them (Review focus 5).
   const seenNorm = new Set([...seen].map(normalizeConversationUrl).filter((u): u is string => u !== null));
   const taken = new Set<string>();
+  /** Threads skipped because their author already has a card: open, replied to, messaged, not interested or not a fit. */
+  let known = 0;
   const cutoff = Date.now() - MAX_AGE_DAYS * 86_400_000;
-  /** The thread under its stored URL when it is new, allowed and recent; null otherwise. */
+  /** The thread under its stored URL when it is new, by someone new, allowed and recent; null otherwise. */
   const fresh = <T extends ScanThread>(t: T): T | null => {
     const url = postUrl(t.platform, t.url);
     if (!url || seen.has(url) || seenNorm.has(url) || taken.has(url)) return null;
+    // "I will not write again" (the email's last line) holds for every thread they write, not only the one we found.
+    const person = personKey(t.platform, t.author);
+    if (person && authors.has(person)) {
+      taken.add(url);
+      known += 1;
+      return null;
+    }
     // The founder's limits cost nothing to apply: excluded threads are never scored (P5 F5).
     if (!allowedBySettings(t, settings)) return null;
     if (t.postedAt && new Date(t.postedAt).getTime() < cutoff) return null;
@@ -858,7 +881,8 @@ export async function salesScan(ctx: JobContext): Promise<SalesScanOutput & JobO
   const searched = queries.slice(0, MAX_QUERIES);
   const output = (scanned: number, o: { cards: number; skipped?: number; dropped?: number }): SalesScanOutput => ({
     cards: o.cards,
-    skipped: o.skipped ?? 0,
+    // Skipped: by the community's rules, or because the person already has a card.
+    skipped: (o.skipped ?? 0) + known,
     dropped: o.dropped ?? 0,
     refund: o.cards === 0,
     platforms,
@@ -996,10 +1020,22 @@ export async function salesScan(ctx: JobContext): Promise<SalesScanOutput & JobO
           })
         ).scores;
     const byIndex = new Map(scores.map((s) => [s.index, s]));
+    // Two threads by one person in this scan: their best one only, so they get one card and at most one DM.
+    const people = new Set<string>();
     return scanned
       .map((thread, i) => ({ thread, scored: byIndex.get(i), result: scoreThread(thread, byIndex.get(i), ctx.now.getTime()) }))
       .filter((r): r is { thread: ScanThread; scored: Scored; result: { score: number; parts: ScorePart[] } } => r.result !== null && r.result.score >= PASS_SCORE)
       .sort((a, b) => b.result.score - a.result.score)
+      .filter((r) => {
+        const person = personKey(r.thread.platform, r.thread.author);
+        if (!person) return true;
+        if (people.has(person)) {
+          known += 1;
+          return false;
+        }
+        people.add(person);
+        return true;
+      })
       .slice(0, MAX_CARDS);
   }, (r) => (r.length ? `${r.length} worth joining (score ${PASS_SCORE}+)` : "None scored high enough"));
 
@@ -1090,7 +1126,7 @@ export async function salesScan(ctx: JobContext): Promise<SalesScanOutput & JobO
     "create_card",
     "Adding cards to Approvals",
     async () => (items.length || skipped.length ? (await store.saveOpportunities(run.user_id, run.id, [...items, ...skipped])) - skipped.length : 0),
-    (n) => `${Math.max(0, n)} ${n === 1 ? "card" : "cards"} in Approvals${skipped.length ? ` · ${skipped.length} skipped by community rules` : ""}`,
+    (n) => `${Math.max(0, n)} ${n === 1 ? "card" : "cards"} in Approvals${skipped.length ? ` · ${skipped.length} skipped by community rules` : ""}${known ? ` · ${known} from people you already found` : ""}`,
   );
   const cards = Math.max(0, saved);
 
@@ -1117,7 +1153,6 @@ export async function salesScan(ctx: JobContext): Promise<SalesScanOutput & JobO
 
   // Wave 3 B1/B2: who is ready for a DM, from the post and its thread only, and one DM draft for each who is. A free
   // scan saves the checks (the screen shows why) but drafts no DM, as it drafts no reply.
-  const replyByUrl = new Map(items.map((o) => [o.url, o.reply]));
   let people = planned
     .filter((p) => kept.has(p.thread.url))
     .map((p) => ({ p, ...reachFor(p.thread, p.scored, p.result.parts, p.read, ctx.now) }));
@@ -1147,12 +1182,14 @@ export async function salesScan(ctx: JobContext): Promise<SalesScanOutput & JobO
   const dmFor = !dmReady.length ? new Map<number, string>() : (await ctx.step(
     "draft_dm",
     `Drafting ${dmReady.length} ${dmReady.length === 1 ? "message" : "messages"} for people ready for one`,
-    // The public reply comes first on the card, so the DM may refer to it; the founder sends both.
+    // These people are new (one card per person), so the founder has posted nothing to them yet: the DM is a first
+    // contact. The reply on the card is only a draft, and a DM that says "I replied in the thread" before the founder
+    // did would be a lie in a stranger's inbox (review 2026-11-21).
     // The cards are saved: a model that fails here leaves these people with no DM draft, never a failed scan whose
     // refund and retry would find every thread seen, and `save_reach` below still runs.
     async () => {
       try {
-        return await draftMessages(ctx, "dm", { docs, voice, targets: dmReady.map((x) => ({ thread: x.p.thread, reply: replyByUrl.get(x.p.thread.url) || null })) });
+        return await draftMessages(ctx, "dm", { docs, voice, targets: dmReady.map((x) => ({ thread: x.p.thread, reply: null })) });
       } catch (error) {
         console.error(`[cmo] sales_scan ${run.id}: DMs not drafted`, error);
         return { textFor: new Map<number, string>() };

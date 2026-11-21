@@ -107,7 +107,7 @@ test("a platform quiet for days comes first and asks the CMO for a post", async 
     await page.goto("/app");
     const first = page.getByTestId("approval-queue").getByTestId("feed-row").first();
     await expect(first).toContainText("LinkedIn: nothing posted for 9 days");
-    await first.getByRole("button", { name: "Ask your CMO for a post" }).click();
+    await first.getByRole("button", { name: "Ask Ferreto for a post" }).click();
     await expect(page.locator("textarea:focus")).toHaveValue("Write me a post for LinkedIn for today.");
   } finally {
     await db.from("content_items").delete().eq("id", old!.id);

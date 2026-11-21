@@ -119,7 +119,7 @@ function Look({ look, name }: { look: Record<string, unknown>; name: string }) {
           <span style={{ alignSelf: "flex-start", fontSize: "12px", padding: "2px 8px", borderRadius: "999px", background: accent }}>Your accent colour</span>
         </div>
         <p className="meta" style={{ margin: "6px 0 0" }}>
-          Images made in Post use these colours and this font.
+          What Ferreto learned about your look from your website. Quote cards on a post use the Brand Kit you set in the editor.
         </p>
       </Section>
     </>
@@ -369,7 +369,7 @@ export function BusinessView() {
         <header style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: "8px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
             <span className="meta">
-              {written ? `Version ${written.version} · ${written.created_by === "user" ? "edited by you" : "drafted by your CMO"} ${when(written.created_at)}` : "Not written yet"}
+              {written ? `Version ${written.version} · ${written.created_by === "user" ? "edited by you" : "drafted by Ferreto"} ${when(written.created_at)}` : "Not written yet"}
             </span>
             <span style={{ marginLeft: "auto", display: "flex", gap: "8px" }}>
               {draft ? (
@@ -416,7 +416,7 @@ export function BusinessView() {
           </div>
         ) : (
           <p>
-            Not written yet. Your CMO writes it from your website, or you can write it yourself. <Link href="/app/setup">Set up from your website</Link>
+            Not written yet. Ferreto writes it from your website, or you can write it yourself. <Link href="/app/setup">Set up from your website</Link>
           </p>
         )}
       </article>

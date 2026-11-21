@@ -23,8 +23,8 @@ test("a finished draft comes back to the chat and lands on the feed; Open goes t
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/app");
   const chat = page.locator("#v2-chat");
-  await chat.getByLabel("Ask your CMO").fill("Draft a post for X about the launch");
-  await chat.getByLabel("Ask your CMO").press("Enter");
+  await chat.getByRole("textbox", { name: "Ask Ferreto" }).fill("Draft a post for X about the launch");
+  await chat.getByRole("textbox", { name: "Ask Ferreto" }).press("Enter");
 
   const line = chat.getByTestId("run-line");
   await expect(line).toContainText("Draft ready to review", { timeout: 120_000 });
@@ -34,7 +34,7 @@ test("a finished draft comes back to the chat and lands on the feed; Open goes t
   // The run line's Open is the way to Writer: there the chat is a drawer, and it stays open.
   await line.getByRole("button", { name: "Open" }).click();
   await expect(page).toHaveURL(/\/app\/writer/);
-  await expect(chat.getByLabel("Ask your CMO")).toBeVisible();
+  await expect(chat.getByRole("textbox", { name: "Ask Ferreto" })).toBeVisible();
   await page.screenshot({ path: join(OUT, "run-line-1440.png") });
 
   const up = chat.getByRole("button", { name: "Good answer" }).last();

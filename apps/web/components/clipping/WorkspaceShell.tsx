@@ -35,7 +35,7 @@ type NavEntry = { view: WorkspaceNavView; label: string; icon: IconName };
  * nó là sheet mở trên Dashboard (`?doc=`), vào từ menu dự án và cột Brief.
  */
 const MAIN: (NavEntry & { hint: string; beta?: boolean })[] = [
-  { view: "home", label: "Dashboard", icon: "chart-column", hint: "AI CMO" },
+  { view: "home", label: "Dashboard", icon: "chart-column", hint: "Feed" },
   // Beta while background swap and AI editing are being reworked; the AI CMO is the main door.
   { view: "editor", label: "Editor", icon: "clapperboard", hint: "Clips, captions, timeline", beta: true },
 ];

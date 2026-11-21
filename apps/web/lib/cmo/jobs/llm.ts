@@ -94,7 +94,7 @@ export async function structured<S extends z.ZodType>(input: StructuredOptions<S
       }
     : input;
   const candidates = agentCandidates(opts.agent);
-  if (!candidates.length) throw new LlmError("The AI CMO is not set up on this server yet.");
+  if (!candidates.length) throw new LlmError("Ferreto's writing model is not set up on this server yet.");
   try {
     // The founder's daily provider cap (spend ledger): refused before the call, never after it.
     await assertSpendAllowed();

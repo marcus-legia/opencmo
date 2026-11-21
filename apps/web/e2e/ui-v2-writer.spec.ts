@@ -109,7 +109,7 @@ async function founder(db: SupabaseClient): Promise<E2EUser> {
   expect((await db.from("profiles").update({ plan: "starter" }).eq("id", user.id)).error).toBeNull();
   const doc = await db
     .from("marketing_documents")
-    .insert({ user_id: user.id, kind: "product", version: 1, created_by: "user", body: { name: "Ferreto", one_liner: "An AI CMO for solo founders." } });
+    .insert({ user_id: user.id, kind: "product", version: 1, created_by: "user", body: { name: "Ferreto", one_liner: "A customer-finding tool for founders." } });
   expect(doc.error).toBeNull();
   return user;
 }
@@ -195,7 +195,7 @@ test("Library → Voice: notes with platform, source and weight; delete asks fir
     await expect(notes).toHaveCount(2);
 
     await page.goto("/app/library?tab=skills&sample=1");
-    await expect(page.getByText("Read by Writer, Checker, Sales, CMO chat")).toBeVisible();
+    await expect(page.getByText("Read by Writer, Checker, Sales, Chat")).toBeVisible();
     // Skills are read only: no switch in the pane.
     await expect(page.getByRole("dialog", { name: "Skills" }).getByRole("switch")).toHaveCount(0);
     await axeAndShot(page, "library-skills", width);

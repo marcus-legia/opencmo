@@ -120,7 +120,7 @@ export const POST = withApi({ body, rateLimit: { bucket: "agent-session", limit:
     });
   } else {
     const provider = agentChatProvider("cmo");
-    if (!provider) throw new ApiError(503, "Your CMO is not available yet.");
+    if (!provider) throw new ApiError(503, "The chat is not available yet.");
     session = await rpcOrThrow<SessionRow>(supabase, "agent_open_cmo_session", { p_model: provider.model, p_new: body.new ?? false });
   }
   return sessionView(supabase, session);

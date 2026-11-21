@@ -9,7 +9,6 @@ import { ApiError, api, jsonBody } from "@/components/clipping/api";
 import { fillChat } from "@/components/dashboard/TodayBlock";
 import { useShellState } from "@/components/shell-v2/ShellState";
 import { useScreen } from "@/components/screens/useScreen";
-import { JOB_PRICES } from "@/lib/cmo/jobs/progress";
 import { PLATFORM_LABEL as SOURCE_LABEL } from "@/lib/cmo/social/conversations";
 import type { ApprovalCard as Card } from "@/lib/screens/approval-card";
 import { PLATFORM_LABEL } from "@/lib/screens/common";
@@ -224,9 +223,9 @@ export function AgentWriter() {
             <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
               <span className="meta">Reads</span>
               <span className="chip">Strategy</span>
-              <span className="chip">Content plan</span>
+              <span className="chip">Post plan</span>
               <span className="chip">Product</span>
-              <span className="chip">Your voice</span>
+              <span className="chip">Brand</span>
             </div>
           </div>
         </div>
@@ -249,7 +248,7 @@ export function AgentWriter() {
           <label htmlFor="ask-writer" style={{ position: "absolute", width: "1px", height: "1px", overflow: "hidden", clip: "rect(0 0 0 0)" }}>
             Ask for a post
           </label>
-          <input id="ask-writer" type="text" placeholder="Ask for a post or a video script" value={ask} onChange={(e) => setAsk(e.target.value)} />
+          <input id="ask-writer" type="text" placeholder="Ask for a post" value={ask} onChange={(e) => setAsk(e.target.value)} />
           <label htmlFor="ask-kind" style={{ position: "absolute", width: "1px", height: "1px", overflow: "hidden", clip: "rect(0 0 0 0)" }}>
             Kind
           </label>
@@ -261,7 +260,7 @@ export function AgentWriter() {
             ))}
           </select>
           <button type="submit" className="primary">
-            Write it · {JOB_PRICES.post_draft ?? 1} credit
+            Write it
           </button>
         </form>
 
@@ -383,17 +382,6 @@ export function AgentWriter() {
               </ul>
             </>
           ) : null}
-        </section>
-        <section className="card">
-          <h2 style={{ margin: "0 0 6px", fontSize: "14px", fontWeight: "600" }}>What it costs</h2>
-          <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0" }}>
-            <span>Week plan</span>
-            <span className="meta">{JOB_PRICES.plan_week ?? 1} credit</span>
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0" }}>
-            <span>Extra post or script</span>
-            <span className="meta">{JOB_PRICES.post_draft ?? 1} credit</span>
-          </div>
         </section>
       </aside>
     </div>

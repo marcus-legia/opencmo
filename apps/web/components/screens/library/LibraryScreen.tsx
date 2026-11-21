@@ -173,7 +173,7 @@ function VoiceRules({ page, onChanged }: { page: VoicePage; onChanged: () => voi
         }
       >
         <div className="scr-rows">
-          {page.rules.length === 0 && <p className="scr-row scr-muted">No rules yet. Rate a few drafts, or approve a rule your CMO proposes from your edits.</p>}
+          {page.rules.length === 0 && <p className="scr-row scr-muted">No rules yet. Rate a few drafts, or approve a rule Ferreto proposes from your edits.</p>}
           {page.rules.map((rule) =>
             editing?.id === rule.id ? (
               <form

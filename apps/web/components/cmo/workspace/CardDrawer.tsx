@@ -176,7 +176,7 @@ function SalesDetail({ card, act, onToast }: { card: SalesCard; act: Actions["ca
             void run({ type: "dismiss", reason: reason.trim() || undefined });
           }}
         >
-          <label htmlFor={`dismiss-${card.id}`}>Why dismiss it? <small>Optional. Your CMO learns from it.</small></label>
+          <label htmlFor={`dismiss-${card.id}`}>Why dismiss it? <small>Optional. Ferreto learns from it.</small></label>
           <input id={`dismiss-${card.id}`} value={reason} maxLength={400} onChange={(e) => setReason(e.target.value)} placeholder="Not our customer, wrong subreddit, too old…" />
           <div className="cmo-feed-actions">
             <button type="button" className="text-button" onClick={() => setDismissing(false)} disabled={busy}>Cancel</button>

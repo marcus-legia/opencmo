@@ -54,7 +54,7 @@ test("rate three drafts, accept two rules, see them in Library → Voice", async
   await drafts.nth(2).getByRole("button", { name: "Too long" }).click();
   await sheet.getByRole("button", { name: "Send 3 ratings" }).click();
 
-  await expect(sheet.getByRole("heading", { name: "Your CMO learned:" })).toBeVisible({ timeout: 60_000 });
+  await expect(sheet.getByRole("heading", { name: "What Ferreto learned" })).toBeVisible({ timeout: 60_000 });
   await expect(sheet.getByTestId("rating-rule")).toHaveCount(2);
   await sheet.getByRole("button", { name: "Use these rules" }).click();
   await expect(sheet).toContainText("2 rules saved.");

@@ -192,7 +192,7 @@ function silentRow(platform: TodayPlatform, days: number, post: TodayCard | unde
     platform,
     action: post
       ? { type: "card", approvalId: post.id, label: "Open the post" }
-      : { type: "chat", prompt: silentPrompt(platform), label: "Ask your CMO for a post" },
+      : { type: "chat", prompt: silentPrompt(platform), label: "Ask Ferreto for a post" },
   };
 }
 
@@ -349,7 +349,7 @@ export function buildToday(input: TodayInput): Today {
       reason: "first_run",
       level: "normal",
       title: "Ready to read: your marketing strategy",
-      detail: "Your CMO wrote it from your website. Edit anything that is wrong; every draft after reads it.",
+      detail: "Ferreto wrote it from your website. Edit anything that is wrong; every draft after reads it.",
       department: "brain",
       platform: null,
       action: { type: "link", href: "/app?doc=strategy", label: "Read it" },
@@ -361,7 +361,7 @@ export function buildToday(input: TodayInput): Today {
       reason: "first_run",
       level: "normal",
       title: "Rate your first drafts",
-      detail: "Thumbs up or down on a few versions, and your CMO turns them into rules for your voice.",
+      detail: "Thumbs up or down on a few versions, and Ferreto turns them into rules for how you write.",
       department: "writer",
       platform: null,
       action: { type: "link", href: "/app?rate=1", label: "Rate them" },

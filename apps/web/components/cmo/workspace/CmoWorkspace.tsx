@@ -2,7 +2,7 @@
 
 /**
  * Màn chính sau đăng nhập: AI CMO (docs/cmo/san-pham.md §3.2), style Lapis & Marble.
- * Dải lapis trên cùng; bốn cột Brief · Results · Approvals · Your CMO. Tên và
+ * Dải lapis trên cùng; bốn cột Brief · Results · Approvals · Chat. Tên và
  * style là của Ferreto, cố ý không theo Okara. Brief và Results thu được
  * thành dải hẹp (nhớ trong localStorage). Màn hẹp:
  * một cột + tab, mặc định là Approvals.
@@ -36,7 +36,7 @@ import { TopBar } from "./TopBar";
 type Tab = "feed" | "chat" | "context" | "analytics";
 const TABS: { id: Tab; label: string }[] = [
   { id: "feed", label: "Approvals" },
-  { id: "chat", label: "CMO" },
+  { id: "chat", label: "Chat" },
   { id: "context", label: "Brief" },
   { id: "analytics", label: "Results" },
 ];
@@ -205,7 +205,7 @@ export function CmoWorkspace({ initial }: { initial: Workspace }) {
           // Thread Reddit: chỉ "đã tự trả lời" hoặc "bỏ" — không có đường đăng.
           const body = act.type === "replied" ? { action: "replied" } : { action: "dismissed", reason: act.type === "dismiss" ? act.reason : undefined };
           await api(`/cmo/opportunities/${card.id}`, jsonBody(body));
-          setToast(act.type === "replied" ? "Marked as replied." : "Dismissed. Your CMO will look for better threads.");
+          setToast(act.type === "replied" ? "Marked as replied." : "Dismissed. Ferreto will look for better threads.");
         } else {
           const body =
             act.type === "approve"
@@ -215,7 +215,7 @@ export function CmoWorkspace({ initial }: { initial: Workspace }) {
                 : { action: "posted", url: act.type === "posted" ? act.url : undefined };
           await api(`/cmo/items/${card.id}`, jsonBody(body));
           setToast(
-            act.type === "approve" ? "Approved. Post it on X when you are ready." : act.type === "posted" ? "Marked as posted." : "Skipped. Your CMO will plan around it.",
+            act.type === "approve" ? "Approved. Post it on X when you are ready." : act.type === "posted" ? "Marked as posted." : "Skipped. Ferreto will plan around it.",
           );
         }
         epoch.current += 1;
@@ -231,7 +231,7 @@ export function CmoWorkspace({ initial }: { initial: Workspace }) {
     async goal(goal, act) {
       try {
         await api(`/cmo/goals/${goal.id}`, jsonBody(act));
-        setToast(act.action === "approve" ? "Goal approved. Your CMO plans the week around it." : "Goal dismissed. Ask your CMO for a different one.");
+        setToast(act.action === "approve" ? "Goal approved. Ferreto plans the week around it." : "Goal dismissed. Ask Ferreto for a different one.");
         void refresh();
         return true;
       } catch (error) {

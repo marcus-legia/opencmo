@@ -22,6 +22,15 @@ export function emailSubject(threadTitle: string): string {
   return subject.length <= MAX_SUBJECT ? subject : `${subject.slice(0, MAX_SUBJECT - 1).trimEnd()}…`;
 }
 
+/**
+ * The email's starting text when no DM was drafted (daily limit, a draft the checks dropped, a platform without DMs):
+ * an opening that names their post, and the one line the founder writes themselves. Never an empty box.
+ */
+export function emailOpening(threadTitle: string): string {
+  const title = threadTitle.replace(/\s+/g, " ").trim();
+  return `Hi,\n\nI read your post${title ? ` "${title}"` : ""} and wanted to write to you directly.\n\n[One or two lines on how you can help with what they described.]`;
+}
+
 /** The body as sent: the draft, then the opt-out line unless the founder already wrote it. */
 export function emailBody(draft: string): string {
   const body = draft.trim();

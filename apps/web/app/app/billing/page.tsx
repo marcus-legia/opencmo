@@ -22,14 +22,15 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   const site = typeof siteParam === "string" ? siteParam.slice(0, 300) : undefined;
   const supabase = await createServerClient();
 
+  const ledgerRows = supabase.from("credit_ledger").select("*");
   const [{ data: profile }, { data: ledger }, plans, packs, { data: usage }] = await Promise.all([
     supabase
       .from("profiles")
       .select("plan, creem_customer_id")
       .maybeSingle<{ plan: string; creem_customer_id: string | null }>(),
-    supabase
-      .from("credit_ledger")
-      .select("*")
+    // v2 lists payments only: the rows Creem's webhook wrote (`creem:` keys). Holds, refunds of failed work and test
+    // top-ups are bookkeeping under the fair-use bar, not something a founder paid for.
+    (UI_V2 ? ledgerRows.like("external_id", "creem:%") : ledgerRows)
       .order("created_at", { ascending: false })
       .limit(30)
       .returns<LedgerEntry[]>(),

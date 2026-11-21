@@ -5,7 +5,7 @@
 
 export const WINDOWS = [7, 30, 90] as const;
 
-export type FunnelStep = "signed_up" | "onboarded" | "approved" | "scheduled" | "posted" | "paid";
+export type FunnelStep = "signed_up" | "onboarded" | "free_scan" | "found" | "approved" | "scheduled" | "posted" | "paid";
 
 export type FunnelReport = {
   since: string;
@@ -13,11 +13,15 @@ export type FunnelReport = {
   median_seconds: { onboarded: number | null; approved: number | null; posted: number | null };
   active_7d: { eligible: number; active: number; paid_eligible: number; paid_active: number };
   by_week: { week: string; signed_up: number; onboarded: number; approved: number; posted: number; paid: number }[];
+  /** First-touch channel (`ref`, `utm_source`, the linking host, or "direct"), deleted accounts included (`signup_outcomes`). */
+  by_channel?: { channel: string; signed_up: number; free_scan: number; found: number; paid: number }[];
 };
 
 const LABEL: Record<FunnelStep, string> = {
   signed_up: "Signed up",
   onboarded: "Website read (documents saved)",
+  free_scan: "Ran the free scan",
+  found: "The scan found someone",
   approved: "Approved a first card",
   scheduled: "Scheduled a post",
   posted: "Posted",

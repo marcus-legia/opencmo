@@ -31,7 +31,7 @@ export type DocId = DocumentKind | PaneId;
 /** The five documents of the Context column, with who reads each (Main.dc.html). */
 export const DOC_ROWS: { id: DocId; title: string; readBy: string; readers: string[] }[] = [
   { id: "product", title: "Product", readBy: "Read by every agent", readers: ["Every agent"] },
-  { id: "strategy", title: "Strategy", readBy: "Planner, Writer", readers: ["Planner", "Writer", "CMO chat"] },
+  { id: "strategy", title: "Strategy", readBy: "Planner, Writer", readers: ["Planner", "Writer", "Chat"] },
   { id: "competitors", title: "Competitors", readBy: "Research, Sales", readers: ["Research", "Sales"] },
   { id: "post_plan", title: "Post plan", readBy: "Planner, Writer", readers: ["Planner", "Writer"] },
   // Wave 3 A4: Brand is a document now (voice and look); the editor's Brand Kit stays in the editor.
@@ -43,7 +43,7 @@ type Row = { id: DocId; title: string; readBy: string; readers: string[] };
 /** The drawer's other sections, after the documents: the CMO's week and memory (was Brain), how it writes (was Library). */
 export const PANE_GROUPS: { title: string; rows: Row[] }[] = [
   {
-    title: "Your CMO",
+    title: "Your week",
     rows: [
       { id: "plan", title: "Plan and orders", readBy: "This week's goal, orders and measures", readers: [] },
       { id: "learned", title: "What it learned", readBy: "Lessons, rules from your edits", readers: [] },
@@ -243,7 +243,7 @@ export function ContextDrawer({ doc, edit = false, onClose, onOpen }: { doc: Doc
           {learned.length > 0 && doc !== "learned" ? (
             <div style={{ borderTop: "1px solid var(--line)", paddingTop: "12px", marginTop: "10px" }}>
               <div className="sec">
-                <h2>What your CMO learned</h2>
+                <h2>What Ferreto learned</h2>
                 <span className="meta">this week</span>
               </div>
               {learned.map((l) => (
@@ -275,7 +275,7 @@ export function ContextDrawer({ doc, edit = false, onClose, onOpen }: { doc: Doc
             <span style={{ fontWeight: "600", fontSize: "15px" }}>{row.title}</span>
             {written ? (
               <span className="meta">
-                · version {written.version} · updated {ago(written.created_at)} by {written.created_by === "user" ? "you" : "your CMO"}
+                · version {written.version} · updated {ago(written.created_at)} by {written.created_by === "user" ? "you" : "Ferreto"}
               </span>
             ) : null}
             <div style={{ flex: "1 1 auto" }}></div>
@@ -325,7 +325,7 @@ export function ContextDrawer({ doc, edit = false, onClose, onOpen }: { doc: Doc
               ) : written ? (
                 DOCUMENTS[kind].fields.map((f) => <Field key={f.key} label={f.label} value={written.body[f.key]} />)
               ) : (
-                <p style={{ marginTop: "16px" }}>Not written yet. Your CMO writes it from your website, or you can write it yourself.</p>
+                <p style={{ marginTop: "16px" }}>Not written yet. Ferreto writes it from your website, or you can write it yourself.</p>
               )
             ) : (
               <div className="td-brandhost v2" style={{ marginTop: "16px" }}>
@@ -357,7 +357,7 @@ export function ContextDrawer({ doc, edit = false, onClose, onOpen }: { doc: Doc
                       fillChat(`Change my ${row.title.toLowerCase()} document: `);
                     }}
                   >
-                    Ask your CMO to change it
+                    Ask Ferreto to change it
                   </button>
                   <button type="button" className="primary" disabled={!state} onClick={() => setDraft(structuredClone(written?.body ?? {}))}>
                     <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">

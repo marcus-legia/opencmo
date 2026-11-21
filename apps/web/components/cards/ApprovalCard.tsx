@@ -492,7 +492,7 @@ export function ApprovalCard({
           )}
 
           {card.body.kind === "post" && editing && draft.trim() !== shown && card.status === "waiting" ? (
-            <ReasonChips label="What did you fix? Optional: your CMO learns from it." value={fixCode} onChange={setFixCode} only={FIX_REASONS} disabled={busy} />
+            <ReasonChips label="What did you fix? Optional. Ferreto learns from it." value={fixCode} onChange={setFixCode} only={FIX_REASONS} disabled={busy} />
           ) : null}
           {proposed ? (
             <p className="v2-card-meta" data-testid="post-when">
@@ -586,11 +586,11 @@ export function ApprovalCard({
               }}
             >
               {card.kind === "post" ? (
-                <ReasonChips label="Why skip it? Optional: your CMO learns from it." value={reasonCode} onChange={setReasonCode} disabled={busy} />
+                <ReasonChips label="Why skip it? Optional. Ferreto learns from it." value={reasonCode} onChange={setReasonCode} disabled={busy} />
               ) : null}
               {card.kind !== "post" || reasonCode === "OTHER" ? (
                 <label className="v2-field">
-                  <span>{card.kind === "post" ? "What was wrong with it?" : "Why? Your CMO learns from it (optional)"}</span>
+                  <span>{card.kind === "post" ? "What was wrong with it?" : "Why? Ferreto learns from it (optional)"}</span>
                   <input className="v2-input" value={reason} maxLength={400} autoFocus onChange={(event) => setReason(event.target.value)} />
                 </label>
               ) : null}

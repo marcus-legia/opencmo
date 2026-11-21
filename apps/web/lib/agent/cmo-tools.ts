@@ -62,7 +62,7 @@ export const CMO_TOOL_SPECS: ToolSpec[] = [
   {
     name: "list_approvals",
     description:
-      "List the cards waiting on the founder in Approvals (every kind: post, reply, goal, schedule, script, price, finished video, shorts, slideshow, correction), posts drafted, approved or published in the last 14 days, and Sales conversations (Reddit, Hacker News, Facebook groups, Threads: community, score, status) waiting for a reply.",
+      "List the cards waiting on the founder in Approvals (every kind: post, reply, goal, schedule, finished video, correction), posts drafted, approved or published in the last 14 days, and Sales conversations (Reddit, Hacker News, Facebook groups, Threads: community, score, status) waiting for a reply.",
     schema: EMPTY,
     strict: true,
   },
@@ -70,10 +70,10 @@ export const CMO_TOOL_SPECS: ToolSpec[] = [
     name: "create_task",
     description: [
       "Hand a task to one of your agents. Each task needs a specific brief: what to make, for whom, and the angle or evidence from your research (with URLs).",
-      "planner: plan the next seven days into the calendar (1 credit; when = now only).",
-      "x_writer: draft an X post, three versions, into Approvals (1 credit). With thread: true, one X thread of 5 to 8 posts instead (1 credit; only when the founder asks for a thread; when = now only).",
-      "sales: find people describing the problem in conversations on Reddit, Hacker News, public Facebook groups and Threads (not X), score them with quotes, draft replies the founder posts themselves (5 credits; only when the founder asks).",
-      "research: study competitors' X accounts, find posts that beat their baseline and the hooks behind them, and save what works for the planner and X writer (2 credits; pass handles, or it uses the X handles in Competitor Analysis; when = now only).",
+      "planner: plan the next seven days into the calendar (when = now only).",
+      "x_writer: draft an X post, three versions, into Approvals. With thread: true, one X thread of 5 to 8 posts instead (only when the founder asks for a thread; when = now only).",
+      "sales: find people describing the problem in conversations on Reddit, Hacker News, public Facebook groups and Threads (not X), score them with quotes, draft replies the founder posts themselves (the founder confirms it on a card; only when the founder asks).",
+      "research: study competitors' X accounts, find posts that beat their baseline and the hooks behind them, and save what works for the planner and X writer (the founder confirms it on a card; pass handles, or it uses the X handles in Competitor Analysis; when = now only).",
       "when: \"now\" runs it in the background, usually within a minute: x_writer and sales results land in Approvals, the planner's on the calendar, research's in what the planner and X writer read. A date (YYYY-MM-DD, within 13 days) puts it on the calendar and it runs that morning. Nothing is posted until the founder approves.",
     ].join(" "),
     schema: {
@@ -430,7 +430,7 @@ async function runTool(supabase: SupabaseClient, name: string, input: unknown, t
             p_department: DEPARTMENT_OF[task.agent],
             p_idea: task.brief,
             p_day: day,
-            p_reason: "Added by your CMO",
+            p_reason: "Added from the chat",
             p_body: { brief: task.brief },
           });
           return { ok: true, content: JSON.stringify({ scheduled: true, item_id: item.id, day: item.day }), summary: `Scheduled for ${item.day}`, ...opens({ screen: "schedule" }) };

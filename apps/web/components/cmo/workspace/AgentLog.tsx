@@ -46,7 +46,7 @@ export function AgentLog({ open, height, onHeight, entries }: { open: boolean; h
     <section id="cmo-console" className="cmo-console" data-open={open || undefined} style={{ height: open ? height : 0 }} aria-label="Activity" aria-hidden={!open} data-testid="cmo-log">
       <div className="cmo-console-scroll" ref={list}>
         {entries.length === 0 ? (
-          <p className="cmo-console-line is-muted">&gt; Nothing has run yet. Every task your CMO runs shows up here, step by step.</p>
+          <p className="cmo-console-line is-muted">&gt; Nothing has run yet. Every task Ferreto runs shows up here, step by step.</p>
         ) : (
           entries.map((entry) => (
             <div key={entry.id} className={`cmo-console-entry is-${entry.status}`}>

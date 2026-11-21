@@ -38,7 +38,7 @@ export function SetupQuestions({ status }: { status: OnboardingStatus }) {
     return (
       <aside className="v2-panel td-setup-next" data-testid="setup-questions-saved">
         <div className="v2-panel-body">
-          <p role="status">Saved. Your CMO plans with these answers.</p>
+          <p role="status">Saved. Ferreto plans with these answers.</p>
         </div>
       </aside>
     );

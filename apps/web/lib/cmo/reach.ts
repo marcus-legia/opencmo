@@ -104,5 +104,17 @@ export function platformHasDms(platform: SalesPlatform): boolean {
   return DM_PLATFORMS.includes(platform);
 }
 
+/** Authors no one can be told apart by: never deduped (as `cmo_save_opportunities`, 20270204010000). */
+const NO_PERSON = new Set(["", "[deleted]", "[removed]", "u/[deleted]", "u/[removed]"]);
+
+/**
+ * One key per person (review 2026-11-21): the platform and the author's handle, trimmed and lower-cased, the way SQL
+ * compares them. Null for an author we cannot tell apart, who is never deduped.
+ */
+export function personKey(platform: SalesPlatform, author: string | null | undefined): string | null {
+  const handle = (author ?? "").slice(0, 100).trim().toLowerCase();
+  return NO_PERSON.has(handle) ? null : `${platform}:${handle}`;
+}
+
 /** One reach check the scan hands `cmo_save_reach`, keyed by the thread's url; `dm` only for a DM-ready person. */
 export type ReachSaveItem = { url: string; level: ReachLevel; reach: ReachCheck; dm?: string };
