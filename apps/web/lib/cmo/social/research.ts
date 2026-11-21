@@ -53,7 +53,8 @@ function fakePosts(platform: SocialPost["platform"], seed: string, author: strin
   return perf.map((p, i) => ({
     platform,
     url: base(i),
-    author,
+    // A search returns posts by different people (Sales keeps one card per person); a profile's posts share one author.
+    author: platform === "reddit" ? `u/fake_founder_${i}` : author,
     text: i === 0 ? `Stop doing ${seed} the hard way. Here's the 3-step version I wish I had.` : i === 1 ? `I tried 5 ways to handle ${seed}. Only one stuck.` : `Notes on ${seed}, part ${i}.`,
     postedAt: new Date(Date.now() - (i + 1) * 20 * hour).toISOString(),
     views: platform === "tiktok" || platform === "youtube" ? p * 100 : 0,

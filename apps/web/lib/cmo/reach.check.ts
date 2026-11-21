@@ -8,7 +8,7 @@
 import assert from "node:assert/strict";
 
 import { LibraryEntrySchema } from "./library";
-import { ReachCheckSchema, isFresh, platformHasDms, reachLevel, reachReason, type ReachCheck } from "./reach";
+import { ReachCheckSchema, isFresh, personKey, platformHasDms, reachLevel, reachReason, type ReachCheck } from "./reach";
 
 const failures: string[] = [];
 function check(label: string, run: () => void): void {
@@ -81,6 +81,14 @@ check("reach line: no reason written falls back to a plain line", () => {
   assert.equal(reachReason("reply_first", { ...ready, fresh: false }), "Posted more than 7 days ago.");
   assert.equal(reachReason("reply_first", { ...ready, warm: false }), "Not warm yet: reply in public first.");
   assert.equal(reachReason("reply_first", null), "Reply in public first.");
+});
+check("one key per person: platform and handle, case and spaces ignored", () => {
+  assert.equal(personKey("reddit", " u/Sam_Studio "), "reddit:u/sam_studio");
+  assert.equal(personKey("reddit", "u/sam_studio"), personKey("reddit", "U/SAM_STUDIO"));
+  assert.notEqual(personKey("reddit", "sam"), personKey("threads", "sam"));
+});
+check("an author no one can be told apart by has no key", () => {
+  for (const author of ["", "  ", null, undefined, "[deleted]", "u/[deleted]", "u/[removed]"]) assert.equal(personKey("reddit", author), null);
 });
 
 if (failures.length) {

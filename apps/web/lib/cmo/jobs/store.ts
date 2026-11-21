@@ -9,7 +9,8 @@ import type { CmoStore, NudgeDue, DraftRating, CompetitorInsight, ConnectedAccou
 import { SCAN_CADENCES, isoDay, toVerdict } from "./types";
 import { enqueueDueDrafts } from "../schedule";
 import { planOrDefault } from "../posting-plan";
-import { SALES_PLATFORMS, parsePlatforms } from "../social/conversations";
+import { personKey } from "../reach";
+import { SALES_PLATFORMS, parsePlatforms, type SalesPlatform } from "../social/conversations";
 
 const ITEM_COLUMNS =
   "id, run_id, department, platform, day, idea, reason, status, priority, body, final_text, external_url, decided_at, published_at, created_at";
@@ -212,6 +213,12 @@ export function supabaseStore(admin: BaseClient): CmoStore {
       // An empty set after a failed read would re-score and re-draft threads that are already cards.
       if (error) throw new Error(`opportunities: ${error.message}`);
       return new Set(((data ?? []) as { url: string }[]).map((r) => r.url));
+    },
+    async seenAuthors(userId) {
+      // As `seenUrls`: an empty set after a failed read would make second cards for people already met.
+      const rows = await rpc<{ platform: string; author: string }[] | null>("cmo_seen_authors", { p_user: userId });
+      const known = (p: string): p is SalesPlatform => (SALES_PLATFORMS as readonly string[]).includes(p);
+      return new Set((rows ?? []).flatMap((r) => (known(r.platform) ? [personKey(r.platform, r.author)] : [])).filter((k): k is string => k !== null));
     },
     paid: (userId) => rpc<boolean>("cmo_paid", { p_user: userId }),
     async undraftedOpportunities(userId, limit) {
