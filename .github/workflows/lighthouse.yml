@@ -2,7 +2,6 @@ name: Lighthouse
 
 # Performance, accessibility, best practices and SEO of the public pages, on a production build of this commit with a
 # local Supabase (the Vercel preview is behind SSO and reads the production database). No secret, no paid call.
-# Plan: docs/plans/engineering/2026-11-15-lighthouse-ci-plan.md
 on:
   pull_request:
   push:

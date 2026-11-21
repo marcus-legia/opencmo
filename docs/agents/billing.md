@@ -1,11 +1,6 @@
 # Billing
 
-Moved verbatim from `CLAUDE.md` on 2026-11-20.
-
-## Billing (owner, 2026-11-04)
-
-The plan is [`docs/plans/billing/2026-11-04-polar-to-creem-plan.md`](docs/plans/billing/2026-11-04-polar-to-creem-plan.md),
-and Creem's docs are in `docs/creem-llm.txt`.
+Owner decisions of 2026-11-04 and after. Creem's own docs are in `docs/creem-llm.txt`.
 
 - **Creem is the only payment provider (merchant of record).** Polar was removed on 2026-11-05: code, tables and env. Do
   not bring it back.

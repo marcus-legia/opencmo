@@ -1,6 +1,6 @@
 # Engineering: budgets, running, traps, layout, web rules
 
-Moved verbatim from `CLAUDE.md` on 2026-11-20; `CLAUDE.md` keeps the rules agents break most.
+`CLAUDE.md` keeps the rules agents break most; [ARCHITECTURE.md](../../ARCHITECTURE.md) has the reasons.
 
 ## Hard budgets
 
@@ -84,7 +84,7 @@ packages/skills/       style skills: markdown + frontmatter → generated index;
 apps/web/               Next.js app; app/api/v1 = API (reads under RLS, writes via RPC)
   lib/agent/            the editor assistant (tools = editor-core ops)
   lib/generate/         AI media generation
-  lib/cmo/              the AI CMO job engine
+  lib/cmo/              Sales, Post and the job engine
   lib/mcp/              MCP server (API keys → short-lived user JWT under RLS)
   app/api/webhooks/     inbound webhooks: payments (Creem) and Zernio, each → one atomic RPC
   lib/supabase/admin.ts service role — only webhooks, crons, CMO runner, MCP key lookup, Assistant ledger, caption translation refunds, health probe (`lib/ops/health.ts`)

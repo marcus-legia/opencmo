@@ -18,11 +18,11 @@ import { ONBOARDING_DOCUMENT } from "./ui-v2-seed";
  * - C2, the missing states: 100% used (Sales, Post, Feed, Billing), a free account after its free scan (one locked
  *   card on Post and on Feed), and the reach level on the Feed's Sales card.
  * - C5, the look: Sales, Feed, Billing and Settings at 1440, 390 and 360 on seeded data, never on "Loading…".
- * Screenshots land in docs/plans/cmo/2026-11-20-wave4-shots/.
+ * Screenshots land in docs/shots/2026-11-20-wave4-shots/.
  */
 test.skip(process.env.NEXT_PUBLIC_OPENCMO_UI !== "v2", "v2 UI only: run with npm run test:e2e:v2");
 
-const OUT = join(__dirname, "..", "..", "..", "docs", "plans", "cmo", "2026-11-20-wave4-shots");
+const OUT = join(__dirname, "..", "..", "..", "docs", "shots", "2026-11-20-wave4-shots");
 
 const admin = () => {
   const { url, service } = state();

@@ -13,7 +13,7 @@
  *       OPENCMO_DIGEST_LOCAL_MAIL=1 OPENCMO_LOCAL_MAIL_URL=$INBUCKET_URL \
  *       NODE_OPTIONS=--conditions=react-server npx tsx lib/screens/p6-acceptance.e2e.ts
  *
- * Writes the digest email it sent to `docs/plans/cmo/2026-10-28-p6-acceptance/digest-email.html` for a look. Leaves
+ * Writes the digest email it sent to `docs/shots/2026-10-28-p6-acceptance/digest-email.html` for a look. Leaves
  * its founder in the database.
  */
 import assert from "node:assert/strict";
@@ -36,7 +36,7 @@ import { compose } from "./registry";
 
 const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, { auth: { persistSession: false } });
 assert.equal(process.env.OPENCMO_AGENT_FAKE, "1", "the acceptance run uses fake models and readers only");
-const OUT = join(__dirname, "..", "..", "..", "..", "docs", "plans", "cmo", "2026-10-28-p6-acceptance");
+const OUT = join(__dirname, "..", "..", "..", "..", "docs", "shots", "2026-10-28-p6-acceptance");
 
 const ok = <T>(r: { data: T; error: { message: string } | null }, what: string): T => {
   assert.equal(r.error, null, `${what}: ${r.error?.message}`);

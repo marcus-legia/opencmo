@@ -34,7 +34,8 @@ sends from their own account. **Post** (a week of posts for X, LinkedIn and Thre
   names (`@opencmo/*`, `OPENCMO_*`) keep the old name; everything a user reads says Ferreto.
 - One system: Next.js + Supabase + a Modal worker. No second runtime. Motion is one renderer (Remotion,
   `clip-motion`); the editor is one runtime (`clip-render`). No three.js or Lottie.
-- Internal docs (plans, specs, costs) go in `docs/` here; the owner's own notes live in `../opencmo-internal`.
+- `docs/` holds only what stays current ([[docs/README]]); a wave's plan goes in its PR or the work note. The owner's
+  own notes live in `../opencmo-internal`.
 
 ## Rules you must not break
 

@@ -40,6 +40,8 @@ next-env.d.ts
 modal-kiem.png
 # Production logs pulled by `npm run qa:logs`; they carry user ids.
 /docs/qa/logs/
+# Screenshots the e2e specs write for a look (`docs/shots/<topic>/`); attach the ones a PR needs with `git add -f`.
+/docs/shots/
 /work/
 
 # Hệ điều hành / editor
