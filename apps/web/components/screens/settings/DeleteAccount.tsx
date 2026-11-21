@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { BillingButton } from "@/components/billing/BillingButton";
 import { ApiError, api, jsonBody } from "@/components/clipping/api";
 import { Button, Field } from "@/components/ui";
 import { SUPPORT_EMAIL } from "@/lib/site";
@@ -12,9 +13,10 @@ const CANCEL_FIRST = "Cancel your plan first, on the Billing page. Then you can 
 /**
  * Delete my account (wave 4 C3, owner decision 2 default): the founder types their email back, the route runs
  * `account_delete` and removes the sign-in, and the landing page says it is done. SQL's refusals are shown as they are.
- * Export is by email to support, said on the same card.
+ * Export is by email to support, said on the same card. A paid plan must end first (SQL refuses while one renews), so
+ * a paying founder gets the Cancel plan button here, in the same card, instead of a trip to Billing (review 2026-11-21).
  */
-export function DeleteAccount({ email }: { email: string | null }) {
+export function DeleteAccount({ email, paid }: { email: string | null; paid: boolean }) {
   const [open, setOpen] = useState(false);
   const [typed, setTyped] = useState("");
   const [busy, setBusy] = useState(false);
@@ -53,6 +55,16 @@ export function DeleteAccount({ email }: { email: string | null }) {
             if (matches && !busy) void remove();
           }}
         >
+          {paid ? (
+            <div className="scr-delete-plan" style={{ display: "flex", flexDirection: "column", gap: "6px", alignItems: "flex-start" }}>
+              <p style={{ margin: "0" }}>
+                Step 1: cancel your plan. It ends right away and you are not charged again. Billing records we must keep for tax stay with our
+                payment provider.
+              </p>
+              <BillingButton path="/api/v1/billing/portal" label="Cancel plan" className="ghost" />
+              <p style={{ margin: "0" }}>Step 2: come back here and delete the account.</p>
+            </div>
+          ) : null}
           <p style={{ margin: "0" }}>
             This deletes your business documents, the people Sales found, your drafts, posts, videos and connected accounts. It cannot be undone.
           </p>

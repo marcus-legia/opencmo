@@ -58,7 +58,7 @@ export function SettingsScreen({ mcpEndpoint, paid }: { mcpEndpoint: string | nu
             <ThemeSwitch />
           </section>
           {/* Today's account, API keys and connected apps: kept whole so nothing the old page did is lost. */}
-          <AccountPanel />
+          <AccountPanel paid={paid} />
           <div id="api-keys" className="scr-legacy-cards">
             <ApiKeys endpoint={mcpEndpoint} paid={paid} />
             <ConnectedApps paid={paid} />
@@ -282,7 +282,7 @@ function SettingsBody({ data, live }: { data: Data; live: Record<keyof Data, boo
   );
 }
 
-function AccountPanel() {
+function AccountPanel({ paid }: { paid: boolean }) {
   const [account, setAccount] = useState<AccountSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
@@ -326,7 +326,7 @@ function AccountPanel() {
           </span>
         )}
       </div>
-      {account ? <DeleteAccount email={account.email} /> : null}
+      {account ? <DeleteAccount email={account.email} paid={paid} /> : null}
     </Panel>
   );
 }

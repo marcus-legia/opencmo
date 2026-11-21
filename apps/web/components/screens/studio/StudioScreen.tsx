@@ -26,7 +26,6 @@ const TABS: { id: "all" | Kind; label: string }[] = [
   { id: "all", label: "All" },
   { id: "video", label: "Videos" },
   { id: "short", label: "Shorts" },
-  { id: "slideshow", label: "Slideshows" },
   { id: "upload", label: "Your uploads" },
 ];
 type Tab = (typeof TABS)[number]["id"];
