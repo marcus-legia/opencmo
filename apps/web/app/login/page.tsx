@@ -72,7 +72,7 @@ export default async function LoginPage({
 
           <p className="lg-note">Free scan. No card.</p>
           <p className="lg-fine">
-            Nothing is ever posted for you. By continuing you agree to the <a href={absoluteUrl("/terms")}>Terms</a> and
+            Ferreto never replies to or messages anyone for you. By continuing you agree to the <a href={absoluteUrl("/terms")}>Terms</a> and
             the <a href={absoluteUrl("/privacy")}>Privacy Policy</a>.
           </p>
         </section>

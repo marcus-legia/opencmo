@@ -35,6 +35,8 @@
 
 /* The side panel: the landing's dark surface, light ink in both themes. */
 .lg-aside { display: flex; flex-direction: column; justify-content: center; gap: 28px; padding: clamp(40px, 8vh, 96px) var(--gutter); background: var(--char); color: var(--char-ink); }
+/* The dark panel runs to the right edge of the window, past the centred 1240px column. */
+@media (min-width: 900px) { .lg-aside { box-shadow: 0 0 0 100vmax var(--char); clip-path: inset(0 -100vmax 0 0); } }
 .lg-aside .lv-eyebrow { color: color-mix(in srgb, var(--char-ink) 70%, transparent); }
 .lg-steps { display: grid; gap: 0; padding: 0; list-style: none; counter-reset: lg-step; max-width: 440px; }
 .lg-steps li { counter-increment: lg-step; display: grid; grid-template-columns: 40px 1fr; column-gap: 8px; row-gap: 6px; padding: 20px 0; border-top: 1px solid color-mix(in srgb, var(--char-ink) 16%, transparent); }
