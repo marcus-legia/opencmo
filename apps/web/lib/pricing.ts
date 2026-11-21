@@ -34,6 +34,13 @@ export type Plan = {
   quota: { previews: number; exports: number; storageBytes: number; storageObjects: number };
 };
 
+/**
+ * The landing page's words for the allowance (`components/landing/data.ts` INCLUDED). It is fair use, so no screen
+ * prints the credit count (review 2026-11-21, X2): `withCatalogPrice` swaps this line for the sentence a plan with a
+ * catalogue row can promise, and a plan with no row keeps this one.
+ */
+const ALLOWANCE_LINE = "Monthly credits for the AI work";
+
 export const PLANS: Plan[] = [
   {
     id: "free",
@@ -51,7 +58,7 @@ export const PLANS: Plan[] = [
     // gets is the free first run (CMO review 3, 3.1), so the list says exactly that.
     features: [
       "Your first scan, free: the people asking, in their own words",
-      "Reply drafts, more scans and posts come with a plan",
+      "Reply drafts, more scans and posting come with a plan",
       "The video editor, with a watermark on exports",
       "Account deleted 30 days after sign-up unless you buy a plan",
     ],
@@ -71,9 +78,10 @@ export const PLANS: Plan[] = [
     watermark: false,
     quota: { previews: 100, exports: 30, storageBytes: 10 * 1024 ** 3, storageObjects: 1000 },
     features: [
-      "Sales: people asking on Reddit, Hacker News, Threads and Facebook groups, with drafted replies, DMs and emails",
-      "Post: a week of posts for X, LinkedIn and Threads from what those people asked",
-      "Monthly credits",
+      "Searches on Reddit, Hacker News, Threads and Facebook groups, each person with the quote that shows why",
+      "Replies, DMs and emails drafted from your business plan",
+      "A week of posts for X, LinkedIn and Threads, approved in one go",
+      ALLOWANCE_LINE,
       "The video editor, 1080p exports with no watermark",
     ],
   },
@@ -110,8 +118,10 @@ export function withCatalogPrice(plan: Plan, priceCents: number, credits: number
     credits,
     listPrice: year && monthlyCents ? monthlyCents / 100 : plan.listPrice,
     features: year
-      ? [`Everything in Monthly, ${credits} credits every month, billed $${billed} once a year`]
-      : plan.features.map((feature) => (feature === "Monthly credits" ? `${credits} credits per month` : feature)),
+      ? [`Everything in Monthly, billed $${billed} once a year`]
+      : plan.features.map((feature) =>
+          feature === ALLOWANCE_LINE && credits > 0 ? `${ALLOWANCE_LINE}, one allowance you can see in Billing, no per-click prices` : feature,
+        ),
   };
 }
 
