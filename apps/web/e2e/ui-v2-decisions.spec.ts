@@ -15,7 +15,7 @@ import { ensureOnboarded } from "./ui-v2-seed";
 test.skip(process.env.NEXT_PUBLIC_OPENCMO_UI !== "v2", "v2 UI only: run with npm run test:e2e:v2");
 test.beforeAll(ensureOnboarded);
 
-const OUT = join(__dirname, "..", "..", "..", "docs", "plans", "cmo", "2026-11-02-cmo-chat-decisions-shots");
+const OUT = join(__dirname, "..", "..", "..", "docs", "shots", "2026-11-02-cmo-chat-decisions-shots");
 
 async function pausedAt(userId: string): Promise<string | null> {
   const { url, service } = state();

@@ -15,7 +15,7 @@ import { ensureOnboarded } from "./ui-v2-seed";
 test.skip(process.env.NEXT_PUBLIC_OPENCMO_UI !== "v2", "v2 UI only: run with npm run test:e2e:v2");
 test.beforeAll(ensureOnboarded);
 
-const OUT = join(__dirname, "..", "..", "..", "docs", "plans", "cmo", "2026-10-30-three-column-shell-shots");
+const OUT = join(__dirname, "..", "..", "..", "docs", "shots", "2026-10-30-three-column-shell-shots");
 
 test("the top bars move between views and agent pages; the chat is open on the feed and folds elsewhere", async ({ page }) => {
   await signIn(page, state().users.a);

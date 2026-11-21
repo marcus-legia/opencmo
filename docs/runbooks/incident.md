@@ -1,17 +1,17 @@
 # Incident runbook
 
 For the owner, when something is broken for founders. One page on purpose: read it top to bottom during an incident.
-Written in web hardening round 4 (`docs/plans/engineering/2026-11-17-web-hardening-round-4-plan.md`, session B).
+Written in web hardening round 4 (2026-11-17).
 
 ## How you find out
 
 | Signal | What it means | Where |
 |---|---|---|
 | Sentry email "new issue" with `founder-failure` in its fingerprint | A new group of founder failures, or of uploads published with a fallback, appeared. One issue per group: later hours add events, not emails. Stuck work sends an event every hour while it stays stuck, so resolving its issue before the row is fixed reopens it. | Sentry → Issues, filter `alert:founder-failure` |
-| Sentry cron monitor `cron-cmo`, `cron-cmo-digest`, `cron-cleanup` or `cron-failures` missed or failed | Modal's clock stopped, or a cron route keeps failing: the CMO stops planning and drafting, digests stop | Sentry → Crons; Modal → app → logs |
+| Sentry cron monitor `cron-cmo`, `cron-cmo-digest`, `cron-cleanup` or `cron-failures` missed or failed | Modal's clock stopped, or a cron route keeps failing: Sales scans, planning and drafting stop, digests stop | Sentry → Crons; Modal → app → logs |
 | Sentry uptime monitor on `/api/health` | The web app or the database does not answer | Sentry → Uptime; Vercel → Deployments |
 | `/app/settings/failures` | Everything that failed, got stuck or fell back for founders in the last 7, 30 or 90 days, grouped so one bug is one row | The app, signed in as an owner |
-| A founder's email to `support@opencmo.io` | Often the first signal for something that does not end `failed` | Your inbox |
+| A founder's email to `support@ferreto.io` | Often the first signal for something that does not end `failed` | Your inbox |
 
 A failure with a clean message (a job or run that ends `failed`) never reaches Sentry as an exception: the hourly alert
 (`/api/cron/failures`) is what turns it into an issue. Silent fallbacks (a Scribe failure, a missing face detector)
@@ -29,13 +29,13 @@ show as warnings, on the page and as Sentry `warning` events.
 5. **Never roll a migration back.** Production has applied it, and `supabase db push` never runs a version twice.
    Fix forward with a new migration (`.claude/skills/supabase-migrations`). If a migration broke the web, roll the web
    back to a build that works with the new schema, or ship a fix.
-6. **Stop the bleeding** if the CMO itself is doing damage (bad drafts, a provider failing every run): set
-   `OPENCMO_CMO_PAUSED=1` in Vercel and redeploy. The CMO stops for every founder within one sweep and their work is
+6. **Stop the bleeding** if the job engine itself is doing damage (bad drafts, a provider failing every run): set
+   `OPENCMO_CMO_PAUSED=1` in Vercel and redeploy. The jobs stop for every founder within one sweep and their work is
    kept (`lib/cmo/pause.ts`). Unset it to resume. The Costs page's Live switches show which outbound channels are on.
 
 ## Telling founders
 
-- Write from `support@opencmo.io` to the founders it hit (the failures page gives their ids; look the emails up in
+- Write from `support@ferreto.io` to the founders it hit (the failures page gives their ids; look the emails up in
   Supabase). Say what broke, what you did, and whether they need to do anything. No blame on a provider by name.
 - **Credits:** work that ends `failed` gives its held credits back by itself (`credit_refund` from the job, run or
   task). Check the founder's ledger first. Work still holding credits that will not finish can be refunded by hand in

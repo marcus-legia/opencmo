@@ -9,12 +9,12 @@ import { ensureOnboarded } from "./ui-v2-seed";
 
 /**
  * U9 look check: every v2 screen at 1440 and 390 on fixtures, plus axe. Screenshots land next to the frames in
- * docs/plans/cmo/2026-10-27-ui-build-frames/ for side-by-side review. Runs with `npm run test:e2e:v2`.
+ * docs/shots/2026-10-27-ui-build-frames/ for side-by-side review. Runs with `npm run test:e2e:v2`.
  */
 test.skip(process.env.NEXT_PUBLIC_OPENCMO_UI !== "v2", "v2 UI only: run with npm run test:e2e:v2");
 test.beforeAll(ensureOnboarded);
 
-const OUT = join(__dirname, "..", "..", "..", "docs", "plans", "cmo", "2026-10-27-ui-build-frames");
+const OUT = join(__dirname, "..", "..", "..", "docs", "shots", "2026-10-27-ui-build-frames");
 
 /** Session B's screens; Session C appends its pages here as they land. */
 const SCREENS: { name: string; path: string; ready: string }[] = [

@@ -16,7 +16,7 @@ import { ONBOARDING_DOCUMENT } from "./ui-v2-seed";
  */
 test.skip(process.env.NEXT_PUBLIC_OPENCMO_UI !== "v2", "v2 UI only: run with npm run test:e2e:v2");
 
-const OUT = join(__dirname, "..", "..", "..", "docs", "plans", "cmo", "2026-11-19-wave2-shots");
+const OUT = join(__dirname, "..", "..", "..", "docs", "shots", "2026-11-19-wave2-shots");
 
 function admin() {
   const { url, service } = state();

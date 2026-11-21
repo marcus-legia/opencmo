@@ -1,80 +1,59 @@
-# OpenCMO
+# Ferreto
 
-**An AI CMO for solo founders.** Paste your website, and OpenCMO learns your business, plans
-the week, and drafts the work across three departments — you approve everything that goes out.
+**Find the people already asking for what you built.** Ferreto learns your business from its
+website, searches Reddit, Hacker News, Threads and Facebook groups for people describing the
+problem you solve, scores each conversation with quotes from it as evidence, and drafts a
+reply, a DM or an email that **you** send from your own account.
 
-- **Video** — upload a video you recorded and edit it whole in a timeline editor: cut it by
-  editing the transcript, add captions, B-roll, motion and generated shots by asking, and export
-  a version per platform. Or start from a blank edit.
-- **Post** — draft X posts from your strategy; you review, approve and publish to your own account.
-- **Sales** — find Reddit threads where people need what you sell, score them with evidence,
-  and draft replies that **you** post yourself.
+- **Sales**: people asking, each with the thread's own words as proof, and drafts to reach them.
+  Each person is tracked from first contact to customer, so nobody is contacted twice.
+- **Post**: a week of posts for X, LinkedIn and Threads, written from what people said; you
+  approve it once.
+- **Video**: an editor for videos you record yourself: cut by editing the transcript, add
+  captions, B-roll and motion, export a version per platform.
 
-OpenCMO drafts and assists; it never posts, likes, follows or comments on its own.
+Ferreto drafts and assists; it never sends, likes, follows or comments on its own.
 
-The hosted version runs at [opencmo.io](https://opencmo.io). This repository is the full source
-of the web app, the editor and the video engine, released under the
-[GNU AGPL-3.0](LICENSE).
+The hosted version runs at [ferreto.io](https://ferreto.io). This repository is the full source
+of the web app, the editor and the video engine, released under the [GNU AGPL-3.0](LICENSE).
+Package, SQL and environment names keep the project's old name (`@opencmo/*`, `OPENCMO_*`).
 
 ## Architecture
 
 ```
 Browser ──► Next.js app + /api/v1 (Vercel) ──► Supabase (Auth · Postgres/RLS · Storage · Realtime)
                                                    ▲
-                       Modal worker (Python + ffmpeg + Node exporter) ── claims queued tasks
-Your Claude ──► MCP server (Modal) ──────────────────┘  same tools as the in-app Assistant
+                Modal worker (Python + ffmpeg + Node exporter) ── claims queued tasks
+Your Claude ──► MCP server (Modal) ──────────────────┘  the editor's tools, under your own account
 ```
 
 Every read runs under Row Level Security; every write goes through a Postgres RPC that checks
-ownership. The database schema is the contract between the web app, the worker and the MCP
-server.
+ownership. [ARCHITECTURE.md](ARCHITECTURE.md) explains the shape and the hard budget every
+change must respect: **peak RAM per job < 2 GB**.
 
 ## Repository layout
 
 ```
-opencmo/
-├── apps/
-│   └── web/                    Next.js app: landing, workspace, AI CMO, clip editor, /api/v1
-│       ├── app/                routes (App Router); app/api/v1 = the public API
-│       ├── components/         UI, including the editor (components/editor)
-│       ├── lib/
-│       │   ├── agent/          the editor Assistant — its tools are editor-core operations
-│       │   ├── cmo/            the AI CMO: onboarding, jobs, schedules and its agents
-│       │   ├── generate/       AI image/video/voice generation, with prompt moderation
-│       │   ├── mcp/            MCP auth: API keys → short-lived user tokens under RLS
-│       │   └── supabase/       Supabase clients (admin.ts = service role, server-only)
-│       ├── e2e/                Playwright end-to-end tests
-│       └── e2e-compat/         Safari/Firefox compatibility tests
-├── packages/
-│   ├── engine/                 Python engine: an upload → editor master + transcript, exports,
-│   │                           media generation, all via streaming ffmpeg;
-│   │                           Modal worker in production (modal_app.py)
-│   ├── contracts/              JSON contracts shared by Python and TypeScript
-│   │                           (task kinds, AI model catalog, document schemas)
-│   ├── clip-doc/               the clip document: zod schema, validation, migrations
-│   ├── editor-core/            operations on the document — the only write path
-│   │                           (editor buttons, the API and the Assistant all use it)
-│   ├── clip-render/            Canvas 2D renderer, shared by the browser preview and the exporter
-│   ├── clip-export/            server export: document → MP4
-│   ├── clip-motion/            explainer animations (Remotion), rendered on the worker
-│   ├── clip-icons/             animated icon library
-│   ├── clip-assets/            the editor media library: manifest, folders, rename/move/delete
-│   ├── clip-media/             bundled fonts
-│   ├── editor-parity/          golden-image tests that keep the renderer pixel-stable
-│   ├── skills/                 style skills: markdown + frontmatter → a generated index
-│   └── mcp-server/             MCP server (Streamable HTTP, stateless) so your own Claude
-│                               can drive OpenCMO
-├── supabase/
-│   ├── migrations/             schema history, applied in order
-│   ├── tests/                  pgTAP tests, one per migration
-│   ├── schema/current.sql      generated snapshot of the current schema (read-only)
-│   └── config.toml             local stack config
-├── scripts/                    dev stack (dev.mjs), schema dump, document checks
-└── docs/                       design notes, build plans and research reports
+apps/web/                  Next.js app: landing, blog, the app at /app, the editor, /api/v1
+  lib/cmo/                 Sales, Post and the job engine (jobs/, social/, writer/, loops.ts)
+  lib/agent/               the editor Assistant: its tools are editor-core operations
+  lib/departments/publish/ posting through Zernio
+  lib/generate/            image, video and voice generation, with prompt moderation
+  lib/mcp/                 MCP auth: API keys → short-lived user tokens under RLS
+  e2e/                     Playwright end-to-end tests
+packages/
+  engine/                  Python engine and Modal worker: uploads, transcripts, exports (streaming ffmpeg)
+  contracts/               JSON contracts shared by Python and TypeScript
+  clip-doc/                the editor document: zod schema, validation, migrations
+  editor-core/             operations on the document, the only write path
+  clip-render/             Canvas 2D renderer, shared by the browser preview and the exporter
+  clip-export/             server export: document → MP4
+  clip-motion/             motion and explainers (Remotion), rendered on the worker
+  clip-icons/ clip-media/ clip-assets/ editor-parity/ skills/ mcp-server/
+supabase/                  migrations, pgTAP tests, schema/current.sql (generated)
+scripts/                   dev stack (dev.mjs), schema dump, checks
+docs/                      agent rules, runbook, research reports (docs/README.md)
 ```
-
-Read [ARCHITECTURE.md](ARCHITECTURE.md) for the decisions behind this shape, including the
-hard budget every change must respect: **peak RAM per job < 2 GB**.
 
 ## Getting started
 
@@ -121,12 +100,12 @@ Issues and pull requests are welcome — start with [CONTRIBUTING.md](CONTRIBUTI
 
 ## License
 
-OpenCMO is licensed under the **GNU Affero General Public License v3.0 only**
+Ferreto is licensed under the **GNU Affero General Public License v3.0 only**
 ([LICENSE](LICENSE)). If you run a modified version as a network service, the AGPL requires you
 to offer its source code to that service's users.
 
 Bundled fonts, icons, emoji and animations keep their own licenses — see
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-The OpenCMO name and logo are trademarks of the OpenCMO project and are not licensed under the
+The Ferreto name and logo are trademarks of the Ferreto project and are not licensed under the
 AGPL. Forks must use a different name and logo.

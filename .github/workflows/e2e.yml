@@ -3,7 +3,6 @@ name: E2E
 # The browser end-to-end suite (apps/web/e2e) on a local Supabase stack, the e2e Python worker and fake models: no
 # secret and no paid call, so forks run it too. Each PR and push to main runs the smoke set (the CMO loop and sign-in,
 # on the v2 app); the clock and a manual run take the whole suite on both apps, editor included.
-# Plan: docs/plans/engineering/2026-11-15-e2e-in-ci-plan.md
 on:
   pull_request:
   push:

@@ -14,7 +14,7 @@ import { ensureOnboarded } from "./ui-v2-seed";
 test.skip(process.env.NEXT_PUBLIC_OPENCMO_UI !== "v2", "v2 UI only: run with npm run test:e2e:v2");
 test.beforeAll(ensureOnboarded);
 
-const OUT = join(__dirname, "..", "..", "..", "docs", "plans", "cmo", "2026-11-02-cmo-chat-live-shots");
+const OUT = join(__dirname, "..", "..", "..", "docs", "shots", "2026-11-02-cmo-chat-live-shots");
 
 test("a finished draft comes back to the chat and lands on the feed; Open goes to Writer; a rating is kept", async ({ page }) => {
   test.setTimeout(240_000);

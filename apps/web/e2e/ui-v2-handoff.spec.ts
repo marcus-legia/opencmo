@@ -14,7 +14,7 @@ import { ensureOnboarded } from "./ui-v2-seed";
 test.skip(process.env.NEXT_PUBLIC_OPENCMO_UI !== "v2", "v2 UI only: run with npm run test:e2e:v2");
 test.beforeAll(ensureOnboarded);
 
-const OUT = join(__dirname, "..", "..", "..", "docs", "plans", "cmo", "2026-11-02-cmo-chat-editor-handoff-shots");
+const OUT = join(__dirname, "..", "..", "..", "docs", "shots", "2026-11-02-cmo-chat-editor-handoff-shots");
 const ASK = "Open my latest video in the editor and add captions";
 
 test("video work asked in the CMO chat opens the editor with the request sent once", async ({ page }) => {

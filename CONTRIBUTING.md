@@ -100,8 +100,9 @@ OpenCMO assists; it does not act on the user's behalf. Contributions must not ad
   errors, because they reach the user's screen verbatim.
 - Some older comments are still in Vietnamese. If you touch a file, feel free to translate
   the comments you change; there is no need to translate unrelated code in the same PR.
-- Some comments reference internal design documents (for example `docs/specs/…`) that are not
-  part of this repository. Treat them as context, not as files you are missing.
+- Some comments cite plans and specs that are no longer in `docs/` (`docs/plans/…`, `docs/specs/…`).
+  They were removed once built; read one with `git log --all -- <path>` and `git show`, or treat
+  the comment as context. `docs/README.md` lists what `docs/` holds now.
 - Comments explain **why**, not **what**. Match the style of the surrounding code.
 - Python: `ruff check .` must pass. TypeScript: `npm run typecheck` must pass.
 
