@@ -115,9 +115,6 @@ export function PostBody({
   );
 }
 
-/** Rewrite price, as SQL `cmo_job_price('repurpose_post')` holds it before the model runs. */
-export const REWRITE_CREDITS = 1;
-
 /**
  * Where the core post goes (daily core drafts D3): one line of platforms, then each platform's own rewrite when the
  * founder asked for one (D4). A rewrite goes out on that platform only, after its own schedule card.
@@ -161,14 +158,14 @@ function PostTargets({
       {several && onRewrite ? (
         <div className="v2-card-rewrite" role="group" aria-label="Rewrite for one platform">
           <p>
-            <b>Want it to read differently on one platform?</b> Your CMO rewrites it for that platform only, {REWRITE_CREDITS} credit each.
+            <b>Want it to read differently on one platform?</b> Ferreto rewrites it for that platform only.
           </p>
           <div className="v2-card-rewrite-row">
             {targets.map((t) => {
               const busy = rewriting?.has(t.platform);
               const label = PLATFORM_LABEL[t.platform];
               return (
-                <button key={t.platform} type="button" disabled={busy} onClick={() => onRewrite(t.platform)} aria-label={`${t.variant ? "Rewrite again" : "Rewrite"} for ${label}, ${REWRITE_CREDITS} credit`}>
+                <button key={t.platform} type="button" disabled={busy} onClick={() => onRewrite(t.platform)} aria-label={`${t.variant ? "Rewrite again" : "Rewrite"} for ${label}`}>
                   {hasLogo(t.platform) ? <PlatformMark platform={t.platform} /> : null}
                   {busy ? `Rewriting for ${label}…` : `${t.variant ? "Rewrite again" : "Rewrite"} for ${label}`}
                 </button>

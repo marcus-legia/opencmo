@@ -10,7 +10,7 @@ import type { Department } from "@/lib/screens/common";
 /** The canvas's filters (Logs.dc.html) and the departments each one covers. */
 const FILTERS = [
   { id: "all", label: "All", who: null },
-  { id: "cmo", label: "CMO", who: ["brain", "research"] },
+  { id: "cmo", label: "Planner", who: ["brain", "research"] },
   { id: "writer", label: "Writer", who: ["writer"] },
   { id: "video", label: "Video", who: ["studio"] },
   { id: "post", label: "Post", who: ["schedule", "publish"] },
@@ -18,7 +18,7 @@ const FILTERS = [
 ] as const satisfies readonly { id: string; label: string; who: readonly Department[] | null }[];
 type FilterId = (typeof FILTERS)[number]["id"];
 
-const AGENT: Record<Department, string> = { brain: "CMO", research: "CMO", writer: "Writer", studio: "Video", schedule: "Post", publish: "Post", sales: "Sales" };
+const AGENT: Record<Department, string> = { brain: "Planner", research: "Research", writer: "Writer", studio: "Video", schedule: "Post", publish: "Post", sales: "Sales" };
 
 type Row = { key: string; at: string; agent: string; who: Department | null; what: string; cost: string; tone: "ok" | "bad"; held: string; spent: string; back: string };
 
@@ -135,7 +135,7 @@ export function LogsDrawer({ onClose, running = 0 }: { onClose: () => void; runn
             <line x1="12" x2="20" y1="19" y2="19" />
           </svg>
           <span style={{ fontWeight: "600", fontSize: "15px" }}>Logs</span>
-          <span className="meta">· what your CMO did, and what it cost</span>
+          <span className="meta">· what Ferreto did, and what it cost</span>
           <div style={{ flex: "1 1 auto" }}></div>
           <button type="button" className="ib" aria-label="Close" onClick={onClose}>
             <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
@@ -174,7 +174,7 @@ export function LogsDrawer({ onClose, running = 0 }: { onClose: () => void; runn
         <div style={{ flex: "1 1 auto", overflow: "auto" }}>
           {failed ? <div className="meta" style={{ padding: "12px 20px" }}>Could not load the logs. Close and open them again.</div> : null}
           {!failed && !logs ? <div className="meta" style={{ padding: "12px 20px" }}>Loading…</div> : null}
-          {logs && rows.length === 0 ? <div className="meta" style={{ padding: "12px 20px" }}>Nothing here yet. Lines show up as your CMO works.</div> : null}
+          {logs && rows.length === 0 ? <div className="meta" style={{ padding: "12px 20px" }}>Nothing here yet. Lines show up as Ferreto works.</div> : null}
           {rows.map((e) => {
             const day = dayOf(e.at);
             const heading = day !== lastDay ? day : null;

@@ -72,7 +72,7 @@ export async function run(): Promise<void> {
   };
 
   for (const [kind, body] of Object.entries({
-    product: { name: "Ferreto", one_liner: "An AI CMO for solo founders: an editor, post drafts and Reddit leads you approve." },
+    product: { name: "Ferreto", one_liner: "A customer-finding tool for founders: people asking for what you built, and drafts you approve." },
     strategy: { icp: "Solo founders who ship software", pains: ["editing product demos takes longer than building them"] },
     brand: { voice: "Plain and direct" },
     post_plan: { topics: ["Cut a video by deleting words"] },

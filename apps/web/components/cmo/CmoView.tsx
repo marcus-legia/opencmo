@@ -46,7 +46,7 @@ export function CmoView({ initial, site }: { initial: CmoState; site: string }) 
   if (!hasDocs || rebuild) {
     return (
       <section className="settings-view cmo-view" data-testid="cmo-onboarding">
-        <h1 className="page-title">{hasDocs ? "Rebuild your marketing plan" : "Meet your AI CMO"}</h1>
+        <h1 className="page-title">{hasDocs ? "Read your website again" : "Start with your website"}</h1>
         <p className="cmo-lead">
           Enter your website. Ferreto reads it and writes the four documents your marketing is built on: what you sell,
           who it is for, who you compete with and what to post. You can edit every word.

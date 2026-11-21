@@ -24,7 +24,7 @@ export type SpendContext =
   | { via: "service"; client: SupabaseClient; userId: string; refKind: SpendRefKind; refId?: string }
   | { via: "founder"; client: SupabaseClient; refKind: "agent_turn" | "mcp" };
 
-export const SPEND_CAP_MESSAGE = "Your CMO reached today's limit. It will continue tomorrow.";
+export const SPEND_CAP_MESSAGE = "Ferreto reached today's limit. It will continue tomorrow.";
 
 export class SpendCapError extends Error {
   constructor() {

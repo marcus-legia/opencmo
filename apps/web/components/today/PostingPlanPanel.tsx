@@ -16,7 +16,7 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
 
 /** What the plan costs the founder, in plain words: core posts a day (one post goes to each platform of its slot). */
 export function planLine(plan: PostingPlan): string {
-  return `The CMO writes ${plural(dayTargets(plan).length, "post", "posts")} a day.`;
+  return `Ferreto writes ${plural(dayTargets(plan).length, "post", "posts")} a day.`;
 }
 
 /**
@@ -75,7 +75,7 @@ export function PostingPlanPanel({ initial, accounts, live, onSaved }: { initial
       <header className="pp-head">
         <div>
           <h2>Posting plan</h2>
-          <p>Pick where you post and how often. Your CMO writes to this plan.</p>
+          <p>Pick where you post and how often. Ferreto writes to this plan.</p>
         </div>
         <span className="pp-saved" data-live={live || undefined}>
           {live ? (

@@ -34,8 +34,8 @@ test("video work asked in the CMO chat opens the editor with the request sent on
     (r) => /\/agent\/sessions\/[^/]+\/turns$/.test(new URL(r.url()).pathname) && r.request().method() === "POST" && page.url().includes("/app/editor/"),
     { timeout: 180_000 },
   );
-  await chat.getByLabel("Ask your CMO").fill(ASK);
-  await chat.getByLabel("Ask your CMO").press("Enter");
+  await chat.getByLabel("Ask Ferreto").fill(ASK);
+  await chat.getByLabel("Ask Ferreto").press("Enter");
 
   // The editor opens on the newest edit, and the request leaves the URL once it is in the Assistant.
   await expect(page).toHaveURL(new RegExp(`/app/editor/${clipId}$`), { timeout: 120_000 });

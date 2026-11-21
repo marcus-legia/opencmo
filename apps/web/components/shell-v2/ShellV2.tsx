@@ -281,7 +281,7 @@ function TodayFrame({ credits, plan, email, userId, pending, usage, chatLive, ch
                   onReset={() => chatWidth.commit("chat", CHAT.base)}
                 />
               ) : null}
-              <aside className={chatClass} id="v2-chat" aria-label={screen.chat === "assistant" ? "Assistant" : "Chat with your CMO"} data-clip={screen.chat === "assistant" ? "" : undefined} data-folded={folded ? "" : undefined} ref={chatColumn}>
+              <aside className={chatClass} id="v2-chat" aria-label={screen.chat === "assistant" ? "Assistant" : "Ask Ferreto"} data-clip={screen.chat === "assistant" ? "" : undefined} data-folded={folded ? "" : undefined} ref={chatColumn}>
                 {folded ? (
                   <button type="button" className="td-askrail" aria-label="Open the chat" aria-expanded="false" aria-controls="v2-chat-panel" onClick={focusChat}>
                     <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">

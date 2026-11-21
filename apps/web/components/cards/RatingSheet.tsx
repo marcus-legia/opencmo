@@ -3,7 +3,7 @@
 /**
  * "Rate your first drafts" (cmo-review-3 2.2). The founder rates up to five versions of waiting posts (thumbs, a
  * reason on a thumbs down, a short note), the CMO turns the round into rules, and the sheet shows them ticked and
- * editable under "Your CMO learned:" with one button, "Use these rules". Rating is not deciding: the cards stay.
+ * editable under "Ferreto learned:" with one button, "Use these rules". Rating is not deciding: the cards stay.
  *
  * Opened from Today's row (session B): `<RatingSheet open onClose={…} />`. Everything reads and writes through
  * `/api/v1/cmo/ratings` under the founder's session.
@@ -131,7 +131,7 @@ export function RatingSheet({ open, onClose }: { open: boolean; onClose: () => v
     <dialog ref={ref} className="v2-dialog v2-rating-sheet" aria-labelledby="rating-sheet-title" data-testid="rating-sheet" onClose={onClose}>
       <div className="v2-dialog-body">
         <h2 id="rating-sheet-title" className="v2-dialog-title">
-          {ready ? "Your CMO learned:" : "Rate your first drafts"}
+          {ready ? "What Ferreto learned" : "Rate your first drafts"}
         </h2>
         {error ? (
           <p className="v2-card-state is-failed" role="alert">
@@ -189,7 +189,7 @@ export function RatingSheet({ open, onClose }: { open: boolean; onClose: () => v
             </div>
           </>
         ) : latest?.state === "learning" ? (
-          <p aria-live="polite">{polls.current >= POLL_LIMIT ? "Still reading your ratings. Come back in a minute." : "Your CMO is reading your ratings…"}</p>
+          <p aria-live="polite">{polls.current >= POLL_LIMIT ? "Still reading your ratings. Come back in a minute." : "Ferreto is reading your ratings…"}</p>
         ) : !sheet ? (
           <p className="v2-muted" aria-busy="true">
             Loading your drafts…
@@ -198,9 +198,9 @@ export function RatingSheet({ open, onClose }: { open: boolean; onClose: () => v
           <>
             <p>
               {latest?.state === "failed"
-                ? "Your CMO could not read your last ratings. You can rate again tomorrow."
+                ? "Ferreto could not read your last ratings. You can rate again tomorrow."
                 : latest?.state === "done" && latest.rules.length === 0 && sheet.ratedToday
-                  ? "Nothing to change: your CMO keeps writing the way you liked."
+                  ? "Nothing to change. Ferreto keeps writing the way you liked."
                   : sheet.ratedToday
                     ? "You rated drafts today. Rate again tomorrow."
                     : "No drafts wait for you right now. They come with your next plan."}
@@ -213,7 +213,7 @@ export function RatingSheet({ open, onClose }: { open: boolean; onClose: () => v
           </>
         ) : (
           <>
-            <p className="v2-muted">Rating does not approve anything: the drafts stay in your queue. Your CMO turns your ratings into a few rules for you to check.</p>
+            <p className="v2-muted">Rating does not approve anything, and the drafts stay in your queue. Ferreto turns your ratings into a few rules for you to check.</p>
             <ol className="v2-rating-list">
               {sheet.drafts.map((draft) => {
                 const k = key(draft);
@@ -232,7 +232,7 @@ export function RatingSheet({ open, onClose }: { open: boolean; onClose: () => v
                     {r.verdict === "down" ? <ReasonChips label="What is wrong with it? (optional)" value={r.reasonCode} onChange={(code) => set(k, { reasonCode: code })} disabled={busy} /> : null}
                     {r.verdict ? (
                       <label className="v2-field">
-                        <span>A note for your CMO (optional)</span>
+                        <span>A note for Ferreto (optional)</span>
                         <input className="v2-input is-compact" value={r.note} maxLength={200} disabled={busy} onChange={(event) => set(k, { note: event.target.value })} />
                       </label>
                     ) : null}

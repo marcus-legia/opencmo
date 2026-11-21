@@ -171,7 +171,7 @@ export function decidedMessage(card: ApprovalCard, decision: Decision, sample: b
       if (card.kind === "correction") return `Kept as a rule. Every draft follows it${suffix}.`;
       if (card.kind === "plan") return decision.action === "approve" && decision.drop?.length
         ? `Week approved without ${decision.drop.length} ${decision.drop.length === 1 ? "item" : "items"}${suffix}.`
-        : `Week approved. Your CMO works through it${suffix}.`;
+        : `Week approved. Ferreto works through it${suffix}.`;
       if (card.body.kind === "schedule") {
         const when = formatWhen(card.body.at, card.body.timezone);
         return card.body.mode === "publish"

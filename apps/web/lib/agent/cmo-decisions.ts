@@ -394,8 +394,8 @@ export async function prepareDecision(supabase: SupabaseClient, name: string, in
         prepared: { tool: "set_cmo_paused", paused: parsed.data.paused },
         card: {
           changes: parsed.data.paused
-            ? ["Pause your CMO: nothing new starts and the schedule queues nothing", "Your work and cards are kept"]
-            : ["Resume your CMO: paused work runs again and the schedule starts tomorrow"],
+            ? ["Pause Ferreto: nothing new starts and the schedule queues nothing", "Your work and cards are kept"]
+            : ["Resume Ferreto: paused work runs again and the schedule starts tomorrow"],
         },
       };
     }
@@ -440,7 +440,7 @@ export async function runDecision(supabase: SupabaseClient, prepared: Prepared):
         return done("Sales settings saved", { screen: "sales" });
       case "set_cmo_paused":
         await rpcOrThrow(supabase, prepared.paused ? "cmo_pause" : "cmo_resume", {});
-        return done(prepared.paused ? "Your CMO is paused" : "Your CMO is running again", { screen: "settings" });
+        return done(prepared.paused ? "Ferreto is paused" : "Ferreto is running again", { screen: "settings" });
       case "update_cmo_settings":
         await rpcOrThrow(supabase, "save_cmo_settings", {
           p_weekly_credit_budget: prepared.budget,

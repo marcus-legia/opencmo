@@ -179,7 +179,7 @@ function FeedCard({ card, agentName, actions, onOpen }: { card: InboxCard; agent
             void act(() => actions.card(card, sales ? { type: "dismiss", reason: why } : { type: "skip", reason: why }));
           }}
         >
-          <label htmlFor={`skip-${card.id}`}>{sales ? "Why dismiss it?" : "Why skip it?"} <small>Optional. Your CMO learns from it.</small></label>
+          <label htmlFor={`skip-${card.id}`}>{sales ? "Why dismiss it?" : "Why skip it?"} <small>Optional. Ferreto learns from it.</small></label>
           <input
             id={`skip-${card.id}`}
             value={reason}

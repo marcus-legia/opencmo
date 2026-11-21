@@ -77,7 +77,7 @@ function localSender(base: string, doFetch: typeof fetch): EmailSender {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          From: { Email: "cmo@opencmo.local", Name: "Your CMO" },
+          From: { Email: "cmo@opencmo.local", Name: "Ferreto" },
           To: [{ Email: m.to }],
           Subject: m.subject,
           Text: m.text,

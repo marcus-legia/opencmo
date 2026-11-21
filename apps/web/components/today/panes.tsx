@@ -17,7 +17,7 @@ import { useScreen, type ScreenState } from "@/components/screens/useScreen";
 export type BrainPaneId = "plan" | "learned" | "past";
 const BRAIN_TAB = { plan: "week", learned: "memory", past: "past" } as const;
 
-/** `state`: the drawer already reads the brain screen (its "What your CMO learned" list); the pane shows that read. */
+/** `state`: the drawer already reads the brain screen (its "What Ferreto learned" list); the pane shows that read. */
 export function BrainPane({ pane, state }: { pane: BrainPaneId; state: ScreenState<"brain"> }) {
   const [pausedOverride, setPausedOverride] = useState<string | null | undefined>(undefined);
   if (state.status === "loading") return <SkeletonBlocks />;
@@ -30,7 +30,7 @@ export function BrainPane({ pane, state }: { pane: BrainPaneId; state: ScreenSta
           <span className="meta">
             {pausedAt
               ? `Paused since ${new Date(pausedAt).toLocaleString("en-GB", { weekday: "short", hour: "2-digit", minute: "2-digit" })}. Nothing runs until you resume.`
-              : "Your CMO plans the week on Monday and checks it every morning."}
+              : "Ferreto plans the week on Monday and checks it every morning."}
           </span>
           <PauseButton pausedAt={pausedAt} live={state.live.cmo} onChange={setPausedOverride} />
         </div>

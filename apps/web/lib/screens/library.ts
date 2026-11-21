@@ -68,7 +68,7 @@ export const VoiceNoteSchema = z.object({
 });
 
 /** Agents that read skills, as the Library names them. */
-export const SKILL_READERS = ["Writer", "Checker", "Sales", "CMO chat", "Studio", "Editor Assistant"] as const;
+export const SKILL_READERS = ["Writer", "Checker", "Sales", "Chat", "Studio", "Editor Assistant"] as const;
 
 /** One skill, read only (P3 C1): what it is for and which agents read it. */
 export const LibrarySkillSchema = z.object({

@@ -25,7 +25,7 @@ export function DocumentRead({ fields, value }: { fields: Field[]; value: Body }
     if (field.type === "object") return !!v && typeof v === "object" && field.fields.some((f) => (Array.isArray((v as Body)[f.key]) ? list((v as Body)[f.key]).length : str((v as Body)[f.key])));
     return str(v) !== "";
   });
-  if (!shown.length) return <p className="cmo-muted">This document is empty. Edit it to add what your CMO should know.</p>;
+  if (!shown.length) return <p className="cmo-muted">This document is empty. Edit it to add what Ferreto should know.</p>;
   return (
     <div className="cmo-prose">
       {shown.map((field) => {

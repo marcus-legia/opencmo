@@ -189,7 +189,7 @@ function SettingsBody({ data, live }: { data: Data; live: Record<keyof Data, boo
       <TrackingPanel />
 
       <div className="scr-settings-grid">
-        <Panel id="settings-your-cmo" title="Your CMO" className="scr-settings-cmo">
+        <Panel id="settings-your-cmo" title="Planning" className="scr-settings-cmo">
           <form
             className="v2-panel-body scr-form"
             onSubmit={(event) => {
@@ -198,7 +198,7 @@ function SettingsBody({ data, live }: { data: Data; live: Record<keyof Data, boo
             }}
           >
             <label className="v2-field" htmlFor="budget">
-              Weekly credit budget
+              Weekly limit
               <span className="scr-inline-field">
                 <input
                   id="budget"
@@ -213,7 +213,7 @@ function SettingsBody({ data, live }: { data: Data; live: Record<keyof Data, boo
                   }}
                 />
                 <span id="budget-note" className="scr-small">
-                  credits · paid video always asks you first
+                  credits a week, out of your plan&apos;s monthly allowance
                 </span>
               </span>
             </label>
@@ -255,7 +255,7 @@ function SettingsBody({ data, live }: { data: Data; live: Record<keyof Data, boo
         <section aria-labelledby="off-title" className="v2-panel scr-dark scr-off">
           <MonoLabel small>Off switch</MonoLabel>
           <h2 id="off-title">
-            {pausedAt ? "Your CMO is paused. Nothing runs and nothing posts." : "Pause stops every order and every scheduled post within a minute."}
+            {pausedAt ? "Ferreto is paused. Nothing runs and nothing posts." : "Pause stops every order and every scheduled post within a minute."}
           </h2>
           <p>Nothing is deleted. Resume picks up where it stopped; posts whose time passed ask you again.</p>
           <span>
@@ -266,7 +266,6 @@ function SettingsBody({ data, live }: { data: Data; live: Record<keyof Data, boo
               <span>Plan</span>
               <span className="scr-num">
                 {data.plan.name}
-                {data.plan.credits != null ? ` · ${data.plan.credits} credits` : ""}
               </span>
             </span>
             <span className="scr-off-links">

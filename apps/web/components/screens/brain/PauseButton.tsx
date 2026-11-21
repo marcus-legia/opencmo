@@ -48,7 +48,7 @@ export function PauseButton({
     return (
       <span className="scr-pause">
         <Button variant={variant === "on-dark" ? "secondary" : "on-dark"} className={cls} disabled={busy || !live} onClick={() => void set(false)}>
-          {busy ? "Resuming…" : "Resume CMO"}
+          {busy ? "Resuming…" : "Resume Ferreto"}
         </Button>
         {error && <ErrorNote>{error}</ErrorNote>}
       </span>
@@ -58,12 +58,12 @@ export function PauseButton({
   return (
     <>
       <Button variant={variant === "on-dark" ? "secondary" : "danger"} className={cls} onClick={() => ref.current?.showModal()}>
-        Pause CMO
+        Pause Ferreto
       </Button>
       <dialog ref={ref} className="v2-dialog" aria-labelledby="scr-pause-title">
         <div className="v2-dialog-body">
           <h2 id="scr-pause-title" className="v2-dialog-title">
-            Pause your CMO?
+            Pause Ferreto?
           </h2>
           <p>
             Pause stops every order and every scheduled post within a minute. Nothing is deleted. Resume picks up where it
@@ -73,7 +73,7 @@ export function PauseButton({
           {error && <ErrorNote>{error}</ErrorNote>}
           <div className="v2-actions">
             <Button variant="danger" onClick={() => void set(true)} disabled={!live || busy}>
-              {busy ? "Pausing…" : "Pause CMO"}
+              {busy ? "Pausing…" : "Pause Ferreto"}
             </Button>
             <Button variant="quiet" onClick={() => ref.current?.close()}>
               Keep running

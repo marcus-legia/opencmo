@@ -111,13 +111,13 @@ test("đổi tab trong workspace không tải lại trang", async ({ page }) => 
     ["My projects", /\/app\/projects$/],
     ["Settings", /\/app\/settings$/],
     ["Credits & plan", /\/app\/billing$/],
-    ["AI CMO", /\/app$/],
+    ["Dashboard", /\/app$/],
   ];
   for (const [label, url] of steps) {
     await page.getByRole("link", { name: label }).first().click();
     await expect(page).toHaveURL(url);
     const navigation = page.getByRole("navigation", { name: "Workspace" });
-    // Mục Dashboard có hai dòng ("Dashboard" + "AI CMO"): kiểm nhãn có mặt, không so nguyên văn.
+    // The Dashboard entry has two lines ("Dashboard" + its hint): check the label is there, not the whole text.
     await expect(navigation.locator('[aria-current="page"] .rail-label').first()).toContainText(label);
     expect(
       await page.evaluate(

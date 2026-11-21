@@ -43,8 +43,8 @@ test("a decision waits on its card: Cancel changes nothing, the card survives a 
     await page.goto("/app");
     const chat = page.locator("#v2-chat");
     // On the feed the chat is the right column (Main.dc.html); at 390 px it stacks under the feed.
-    await chat.getByLabel("Ask your CMO").fill("Pause my CMO for now, I'm travelling.");
-    await chat.getByLabel("Ask your CMO").press("Enter");
+    await chat.getByLabel("Ask Ferreto").fill("Pause my CMO for now, I'm travelling.");
+    await chat.getByLabel("Ask Ferreto").press("Enter");
 
     const card = chat.getByRole("group", { name: "Confirm" });
     await expect(card).toBeVisible();

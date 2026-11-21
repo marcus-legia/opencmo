@@ -164,7 +164,7 @@ export function SetupScreen() {
               <div className="meta" style={{ marginBottom: "10px" }}>
                 Step {scanStarted ? 3 : 2} of 3{status?.suggestedHandle ? ` · @${status.suggestedHandle}` : ""}
               </div>
-              <h1>{scanStarted ? "Sales is looking for people who need you." : "Your CMO is reading your website."}</h1>
+              <h1>{scanStarted ? "Sales is looking for people who need you." : "Ferreto is reading your website."}</h1>
               <p className="lead">It writes the documents every agent works from, then looks for people describing the problem you solve, in their own words. Your first week of posts comes after. Nothing is posted: every draft waits for your approval.</p>
               {status ? (
                 <div className="card v2" style={{ marginTop: "24px" }}>
@@ -226,7 +226,7 @@ function WebsiteStep({ initial, error, onStart }: { initial: string; error: stri
           Step 1 of 3
         </div>
         <h1>Start with your website.</h1>
-        <p className="lead">Your CMO reads it and writes the four documents every agent works from: Product, Strategy, Competitors and Content plan. You can change any of them later.</p>
+        <p className="lead">Ferreto reads it and writes the five documents every agent works from: Product, Strategy, Competitors, Post plan and Brand. You can change any of them later.</p>
         <div style={{ marginTop: "28px", display: "flex", flexDirection: "column", gap: "10px", maxWidth: "520px" }}>
           <label htmlFor="setup-site" style={{ fontSize: "13.5px", fontWeight: "500" }}>
             Your website
@@ -260,7 +260,7 @@ function WebsiteStep({ initial, error, onStart }: { initial: string; error: stri
         <div style={{ fontWeight: "600", marginBottom: "12px" }}>What happens next</div>
         <div className="task">
           <span className="dot d-wait mono" style={{ fontSize: "12px" }}>1</span>
-          <span style={{ flex: "1" }}>Your CMO reads the site and writes your documents.</span>
+          <span style={{ flex: "1" }}>Ferreto reads the site and writes your documents.</span>
         </div>
         <div className="task">
           <span className="dot d-wait mono" style={{ fontSize: "12px" }}>2</span>

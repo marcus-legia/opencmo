@@ -117,7 +117,7 @@ export function buildWeekly(input: WeeklyInput): Weekly {
     "Every number here counts your own conversations and posts from the last 7 days.",
     // A founder who chose Monday emails only gets this report as that email: no morning email to promise them.
     input.schedule.startsWith("every Monday")
-      ? "You chose one email a week: this report is it, every Monday."
+      ? "You chose one email a week, so this report is the only one, every Monday."
       : `This report replaces your Monday morning email. You get the morning email ${input.schedule}.`,
   ];
 
