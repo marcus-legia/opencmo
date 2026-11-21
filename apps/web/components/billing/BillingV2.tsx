@@ -4,9 +4,22 @@ import { LocalTime } from "@/components/LocalTime";
 import { SettingsFrame } from "@/components/today/SettingsFrame";
 import type { SellablePlan } from "@/lib/billing-catalog";
 import type { PlanUsage } from "@/lib/billing/usage";
+import { SUPPORT_EMAIL } from "@/lib/site";
 import type { LedgerEntry } from "@/lib/types";
 
 type Pack = { slug: string; credits: number; price_cents: number };
+
+/**
+ * The payment rows in plain words. The page passes only the rows Creem's webhook wrote; their `reason` strings are set in
+ * SQL (`process_creem_event`, `grant_annual_credits`). Credit counts stay hidden, as everywhere under the fair-use bar.
+ */
+const PAYMENT_LABEL: Record<string, string> = {
+  "Plan payment": "Plan payment",
+  "Annual plan monthly credits": "This month's allowance from your annual plan",
+  "Credit pack purchase": "Extra pack for this month",
+  Refund: "Refund",
+  "Payment dispute": "Payment disputed",
+};
 
 /** "18 Dec": the reset date the way the pause message says it. */
 function day(iso: string): string {
@@ -52,7 +65,7 @@ export function BillingV2({
         <h1 style={{ margin: "0 0 4px", fontSize: "22px", fontWeight: "600", letterSpacing: "-0.4px" }}>Billing</h1>
         {justPaid ? (
           <p className="meta" role="status">
-            Payment received. Credits arrive within a minute.
+            Payment received. Your plan is active within a minute.
           </p>
         ) : null}
         {start && !paid ? (
@@ -93,7 +106,6 @@ export function BillingV2({
                 ) : null}
                 {annual ? <SwitchAnnual billed={annual.billedPrice} /> : null}
                 {hasPortal ? <BillingButton path="/api/v1/billing/portal" label="Invoices and payment method" className="ghost" /> : null}
-                {paid && hasPortal ? <BillingButton path="/api/v1/billing/portal" label="Cancel plan" className="ghost" /> : null}
               </div>
               <div className="meta" style={{ marginTop: "8px" }}>
                 Payments, invoices and cancelling are handled by Creem, our merchant of record.
@@ -202,23 +214,47 @@ export function BillingV2({
           </section>
         ) : null}
 
-        <section className="card">
+        <section className="card" data-testid="billing-payments">
           <div className="hd">
-            <h2>Recent payments and credits</h2>
+            <h2>Payments</h2>
+            {hasPortal ? <span className="meta">Invoices are in Creem&apos;s billing page</span> : null}
           </div>
-          {ledger.length === 0 ? <div className="row meta">No transactions yet.</div> : null}
+          {ledger.length === 0 ? <div className="row meta">No payments yet.</div> : null}
           {ledger.slice(0, 12).map((row) => (
             <div key={row.id} className="row">
               <span className="mono meta" style={{ width: "120px" }}>
                 <LocalTime iso={row.created_at} />
               </span>
-              <span style={{ flex: "1" }}>{row.reason}</span>
-              <span className="mono" style={{ textAlign: "right", color: row.delta > 0 ? "var(--ok)" : undefined }}>
-                {row.delta > 0 ? `+${row.delta}` : row.delta}
-              </span>
+              <span style={{ flex: "1" }}>{PAYMENT_LABEL[row.reason] ?? "Billing update"}</span>
             </div>
           ))}
         </section>
+
+        {paid ? (
+          <section className="card" data-testid="billing-cancel">
+            <div className="hd">
+              <h2>Cancel your plan</h2>
+            </div>
+            <div className="bd" style={{ display: "flex", flexDirection: "column", gap: "10px", alignItems: "flex-start" }}>
+              {/* Creem's portal cancels at once (`subscription.canceled`, app/api/v1/billing/portal/route.ts): no "until" date to promise. */}
+              <p style={{ margin: "0" }}>
+                Cancelling ends your plan right away, and you are not charged again. Your Library, documents and drafts stay in your account if you
+                come back.
+              </p>
+              {hasPortal ? (
+                <BillingButton path="/api/v1/billing/portal" label="Cancel plan" className="ghost" />
+              ) : (
+                <p className="meta" style={{ margin: "0" }}>
+                  To cancel, write to <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> from your account email.
+                </p>
+              )}
+            </div>
+          </section>
+        ) : null}
+
+        <p className="meta" data-testid="billing-support">
+          Questions about a charge: <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>. Refunds: see the <a href="/refund">refund policy</a>.
+        </p>
       </div>
     </SettingsFrame>
   );
