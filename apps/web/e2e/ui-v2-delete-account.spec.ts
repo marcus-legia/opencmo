@@ -68,6 +68,8 @@ test("a plan that still renews is refused, with the way to Billing", async ({ pa
   await signIn(page, user);
   await page.setViewportSize({ width: 390, height: 844 });
   const card = await openDelete(page);
+  // A paying founder cancels from this card (review 2026-11-21): no trip to Billing first.
+  await expect(card.getByRole("button", { name: "Cancel plan" })).toBeVisible();
   const confirm = card.getByRole("button", { name: "Delete my account" });
   // A wrong address never reaches the server.
   await card.getByLabel(/to confirm/).fill("someone-else@test.local");
@@ -90,6 +92,7 @@ test("a free account deletes itself: signed out, the landing page says so, the s
   await signIn(page, user);
   await page.setViewportSize({ width: 1440, height: 1000 });
   const card = await openDelete(page);
+  await expect(card.getByRole("button", { name: "Cancel plan" })).toHaveCount(0);
   await card.getByLabel(/to confirm/).fill(user.email.toUpperCase());
   await card.getByRole("button", { name: "Delete my account" }).click();
   await expect(page).toHaveURL(/\/$/);

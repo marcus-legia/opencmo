@@ -268,7 +268,7 @@ function WebsiteStep({ initial, error, onStart }: { initial: string; error: stri
         </div>
         <div className="task">
           <span className="dot d-wait mono" style={{ fontSize: "12px" }}>3</span>
-          <span style={{ flex: "1" }}>Writer plans your week and drafts your first posts. To reply and post, you pick a plan.</span>
+          <span style={{ flex: "1" }}>Post drafts a week of posts for X, LinkedIn and Threads from what people asked. To reply and post, you pick a plan.</span>
         </div>
       </div>
     </div>
