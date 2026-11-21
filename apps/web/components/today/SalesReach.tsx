@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 import { api, jsonBody } from "@/components/clipping/api";
-import { emailBody, emailSubject, mailLinks } from "@/lib/cmo/email-links";
+import { emailBody, emailOpening, emailSubject, mailLinks } from "@/lib/cmo/email-links";
 import { PERSON_STATUSES, type PersonStatus, type ReachCheck } from "@/lib/cmo/reach";
 import { PLATFORM_LABEL, type SalesPlatform } from "@/lib/cmo/social/conversations";
 import type { SalesScreen } from "@/lib/screens/sales";
@@ -100,6 +100,8 @@ export function ReachPanel({ t, publicReply, onSent }: { t: Thread; publicReply:
   const person = t.person;
   const [tab, setTab] = useState<Tab>("public");
   const [dm, setDm] = useState(person?.dmDraft ?? "");
+  // The email has its own text (review 2026-11-21): it starts from the DM draft, or an opening when there is none.
+  const [email, setEmail] = useState(person?.dmDraft || emailOpening(t.title));
   const [note, setNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   if (!person) return <>{publicReply}</>;
@@ -114,7 +116,7 @@ export function ReachPanel({ t, publicReply, onSent }: { t: Thread; publicReply:
         ? "No DM drafted for this person yet."
         : null;
   const subject = emailSubject(t.title);
-  const links = reach?.emailFound ? mailLinks(reach.emailFound, subject, dm) : { gmail: null, mailto: null };
+  const links = reach?.emailFound ? mailLinks(reach.emailFound, subject, email) : { gmail: null, mailto: null };
   const emailLock = level !== "email_ready" || !reach?.emailFound ? (reach?.emailFound ? "They have not answered you yet." : "No address they published themselves was found.") : null;
 
   async function sent(via: "dm" | "email") {
@@ -242,21 +244,24 @@ export function ReachPanel({ t, publicReply, onSent }: { t: Thread; publicReply:
             <p className="meta" style={{ margin: "0" }}>
               An address they published themselves. Send it from your own mailbox, once. Ferreto adds a last line so they can tell you no.
             </p>
+            <p className="meta" style={{ margin: "0" }} data-testid="sales-email-sign">
+              Sign it with your name and your business. A sales email to someone in the US must also give your postal address.
+            </p>
             <div style={{ fontSize: "13.5px" }}>
               <span className="meta">Subject </span>
               {subject}
             </div>
-            <textarea aria-label="Email" className="reply" rows={5} value={dm} onChange={(e) => setDm(e.target.value)} style={{ width: "100%", resize: "vertical", font: "inherit", fontSize: "15px", lineHeight: "1.55", color: "var(--text)" }} />
+            <textarea aria-label="Email" className="reply" rows={6} value={email} onChange={(e) => setEmail(e.target.value)} style={{ width: "100%", resize: "vertical", font: "inherit", fontSize: "15px", lineHeight: "1.55", color: "var(--text)" }} />
             <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "flex-end", alignItems: "center" }}>
               {note ? <span className="meta">{note}</span> : null}
-              {dm.trim() && !links.gmail ? <span className="meta" data-testid="sales-email-long">Too long for a link. Copy it into your mail.</span> : null}
+              {email.trim() && !links.gmail ? <span className="meta" data-testid="sales-email-long">Too long for a link. Copy it into your mail.</span> : null}
               <button type="button" className="ghost" disabled={busy} onClick={() => void sent("email")}>
                 I sent it
               </button>
               <button type="button" className="ghost" onClick={async () => setNote((await copy(reach!.emailFound!)) ? "Address copied." : "Select the address and copy it.")}>
                 Copy address
               </button>
-              <button type="button" className="ghost" disabled={!dm.trim()} onClick={async () => setNote((await copy(emailBody(dm))) ? "Email copied." : "Select the email and copy it.")}>
+              <button type="button" className="ghost" disabled={!email.trim()} onClick={async () => setNote((await copy(emailBody(email))) ? "Email copied." : "Select the email and copy it.")}>
                 Copy
               </button>
               {links.mailto ? (

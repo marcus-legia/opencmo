@@ -5,7 +5,7 @@
  */
 import assert from "node:assert/strict";
 
-import { MAX_MAIL_URL, OPT_OUT_LINE, emailBody, emailSubject, mailLinks } from "./email-links";
+import { MAX_MAIL_URL, OPT_OUT_LINE, emailBody, emailOpening, emailSubject, mailLinks } from "./email-links";
 
 const failures: string[] = [];
 function check(label: string, run: () => void): void {
@@ -19,6 +19,11 @@ function check(label: string, run: () => void): void {
 check("the body ends with the opt-out line", () => assert.equal(emailBody("Hi Sam,\nSaw your post."), `Hi Sam,\nSaw your post.\n\n${OPT_OUT_LINE}`));
 check("the opt-out line is not added twice", () => assert.equal(emailBody(`Hi.\n\n${OPT_OUT_LINE}`), `Hi.\n\n${OPT_OUT_LINE}`));
 check("an empty draft has no body", () => assert.equal(emailBody("  \n "), ""));
+check("with no DM the email opens with their post, never empty", () => {
+  const text = emailOpening("Typeform  is too expensive");
+  assert.ok(text.includes('"Typeform is too expensive"') && text.trim().length > 0);
+  assert.ok(emailOpening("").startsWith("Hi,"));
+});
 check("the subject names their post", () => assert.equal(emailSubject("Typeform  is too expensive"), "About your post: Typeform is too expensive"));
 check("a long title is cut to 120 characters", () => assert.equal(emailSubject("x".repeat(300)).length, 120));
 check("no title still gives a subject", () => assert.equal(emailSubject(""), "About your post"));
