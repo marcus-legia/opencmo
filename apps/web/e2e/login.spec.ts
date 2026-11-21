@@ -46,11 +46,11 @@ test("login: landing design, no horizontal scroll at 390px, legal links", async 
 test("callback: cancelled at Google or no code goes back to /login with a sentence", async ({ page }) => {
   await page.goto("/auth/callback?error=access_denied&error_description=cancelled");
   await expect(page).toHaveURL(/\/login\?error=cancelled/);
-  await expect(page.getByRole("alert")).toHaveText("Sign-in was cancelled.");
+  await expect(page.getByRole("main").getByRole("alert")).toHaveText("Sign-in was cancelled.");
 
   await page.goto("/auth/callback");
   await expect(page).toHaveURL(/\/login\?error=no-code/);
-  await expect(page.getByRole("alert")).toContainText("Google did not finish");
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("Google did not finish");
 });
 
 test("a free account sees its deletion date in the app", async ({ page }, testInfo) => {

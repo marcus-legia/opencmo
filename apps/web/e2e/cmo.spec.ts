@@ -112,7 +112,7 @@ test("AI CMO: lập lịch, soạn bài X, duyệt, đánh dấu đã đăng, qu
   await page.keyboard.press("Escape");
 
   // Chat CMO (agent duy nhất): nhớ một điều người dùng dặn.
-  await page.getByLabel("Ask Ferreto").fill("Remember: never mention pricing in posts.");
+  await page.getByRole("textbox", { name: "Ask Ferreto" }).fill("Remember: never mention pricing in posts.");
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.locator(".cmo-msg.is-cmo").last()).toContainText("Noted", { timeout: 30_000 });
   const { data: memories } = await admin.from("cmo_memories").select("body").eq("user_id", userId);
@@ -120,7 +120,7 @@ test("AI CMO: lập lịch, soạn bài X, duyệt, đánh dấu đã đăng, qu
 
   // H2/H3: CMO nghiên cứu bằng tool ScrapeCreators (giả) rồi GIAO VIỆC cho agent Sales có brief.
   const { count: scansBefore } = await admin.from("cmo_runs").select("id", { count: "exact", head: true }).eq("user_id", userId).eq("kind", "sales_scan");
-  await page.getByLabel("Ask Ferreto").fill("Do some research on who needs this");
+  await page.getByRole("textbox", { name: "Ask Ferreto" }).fill("Do some research on who needs this");
   await page.getByRole("button", { name: "Send" }).click();
   // Charge before running (cmo-review-2 S3.5): the scan stops at its price card, and nothing is queued before Approve.
   const confirmCard = page.getByRole("group", { name: "Confirm" });
@@ -142,7 +142,7 @@ test("AI CMO: lập lịch, soạn bài X, duyệt, đánh dấu đã đăng, qu
   // link opens the editor (the founder records and uploads their own video) and the Writer run that holds the price.
   const scriptRuns = async () =>
     (await admin.from("cmo_runs").select("id", { count: "exact", head: true }).eq("user_id", userId).eq("kind", "write_video_brief")).count ?? 0;
-  await page.getByLabel("Ask Ferreto").fill("Plan a short video about onboarding");
+  await page.getByRole("textbox", { name: "Ask Ferreto" }).fill("Plan a short video about onboarding");
   await page.getByRole("button", { name: "Send" }).click();
   const scriptCard = page.getByRole("group", { name: "Confirm" });
   await expect(scriptCard).toContainText("Write a script and storyboard", { timeout: 60_000 });

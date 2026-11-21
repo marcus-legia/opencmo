@@ -71,13 +71,13 @@ test("the phone layout keeps the feed and the chat on the page; 1024 folds the c
   // On the feed the chat is the right column (Main.dc.html); at 390 px it stacks under the feed, no tap away.
   const rows = page.getByTestId("approval-queue").locator('[data-testid="feed-row"][data-card-id]');
   await expect(rows.first().getByTestId("approval-card")).toBeVisible();
-  await expect(page.locator("#v2-chat").getByLabel("Ask Ferreto")).toBeAttached();
+  await expect(page.locator("#v2-chat").getByRole("textbox", { name: "Ask Ferreto" })).toBeAttached();
   await page.screenshot({ path: join(OUT, "phone-queue-390.png"), fullPage: true });
 
   await page.setViewportSize({ width: 1024, height: 900 });
   await page.goto("/app/writer?sample=1");
   await page.locator("#v2-chat").getByRole("button", { name: "Open the chat" }).click();
-  await expect(page.locator("#v2-chat").getByLabel("Ask Ferreto")).toBeVisible();
+  await expect(page.locator("#v2-chat").getByRole("textbox", { name: "Ask Ferreto" })).toBeVisible();
 });
 
 test("the thread card numbers its posts and cannot be edited; the look note sits on the video card", async ({ page }) => {

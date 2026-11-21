@@ -23,7 +23,7 @@ test("the top bars move between views and agent pages; the chat is open on the f
   await page.goto("/app?sample=1");
   const chat = page.locator("#v2-chat");
   await expect(page.getByTestId("v2-dashboard")).toBeVisible();
-  await expect(chat.getByLabel("Ask Ferreto")).toBeVisible();
+  await expect(chat.getByRole("textbox", { name: "Ask Ferreto" })).toBeVisible();
 
   // Feed → Post (list, then week) → Analytics through the one bar the four views share.
   const views = page.getByRole("banner").getByRole("navigation", { name: "View" });
@@ -33,10 +33,10 @@ test("the top bars move between views and agent pages; the chat is open on the f
   // Off the Feed the chat folds to the "Ask" rail; it opens on demand and folds again.
   const rail = chat.getByRole("button", { name: "Open the chat" });
   await expect(rail).toBeVisible();
-  await expect(chat.getByLabel("Ask Ferreto")).toBeHidden();
+  await expect(chat.getByRole("textbox", { name: "Ask Ferreto" })).toBeHidden();
   await expect(page.getByRole("separator", { name: "Resize the chat" })).toHaveCount(0);
   await rail.click();
-  await expect(chat.getByLabel("Ask Ferreto")).toBeFocused();
+  await expect(chat.getByRole("textbox", { name: "Ask Ferreto" })).toBeFocused();
   await chat.getByRole("button", { name: "Fold the chat" }).click();
   await expect(rail).toBeVisible();
   await expect(views.getByRole("link", { name: "Post" })).toHaveAttribute("aria-current", "page");
@@ -115,7 +115,7 @@ test("the chat keeps its draft across screens, and ?ask=1 puts the cursor in it"
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/app?sample=1");
   const chat = page.locator("#v2-chat");
-  const input = chat.getByLabel("Ask Ferreto");
+  const input = chat.getByRole("textbox", { name: "Ask Ferreto" });
   await input.fill("Plan a launch week");
   await page.getByRole("banner").getByRole("navigation", { name: "View" }).getByRole("link", { name: "Post" }).click();
   await expect(page).toHaveURL(/\/app\/writer/);
@@ -151,7 +151,7 @@ test("look: the frame at 1440, 1280, 1024 and 390, with no serious axe violation
   await page.setViewportSize({ width: 1024, height: 768 });
   await page.goto("/app/writer?sample=1");
   await page.locator("#v2-chat").getByRole("button", { name: "Open the chat" }).click();
-  await expect(page.locator("#v2-chat").getByLabel("Ask Ferreto")).toBeVisible();
+  await expect(page.locator("#v2-chat").getByRole("textbox", { name: "Ask Ferreto" })).toBeVisible();
   await page.screenshot({ path: join(OUT, "writer-1024-chat.png") });
 
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -193,5 +193,5 @@ test("the editor wears its artboard: Feed back, the Assistant in the right colum
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.getByTestId("editor-home").click();
   await expect(page).toHaveURL(/\/app(\?|$)/);
-  await expect(page.locator("#v2-chat").getByLabel("Ask Ferreto")).toBeVisible();
+  await expect(page.locator("#v2-chat").getByRole("textbox", { name: "Ask Ferreto" })).toBeVisible();
 });

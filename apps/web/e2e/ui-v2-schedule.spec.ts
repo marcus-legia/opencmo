@@ -156,15 +156,18 @@ test("a schedule card is approved; dragging its slot to another day asks again w
   await expect.poll(async () => (await db.from("schedule_slots").select("status").eq("id", slot.id).single()).data?.status).toBe("waiting");
 
   await page.goto(`/app/schedule?from=${mondayOf(slot.publish_at)}`);
+  // Month view, so the day after the slot is on screen even when the slot is on the week's Sunday: moving it back
+  // instead could land on a time already past (a Sunday slot seen on a Saturday), which the server rightly refuses.
+  await page.getByRole("tab", { name: "Month" }).click();
   // Calendar.dc.html: one column per day, a card per slot.
   const days = page.getByTestId("v2-schedule").locator(".grid > .day");
-  // The card's own day, in the founder's zone as the Calendar keys it (`data-day`); the target is the next day (or the
-  // one before on the week's last day).
+  await expect(days).toHaveCount(28);
+  // The card's own day, in the founder's zone as the Calendar keys it (`data-day`); the target is the next day.
   const slotCard = page.locator(`[data-slot-id="${slot.id}"]`);
   const fromKey = await slotCard.evaluate((el) => (el.closest("[data-day]") as HTMLElement).dataset.day!);
   const keys = await days.evaluateAll((els) => els.map((el) => (el as HTMLElement).dataset.day!));
   const at = keys.indexOf(fromKey);
-  const toDay = page.getByTestId("v2-schedule").locator(`[data-day="${keys[at === keys.length - 1 ? at - 1 : at + 1]}"]`);
+  const toDay = page.getByTestId("v2-schedule").locator(`[data-day="${keys[at + 1]}"]`);
   // The card's own drag events, carrying one DataTransfer from the card to the day: the page's handlers run as they do
   // under a founder's mouse, without depending on how Chromium starts a native drag from synthetic mouse steps.
   const dataTransfer = await page.evaluateHandle(() => new DataTransfer());
