@@ -382,7 +382,7 @@ async function main() {
   // An injected search (the evals' seam) replaces Reddit: only its threads become cards.
   const injected = (n: number): RedditThread => ({
     url: `https://www.reddit.com/r/freelance/comments/inj${n}/`, community: "freelance", title: `Clients pay me late ${n}`,
-    author: "someone", text: `Every month the same story. My clients pay invoices weeks late and I hate chasing them.`, comments: 4,
+    author: `u/someone${n}`, text: `Every month the same story. My clients pay invoices weeks late and I hate chasing them.`, comments: 4,
     postedAt: new Date().toISOString(),
   });
   const queried: string[] = [];
@@ -483,6 +483,34 @@ async function main() {
   });
   assert.equal(noKey.run.status, "done", `no key, HN on (${noKey.run.error})`);
   assert.deepEqual((noKey.run.output as { failed: Platform[] }).failed, ["reddit"]);
+  // Review 2026-11-21: one card per person. Someone who already has a card (in any state) is skipped before scoring
+  // and counted as skipped; two threads by one new person make one card (the better one).
+  const memP = memoryStore({ ...docs, strategy: { ...docs.strategy, pains: ["late invoice payments"] } });
+  memP.salesSettings.platforms = ["reddit"];
+  memP.opps.push({ url: "https://www.reddit.com/r/freelance/comments/old1/", community: "freelance", title: "Earlier post", author: "u/Sam", snippet: "", posted_at: null, comments: 0, score: 80, score_parts: [], reply: "Try reminders." });
+  const runP = memP.enqueue("sales_scan");
+  await drainCmoQueue(memP.store, {
+    searchReddit: async () => [{ ...injected(30), author: "u/sam " }, { ...injected(31), author: "u/new_one" }, { ...injected(32), author: "U/New_One" }],
+    searchHn: async () => [],
+    searchConversations: async () => [],
+  });
+  assert.equal(runP.status, "done", `person dedupe (${runP.error})`);
+  const outP = runP.output as { scanned: number; skipped: number; cards: number };
+  assert.equal(outP.scanned, 2, "the person already found is not scored");
+  assert.equal(outP.cards, 1, "one card for the new person with two threads");
+  assert.equal(outP.skipped, 2, "both counted as skipped");
+  assert.equal(memP.opps.length, 2, "no second card for u/Sam, one for new_one");
+  // The store holds it too, as `cmo_save_opportunities` does, if the scan's own check is bypassed.
+  assert.equal(await memP.store.saveOpportunities("u", runP.id, [{ ...memP.opps[0]!, url: "https://www.reddit.com/r/x/comments/again/", author: "U/SAM" }]), 0, "the store refuses a second card for a person");
+  // Review 2026-11-21: a DM may say "I replied in the thread" only for a reply the founder posted, never a draft.
+  const { draftMessages } = await import("./sales-scan");
+  const prompts: string[] = [];
+  const capture = { now: new Date(), think: async (call: { prompt: string; fake?: () => unknown }) => (prompts.push(call.prompt), call.fake!()) } as unknown as Parameters<typeof draftMessages>[0];
+  const dmThread = { ...injected(40), platform: "reddit" as const };
+  const dmDrafted = await draftMessages(capture, "dm", { docs, voice: "", targets: [{ thread: dmThread, reply: "A draft never posted." }, { thread: { ...dmThread, url: `${dmThread.url}b` }, reply: "Posted.", posted: true }] });
+  assert.ok(prompts[0]!.includes('replied="no"') && !prompts[0]!.includes("A draft never posted."), "a reply still in draft is not in the DM prompt");
+  assert.ok(prompts[0]!.includes('replied="yes"') && prompts[0]!.includes("<reply>Posted.</reply>"), "a posted reply is");
+  assert.ok(!/replied/i.test(dmDrafted.textFor.get(0) ?? "x replied"), `the first-contact DM claims no reply (${dmDrafted.textFor.get(0)})`);
   // Excluded subreddits are Reddit's: a Facebook group with the same name is still read.
   assert.equal(allowedBySettings({ ...social("facebook", 1), community: "freelance" }, { excluded: ["freelance"], pairs: [], platforms: ["facebook"] }), true);
 

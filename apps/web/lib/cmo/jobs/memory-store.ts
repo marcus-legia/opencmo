@@ -4,7 +4,7 @@
  */
 
 import type { LibrarySaveItem, LibraryTopTheme } from "../library";
-import { reachLevel, type ReachCheck, type ReachLevel } from "../reach";
+import { personKey, reachLevel, type ReachCheck, type ReachLevel } from "../reach";
 import type { VideoSource } from "../writer/types";
 import { latestPerTopic } from "./context";
 import { isoDay, type CmoStore, type DraftRating, type CompetitorInsight, type ConnectedAccountRow, type ReplyOutcomeDue, type MetricRow, type ZernioPostRow, type NicheVideoInsight, type SalesSettings, type SubredditRule, type Documents, type Goal, type ItemRow, type Lesson, type MemoryEvent, type Opportunity, type PostSource, type QueuedRun, type Step, type VoiceNoteRow, type WeekResults } from "./types";
@@ -189,6 +189,7 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
       return item;
     },
     seenUrls: async () => new Set(opps.map((o) => o.url)),
+    seenAuthors: async () => new Set(opps.map((o) => personKey(o.platform ?? "reddit", o.author)).filter((k): k is string => k !== null)),
     subredditRule: async (name) => rules.get(name.toLowerCase()) ?? null,
     async saveSubredditRule(rule) {
       rules.set(rule.subreddit.toLowerCase(), { ...rule, subreddit: rule.subreddit.toLowerCase(), read_at: new Date().toISOString() });
@@ -308,8 +309,15 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
     async saveOpportunities(_u, runId, list) {
       // As `cmo_save_opportunities`: a card with no draft is kept only by the account's free scan (priced 0).
       const free = runs.some((r) => r.id === runId && r.kind === "sales_scan" && r.credits === 0);
-      const fresh = list.filter((o) => !opps.some((x) => x.url === o.url) && (o.rule === "skip" || o.reply.length > 0 || free));
-      opps.push(...fresh);
+      // And one card per person (20270204010000): an author already met, or met earlier in this save, is skipped.
+      const fresh: Opportunity[] = [];
+      for (const o of list) {
+        if (opps.some((x) => x.url === o.url) || !(o.rule === "skip" || o.reply.length > 0 || free)) continue;
+        const key = personKey(o.platform ?? "reddit", o.author);
+        if (key && opps.some((x) => personKey(x.platform ?? "reddit", x.author) === key)) continue;
+        opps.push(o);
+        fresh.push(o);
+      }
       return fresh.length;
     },
     async defer(run, seconds, steps) {

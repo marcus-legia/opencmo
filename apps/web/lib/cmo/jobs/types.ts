@@ -336,6 +336,11 @@ export interface CmoStore {
   saveDraft(userId: string, runId: string, itemId: string | null, idea: string, body: Record<string, unknown>, priority: ItemRow["priority"]): Promise<ItemRow>;
   /** Thread links that already became cards (dismissed ones too): W4 never offers them again. */
   seenUrls(userId: string): Promise<Set<string>>;
+  /**
+   * Everyone the founder already has a card for, as `personKey`s (`cmo_seen_authors`): W4 never makes a second card for
+   * a person, whether open, replied to, messaged, not interested or not a fit.
+   */
+  seenAuthors(userId: string): Promise<Set<string>>;
   saveOpportunities(userId: string, runId: string, items: Opportunity[]): Promise<number>;
   /** Wave 3 A2: the scan's Library lines (`cmo_save_library`); returns how many were saved or updated. */
   saveLibrary(userId: string, runId: string, items: LibrarySaveItem[]): Promise<number>;
