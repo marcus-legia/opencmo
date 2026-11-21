@@ -16,6 +16,7 @@ select plan(3);
 create temp table intended (name text primary key) on commit drop;
 insert into intended values
   ('account_deletions'),  -- wave 4 A2: the purge log, service role and its definer functions only
+  ('signup_outcomes'),  -- launch measurement: anonymous outcomes of deleted accounts, written by the purge, read by the owner funnel
   ('agent_model_prices'),
   ('app_owners'),
   ('creem_customers'),

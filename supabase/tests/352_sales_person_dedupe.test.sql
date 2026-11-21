@@ -64,7 +64,7 @@ select is(public.cmo_save_opportunities('e3520000-0000-4000-8000-00000000000a', 
 ]'::jsonb), 1, 'a new person gets a card');
 
 -- The scan's list: one key per person, lower-cased, without the authors that are never deduped.
-select is((select count(*)::integer from public.cmo_seen_authors('e3520000-0000-4000-8000-00000000000a') a where a.author in ('u/openone', 'u/replied_one', 'u/not_a_fit', 'u/twice')), 4,
+select is((select count(*)::integer from public.cmo_seen_authors('e3520000-0000-4000-8000-00000000000a') a where a.platform = 'reddit' and a.author in ('u/openone', 'u/replied_one', 'u/not_a_fit', 'u/twice')), 4,
   'cmo_seen_authors lists the people already met, lower-cased');
 select is((select count(*)::integer from public.cmo_seen_authors('e3520000-0000-4000-8000-00000000000a') a where a.author in ('', 'u/[deleted]')), 0,
   'and never an empty or deleted author');

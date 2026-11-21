@@ -4841,7 +4841,10 @@ begin
       -- Active: approved something in the last 7 days, counted only for accounts at least 7 days old.
       exists (select 1 from public.product_events e where e.user_id = c.id and e.kind = 'approve' and e.at >= now() - interval '7 days')
         as active_7d,
-      public.cmo_paid(c.id) as paid
+      public.cmo_paid(c.id) as paid,
+      exists (select 1 from public.cmo_runs r where r.user_id = c.id and r.kind = 'sales_scan' and r.status = 'done' and r.output->>'free' = 'true') as free_scan,
+      exists (select 1 from public.opportunities o where o.user_id = c.id) as found_someone,
+      public.first_touch_channel((select p.first_touch from public.profiles p where p.id = c.id)) as channel
     from cohort c
   ),
   median as (
@@ -4856,6 +4859,8 @@ begin
     'steps', jsonb_build_array(
       jsonb_build_object('step', 'signed_up', 'users', (select count(*) from firsts)),
       jsonb_build_object('step', 'onboarded', 'users', (select count(*) from firsts where onboarded_at is not null)),
+      jsonb_build_object('step', 'free_scan', 'users', (select count(*) from firsts where free_scan)),
+      jsonb_build_object('step', 'found', 'users', (select count(*) from firsts where found_someone)),
       jsonb_build_object('step', 'approved', 'users', (select count(*) from firsts where approved_at is not null)),
       jsonb_build_object('step', 'scheduled', 'users', (select count(*) from firsts where scheduled_at is not null)),
       jsonb_build_object('step', 'posted', 'users', (select count(*) from firsts where posted_at is not null)),
@@ -4868,6 +4873,17 @@ begin
       'paid_eligible', (select count(*) from firsts where created_at <= now() - interval '7 days' and paid),
       'paid_active', (select count(*) from firsts where created_at <= now() - interval '7 days' and paid and active_7d)
     ),
+    -- Accounts still here, plus the anonymous outcomes of those deleted since (free accounts go after 30 days).
+    'by_channel', coalesce((select jsonb_agg(ch order by ch.signed_up desc) from (
+      select channel, sum(signed_up)::integer as signed_up, sum(free_scan)::integer as free_scan,
+        sum(found_n)::integer as found, sum(paid)::integer as paid
+      from (
+        select channel, 1 as signed_up, free_scan::int as free_scan, found_someone::int as found_n, paid::int as paid from firsts
+        union all
+        select o.channel, 1, o.free_scan::int, (o.people_found > 0)::int, o.paid::int
+        from public.signup_outcomes o where o.signup_day >= (v_since at time zone 'utc')::date
+      ) x group by channel
+    ) ch), '[]'::jsonb),
     'by_week', coalesce((select jsonb_agg(w order by w.week) from (
       select date_trunc('week', created_at at time zone 'utc')::date as week,
         count(*) as signed_up,
@@ -5212,7 +5228,8 @@ begin
   end if;
   if p_answers ? 'heard_from' then
     v_heard := p_answers->>'heard_from';
-    if v_heard is null or v_heard not in ('search', 'x', 'reddit', 'linkedin', 'youtube', 'ai_assistant', 'friend', 'newsletter', 'other') then
+    if v_heard is null or v_heard not in ('search', 'x', 'reddit', 'linkedin', 'youtube', 'ai_assistant', 'friend', 'newsletter', 'product_hunt',
+      'hacker_news', 'threads', 'other') then
       raise exception 'These answers are not valid.' using errcode = '22023';
     end if;
     v_note := nullif(left(btrim(coalesce(p_answers->>'heard_from_note', '')), 100), '');
@@ -6306,6 +6323,8 @@ declare
   v_rule text;
   v_karma integer;
   v_age integer;
+  v_platform text;
+  v_person text;
   -- The account's free scan (priced 0, 20270131010000) saves its cards without a draft: '' means not drafted yet.
   v_free boolean := exists (
     select 1 from public.cmo_runs r where r.id = p_run and r.user_id = p_user and r.kind = 'sales_scan' and r.credits = 0
@@ -6328,8 +6347,17 @@ begin
     if v_rule is distinct from 'skip' and coalesce(v_item->>'reply', '') = '' and not v_free then
       continue;
     end if;
-    if coalesce(v_item->>'platform', 'reddit') not in ('reddit', 'hn', 'facebook', 'threads') then
+    v_platform := coalesce(v_item->>'platform', 'reddit');
+    if v_platform not in ('reddit', 'hn', 'facebook', 'threads') then
       raise exception 'A conversation comes from Reddit, Hacker News, a Facebook group or Threads.' using errcode = '22023';
+    end if;
+    -- One card per person: the key is the stored author (cut to 100 like the column), trimmed and lower-cased.
+    v_person := lower(btrim(left(coalesce(v_item->>'author', ''), 100)));
+    if v_person not in ('', '[deleted]', '[removed]', 'u/[deleted]', 'u/[removed]') and exists (
+      select 1 from public.opportunities o
+      where o.user_id = p_user and o.platform = v_platform and lower(btrim(o.author)) = v_person
+    ) then
+      continue;
     end if;
     -- Clamped while still numeric: a huge number (1e10) cast to integer first would abort the whole scan's save.
     v_karma := case when jsonb_typeof(v_item->'min_karma') = 'number' and (v_item->>'min_karma')::numeric between 0 and 1000000
@@ -6340,7 +6368,7 @@ begin
       user_id, run_id, platform, url, community, title, author, snippet, posted_at, comments, score, score_parts, reply,
       priority, gen, rule, rule_why, min_karma, min_account_age_days
     ) values (
-      p_user, p_run, coalesce(v_item->>'platform', 'reddit'), v_item->>'url', left(coalesce(v_item->>'community', ''), 100),
+      p_user, p_run, v_platform, v_item->>'url', left(coalesce(v_item->>'community', ''), 100),
       left(v_item->>'title', 400),
       left(coalesce(v_item->>'author', ''), 100), left(coalesce(v_item->>'snippet', ''), 1200),
       nullif(v_item->>'posted_at', '')::timestamptz, greatest(0, coalesce((v_item->>'comments')::integer, 0)),
@@ -6638,6 +6666,22 @@ begin
   values (v_user, v_order.id, 'writer', 'note', left('You edited beat ' || p_beat || ' of “' || coalesce(v_order.title, 'the script') || '”', 200));
   return jsonb_build_object('version', v_order.updated_at, 'beat', p_beat, 'say', v_beat->>'say', 'show', v_beat->>'show');
 end;
+$$;
+
+
+--
+-- Name: cmo_seen_authors(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_seen_authors(p_user uuid) RETURNS TABLE(platform text, author text)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select distinct o.platform, lower(btrim(o.author))
+  from public.opportunities o
+  where o.user_id = p_user
+    and lower(btrim(o.author)) not in ('', '[deleted]', '[removed]', 'u/[deleted]', 'u/[removed]')
+  limit 5000;
 $$;
 
 
@@ -9360,6 +9404,23 @@ begin
   end if;
   return v_row;
 end;
+$$;
+
+
+--
+-- Name: first_touch_channel(jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.first_touch_channel(p_touch jsonb) RETURNS text
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO ''
+    AS $$
+  select coalesce(
+    nullif(p_touch->>'ref', ''),
+    nullif(p_touch->>'utm_source', ''),
+    nullif(p_touch->>'referrer_host', ''),
+    'direct'
+  );
 $$;
 
 
@@ -12235,6 +12296,43 @@ $_$;
 
 
 --
+-- Name: profile_set_first_touch(jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.profile_set_first_touch(p_touch jsonb) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $_$
+declare
+  v_user uuid := (select auth.uid());
+  v_clean jsonb := '{}'::jsonb;
+  v_key text;
+  v_value text;
+begin
+  if v_user is null then
+    raise exception 'Sign in first.' using errcode = '42501';
+  end if;
+  if p_touch is null or jsonb_typeof(p_touch) <> 'object' then
+    return false;
+  end if;
+  foreach v_key in array array['ref', 'utm_source', 'utm_medium', 'utm_campaign', 'referrer_host', 'landing_path', 'day'] loop
+    v_value := p_touch->>v_key;
+    if v_value is not null and char_length(v_value) between 1 and 100 and v_value ~ '^[A-Za-z0-9/._-]+$' then
+      v_clean := v_clean || jsonb_build_object(v_key, v_value);
+    end if;
+  end loop;
+  if v_clean = '{}'::jsonb then
+    return false;
+  end if;
+  update public.profiles p set first_touch = v_clean
+  where p.id = v_user and p.first_touch is null
+    and exists (select 1 from auth.users u where u.id = v_user and u.created_at > now() - interval '1 day');
+  return found;
+end;
+$_$;
+
+
+--
 -- Name: profile_timezone_detect(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -12819,6 +12917,11 @@ begin
     limit v_left
     for update of d skip locked
   loop
+    -- A retry after a failed deleteUser must not count the account twice.
+    if not exists (select 1 from public.account_deletions d where d.user_id = v_user and d.done_at is null and d.outcome_recorded) then
+      perform public.record_signup_outcome(v_user, 'self');
+      update public.account_deletions set outcome_recorded = true where user_id = v_user and done_at is null;
+    end if;
     -- Files uploaded after the founder asked are queued too.
     perform public.account_purge_files(v_user);
     v_left := v_left - 1;
@@ -12846,9 +12949,12 @@ begin
     limit v_left
     for update of p skip locked
   loop
+    if not exists (select 1 from public.account_deletions d where d.user_id = v_user and d.done_at is null and d.outcome_recorded) then
+      perform public.record_signup_outcome(v_user, 'unpaid');
+    end if;
     perform public.account_purge_files(v_user);
-    insert into public.account_deletions (user_id, source) values (v_user, 'unpaid')
-    on conflict (user_id) where done_at is null do nothing;
+    insert into public.account_deletions (user_id, source, outcome_recorded) values (v_user, 'unpaid', true)
+    on conflict (user_id) where done_at is null do update set outcome_recorded = true;
     return next v_user;
   end loop;
 end;
@@ -13485,6 +13591,29 @@ begin
   end if;
   return old;
 end;
+$$;
+
+
+--
+-- Name: record_signup_outcome(uuid, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.record_signup_outcome(p_user uuid, p_source text) RETURNS void
+    LANGUAGE sql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  insert into public.signup_outcomes (signup_day, channel, heard_from, free_scan, people_found, paid, deleted_as)
+  select
+    (coalesce(u.created_at, now()) at time zone 'utc')::date,
+    public.first_touch_channel(p.first_touch),
+    p.heard_from,
+    exists (select 1 from public.cmo_runs r where r.user_id = p_user and r.kind = 'sales_scan' and r.status = 'done' and r.output->>'free' = 'true'),
+    (select count(*)::integer from public.opportunities o where o.user_id = p_user),
+    public.account_is_paid(p_user),
+    p_source
+  from auth.users u
+  left join public.profiles p on p.id = u.id
+  where u.id = p_user;
 $$;
 
 
@@ -18794,6 +18923,7 @@ CREATE TABLE public.account_deletions (
     source text NOT NULL,
     requested_at timestamp with time zone DEFAULT now() NOT NULL,
     done_at timestamp with time zone,
+    outcome_recorded boolean DEFAULT false NOT NULL,
     CONSTRAINT account_deletions_source_check CHECK ((source = ANY (ARRAY['self'::text, 'unpaid'::text])))
 );
 
@@ -18885,12 +19015,14 @@ CREATE TABLE public.profiles (
     autopilot_paused boolean DEFAULT false NOT NULL,
     digest_days text DEFAULT 'weekdays'::text NOT NULL,
     sells_to text,
+    first_touch jsonb,
     CONSTRAINT profiles_autopilot_hours_check CHECK ((autopilot_hours = ANY (ARRAY[6, 12, 24]))),
     CONSTRAINT profiles_autopilot_note_check CHECK ((char_length(autopilot_note) <= 200)),
     CONSTRAINT profiles_autopilot_platforms_check CHECK ((autopilot_platforms <@ ARRAY['x'::text, 'threads'::text, 'linkedin'::text])),
     CONSTRAINT profiles_digest_days_check CHECK ((digest_days = ANY (ARRAY['weekdays'::text, 'daily'::text, 'monday'::text, 'off'::text]))),
     CONSTRAINT profiles_digest_hour_check CHECK (((digest_hour >= 0) AND (digest_hour <= 23))),
-    CONSTRAINT profiles_heard_from_check CHECK (((heard_from IS NULL) OR (heard_from = ANY (ARRAY['search'::text, 'x'::text, 'reddit'::text, 'linkedin'::text, 'youtube'::text, 'ai_assistant'::text, 'friend'::text, 'newsletter'::text, 'other'::text])))),
+    CONSTRAINT profiles_first_touch_check CHECK (((first_touch IS NULL) OR ((jsonb_typeof(first_touch) = 'object'::text) AND (octet_length((first_touch)::text) <= 1000)))),
+    CONSTRAINT profiles_heard_from_check CHECK (((heard_from IS NULL) OR (heard_from = ANY (ARRAY['search'::text, 'x'::text, 'reddit'::text, 'linkedin'::text, 'youtube'::text, 'ai_assistant'::text, 'friend'::text, 'newsletter'::text, 'product_hunt'::text, 'hacker_news'::text, 'threads'::text, 'other'::text])))),
     CONSTRAINT profiles_heard_from_note_check CHECK (((heard_from_note IS NULL) OR (char_length(heard_from_note) <= 100))),
     CONSTRAINT profiles_post_platforms_check CHECK (((post_platforms IS NULL) OR (((cardinality(post_platforms) >= 1) AND (cardinality(post_platforms) <= 3)) AND (post_platforms <@ ARRAY['x'::text, 'threads'::text, 'linkedin'::text])))),
     CONSTRAINT profiles_sells_to_check CHECK (((sells_to IS NULL) OR ((char_length(sells_to) >= 1) AND (char_length(sells_to) <= 160)))),
@@ -19778,6 +19910,38 @@ CREATE TABLE public.shorts (
     CONSTRAINT shorts_reason_check CHECK (((char_length(reason) >= 1) AND (char_length(reason) <= 300))),
     CONSTRAINT shorts_source_start_check CHECK ((source_start >= (0)::numeric)),
     CONSTRAINT shorts_status_check CHECK ((status = ANY (ARRAY['building'::text, 'rendering'::text, 'ready'::text, 'approved'::text, 'sent_back'::text, 'failed'::text])))
+);
+
+
+--
+-- Name: signup_outcomes; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.signup_outcomes (
+    id bigint NOT NULL,
+    signup_day date NOT NULL,
+    channel text NOT NULL,
+    heard_from text,
+    free_scan boolean DEFAULT false NOT NULL,
+    people_found integer DEFAULT 0 NOT NULL,
+    paid boolean DEFAULT false NOT NULL,
+    deleted_as text NOT NULL,
+    recorded_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT signup_outcomes_deleted_as_check CHECK ((deleted_as = ANY (ARRAY['self'::text, 'unpaid'::text])))
+);
+
+
+--
+-- Name: signup_outcomes_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.signup_outcomes ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.signup_outcomes_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
 );
 
 
@@ -20798,6 +20962,14 @@ ALTER TABLE ONLY public.shorts
 
 
 --
+-- Name: signup_outcomes signup_outcomes_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.signup_outcomes
+    ADD CONSTRAINT signup_outcomes_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: social_accounts social_accounts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -21704,6 +21876,13 @@ CREATE INDEX opportunities_run_id_idx ON public.opportunities USING btree (run_i
 --
 
 CREATE INDEX opportunities_user_person_idx ON public.opportunities USING btree (user_id, person_status, status_at DESC);
+
+
+--
+-- Name: opportunities_user_person_key_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX opportunities_user_person_key_idx ON public.opportunities USING btree (user_id, platform, lower(btrim(author)));
 
 
 --
@@ -24296,6 +24475,12 @@ ALTER TABLE public.short_batches ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.shorts ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: signup_outcomes; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.signup_outcomes ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: social_accounts; Type: ROW SECURITY; Schema: public; Owner: -

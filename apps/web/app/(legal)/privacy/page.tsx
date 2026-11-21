@@ -43,7 +43,7 @@ export default function PrivacyPage() {
         },
         {
           heading: "Cookies",
-          body: <p>We use only the cookies needed to keep you signed in and to keep the service secure. We do not use advertising or tracking cookies, and the page-speed measurements we collect set no cookies.</p>,
+          body: <p>We use only the cookies needed to keep you signed in and to keep the service secure. One more first-party cookie remembers which link first brought you here (a campaign name such as "ph" and the host of the linking site, nothing that identifies you) for 30 days, so we can count sign-ups by channel. We do not use advertising or third-party tracking cookies, and the page-speed measurements we collect set no cookies.</p>,
         },
         {
           heading: "Retention",

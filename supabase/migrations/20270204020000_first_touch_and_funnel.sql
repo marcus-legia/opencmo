@@ -33,6 +33,8 @@ as $$
   );
 $$;
 
+revoke all on function public.first_touch_channel(jsonb) from public, anon, authenticated;
+
 -- The founder's own session keeps its first touch once, within a day of sign-up. Only known keys, each a short tag
 -- (the client and the callback clean them the same way: three layers).
 create or replace function public.profile_set_first_touch(p_touch jsonb) returns boolean
@@ -91,7 +93,7 @@ create or replace function public.record_signup_outcome(p_user uuid, p_source te
 as $$
   insert into public.signup_outcomes (signup_day, channel, heard_from, free_scan, people_found, paid, deleted_as)
   select
-    (u.created_at at time zone 'utc')::date,
+    (coalesce(u.created_at, now()) at time zone 'utc')::date,
     public.first_touch_channel(p.first_touch),
     p.heard_from,
     exists (select 1 from public.cmo_runs r where r.user_id = p_user and r.kind = 'sales_scan' and r.status = 'done' and r.output->>'free' = 'true'),
@@ -215,7 +217,7 @@ begin
         as active_7d,
       public.cmo_paid(c.id) as paid,
       exists (select 1 from public.cmo_runs r where r.user_id = c.id and r.kind = 'sales_scan' and r.status = 'done' and r.output->>'free' = 'true') as free_scan,
-      exists (select 1 from public.opportunities o where o.user_id = c.id) as found,
+      exists (select 1 from public.opportunities o where o.user_id = c.id) as found_someone,
       public.first_touch_channel((select p.first_touch from public.profiles p where p.id = c.id)) as channel
     from cohort c
   ),
@@ -232,7 +234,7 @@ begin
       jsonb_build_object('step', 'signed_up', 'users', (select count(*) from firsts)),
       jsonb_build_object('step', 'onboarded', 'users', (select count(*) from firsts where onboarded_at is not null)),
       jsonb_build_object('step', 'free_scan', 'users', (select count(*) from firsts where free_scan)),
-      jsonb_build_object('step', 'found', 'users', (select count(*) from firsts where found)),
+      jsonb_build_object('step', 'found', 'users', (select count(*) from firsts where found_someone)),
       jsonb_build_object('step', 'approved', 'users', (select count(*) from firsts where approved_at is not null)),
       jsonb_build_object('step', 'scheduled', 'users', (select count(*) from firsts where scheduled_at is not null)),
       jsonb_build_object('step', 'posted', 'users', (select count(*) from firsts where posted_at is not null)),
@@ -248,9 +250,9 @@ begin
     -- Accounts still here, plus the anonymous outcomes of those deleted since (free accounts go after 30 days).
     'by_channel', coalesce((select jsonb_agg(ch order by ch.signed_up desc) from (
       select channel, sum(signed_up)::integer as signed_up, sum(free_scan)::integer as free_scan,
-        sum(found)::integer as found, sum(paid)::integer as paid
+        sum(found_n)::integer as found, sum(paid)::integer as paid
       from (
-        select channel, 1 as signed_up, free_scan::int as free_scan, found::int as found, paid::int as paid from firsts
+        select channel, 1 as signed_up, free_scan::int as free_scan, found_someone::int as found_n, paid::int as paid from firsts
         union all
         select o.channel, 1, o.free_scan::int, (o.people_found > 0)::int, o.paid::int
         from public.signup_outcomes o where o.signup_day >= (v_since at time zone 'utc')::date
