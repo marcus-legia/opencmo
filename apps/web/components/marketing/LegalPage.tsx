@@ -3,7 +3,7 @@
  * bốn trang giữ cùng một bố cục và cùng một ngày cập nhật khi sửa.
  */
 
-export const LEGAL_UPDATED = "November 20, 2026";
+export const LEGAL_UPDATED = "November 21, 2026";
 
 export type LegalSection = { heading: string; body: React.ReactNode };
 
