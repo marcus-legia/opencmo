@@ -49,7 +49,8 @@ test("Brain and the old Library tabs open as panes of the Context drawer over th
     // The URL must end with `to` exactly: every regex metacharacter in it escaped, backslash included.
     await expect(page).toHaveURL(new RegExp(`${to.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`));
     await expect(page.getByRole("dialog", { name: title })).toBeVisible();
-    await expect(page.getByTestId("v2-dashboard")).toBeAttached();
+    // `.first()`: during the client navigation from the old route the outgoing feed can still be mounted for a frame.
+    await expect(page.getByTestId("v2-dashboard").first()).toBeAttached();
   }
   // The drawer's own list reaches every pane without leaving the feed.
   await page.getByRole("dialog", { name: "Competitors" }).press("Escape");

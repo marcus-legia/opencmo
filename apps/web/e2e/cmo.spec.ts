@@ -31,13 +31,14 @@ test("AI CMO: lập lịch, soạn bài X, duyệt, đánh dấu đã đăng, qu
     if (insertError) throw new Error(insertError.message);
   }
   // Wave 3 B3: the week's posts are written from the Library, and an empty one plans none. Two conversations under one
-  // theme give the planner something to write from.
+  // theme give the planner something to write from. They are dismissed, so the Sales feed below shows only
+  // the scan's own threads.
   const { data: theme, error: themeError } = await admin.from("library_themes").insert({ user_id: userId, name: "Late payments" }).select("id").single();
   if (themeError || !theme) throw new Error(themeError?.message ?? "no theme");
   for (const n of [1, 2]) {
     const { data: opp, error: oppError } = await admin
       .from("opportunities")
-      .insert({ user_id: userId, platform: "reddit", url: `https://www.reddit.com/r/freelance/comments/e2e${n}${Date.now()}/late/`, community: "freelance", title: "Clients pay late", score: 70, reply: "" })
+      .insert({ user_id: userId, platform: "reddit", url: `https://www.reddit.com/r/freelance/comments/e2e${n}${Date.now()}/late/`, community: "freelance", title: "Clients pay late", score: 70, reply: "", status: "dismissed" })
       .select("id")
       .single();
     if (oppError || !opp) throw new Error(oppError?.message ?? "no opportunity");
@@ -109,7 +110,7 @@ test("AI CMO: lập lịch, soạn bài X, duyệt, đánh dấu đã đăng, qu
   // Sheet nằm trên màn 4 cột: rail vẫn thu thành cột icon, không bung ra ép cột.
   await expect(page.locator(".rail")).not.toHaveClass(/is-open/);
   await sheet.getByRole("button", { name: "Edit" }).click();
-  await sheet.getByLabel("Brand voice").fill("Short, warm, no jargon.");
+  await sheet.getByLabel("Positioning").fill("Short, warm, no jargon.");
   await sheet.getByRole("button", { name: "Save" }).click();
   await expect(sheet.getByText("Short, warm, no jargon.")).toBeVisible();
   await expect(sheet.getByText(/Edited by you · version 2/)).toBeVisible();
@@ -137,11 +138,10 @@ test("AI CMO: lập lịch, soạn bài X, duyệt, đánh dấu đã đăng, qu
   const { count: scansBefore } = await admin.from("cmo_runs").select("id", { count: "exact", head: true }).eq("user_id", userId).eq("kind", "sales_scan");
   await page.getByRole("textbox", { name: "Ask Ferreto" }).fill("Do some research on who needs this");
   await page.getByRole("button", { name: "Send" }).click();
-  // Charge before running (cmo-review-2 S3.5): the scan stops at its price card, and nothing is queued before Approve.
+  // The scan stops at its confirm card, and nothing is queued before Approve. Scans are included in the plan, so the
+  // card names no credit price. Sales finder B2: it names every place it looks; Reddit is in the default.
   const confirmCard = page.getByRole("group", { name: "Confirm" });
-  await expect(confirmCard).toContainText("5 credits", { timeout: 60_000 });
-  // Sales finder B2: the card names every place it looks; the chat may narrow them, Reddit is in the default.
-  await expect(confirmCard).toContainText("Scan Reddit");
+  await expect(confirmCard).toContainText("Scan Reddit", { timeout: 60_000 });
   const { count: scansAtCard } = await admin.from("cmo_runs").select("id", { count: "exact", head: true }).eq("user_id", userId).eq("kind", "sales_scan");
   expect(scansAtCard ?? 0).toBe(scansBefore ?? 0);
   await page.getByTestId("cmo-confirm-approve").click();
@@ -152,25 +152,7 @@ test("AI CMO: lập lịch, soạn bài X, duyệt, đánh dấu đã đăng, qu
   const { data: briefed } = await admin.from("cmo_runs").select("input").eq("user_id", userId).eq("kind", "sales_scan").order("created_at", { ascending: false }).limit(1);
   expect(String((briefed?.[0]?.input as { brief?: string })?.brief)).toContain("reddit.com");
 
-  // A video asked in the chat orders its script and storyboard (cmo-review-3 I0; the founder makes the videos,
-  // owner 2026-11-09): a price card first, nothing ordered before Approve, then the calendar item whose Upload video
-  // link opens the editor (the founder records and uploads their own video) and the Writer run that holds the price.
-  const scriptRuns = async () =>
-    (await admin.from("cmo_runs").select("id", { count: "exact", head: true }).eq("user_id", userId).eq("kind", "write_video_brief")).count ?? 0;
-  await page.getByRole("textbox", { name: "Ask Ferreto" }).fill("Plan a short video about onboarding");
-  await page.getByRole("button", { name: "Send" }).click();
-  const scriptCard = page.getByRole("group", { name: "Confirm" });
-  await expect(scriptCard).toContainText("Write a script and storyboard", { timeout: 60_000 });
-  // One credit, said in the singular (the card read "1 credits").
-  await expect(scriptCard.locator(".cmo-confirm-card p")).toHaveText("1 credit");
-  await expect(scriptCard).toContainText("You record the video yourself");
-  expect(await scriptRuns()).toBe(0);
-  await page.getByTestId("cmo-confirm-approve").click();
-  await expect(page.locator(".cmo-msg.is-cmo").last()).toContainText("On it", { timeout: 60_000 });
-  await expect.poll(scriptRuns, { timeout: 30_000 }).toBe(1);
-  const uploadVideo = page.getByTestId("cmo-upload-video").first();
-  await expect(uploadVideo).toBeVisible({ timeout: 30_000 });
-  await expect(uploadVideo).toHaveAttribute("href", "/app/editor?panel=upload");
+  // Video scripts left in wave 4b: the founder records their own video in the editor, and the chat orders no script.
 
   // Chat mới + lịch sử: cuộc vừa rồi nằm trong danh sách và mở lại được.
   await page.getByRole("button", { name: "New conversation" }).click();
