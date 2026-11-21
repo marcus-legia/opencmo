@@ -12,8 +12,6 @@ html:has(.marketing), body:has(.marketing) { overflow-x: clip; }
 .marketing a { text-decoration: none; color: inherit; }
 .marketing h1, .marketing h2, .marketing h3 { font-family: var(--ds-font-display); }
 
-.arabesque { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; color: var(--ds-gold-500); }
-
 /* nav */
 .marketing-nav { height: 88px; display: flex; justify-content: space-between; align-items: center; gap: 24px; border-bottom: 1px solid var(--ds-gold-line); }
 .marketing-nav > div { display: flex; align-items: center; gap: 30px; font-size: 14px; font-weight: 500; }
@@ -82,16 +80,10 @@ html:has(.marketing), body:has(.marketing) { overflow-x: clip; }
 /* Đăng nhập dùng chung nhận diện của landing. */
 .auth-page { max-width: 1080px; margin: auto; min-height: 100svh; padding: 36px 40px; display: flex; flex-direction: column; }
 .auth-content { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 100px; align-items: center; padding: 60px 0; }
-.auth-art { border-right: 1px solid var(--ds-gold-line); padding-right: 70px; }
-.auth-art img { width: 230px; margin: 0 auto 20px; }
-.auth-art h2 { font-size: 44px; line-height: 1.08; font-weight: 420; letter-spacing: var(--ds-tracking-title); }
-.auth-art p { color: var(--ds-muted); font-size: 15px; line-height: 1.7; margin-top: 18px; }
 .auth-form h1 { font-size: 34px; font-weight: 450; letter-spacing: var(--ds-tracking-title); }
 .auth-form > p { color: var(--ds-muted); font-size: 15px; line-height: 1.7; margin-top: 12px; }
 .auth-fields { display: grid; gap: 12px; margin-top: 32px; }
 .auth-fields .primary-button { width: 100%; padding: 13px; }
-.auth-google { display: inline-flex; align-items: center; justify-content: center; gap: 10px; }
-.auth-google svg { flex: none; background: #fff; border-radius: 50%; padding: 2px; box-sizing: content-box; }
 .auth-form > .auth-error { margin-top: 16px; }
 .auth-error { color: var(--ds-danger-fg); font-size: 13px; }
 .auth-footer { font-size: 12px; color: var(--ds-muted); }
@@ -124,7 +116,6 @@ html:has(.marketing), body:has(.marketing) { overflow-x: clip; }
   .marketing-footer { align-items: flex-start; flex-direction: column; gap: 20px; }
   .auth-page { padding: 24px 16px; }
   .auth-content { grid-template-columns: 1fr; padding: 60px 0; }
-  .auth-art { display: none; }
 }
 
 /* ─────────────────  Đội CMO: hero 3D, goal band, department, inbox, vòng  ───────────────── */

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { readFirstTouchCookie } from "@/lib/ops/first-touch";
 import { createClient } from "@/lib/supabase/client";
 
 /**
@@ -10,6 +11,9 @@ import { createClient } from "@/lib/supabase/client";
  * Why not a magic link: every sign-in meant leaving the app to find a mail that often sat in spam, and a link opened
  * in another browser had no session. OAuth goes through PKCE to `/auth/callback`, which trades the `code` for a
  * session and keeps `next` on this site.
+ *
+ * The first-touch cookie (`lib/ops/first-touch.ts`) rides along as `ft`, like `site`: the callback may run on the
+ * canonical host while this page was opened on another (a preview, the old domain), where the cookie is not sent.
  */
 export function LoginForm({
   nextUrl,
@@ -29,6 +33,8 @@ export function LoginForm({
     const target = new URL("/auth/callback", process.env.NEXT_PUBLIC_SITE_URL || window.location.origin);
     target.searchParams.set("next", nextUrl || "/app");
     if (siteUrl) target.searchParams.set("site", siteUrl);
+    const touch = readFirstTouchCookie(document.cookie);
+    if (touch) target.searchParams.set("ft", touch);
 
     const { error } = await createClient().auth.signInWithOAuth({
       provider: "google",
@@ -42,18 +48,20 @@ export function LoginForm({
   }
 
   return (
-    <div className="auth-fields">
-      <button type="button" className="primary-button auth-google" disabled={busy} onClick={() => void signIn()}>
-        <svg aria-hidden="true" width="18" height="18" viewBox="0 0 48 48">
-          <path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.6 5.4 2.7 13.3l7.9 6.1C12.5 13.6 17.8 9.5 24 9.5z" />
-          <path fill="#4285F4" d="M46.1 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.4c-.5 2.9-2.2 5.3-4.6 6.9l7.4 5.7c4.3-4 6.9-9.9 6.9-17.1z" />
-          <path fill="#FBBC05" d="M10.6 28.6c-.5-1.4-.7-2.9-.7-4.6s.3-3.2.7-4.6l-7.9-6.1C1 16.6 0 20.2 0 24s1 7.4 2.7 10.7l7.9-6.1z" />
-          <path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.4-5.7c-2.1 1.4-4.8 2.3-8.5 2.3-6.2 0-11.5-4.1-13.4-9.9l-7.9 6.1C6.6 42.6 14.6 48 24 48z" />
-        </svg>
+    <div className="lg-fields">
+      <button type="button" className="lv-btn-terra lg-google" disabled={busy} aria-busy={busy} onClick={() => void signIn()}>
+        <span className="lg-google-mark" aria-hidden="true">
+          <svg width="16" height="16" viewBox="0 0 48 48" focusable="false">
+            <path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.6 5.4 2.7 13.3l7.9 6.1C12.5 13.6 17.8 9.5 24 9.5z" />
+            <path fill="#4285F4" d="M46.1 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.4c-.5 2.9-2.2 5.3-4.6 6.9l7.4 5.7c4.3-4 6.9-9.9 6.9-17.1z" />
+            <path fill="#FBBC05" d="M10.6 28.6c-.5-1.4-.7-2.9-.7-4.6s.3-3.2.7-4.6l-7.9-6.1C1 16.6 0 20.2 0 24s1 7.4 2.7 10.7l7.9-6.1z" />
+            <path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.4-5.7c-2.1 1.4-4.8 2.3-8.5 2.3-6.2 0-11.5-4.1-13.4-9.9l-7.9 6.1C6.6 42.6 14.6 48 24 48z" />
+          </svg>
+        </span>
         {busy ? "Opening Google…" : "Continue with Google"}
       </button>
       {error && (
-        <p className="auth-error" role="alert">
+        <p className="lg-error" role="alert">
           {error}
         </p>
       )}

@@ -76,6 +76,37 @@ export default async function FunnelPage({ searchParams }: { searchParams: Promi
         </p>
       </Panel>
 
+      <Panel id="funnel-channels" title="By channel (first touch)">
+        {report.by_channel?.length ? (
+          <TableWrap label="By channel">
+            <table className="v2-table scr-table-compact">
+              <thead>
+                <tr>
+                  <th>Channel</th>
+                  <th>Signed up</th>
+                  <th>Free scan</th>
+                  <th>Found someone</th>
+                  <th>Pay</th>
+                </tr>
+              </thead>
+              <tbody>
+                {report.by_channel.map((row) => (
+                  <tr key={row.channel}>
+                    <td>{row.channel}</td>
+                    <td className="scr-num">{row.signed_up}</td>
+                    <td className="scr-num">{row.free_scan}</td>
+                    <td className="scr-num">{row.found}</td>
+                    <td className="scr-num">{row.paid} ({pct(row.paid, row.signed_up)})</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </TableWrap>
+        ) : (
+          <p className="v2-panel-body scr-muted">No sign-ups with a channel in this window. Links with ?ref= or utm_source are counted from the first visit.</p>
+        )}
+      </Panel>
+
       <Panel id="funnel-weeks" title="By week of sign-up">
         {report.by_week.length ? (
           <TableWrap label="By week of sign-up">

@@ -1,3 +1,4 @@
+import { FirstTouch } from "@/components/FirstTouch";
 import { MarketingFooter } from "@/components/marketing/MarketingFooter";
 import { MarketingNav } from "@/components/marketing/MarketingNav";
 
@@ -9,6 +10,7 @@ import { MarketingNav } from "@/components/marketing/MarketingNav";
 export default function LegalLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="site">
+      <FirstTouch />
       <MarketingNav />
       <div className="marketing legal">{children}</div>
       <MarketingFooter />
