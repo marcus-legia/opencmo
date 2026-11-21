@@ -153,6 +153,6 @@ test("MCP: a free account is refused with the upgrade message", async ({ page })
 
   const refused = await mcp(page, key, "initialize", initialize);
   expect(refused.status).toBe(403);
-  expect(refused.body.error).toEqual({ code: -32003, message: "Ferreto's MCP connection is part of the paid plans. Upgrade on the Credits page." });
+  expect(refused.body.error).toEqual({ code: -32003, message: "Ferreto's MCP connection is part of the paid plans. Pick a plan on the Billing page." });
   expect((await mcp(page, key, "tools/list")).status).toBe(403);
 });

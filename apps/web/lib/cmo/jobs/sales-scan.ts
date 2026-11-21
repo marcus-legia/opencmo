@@ -869,7 +869,7 @@ export async function salesScan(ctx: JobContext): Promise<SalesScanOutput & JobO
       fake: () => ({ queries: fakeQueries(docs) }),
       agent: "checker",
       system: QUERY_SYSTEM,
-      prompt: `${documentsBlock(docs)}\n\n${brief ? `Your CMO's brief for this scan: "${brief}"\n\n` : ""}Write the search queries.`,
+      prompt: `${documentsBlock(docs)}\n\n${brief ? `The founder's brief for this scan: "${brief}"\n\n` : ""}Write the search queries.`,
       schema: QueriesSchema,
       maxTokens: 1000,
       label: "make_queries",

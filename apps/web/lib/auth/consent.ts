@@ -5,7 +5,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 /** Shown to a free account instead of Allow (security fixes plan, fix 5). */
-export const PAID_PLAN_CONSENT = "Connecting apps to Ferreto is part of the paid plans. Choose a plan on the Credits page, then connect again.";
+export const PAID_PLAN_CONSENT = "Connecting apps to Ferreto is part of the paid plans. Pick a plan on the Billing page, then connect again.";
 
 /** Shown when the app would send the code to a host we don't support (fix 6). */
 export const UNKNOWN_APP_CONSENT = "This app can't connect to Ferreto.";

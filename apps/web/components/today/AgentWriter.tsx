@@ -218,11 +218,11 @@ export function AgentWriter() {
               </span>
             </div>
             <p style={{ margin: "4px 0 8px", color: "var(--muted)", fontSize: "14px", maxWidth: "640px" }}>
-              Posts for X, LinkedIn and Threads, written from your strategy. Nothing is posted until you approve it.
+              Posts for X, LinkedIn and Threads, written from what people asked in Sales. Nothing is posted until you approve it.
             </p>
             <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
               <span className="meta">Reads</span>
-              <span className="chip">Strategy</span>
+              <span className="chip">Library</span>
               <span className="chip">Post plan</span>
               <span className="chip">Product</span>
               <span className="chip">Brand</span>
@@ -300,7 +300,7 @@ export function AgentWriter() {
               ) : null}
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-              {shown.length === 0 && !(tab === "week" && shownLeftOver.length) ? <div className="meta">{active ? `No ${PLATFORM_LABEL[active as Draft["platform"]]} drafts here. Pick All to see the rest.` : "Nothing here yet. Writer drafts the week from your strategy every Sunday."}</div> : null}
+              {shown.length === 0 && !(tab === "week" && shownLeftOver.length) ? <div className="meta">{active ? `No ${PLATFORM_LABEL[active as Draft["platform"]]} drafts here. Pick All to see the rest.` : "Nothing here yet. The week's posts are planned every Sunday from what people asked in Sales."}</div> : null}
               {shown.map(renderRow)}
               {tab === "week" && shownLeftOver.length ? (
                 <>
@@ -317,7 +317,7 @@ export function AgentWriter() {
 
         {tab === "voice" && data ? (
           <section className="card" style={{ marginTop: "14px" }}>
-            {data.voice.lines.length === 0 ? <div className="meta">Writer learns your voice from what you change in its drafts.</div> : null}
+            {data.voice.lines.length === 0 ? <div className="meta">Ferreto learns how you write from what you change in its drafts.</div> : null}
             {data.voice.lines.map((line) => (
               <div key={line.text} style={{ padding: "8px 0", borderBottom: "1px solid var(--line)" }}>
                 <div style={{ fontWeight: "500" }}>{line.text}</div>
@@ -354,7 +354,7 @@ export function AgentWriter() {
         <section className="card" aria-labelledby="writer-voice-title">
           <h2 id="writer-voice-title" style={{ margin: "0 0 4px", fontSize: "14px", fontWeight: "600" }}>Your voice</h2>
           <p className="meta" style={{ margin: "0 0 10px", fontSize: "13px" }}>
-            Writer learns your voice from what you change in its drafts.
+            Ferreto learns how you write from what you change in its drafts.
           </p>
           {data?.voice.wordsCut.length ? (
             <>

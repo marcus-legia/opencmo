@@ -44,7 +44,7 @@ const guideResources: McpResource[] = READABLE.map((name) => ({
   uri: `${GUIDE_URI}${name}`,
   name: `guide-${name}`,
   title: name === NO_AI_SLOP ? "Writing without AI slop" : firstLine(readGuide(name)),
-  description: name === NO_AI_SLOP ? "How to write words a person reads or hears: scripts, voice-overs, storyboards, captions, titles." : `The OpenCMO editing guide "${name}".`,
+  description: name === NO_AI_SLOP ? "How to write words a person reads or hears: scripts, voice-overs, storyboards, captions, titles." : `The Ferreto editing guide "${name}".`,
   mimeType: "text/markdown",
   read: async () => guideText(name),
 }));
@@ -87,7 +87,7 @@ const prompts: McpPrompt[] = Object.entries(PROMPTS).map(([name, { guide, steps 
     ],
     render: (args) =>
       [
-        `The user chose /${name} in OpenCMO: ${command.directive}.`,
+        `The user chose /${name} in Ferreto: ${command.directive}.`,
         args.request?.trim() ? `Their request: ${args.request.trim()}` : "Ask the user what they want if it is not clear.",
         args.clip_id?.trim() ? `Clip: ${args.clip_id.trim()}` : "",
         `Over MCP: ${steps}`,
@@ -105,7 +105,7 @@ registerGroup({
     {
       name: "read_guide",
       title: "Read a guide",
-      description: `Read an OpenCMO editing guide (also the resources ${GUIDE_URI}{name}). Available: ${READABLE.join(", ")}. Read "${NO_AI_SLOP}" before writing words a person reads or hears, "workflow" before a multi-step edit, "document" before writing properties or keyframes, "explainer" before an explainer. The guides were written for the in-app editor: where they say capture, call capture_frame (the same clip seconds in times, or count for a contact sheet); if looking is not set up, give the user open_in_editor's link.`,
+      description: `Read a Ferreto editing guide (also the resources ${GUIDE_URI}{name}). Available: ${READABLE.join(", ")}. Read "${NO_AI_SLOP}" before writing words a person reads or hears, "workflow" before a multi-step edit, "document" before writing properties or keyframes, "explainer" before an explainer. The guides were written for the in-app editor: where they say capture, call capture_frame (the same clip seconds in times, or count for a contact sheet); if looking is not set up, give the user open_in_editor's link.`,
       inputSchema: guideInput,
       annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
       async run(input) {

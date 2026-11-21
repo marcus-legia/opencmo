@@ -70,7 +70,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
         {current?.watermark ? " Free clips carry a watermark." : ""}
       </p>
       {/* Only a note: credits come from the webhook, never from this query param. */}
-      {justPaid === "1" && <p className="page-sub" role="status">Payment received. Credits arrive within a minute.</p>}
+      {justPaid === "1" && <p className="page-sub" role="status">Payment received. Your plan turns on within a minute.</p>}
       {start === "1" && !paid && (
         <p className="page-sub" role="status" data-testid="billing-start">
           Your first scan is free: the people asking, in their own words. Pick a plan to get the replies written and to approve and post your drafts.

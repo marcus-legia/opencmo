@@ -48,8 +48,8 @@ export function CmoView({ initial, site }: { initial: CmoState; site: string }) 
       <section className="settings-view cmo-view" data-testid="cmo-onboarding">
         <h1 className="page-title">{hasDocs ? "Read your website again" : "Start with your website"}</h1>
         <p className="cmo-lead">
-          Enter your website. Ferreto reads it and writes the four documents your marketing is built on: what you sell,
-          who it is for, who you compete with and what to post. You can edit every word.
+          Enter your website. Ferreto reads it and writes the five documents your marketing is built on: what you sell,
+          who it is for, who you compete with, what to post and how you sound. You can edit every word.
         </p>
         <SiteForm initial={site || lastSite} busy={busy} onSubmit={build} />
         {busy ? (

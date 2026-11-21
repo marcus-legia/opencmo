@@ -21,7 +21,7 @@ export const MAX_BODY_BYTES = 1024 * 1024;
 const MAX_MESSAGES = 20;
 
 /** The answer to every request from a free account, `initialize` included: the client shows it at connect time. */
-export const PAID_PLAN_ERROR = { code: -32003, message: "OpenCMO's MCP connection is part of the paid plans. Upgrade on the Credits page." };
+export const PAID_PLAN_ERROR = { code: -32003, message: "Ferreto's MCP connection is part of the paid plans. Pick a plan on the Billing page." };
 
 const CORS = {
   // Bearer tokens, never cookies: any origin may call, as with any public API (MCP Inspector runs in a browser).
@@ -136,7 +136,7 @@ export async function handle(request: Request, auth: typeof authenticate = authe
     return rpcError(503, -32603, "Could not check these credentials. Please try again.");
   }
   if (!caller) noteFailedAuth(address, now);
-  if (!caller) return unauthorized(request, "Sign in to OpenCMO: connect this server, or send an API key (Authorization: Bearer ocm_…).");
+  if (!caller) return unauthorized(request, "Sign in to Ferreto: connect this server, or send an API key (Authorization: Bearer ocm_…).");
 
   const read = await readBody(request);
   if ("error" in read) return read.error;

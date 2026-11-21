@@ -41,14 +41,14 @@ export const SERVER_VERSION = "3.0.0";
 
 /** The short workflow every client gets at `initialize` (plan: "Server instructions"). */
 export const INSTRUCTIONS = [
-  "OpenCMO edits and creates the user's videos. You do the thinking (storyboards, scripts, scene code, edit plans); OpenCMO renders, voices, stores and charges credits.",
+  "Ferreto edits and creates the user's videos. You do the thinking (storyboards, scripts, scene code, edit plans); Ferreto renders, voices, stores and charges credits.",
   "Find: list_projects → list_clips → get_project_state(clip_id). Every clip tool takes clip_id. read_guide (or the opencmo://guides/* resources) before a kind of edit you have not done in this conversation.",
   "Explainers: read_guide explainer and get_explainer_kit, write the storyboard (say / label / visual per beat) and the direction (motion spec with numbers) and price them with plan_explainer: show the user the storyboard and the price, and confirm only after they agree (nothing is previewed or rendered before); for a new video, then offer 2-3 looks: preview_explainer variants (the hero shot in each direction, one image) and let the user pick; preview_explainer at times you pick, answer its review checklist and fix the worst problem each round (up to 6 rounds); then add_explainer.",
   "Credits: a tool marked as costing credits first answers with the price and a confirm code, spending nothing. Show the price to the user and call it again with only clip_id and confirm after they agree. Never confirm on your own.",
   "Slow work (generations, explainers, exports) returns an id at once: poll with get_generation, wait_for_media or get_export instead of calling the tool again.",
   "Look before you say done: capture_frame draws the clip as the export will (frames, visible layers and their boxes). Call it after changing the frame, cutting, or adding text or media. inspect_color, media_grab and media_waveform measure color, look inside library files and find pauses. If looking is not set up, give the user open_in_editor's link.",
   "Words a person reads or hears (scripts, voice-overs, storyboards, on-screen text, captions, posts, titles): read_guide no-ai-slop once per conversation before writing them, and follow it.",
-  "Nothing is ever posted for the user: OpenCMO drafts, the user publishes.",
+  "Nothing is ever posted for the user: Ferreto drafts, the user publishes.",
 ].join("\n");
 
 /** JSON Schema of a zod input, in the shape `tools/list` takes. */
@@ -157,7 +157,7 @@ export async function callTool(tool: McpTool, args: Record<string, unknown>, ctx
 
 export function buildServer(ctx: McpToolContext): Server {
   const server = new Server(
-    { name: SERVER_NAME, title: "OpenCMO", version: SERVER_VERSION },
+    { name: SERVER_NAME, title: "Ferreto", version: SERVER_VERSION },
     { capabilities: { tools: { listChanged: false }, prompts: { listChanged: false }, resources: { listChanged: false } }, instructions: INSTRUCTIONS },
   );
   // One list per request: tools/list and tools/call see the same catalog.

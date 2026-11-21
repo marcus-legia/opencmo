@@ -60,7 +60,7 @@ const PROBLEM_LABEL = { expired: "Expired", decided_elsewhere: "Decided", needs_
 /** The decline action of each kind: its label and the decision it sends with the optional reason. */
 const DECLINE: Partial<Record<Card["kind"], { label: string; action: "skip" | "dismissed" | "reject" | "cancel" | "send_back" }>> = {
   post: { label: "Skip with reason", action: "skip" },
-  reply: { label: "Dismiss", action: "dismissed" },
+  reply: { label: "Not a fit", action: "dismissed" },
   goal: { label: "Reject", action: "reject" },
   script: { label: "Cancel", action: "cancel" },
   price: { label: "Cancel", action: "cancel" },

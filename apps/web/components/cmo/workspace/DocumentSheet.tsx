@@ -251,7 +251,7 @@ function Rebuild({ onDone, actions }: { onDone: () => void; actions: Actions }) 
         <button type="submit" className="primary-button" disabled={busy || !site.trim()}>{busy ? "Rebuilding…" : "Rebuild plan"}</button>
         <button type="button" className="text-button" onClick={onDone} disabled={busy}>Cancel</button>
       </div>
-      {busy ? <p className="cmo-muted" role="status">Reading your website and rewriting all four documents. This usually takes under a minute.</p> : null}
+      {busy ? <p className="cmo-muted" role="status">Reading your website and rewriting all five documents. This usually takes under a minute.</p> : null}
       {error ? <p className="field-error" role="alert">{error}</p> : null}
     </form>
   );

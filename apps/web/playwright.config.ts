@@ -75,6 +75,7 @@ export default defineConfig({
     command: "npm run build && npm run start -- --port 3100",
     url: "http://127.0.0.1:3100/login",
     reuseExistingServer: false,
-    timeout: 180_000,
+    // A cold `next build` on a laptop can take longer than CI's; E2E_SERVER_TIMEOUT_MS raises the wait there.
+    timeout: Number(process.env.E2E_SERVER_TIMEOUT_MS) || 180_000,
   },
 });

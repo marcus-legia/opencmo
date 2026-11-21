@@ -90,7 +90,7 @@ registerGroup({
     {
       name: "open_in_editor",
       title: "Open in the editor",
-      description: "The link that opens a clip in the OpenCMO editor, to give the user so they can watch, adjust, export or publish it themselves.",
+      description: "The link that opens a clip in the Ferreto editor, to give the user so they can watch, adjust, export or publish it themselves.",
       inputSchema: openInput,
       outputSchema: openOutput,
       annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },

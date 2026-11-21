@@ -61,7 +61,7 @@ export function VoiceTab({ voice, sample }: { voice: Data["voice"]; sample: { vo
       sub="Learned from your edits and skips; newer notes win when two disagree. Delete any you don't agree with."
     >
       <div className="scr-rows">
-        {notes.length === 0 && <p className="scr-row scr-muted">No notes yet. Writer learns them from what you change in its drafts.</p>}
+        {notes.length === 0 && <p className="scr-row scr-muted">No notes yet. Ferreto learns them from what you change in its drafts.</p>}
         {notes.map((note) => (
           <div key={note.id} className="scr-row scr-row-inline" data-testid="voice-note">
             <span>

@@ -24,7 +24,9 @@ test("a document is edited in the drawer over the feed and saved as a new versio
   // The Context column's card opens Your business (wave 3, C3); a `?doc=` link still opens the drawer over the feed.
   await page.goto("/app");
   await page.getByRole("complementary", { name: "Context" }).getByTestId("context-documents").click();
-  await expect(page).toHaveURL(/\/app\/business$/);
+  // It lands on the document still to write when one is missing (`?d=strategy`), which depends on what earlier tests
+  // did to this shared user.
+  await expect(page).toHaveURL(/\/app\/business(\?d=\w+)?$/);
   await page.goto("/app?doc=product");
   const drawer = page.getByRole("dialog", { name: "Product" });
   await expect(drawer).toBeVisible();

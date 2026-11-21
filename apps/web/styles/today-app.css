@@ -555,7 +555,9 @@ html:not([data-theme="dark"]) .k { --ok: #16744c; --warn: #8f5a0e; }
 
 /* Reach out tabs (owner, 2026-11-20): a segmented control at every width, and a closed tab that still shows what it is for. */
 .pg-agentsales .reach-tabs { display: grid !important; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2px !important; padding: 2px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); }
-.pg-agentsales .reach-tabs button { border: 0 !important; border-radius: 8px; justify-content: center; min-height: 36px; }
+.pg-agentsales .reach-tabs button { border: 0 !important; border-radius: 8px; justify-content: center; }
+/* 36 px on a wide screen only: this rule comes after the phone block, so a bare min-height here undid its 44 px. */
+@media (min-width: 641px) { .pg-agentsales .reach-tabs button { min-height: 36px; } }
 .pg-agentsales .reach-tabs button[aria-selected="true"] { background: var(--raised); color: var(--text); box-shadow: 0 1px 2px rgba(0, 0, 0, .12); }
 .pg-agentsales .reach-locked { display: flex; flex-direction: column; gap: 6px; padding: 12px; border: 1px dashed var(--line-2); border-radius: 10px; font-size: 13.5px; }
 .pg-agentsales .reach-locked-draft { margin-top: 4px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--subtle); font-size: 13.5px; line-height: 1.5; opacity: .7; }

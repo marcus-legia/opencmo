@@ -45,7 +45,7 @@ export const PANE_GROUPS: { title: string; rows: Row[] }[] = [
   {
     title: "Your week",
     rows: [
-      { id: "plan", title: "Plan and orders", readBy: "This week's goal, orders and measures", readers: [] },
+      { id: "plan", title: "This week's plan", readBy: "This week's goal, orders and measures", readers: [] },
       { id: "learned", title: "What it learned", readBy: "Lessons, rules from your edits", readers: [] },
       { id: "past", title: "Past weeks", readBy: "Each week against its goal", readers: [] },
     ],

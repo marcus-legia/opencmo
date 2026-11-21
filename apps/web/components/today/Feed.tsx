@@ -61,7 +61,7 @@ function draftWhen(d: Draft): string | null {
   return dayLabel(d);
 }
 
-const WHO: Record<string, string> = { you: "You", brain: "Planner", writer: "Writer", studio: "Studio", schedule: "Publisher", publish: "Publisher", sales: "Sales", research: "Research" };
+const WHO: Record<string, string> = { you: "You", brain: "Ferreto", writer: "Writer", studio: "Video", schedule: "Post", publish: "Post", sales: "Sales", research: "Research" };
 
 /** "just now", "12 min ago", "3 h ago", then the day. */
 function ago(at: string, now: number): string {
@@ -419,7 +419,7 @@ export function Feed({ email }: { email?: string | null }) {
                 </button>
               ) : (
                 <Link className="do td-rowlink" href="/app/writer">
-                  Open in Writer
+                  Open in Post
                 </Link>
               )
             ) : d.column === "scheduled" || d.column === "posted" ? (
@@ -573,7 +573,7 @@ export function Feed({ email }: { email?: string | null }) {
                       <span>
                         {held} {held === 1 ? "card is" : "cards are"} held until tomorrow (about ten new cards a day).{" "}
                         <Link href="/app/writer" data-testid="today-held">
-                          Show them in Writer
+                          Show them in Post
                         </Link>
                       </span>
                     ) : (
