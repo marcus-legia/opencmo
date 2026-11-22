@@ -24,6 +24,9 @@ export const STATUS_LABEL: Record<PersonStatus, string> = {
 const LEVEL_LABEL = { reply_first: "Reply first", dm_ready: "DM ready", email_ready: "Email ready" } as const;
 
 /** Where the platform's private messages open: the founder sends the DM there, from their own account. */
+/** What that chat is called on the button: a Facebook group's DMs are Messenger, not "Facebook groups chat". */
+const CHAT_NAME: Partial<Record<SalesPlatform, string>> = { reddit: "Reddit chat", facebook: "Messenger", threads: "Threads" };
+
 const CHAT_URL: Partial<Record<SalesPlatform, string>> = {
   reddit: "https://www.reddit.com/chat",
   facebook: "https://www.facebook.com/messages",
@@ -228,7 +231,7 @@ export function ReachPanel({ t, publicReply, onSent }: { t: Thread; publicReply:
                   window.open(CHAT_URL[t.platform] ?? t.url, "_blank", "noopener,noreferrer");
                 }}
               >
-                Copy and open {PLATFORM_LABEL[t.platform]} chat
+                Copy and open {CHAT_NAME[t.platform] ?? `${PLATFORM_LABEL[t.platform]} chat`}
               </button>
             </div>
           </div>
@@ -455,7 +458,7 @@ export function FollowingUp({ threads, live, onStatus }: { threads: Thread[]; li
                     window.open(CHAT_URL[t.platform] ?? t.url, "_blank", "noopener,noreferrer");
                   }}
                 >
-                  {copied === t.id ? "Copied · chat opened" : `Copy and open ${PLATFORM_LABEL[t.platform]} chat`}
+                  {copied === t.id ? "Copied · chat opened" : `Copy and open ${CHAT_NAME[t.platform] ?? `${PLATFORM_LABEL[t.platform]} chat`}`}
                 </button>
               ) : null}
               <label className="meta" htmlFor={`status-${t.id}`}>

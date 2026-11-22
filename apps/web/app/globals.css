@@ -4048,6 +4048,26 @@ span.ed2-asst-model {
   border: 0;
   border-top: 1px solid var(--ds-line);
 }
+/* A table the model wrote: scrolls sideways in the narrow chat column instead of widening it. */
+.ed2-md .md-table {
+  margin: 0 0 10px;
+  overflow-x: auto;
+}
+.ed2-md table {
+  border-collapse: collapse;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.ed2-md th,
+.ed2-md td {
+  padding: 5px 8px;
+  border: 1px solid var(--ds-line);
+  text-align: left;
+  vertical-align: top;
+}
+.ed2-md th {
+  font-weight: 600;
+}
 .ed2-md a {
   color: var(--ds-selected-bright);
   text-decoration: underline;

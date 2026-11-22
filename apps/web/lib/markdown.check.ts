@@ -84,4 +84,16 @@ const text = (nodes: Inline[]): string =>
   assert.equal(text(parseInline("**Build a sta")), "**Build a sta");
 }
 
+// Bảng GFM (chat CMO trả lời bằng bảng, E2E 2026-11-22): header, dòng phân cách, các hàng; ô thừa bị cắt.
+{
+  const blocks = parseMarkdown("Two are waiting.\n\n| Card | Platform |\n|---|:---:|\n| **Pitch** | Facebook group |\n| First clients | Reddit | extra |\n\nAfter.");
+  assert.deepEqual(blocks.map((b) => b.type), ["paragraph", "table", "paragraph"]);
+  const table = blocks[1] as Extract<Block, { type: "table" }>;
+  assert.deepEqual(table.header.map(text), ["Card", "Platform"]);
+  assert.deepEqual(table.rows.map((row) => row.map(text)), [["Pitch", "Facebook group"], ["First clients", "Reddit"]]);
+  assert.equal(table.rows[0]![0]![0]!.type, "strong");
+  // Không có dòng phân cách: vẫn là chữ.
+  assert.deepEqual(parseMarkdown("| a | b |\n| c | d |").map((b) => b.type), ["paragraph"]);
+}
+
 console.log("markdown: mọi kiểm tra xanh");

@@ -29,10 +29,20 @@ export type Block =
   | { type: "list"; list: List }
   | { type: "quote"; children: Inline[] }
   | { type: "code"; lang: string; text: string }
-  | { type: "rule" };
+  | { type: "rule" }
+  | { type: "table"; header: Inline[][]; rows: Inline[][][] };
 
 const BULLET = /^(\s*)([-*+]|\d{1,3}[.)])\s+(.*)$/;
 const FENCE = /^\s*```\s*([\w+-]*)\s*$/;
+/** A table row (`| a | b |`) and the line under its header (`|---|:---:|`). */
+const TABLE_ROW = /^\s*\|.*\|\s*$/;
+const TABLE_RULE = /^\s*\|(\s*:?-{2,}:?\s*\|)+\s*$/;
+const cells = (line: string) =>
+  line
+    .trim()
+    .replace(/^\||\|$/g, "")
+    .split("|")
+    .map((cell) => parseInline(cell.trim()));
 
 export function parseMarkdown(source: string): Block[] {
   const lines = source.replace(/\r\n?/g, "\n").split("\n");
@@ -74,6 +84,16 @@ export function parseMarkdown(source: string): Block[] {
       for (; index < lines.length && /^\s*>/.test(lines[index]!); index++) quoted.push(lines[index]!.replace(/^\s*>\s?/, ""));
       index--;
       blocks.push({ type: "quote", children: parseInline(quoted.join("\n")) });
+      continue;
+    }
+    // A table needs its rule line right under the header; a lone `|` line stays text.
+    if (TABLE_ROW.test(line) && index + 1 < lines.length && TABLE_RULE.test(lines[index + 1]!)) {
+      flush();
+      const header = cells(line);
+      const rows: Inline[][][] = [];
+      for (index += 2; index < lines.length && TABLE_ROW.test(lines[index]!); index++) rows.push(cells(lines[index]!).slice(0, header.length));
+      index--;
+      blocks.push({ type: "table", header, rows });
       continue;
     }
     if (BULLET.test(line)) {
