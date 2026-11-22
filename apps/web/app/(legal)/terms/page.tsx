@@ -10,7 +10,7 @@ export default function TermsPage() {
   return (
     <LegalPage
       title="Terms of Service"
-      intro={<p>These terms govern your use of Ferreto (“Ferreto”, “we”, “us”), a software product at ferreto.io. By creating an account or using Ferreto you agree to them. If you use Ferreto for a company, you accept these terms on its behalf.</p>}
+      intro={<p>These terms govern your use of Ferreto (“Ferreto”, “we”, “us”), a software product at ferreto.io operated by Le Trung Thanh, an individual (on X: <a href="https://x.com/marcus_legia">@marcus_legia</a>). By creating an account or using Ferreto you agree to them. If you use Ferreto for a company, you accept these terms on its behalf.</p>}
       sections={[
         {
           heading: "1. What Ferreto is",

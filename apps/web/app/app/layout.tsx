@@ -7,6 +7,7 @@ import { TimezoneSync } from "@/components/shell/TimezoneSync";
 import { ShellV2 } from "@/components/shell-v2/ShellV2";
 import { agentChatProvider } from "@/lib/agent/model";
 import { UI_V2 } from "@/lib/screens/flag";
+import { editorLive } from "@/lib/editor-flag";
 import { isProduction } from "@/lib/production";
 import { THEME_BOOT } from "@/lib/theme-boot";
 import { createServerClient } from "@/lib/supabase/server";
@@ -66,7 +67,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         {/* Every v2 screen sets its text in Geist; without this the browser finds the font only after the CSS. */}
         <link rel="preload" href="/fonts/geist.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
         <TimezoneSync />
-        <ShellV2 {...account} chatLive={agentChatProvider("cmo") !== null} hideSample={isProduction()}>
+        <ShellV2 {...account} chatLive={agentChatProvider("cmo") !== null} hideSample={isProduction()} editorLive={editorLive()}>
           {children}
         </ShellV2>
       </>

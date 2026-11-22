@@ -54,7 +54,7 @@ export const PANE_GROUPS: { title: string; rows: Row[] }[] = [
     title: "How it writes",
     rows: [
       { id: "voice", title: "Voice", readBy: "Writer, Sales", readers: [] },
-      { id: "skills", title: "Skills", readBy: "Writing and video recipes", readers: [] },
+      { id: "skills", title: "Skills", readBy: "Writing recipes", readers: [] },
     ],
   },
 ];

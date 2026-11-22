@@ -165,7 +165,7 @@ function Project({ menu }: { menu: ReactNode }) {
   );
 }
 
-function Avatar({ email }: { email: string | null }) {
+function Avatar({ email, editor }: { email: string | null; editor: boolean }) {
   const ref = useRef<HTMLDetailsElement>(null);
   return (
     <details className="td-menuwrap is-right" ref={ref} onClick={(e) => (e.target as HTMLElement).closest("a") && ref.current?.removeAttribute("open")}>
@@ -177,7 +177,7 @@ function Avatar({ email }: { email: string | null }) {
       </summary>
       <div className="td-menu">
         <span className="td-menu-note">{email ?? "Signed in"}</span>
-        <a href="/app/studio" target="_blank" rel="noopener">Editor ↗</a>
+        {editor ? <a href="/app/studio" target="_blank" rel="noopener">Editor ↗</a> : null}
         <Link href="/app/settings">Settings</Link>
         <Link href="/app/billing">Billing</Link>
         <form action="/auth/signout" method="post">
@@ -208,10 +208,13 @@ export function TopBar({
   onChat,
   contextOpen = false,
   onContext,
+  editor = false,
 }: {
   variant: TopVariant;
   usage: PlanUsage;
   email: string | null;
+  /** Show the "Editor" link: false while the editor is off in production (`lib/editor-flag.ts`). */
+  editor?: boolean;
   logsOpen: boolean;
   onLogs: () => void;
   onChat: () => void;
@@ -302,7 +305,7 @@ export function TopBar({
           <LogsIcon />
           <span className="td-pill-label">Logs</span>
         </button>
-        <Avatar email={email} />
+        <Avatar email={email} editor={editor} />
       </header>
     );
   }
@@ -343,7 +346,7 @@ export function TopBar({
           <span className="td-pill-label">Chat</span>
         </button>
       ) : null}
-      <Avatar email={email} />
+      <Avatar email={email} editor={editor} />
     </header>
   );
 }

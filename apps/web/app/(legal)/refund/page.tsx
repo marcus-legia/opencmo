@@ -19,7 +19,7 @@ export default function RefundPage() {
           heading: "Refunds",
           body: (
             <>
-              <p>You can request a full refund within 14 days of your first charge if Ferreto was not right for you. If Ferreto did not work as described, we will refund the charge for the affected period.</p>
+              <p>You can request a full refund within 7 days of your first charge, on the monthly or the annual plan, if Ferreto was not right for you. After that, charges are not refunded, except that if Ferreto did not work as described, we will refund the charge for the affected period.</p>
               <p>Customers in the EU and UK keep their statutory right of withdrawal where it applies.</p>
             </>
           ),

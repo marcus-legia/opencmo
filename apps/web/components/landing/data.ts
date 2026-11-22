@@ -3,7 +3,7 @@
  * JSON-LD FAQPage, nên chữ trong schema và chữ trên trang không bao giờ lệch nhau.
  *
  * Copy follows the 2026-11-17 positioning (owner): one audience (founders selling software to businesses), Sales
- * leads, Post comes with it, video is a side tool. Every claim here must be true of the product today (CLAUDE.md
+ * leads, Post comes with it; the video editor is off in production for now and not on the page. Every claim here must be true of the product today (CLAUDE.md
  * "Don't ship coming soon"); Sales reads exactly the platforms in `lib/cmo/social/conversations.ts` SALES_PLATFORMS.
  */
 import { blogUrl } from "@/lib/site";
@@ -63,11 +63,10 @@ export const STEPS = [
   { icon: STEP_ICON.post, title: "Post", body: "It plans a week of posts for X, LinkedIn and Threads. You approve the week once." },
 ];
 
-/** The scroll-darkened walkthrough that replaced the demo videos: Sales, then Post, then video. */
+/** The scroll-darkened walkthrough that replaced the demo videos: Sales, then Post. The editor is off for now (`lib/editor-flag.ts`). */
 export const SHOWCASE: Beat[] = [
   { num: "Sales", title: "The people who *need what you built.*", body: "Sales searches Reddit, Hacker News, Threads and Facebook groups and brings back the people who need what you built, with the quote and a drafted reply.", logos: SALES_SOURCES },
   { num: "Post", title: "Posts about *what people asked.*", body: "The questions Sales found become the week's posts for X, LinkedIn and Threads, each citing the conversations behind it. You approve the week once.", logos: POST_CHANNELS },
-  { num: "Video", title: "Clips from *what you record.*", body: "Upload a video you recorded, cut it by editing its transcript, and add captions in your brand's style." },
 ];
 
 /** What the product never does: assist, never act (CLAUDE.md "Product rules"). */
@@ -110,7 +109,7 @@ export function faqs(p: Prices | null): { q: string; a: string }[] {
     { q: "Will it like, follow or DM people for me?", a: `No. There are no automated likes, follows, DMs or replies. ${BRAND} drafts a reply, and a DM or an email when someone is ready for one; you decide what to send and where.` },
     { q: "Is there a free trial?", a: `Your first scan is free, with no card. Give it your website, and within minutes you see the people asking for what you built, each with the words they wrote. If no one has asked in the last 30 days, it tells you so, with the searches it ran. Pick a plan and it writes a reply to each one. You post each reply yourself; nothing is posted for you.${price}` },
     { q: "What does the plan include?", a: `The searches, the drafted replies and the weekly posts, under a fair-use allowance. A bar in the app shows how much of this month's allowance you used. If it runs out, new searches pause until it resets; your drafts and posts keep working.${price}` },
-    { q: "Can I cancel?", a: "Yes, anytime, from Settings in the app. If it was not right for you, ask for a full refund within 14 days of your first charge." },
+    { q: "Can I cancel?", a: "Yes, anytime, from Settings in the app. If it was not right for you, ask for a full refund within 7 days of your first charge." },
   ];
 }
 

@@ -11,6 +11,7 @@ import type { SupabaseClient } from "@/lib/api/handler";
 import { canonicalJson } from "@/lib/settings-schema";
 
 import { creemModerationKey, moderationReady } from "./moderation";
+import { editorLive } from "@/lib/editor-flag";
 import { isProduction } from "@/lib/production";
 
 /**
@@ -102,8 +103,9 @@ function catalog(): AiModel[] {
 /** Chỉ cho test: quên catalog đã nạp. */
 export const resetCatalog = () => void (catalogRows = null);
 
-/** Model dùng được ngay bây giờ. */
+/** Models usable right now. None while the editor is off in production (`lib/editor-flag.ts`). */
 export function availableModels(): AiModel[] {
+  if (!editorLive()) return [];
   return catalog().filter((model) => providerEnabled(model) && allowedHere(model));
 }
 
