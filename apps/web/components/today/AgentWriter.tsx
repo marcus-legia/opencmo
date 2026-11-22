@@ -25,8 +25,11 @@ type Tab = "week" | "drafts" | "voice";
 
 const KIND_LABEL: Record<Draft["kind"], string> = { post: "post", caption: "Caption" };
 const BADGE: Record<Draft["column"], [string, string]> = { planned: ["Planned", "badge b-plan"], waiting: ["Waiting", "badge b-wait"], drafting: ["Drafting", "badge b-new"], scheduled: ["Scheduled", "badge b-ok"], posted: ["Posted", "badge b-ok"] };
+// The chat passes the platform on to the writer (`create_task` post_platform): X, LinkedIn and Threads (owner, 2026-11-23).
 const ASK_KINDS = [
   { id: "post", label: "X post", prompt: "Write an X post" },
+  { id: "linkedin", label: "LinkedIn post", prompt: "Write a LinkedIn post" },
+  { id: "threads", label: "Threads post", prompt: "Write a Threads post" },
 ] as const;
 
 const when = (d: Draft) => {
@@ -159,7 +162,8 @@ export function AgentWriter() {
           </span>
           <span className={badge[1]}>{badge[0]}</span>
           <span className="meta" style={{ minWidth: "64px", textAlign: "right", whiteSpace: "nowrap" }}>
-            {when(d)}
+            {/* A waiting draft's card says when it would go out ("Mon 09:00"): the row shows that, not the planned day. */}
+            {card?.postAt && !d.at ? when({ ...d, at: card.postAt }) : when(d)}
           </span>
         </button>
         {isOpen && card ? (

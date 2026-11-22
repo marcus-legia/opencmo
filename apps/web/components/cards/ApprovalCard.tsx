@@ -255,17 +255,6 @@ export function ApprovalCard({
     return run({ action: "approve" });
   }
 
-  async function copyReply() {
-    if (card.body.kind !== "reply") return;
-    try {
-      await navigator.clipboard.writeText(card.body.draft);
-      toast("Reply copied. Paste it in the thread and post it from your own account.");
-    } catch {
-      toast("Copy did not work here. Select the reply and copy it yourself.");
-    }
-    window.open(card.body.threadUrl, "_blank", "noopener,noreferrer");
-  }
-
   const editAction = (label = "Edit"): Action => ({
     label: editing ? "Stop editing" : label,
     variant: "secondary",
@@ -321,8 +310,8 @@ export function ApprovalCard({
         return [primary(editing ? "Approve edit" : "Approve"), editAction(), ...(postChangeTime ? [postChangeTime] : []), ...declineAction];
       case "reply":
         return [
-          // Nothing to copy until the reply is written (in Sales): the thread still opens from there.
-          ...(card.body.kind === "reply" && card.body.draft.trim() ? [{ label: PRIMARY_ACTION.reply, variant: "primary" as const, run: copyReply }] : []),
+          // The idea becomes the founder's reply in Sales, where they write it out and copy it (owner, 2026-11-23).
+          { label: PRIMARY_ACTION.reply, variant: "primary", href: "/app/sales" },
           { label: "I replied", variant: "secondary", run: () => run({ action: "replied" }) },
           ...declineAction,
         ];

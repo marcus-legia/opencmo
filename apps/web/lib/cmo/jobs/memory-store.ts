@@ -10,6 +10,7 @@ import { latestPerTopic } from "./context";
 import { isoDay, type CmoStore, type DraftRating, type CompetitorInsight, type ConnectedAccountRow, type ReplyOutcomeDue, type MetricRow, type ZernioPostRow, type NicheVideoInsight, type SalesSettings, type SubredditRule, type Documents, type Goal, type ItemRow, type Lesson, type MemoryEvent, type Opportunity, type PostSource, type QueuedRun, type Step, type VoiceNoteRow, type WeekResults } from "./types";
 import type { AccountMetricRow } from "./metrics-source";
 import { defaultPostingPlan, type PostingPlan } from "../posting-plan";
+import { postProfile } from "../platforms";
 import { SALES_PLATFORMS } from "../social/conversations";
 
 export type RunState = QueuedRun & { status: string; steps: Step[]; error: string | null; output: unknown; notBefore?: number };
@@ -174,10 +175,12 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
       if (at >= 0) variants[at] = row;
       else variants.push(row);
     },
-    async saveDraft(_u, runId, itemId, idea, body, priority) {
+    async saveDraft(_u, runId, itemId, idea, body, priority, platform) {
       let item = itemId ? items.find((i) => i.id === itemId) : undefined;
       if (!item) {
-        item = { id: id(), run_id: runId, department: "post", platform: "x", day: isoDay(), idea, reason: "", status: "planned", priority, body: {}, final_text: null, external_url: null, decided_at: null, published_at: null, created_at: new Date().toISOString() };
+        // As `cmo_save_draft`: a new item takes the post profile's label ("LinkedIn"), X when none is given.
+        const label = platform ? postProfile(platform).label : "X";
+        item = { id: id(), run_id: runId, department: "post", platform: label, day: isoDay(), idea, reason: "", status: "planned", priority, body: {}, final_text: null, external_url: null, decided_at: null, published_at: null, created_at: new Date().toISOString() };
         items.push(item);
       }
       // As `cmo_save_draft`: the draft keeps the planner's targets and slot, so the post still goes to every platform.

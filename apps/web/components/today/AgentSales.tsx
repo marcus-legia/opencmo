@@ -110,8 +110,8 @@ function ScanProgress({ scan, onClose }: { scan: Scan; onClose: () => void }) {
             : "The scan did not finish"
           : replies
             ? scan.cards
-              ? `Replies written · ${scan.cards} to read`
-              : "Replies written"
+              ? `Reply ideas written · ${scan.cards} to read`
+              : "Reply ideas written"
             : scan.cards
               ? `Scan finished · ${scan.cards} ${scan.cards === 1 ? "thread" : "threads"} to review`
               : "Scan finished · nothing worth joining this time";
@@ -266,9 +266,9 @@ function WriteReplies({ count, busy, onPlan, onStarted }: { count: number; busy:
     <div className="card" role="group" aria-labelledby="write-replies-title" style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", marginBottom: "10px" }}>
       <div style={{ flex: "1 1 260px", minWidth: "0" }}>
         <b id="write-replies-title">
-          {count} {count === 1 ? "thread has" : "threads have"} no reply yet
+          {count} {count === 1 ? "thread has" : "threads have"} no reply idea yet
         </b>
-        <div className="meta">Sales writes a help-first reply for each, under each community&apos;s rules. You post them yourself.</div>
+        <div className="meta">Sales writes a help-first idea for each, under each community&apos;s rules. You write the reply in your own words and post it yourself.</div>
         {error ? (
           <div className="meta" role="alert" style={{ color: "var(--warn)", marginTop: "4px" }}>
             {error}
@@ -281,7 +281,7 @@ function WriteReplies({ count, busy, onPlan, onStarted }: { count: number; busy:
         </span>
       ) : step === "idle" ? (
         <button type="button" className="primary" onClick={() => setStep("confirm")}>
-          Write the replies
+          Write the ideas
         </button>
       ) : (
         <span style={{ display: "inline-flex", gap: "8px" }}>
@@ -420,6 +420,35 @@ function NoOneAsked({ scan, onEdit, freeLeft }: { scan: NonNullable<SalesScreen[
 }
 
 /**
+ * The reply idea Sales wrote, for the founder to turn into their own reply (owner, 2026-11-23): a finished, pasted
+ * reply reads like a reply farm. The badge asks for their own words until they changed the text.
+ */
+function ReplyIdea({ id, draft, onDraft, done, edited, checks }: { id: string; draft: string; onDraft: (text: string) => void; done: boolean; edited: boolean; checks: string | null }) {
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", marginBottom: "6px" }}>
+        <label className="meta" htmlFor={`reply-${id}`}>
+          Reply idea
+        </label>
+        {done ? null : edited ? (
+          <span className="chip" data-testid="reply-idea-edited" style={{ color: "var(--ok)" }}>
+            In your words
+          </span>
+        ) : (
+          <span className="chip" data-testid="reply-idea-badge" style={{ color: "var(--warn)" }}>
+            Write it in your own words
+          </span>
+        )}
+      </div>
+      <textarea id={`reply-${id}`} className="reply" value={draft} onChange={(e) => onDraft(e.target.value)} disabled={done} rows={4} style={{ width: "100%", resize: "vertical", font: "inherit", fontSize: "15px", lineHeight: "1.55", color: "var(--text)" }} />
+      <div className="meta" style={{ marginTop: "6px" }}>
+        {done ? checks : `An idea, not a reply: add what you know first-hand and say it your way, then copy it.${checks ? ` ${checks}.` : ""}`}
+      </div>
+    </div>
+  );
+}
+
+/**
  * One thread: a row that opens in place, or, on a phone (`onBack`), the open person full width with a way back to the
  * list and its actions held at the bottom of the screen (canvas board "Sales on a phone").
  */
@@ -432,6 +461,8 @@ function ThreadRow({ t, free, open, onToggle, onBack, onPlan, onDecide, onSent }
     setShownDraft(t.draft);
     if (!draft.trim() || draft === (shownDraft ?? "")) setDraft(t.draft ?? "");
   }
+  // The idea is the founder's to finish (owner, 2026-11-23): Copy and open waits until they changed it.
+  const edited = draft.trim() !== "" && draft.trim() !== (t.draft ?? "").trim();
   const [copied, setCopied] = useState(false);
   const [dismissing, setDismissing] = useState(false);
   const [reason, setReason] = useState<string>(DISMISS_REASONS[0]);
@@ -515,44 +546,24 @@ function ThreadRow({ t, free, open, onToggle, onBack, onPlan, onDecide, onSent }
           ) : locked ? (
             <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }} data-testid="sales-reply-locked">
               <span className="meta" style={{ flex: "1 1 220px" }}>
-                {t.drafted ? "Your reply is written. You see it once you pick a plan." : "Your reply is written once you pick a plan."}
+                {t.drafted ? "Your reply idea is written. You see it once you pick a plan." : "Your reply idea is written once you pick a plan."}
               </span>
               <button type="button" className="primary" onClick={() => onPlan("reply to these people")}>
                 Pick a plan
               </button>
             </div>
           ) : t.draft === null ? (
-            <div className="meta">No reply yet. Write the replies above, or reply in your own words and mark it replied.</div>
+            <div className="meta">No reply idea yet. Write the ideas above, or reply in your own words and mark it replied.</div>
           ) : t.person && t.status !== "dismissed" ? (
             <ReachPanel
               t={t}
               onSent={(via) => onSent(t, via)}
               publicReply={
-                <div>
-                  <label className="meta" htmlFor={`reply-${t.id}`} style={{ display: "block", marginBottom: "6px" }}>
-                    Draft reply
-                  </label>
-                  <textarea id={`reply-${t.id}`} className="reply" value={draft} onChange={(e) => setDraft(e.target.value)} disabled={done} rows={4} style={{ width: "100%", resize: "vertical", font: "inherit", fontSize: "15px", lineHeight: "1.55", color: "var(--text)" }} />
-                  {t.draftChecks ? (
-                    <div className="meta" style={{ marginTop: "6px" }}>
-                      {t.draftChecks}
-                    </div>
-                  ) : null}
-                </div>
+                <ReplyIdea id={t.id} draft={draft} onDraft={setDraft} done={done} edited={edited} checks={t.draftChecks} />
               }
             />
           ) : (
-            <div>
-              <label className="meta" htmlFor={`reply-${t.id}`} style={{ display: "block", marginBottom: "6px" }}>
-                Draft reply
-              </label>
-              <textarea id={`reply-${t.id}`} className="reply" value={draft} onChange={(e) => setDraft(e.target.value)} disabled={done} rows={4} style={{ width: "100%", resize: "vertical", font: "inherit", fontSize: "15px", lineHeight: "1.55", color: "var(--text)" }} />
-              {t.draftChecks ? (
-                <div className="meta" style={{ marginTop: "6px" }}>
-                  {t.draftChecks}
-                </div>
-              ) : null}
-            </div>
+            <ReplyIdea id={t.id} draft={draft} onDraft={setDraft} done={done} edited={edited} checks={t.draftChecks} />
           )}
           {done ? (
             <div style={{ display: "flex", justifyContent: "flex-end" }}>
@@ -591,7 +602,13 @@ function ThreadRow({ t, free, open, onToggle, onBack, onPlan, onDecide, onSent }
                 </button>
               )}
               {!skipped && t.draft !== null ? (
-                <button type="button" className="primary" disabled={!draft.trim()} onClick={() => void copyAndOpen()}>
+                <button
+                  type="button"
+                  className="primary"
+                  disabled={!draft.trim() || !edited}
+                  title={edited ? undefined : "Write the reply in your own words first"}
+                  onClick={() => void copyAndOpen()}
+                >
                   <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
                     <rect width="14" height="14" x="8" y="8" rx="2" />
                     <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
