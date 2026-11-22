@@ -39,4 +39,4 @@ work is in `opencmo-internal/docs/cmo/2026-11-20-viec-truoc-launch.md`. Launch: 
 - **Domains:** the app at `ferreto.io/app`; a tool that opens on its own gets a subdomain: the blog at
   `blog.ferreto.io` (`lib/site.ts` `blogUrl`); the editor moves to `editor.ferreto.io` (today `/app/studio`, opened
   in a new tab). Moving one needs the Supabase session cookie on `.ferreto.io` and the subdomain in Supabase's
-  redirect URLs. `opencmo.io` redirects (308) to `ferreto.io`.
+  redirect URLs. `opencmo.io` is no longer served (removed 2026-11-22).
