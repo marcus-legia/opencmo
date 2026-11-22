@@ -152,7 +152,7 @@ export async function loadWorkspace(supabase: SupabaseClient): Promise<Workspace
   }
   const productName = typeof documents.product?.body.name === "string" ? documents.product.body.name : "";
   const product = productName || "Acme";
-  const site = state.lastRun?.input?.site ?? "";
+  const site = state.site ?? state.lastRun?.input?.site ?? "";
   const category = typeof documents.product?.body.category === "string" && documents.product.body.category ? documents.product.body.category : null;
 
   const realInbox: InboxCard[] = [

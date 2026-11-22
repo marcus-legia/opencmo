@@ -26,7 +26,7 @@ export function CmoView({ initial, site }: { initial: CmoState; site: string }) 
   const [error, setError] = useState<string | null>(null);
   const [rebuild, setRebuild] = useState(false);
   const hasDocs = DOCUMENT_KINDS.some((kind) => state.documents[kind]);
-  const lastSite = state.lastRun?.input?.site ?? "";
+  const lastSite = state.site ?? state.lastRun?.input?.site ?? "";
 
   async function build(value: string) {
     setBusy(true);

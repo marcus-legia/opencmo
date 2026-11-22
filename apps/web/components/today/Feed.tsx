@@ -483,7 +483,7 @@ export function Feed({ email }: { email?: string | null }) {
             <div style={{ flex: "1 1 auto", minWidth: "0" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                 <h1 data-testid="dash-headline" style={{ margin: "0", fontSize: "22px", fontWeight: "600", letterSpacing: "-0.4px", lineHeight: "28px" }}>
-                  {name ? `Welcome back, ${name}.` : "Welcome back."}
+                  {name ? `Hi, ${name}.` : "Hi."}
                 </h1>
                 <span className="live" title="Ferreto is working"></span>
               </div>

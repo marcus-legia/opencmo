@@ -84,7 +84,7 @@ export const SCREENS = {
   // Uploads come from /api/v1/projects on the page; `items` holds only generated work (none before S1).
   studio: entry({ schema: StudioScreenSchema, fixture: studioFixture, empty: studioEmpty, live: ["items", "team", "editStates"], release: ["items"] }),
   // P5 R1: the mention counter, the stuck banner and the founder's Sales settings read real rows.
-  sales: entry({ schema: SalesScreenSchema, fixture: salesFixture, empty: salesEmpty, live: ["free", "lastScan", "threads", "week", "mentions", "stuck", "settings"], release: ["threads", "week"] }),
+  sales: entry({ schema: SalesScreenSchema, fixture: salesFixture, empty: salesEmpty, live: ["free", "freeScansDone", "lastScan", "threads", "week", "mentions", "stuck", "settings"], release: ["threads", "week"] }),
   // P4 A3: slots, accounts and rules read schedule_slots and social_accounts; the posting plan reads profiles (2026-11-12).
   schedule: entry({
     schema: ScheduleScreenSchema,

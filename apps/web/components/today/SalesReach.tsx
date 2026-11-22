@@ -102,6 +102,14 @@ export function ReachPanel({ t, publicReply, onSent }: { t: Thread; publicReply:
   const [dm, setDm] = useState(person?.dmDraft ?? "");
   // The email has its own text (review 2026-11-21): it starts from the DM draft, or an opening when there is none.
   const [email, setEmail] = useState(person?.dmDraft || emailOpening(t.title));
+  // A DM drafted while the card is open arrives as a new `dmDraft`: show it unless the founder already edited the box.
+  const [shownDm, setShownDm] = useState(person?.dmDraft ?? null);
+  if ((person?.dmDraft ?? null) !== shownDm) {
+    const next = person?.dmDraft ?? null;
+    setShownDm(next);
+    if (!dm.trim() || dm === (shownDm ?? "")) setDm(next ?? "");
+    if (email === (shownDm || emailOpening(t.title))) setEmail(next || emailOpening(t.title));
+  }
   const [note, setNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   if (!person) return <>{publicReply}</>;
@@ -198,7 +206,7 @@ export function ReachPanel({ t, publicReply, onSent }: { t: Thread; publicReply:
             kind="dm"
             testId="sales-dm-locked"
             why={dmLock}
-            opens={hasDms ? "they answer your public reply, or their post asks for tools. Ferreto drafts the DM then." : "never on this platform: reply in public."}
+            opens={hasDms ? "they answer your public reply, or their post asks for tools. Mark them as answered in Following up and write the DM there." : "never on this platform: reply in public."}
           />
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: "8px" }} data-testid="sales-dm">
@@ -361,6 +369,10 @@ export function FollowingUp({ threads, live, onStatus }: { threads: Thread[]; li
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  // The DM box of a person who answered: the scan's draft when there is one, else the founder writes it (E2E 2026-11-22:
+  // marking someone "Answered back" opened no way to DM them).
+  const [dmFor, setDmFor] = useState<string | null>(null);
+  const [dmText, setDmText] = useState("");
   const order: PersonStatus[] = ["answered_back", "talking", "replied", "signed_up", "customer"];
   const people = threads
     .filter((t) => t.status === "replied" && t.person && t.person.status !== "not_interested" && t.person.status !== "found")
@@ -390,6 +402,7 @@ export function FollowingUp({ threads, live, onStatus }: { threads: Thread[]; li
       {people.map((t) => {
         const p = t.person!;
         const answered = p.status === "answered_back";
+        const canDm = (answered || p.status === "talking") && t.platform !== "hn";
         return (
           <div key={t.id} className="card" data-testid="sales-person" style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
@@ -411,7 +424,40 @@ export function FollowingUp({ threads, live, onStatus }: { threads: Thread[]; li
                 </p>
               </div>
             ) : null}
+            {dmFor === t.id ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }} data-testid="sales-follow-dm">
+                <label className="meta" htmlFor={`fdm-${t.id}`}>
+                  {p.dmDraft ? "Ferreto's draft. Edit it, then send it from your own account." : "Write one short message from what they answered. You send it from your own account."}
+                </label>
+                <textarea id={`fdm-${t.id}`} className="reply" rows={4} value={dmText} onChange={(e) => setDmText(e.target.value)} style={{ width: "100%", resize: "vertical", font: "inherit", fontSize: "15px", lineHeight: "1.55", color: "var(--text)" }} />
+              </div>
+            ) : null}
             <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center", justifyContent: "flex-end" }}>
+              {canDm && dmFor !== t.id ? (
+                <button
+                  type="button"
+                  className="ghost"
+                  onClick={() => {
+                    setDmFor(t.id);
+                    setDmText(p.dmDraft ?? "");
+                  }}
+                >
+                  Send a DM
+                </button>
+              ) : null}
+              {dmFor === t.id ? (
+                <button
+                  type="button"
+                  className="primary"
+                  disabled={!dmText.trim()}
+                  onClick={async () => {
+                    if (await copy(dmText)) setCopied(t.id);
+                    window.open(CHAT_URL[t.platform] ?? t.url, "_blank", "noopener,noreferrer");
+                  }}
+                >
+                  {copied === t.id ? "Copied · chat opened" : `Copy and open ${PLATFORM_LABEL[t.platform]} chat`}
+                </button>
+              ) : null}
               <label className="meta" htmlFor={`status-${t.id}`}>
                 Mark
               </label>

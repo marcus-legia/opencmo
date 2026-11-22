@@ -386,10 +386,11 @@ async function runTool(supabase: SupabaseClient, name: string, input: unknown, t
         .gte("updated_at", since)
         .order("updated_at", { ascending: false })
         .limit(30);
-      // Thread Reddit: chỉ trường do mình tính — tiêu đề/nội dung người lạ viết không vào chat.
+      // Sales conversations: only fields we computed (the stranger's title and text never reach the chat). The platform
+      // is one of them: without it the model called a Facebook group "r/<group>" (E2E 2026-11-22).
       const { data: threads } = await supabase
         .from("opportunities")
-        .select("id, community, score, priority, status, created_at")
+        .select("id, platform, community, score, priority, status, created_at")
         .eq("status", "in_review")
         .not("reply", "is", null)
         .order("score", { ascending: false })
@@ -409,7 +410,7 @@ async function runTool(supabase: SupabaseClient, name: string, input: unknown, t
       });
       return {
         ok: true,
-        content: data({ waiting_cards: cards, items: rows ?? [], reddit_conversations: threads ?? [] }),
+        content: data({ waiting_cards: cards, items: rows ?? [], sales_conversations: threads ?? [] }),
         summary: `Read Approvals (${cards?.length ?? 0} waiting)`,
       };
     }
@@ -553,7 +554,7 @@ export async function cmoState(supabase: SupabaseClient): Promise<string> {
   return `<cmo_state>${JSON.stringify({
     today: isoDay(),
     awaiting_approval: pending ?? 0,
-    reddit_conversations_waiting: threads?.length ?? 0,
+    sales_conversations_waiting: threads?.length ?? 0,
     calendar_today: today ?? [],
     jobs_running: runs ?? [],
     memories: ((memories ?? []) as { body: string }[]).map((m) => m.body),

@@ -40,7 +40,7 @@ function offset(zone: string): string {
   }
 }
 
-export function SettingsScreen({ mcpEndpoint, paid }: { mcpEndpoint: string | null; paid: boolean }) {
+export function SettingsScreen({ mcpEndpoint, paid, editor = false }: { mcpEndpoint: string | null; paid: boolean; editor?: boolean }) {
   const [state] = useScreen("settings");
 
   return (
@@ -51,18 +51,22 @@ export function SettingsScreen({ mcpEndpoint, paid }: { mcpEndpoint: string | nu
         <div className="td-settings-body">
           {state.status === "loading" && <SkeletonBlocks />}
           {state.status === "error" && <ErrorNote>{state.message}</ErrorNote>}
-          {state.status === "ready" && <SettingsBody data={state.data} live={state.live} />}
+          {state.status === "ready" && <SettingsBody data={state.data} live={state.live} editor={editor} />}
           <section aria-labelledby="appearance-title" className="v2-panel" data-testid="settings-appearance">
             <h2 id="appearance-title">Appearance</h2>
             <p className="scr-tiny scr-muted">System follows your computer&apos;s light or dark mode.</p>
             <ThemeSwitch />
           </section>
           {/* Today's account, API keys and connected apps: kept whole so nothing the old page did is lost. */}
-          <AccountPanel paid={paid} />
-          <div id="api-keys" className="scr-legacy-cards">
-            <ApiKeys endpoint={mcpEndpoint} paid={paid} />
-            <ConnectedApps paid={paid} />
-          </div>
+          <AccountPanel paid={paid} editor={editor} />
+          {/* The MCP server's tools are all the editor's (packages/mcp-server): with the editor off in production, a key
+              would connect to nothing the founder can use (E2E 2026-11-22). */}
+          {editor ? (
+            <div id="api-keys" className="scr-legacy-cards">
+              <ApiKeys endpoint={mcpEndpoint} paid={paid} />
+              <ConnectedApps paid={paid} />
+            </div>
+          ) : null}
         </div>
     </div>
   );
@@ -147,13 +151,13 @@ function AutopilotField({ initial, accounts, live }: { initial: Autopilot; accou
       {value.note ? <span className="scr-tiny scr-stuck-text" role="status">{value.note}</span> : null}
       {error && <ErrorNote>{error}</ErrorNote>}
       <span className="scr-tiny scr-muted">
-        Single posts only. Reddit replies, threads, videos and anything you briefed in the chat always wait for you. Skip three in a row and it turns itself off.
+        Single posts only. Replies, threads and anything you briefed in the chat always wait for you. Skip three in a row and it turns itself off.
       </span>
     </fieldset>
   );
 }
 
-function SettingsBody({ data, live }: { data: Data; live: Record<keyof Data, boolean> }) {
+function SettingsBody({ data, live, editor }: { data: Data; live: Record<keyof Data, boolean>; editor: boolean }) {
   const [budget, setBudget] = useState(String(data.weeklyCreditBudget));
   const [timezone, setTimezone] = useState(data.timezone);
   const [saving, setSaving] = useState(false);
@@ -271,7 +275,7 @@ function SettingsBody({ data, live }: { data: Data; live: Record<keyof Data, boo
             <span className="scr-off-links">
               <a href="/app/billing">Billing</a>
               <a href="/app/business?d=brand">Brand</a>
-              <a href="#api-keys">API keys</a>
+              {editor ? <a href="#api-keys">API keys</a> : null}
             </span>
           </div>
         </section>
@@ -282,7 +286,7 @@ function SettingsBody({ data, live }: { data: Data; live: Record<keyof Data, boo
   );
 }
 
-function AccountPanel({ paid }: { paid: boolean }) {
+function AccountPanel({ paid, editor }: { paid: boolean; editor: boolean }) {
   const [account, setAccount] = useState<AccountSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
@@ -304,7 +308,8 @@ function AccountPanel({ paid }: { paid: boolean }) {
           </Button>
         </form>
       }
-      foot="Clips and uploads are removed 7 days after a project finishes; downloads of whole videos are removed after 24 hours. Export what you want to keep before then. You are responsible for the rights to the videos you submit."
+      // The editor's retention line only where the editor is reachable (off in production, `lib/editor-flag.ts`).
+      foot={editor ? "Clips and uploads are removed 7 days after a project finishes; downloads of whole videos are removed after 24 hours. Export what you want to keep before then. You are responsible for the rights to the videos you submit." : undefined}
     >
       <div className="v2-panel-body scr-small">
         {error ? (

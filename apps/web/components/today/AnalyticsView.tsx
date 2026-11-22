@@ -190,7 +190,7 @@ export function AnalyticsView() {
           <div className="meta">{published?.note ?? " "}</div>
         </div>
         <div className="card">
-          <div className="meta">Reddit replies</div>
+          <div className="meta">Replies</div>
           <div className="kpi">{replied?.replied ?? "–"}</div>
           <div className="meta">{replied ? `${replied.dismissed} dismissed this week` : " "}</div>
         </div>

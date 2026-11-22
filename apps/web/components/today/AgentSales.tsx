@@ -1,6 +1,7 @@
 "use client";
 
 import { STRONG_MATCH, matchLabel } from "@/lib/cmo/match";
+import { bare, isTheirWords } from "@/lib/cmo/quote";
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -424,6 +425,13 @@ function NoOneAsked({ scan, onEdit, freeLeft }: { scan: NonNullable<SalesScreen[
  */
 function ThreadRow({ t, free, open, onToggle, onBack, onPlan, onDecide, onSent }: { t: Thread; free: boolean; open: boolean; onToggle: () => void; onBack?: () => void; onPlan: (action: string) => void; onDecide: (t: Thread, action: "replied" | "dismissed", reason?: string, text?: string) => Promise<void>; onSent: (t: Thread, via: "dm" | "email") => Promise<void> }) {
   const [draft, setDraft] = useState(t.draft ?? "");
+  // A reply written while the card is open ("Write the replies") arrives as a new `t.draft`: show it, unless the
+  // founder already typed their own (E2E 2026-11-22: the box stayed empty until a reload).
+  const [shownDraft, setShownDraft] = useState(t.draft);
+  if (t.draft !== shownDraft) {
+    setShownDraft(t.draft);
+    if (!draft.trim() || draft === (shownDraft ?? "")) setDraft(t.draft ?? "");
+  }
   const [copied, setCopied] = useState(false);
   const [dismissing, setDismissing] = useState(false);
   const [reason, setReason] = useState<string>(DISMISS_REASONS[0]);
@@ -479,7 +487,7 @@ function ThreadRow({ t, free, open, onToggle, onBack, onPlan, onDecide, onSent }
           </span>
           {lead && !open && !done ? (
             <span className="quote" style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", marginTop: "6px", fontSize: "13.5px" }}>
-              “{lead.text}”
+              “{bare(lead.text)}”
             </span>
           ) : null}
         </span>
@@ -496,7 +504,7 @@ function ThreadRow({ t, free, open, onToggle, onBack, onPlan, onDecide, onSent }
               </div>
               {t.quotes.map((q) => (
                 <p key={q.text} className="quote" style={{ marginBottom: "6px" }}>
-                  “{q.text}” <span className="meta">· {q.from}</span>
+                  {isTheirWords(q.from) ? `“${bare(q.text)}”` : bare(q.text)} <span className="meta">· {q.from}</span>
                 </p>
               ))}
             </div>
@@ -800,7 +808,7 @@ export function AgentSales() {
               <h1 style={{ margin: "0", fontSize: "22px", fontWeight: "600", letterSpacing: "-0.4px" }}>Sales</h1>
               {lastScan ? (
                 <span className="chip">
-                  <span className="live"></span>Scanned {ago(lastScan)} ago
+                  <span className="live"></span>Scanned {ago(lastScan) === "just now" ? "just now" : `${ago(lastScan)} ago`}
                 </span>
               ) : null}
             </div>
