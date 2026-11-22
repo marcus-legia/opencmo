@@ -163,7 +163,7 @@ export function AgentWriter() {
           <span className={badge[1]}>{badge[0]}</span>
           <span className="meta" style={{ minWidth: "64px", textAlign: "right", whiteSpace: "nowrap" }}>
             {/* A waiting draft's card says when it would go out ("Mon 09:00"): the row shows that, not the planned day. */}
-            {card?.postAt && !d.at ? when({ ...d, at: card.postAt }) : when(d)}
+            {!d.at && card?.body.kind === "post" && card.body.proposed?.at ? when({ ...d, at: card.body.proposed.at }) : when(d)}
           </span>
         </button>
         {isOpen && card ? (
