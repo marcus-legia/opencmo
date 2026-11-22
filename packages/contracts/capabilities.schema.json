@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://opencmo.io/contracts/capabilities.schema.json",
+  "$id": "https://ferreto.io/contracts/capabilities.schema.json",
   "title": "OpenCMO capability registry",
   "description": "Every Studio entry point and every CMO job, with what it does, who approves it and who may call it (docs/architecture/brain.md §7). apps/web/lib/cmo/capabilities.check.ts validates capabilities.json against the same rules in check:contracts.",
   "type": "object",

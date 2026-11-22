@@ -18,7 +18,7 @@ import { DOCUMENT_VERSION, DocumentSchema } from '../src/schema.ts';
 const target = join(import.meta.dirname, '../../contracts/clip-document.schema.json');
 const schema = {
   ...z.toJSONSchema(DocumentSchema, { target: 'draft-2020-12', io: 'input', unrepresentable: 'throw', reused: 'ref' }),
-  $id: 'https://opencmo.io/schemas/clip-document.json',
+  $id: 'https://ferreto.io/schemas/clip-document.json',
   title: `OpenCMO clip document v${DOCUMENT_VERSION}`,
 };
 const text = `${JSON.stringify(schema, null, 2)}\n`;

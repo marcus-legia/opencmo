@@ -26,7 +26,7 @@ Deploy:
         ANTHROPIC_API_KEY=... [FAL_KEY=...]   # moderation (Claude)
         MOTION_PREVIEW_URL=... MOTION_PREVIEW_TOKEN=... \
         OPENCMO_MCP_URL=https://<workspace>--opencmo-mcp.<region>.modal.run/mcp \
-        OPENCMO_WEB_URL=https://opencmo.io \
+        OPENCMO_WEB_URL=https://ferreto.io \
         OPENCMO_MCP_CONFIRM_KEY=...      # signs confirm codes; its own random value
         OPENCMO_WAKE_URL=https://<workspace>--opencmo-wake.<region>.modal.run \
         OPENCMO_WAKE_TOKEN=...           # same value as in the worker's `opencmo` secret

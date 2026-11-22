@@ -6,7 +6,7 @@ Please **do not** open a public issue for security problems.
 
 Report privately through GitHub's
 [private vulnerability reporting](https://github.com/marcus-legia/opencmo/security/advisories/new)
-(Security tab → "Report a vulnerability"), or email **support@opencmo.io** with the subject
+(Security tab → "Report a vulnerability"), or email **support@ferreto.io** with the subject
 line "Security".
 
 Include what you found, how to reproduce it, and the impact you expect. We will acknowledge
@@ -16,7 +16,7 @@ in the advisory.
 
 ## Scope
 
-In scope: this repository and the hosted service at opencmo.io — for example authentication
+In scope: this repository and the hosted service at ferreto.io — for example authentication
 and authorization (RLS, RPC ownership checks, API keys), credit and billing logic, file
 upload and storage access, and server-side media processing (ffmpeg, the exporter, explainer
 rendering).

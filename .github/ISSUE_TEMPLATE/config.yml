@@ -3,6 +3,6 @@ contact_links:
   - name: Report a security vulnerability
     url: https://github.com/marcus-legia/opencmo/security/advisories/new
     about: Please report security issues privately.
-  - name: Questions about the hosted service (opencmo.io)
-    url: https://opencmo.io
-    about: Account and billing questions go to support@opencmo.io.
+  - name: Questions about the hosted service (ferreto.io)
+    url: https://ferreto.io
+    about: Account and billing questions go to support@ferreto.io.

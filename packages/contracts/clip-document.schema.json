@@ -3378,6 +3378,6 @@
       "additionalProperties": false
     }
   },
-  "$id": "https://opencmo.io/schemas/clip-document.json",
+  "$id": "https://ferreto.io/schemas/clip-document.json",
   "title": "OpenCMO clip document v1"
 }

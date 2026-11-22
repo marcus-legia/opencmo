@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://opencmo.io/contracts/platforms.schema.json",
+  "$id": "https://ferreto.io/contracts/platforms.schema.json",
   "title": "OpenCMO platform profiles",
   "description": "What Writer may write for each platform (docs/architecture/writer.md §7): read by Writer's prompt, the code checks, the cards and SQL's platform_profile(). apps/web/lib/cmo/platforms.check.ts validates platforms.json against the same rules in check:contracts; packages/engine/opencmo/platforms.py reads the same file.",
   "type": "object",
