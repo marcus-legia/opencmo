@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://opencmo.io/contracts/schedule-defaults.schema.json",
+  "$id": "https://ferreto.io/contracts/schedule-defaults.schema.json",
   "title": "OpenCMO default posting slots",
   "description": "How Schedule proposes a time (schedule-publish.md §5): default local times per platform, the gap and caps, the firing window. SQL's schedule_rules() returns the same object; apps/web/lib/cmo/schedule-defaults.check.ts compares them in check:contracts.",
   "type": "object",

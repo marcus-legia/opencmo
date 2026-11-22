@@ -30,7 +30,7 @@ sends from their own account. **Post** (a week of posts for X, LinkedIn and Thre
 **Video** (the editor for videos the founder records) is secondary.
 
 - Domains: `ferreto.io` (app at `/app`); the blog at `blog.ferreto.io` from PR #246 (`lib/site.ts` `blogUrl`, never a hard-coded
-  `/blog`); `ferreto.app` redirects; `opencmo.io` still serves until the webhooks and Modal move. Package, SQL and env
+  `/blog`); `ferreto.app` and `opencmo.io` redirect (308) to `ferreto.io`. Package, SQL and env
   names (`@opencmo/*`, `OPENCMO_*`) keep the old name; everything a user reads says Ferreto.
 - One system: Next.js + Supabase + a Modal worker. No second runtime. Motion is one renderer (Remotion,
   `clip-motion`); the editor is one runtime (`clip-render`). No three.js or Lottie.

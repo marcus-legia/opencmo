@@ -1,13 +1,13 @@
-# OpenCMO for Claude
+# Ferreto for Claude
 
-The `opencmo` skill and OpenCMO's MCP server for Claude Code, plus the same skill as a zip for
+The `opencmo` skill and Ferreto's MCP server for Claude Code, plus the same skill as a zip for
 claude.ai.
 
 ## Claude Code
 
-1. Create an API key in OpenCMO → Settings → API keys.
+1. Create an API key in Ferreto → Settings → API keys.
 2. `export OPENCMO_API_KEY=ocm_…` (and `OPENCMO_MCP_URL=…` to use another server than
-   `https://opencmo.io/api/mcp`).
+   `https://ferreto.io/api/mcp`).
 3. Install the plugin:
 
    ```bash

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://opencmo.io/contracts/revision-settings.schema.json",
+  "$id": "https://ferreto.io/contracts/revision-settings.schema.json",
   "title": "OpenCMO clip revision settings",
   "description": "Shape of the `settings` object stored once per clip (`clips.settings`). This file is the single source of truth shared by the Python engine (`packages/engine/opencmo/editing/models.py`) and the web app (`apps/web/lib/settings-schema.ts`). Rules that depend on another value cannot be written in JSON Schema and are listed under `x-cross-field-rules`; both implementations check them in code and both are held to the same fixtures in `tests/contracts/settings/`.",
   "x-render-profile": 4,
