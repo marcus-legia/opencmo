@@ -72,7 +72,7 @@ export const CMO_TOOL_SPECS: ToolSpec[] = [
     description: [
       "Hand a task to one of your agents. Each task needs a specific brief: what to make, for whom, and the angle or evidence from your research (with URLs).",
       "planner: plan the next seven days into the calendar (when = now only).",
-      "x_writer: draft an X post, three versions, into Approvals. With thread: true, one X thread of 5 to 8 posts instead (only when the founder asks for a thread; when = now only).",
+      "x_writer: draft a post, three versions, into Approvals. It writes for X unless you pass post_platform (\"threads\" or \"linkedin\") when the founder asks for that platform. With thread: true, one X thread of 5 to 8 posts instead (only when the founder asks for a thread; when = now only).",
       "sales: find people describing the problem in conversations on Reddit, Hacker News, public Facebook groups and Threads (not X), score them with quotes, draft replies the founder posts themselves (the founder confirms it on a card; only when the founder asks).",
       "research: study competitors' X accounts, find posts that beat their baseline and the hooks behind them, and save what works for the planner and X writer (the founder confirms it on a card; pass handles, or it uses the X handles in Competitor Analysis; when = now only).",
       "when: \"now\" runs it in the background, usually within a minute: x_writer and sales results land in Approvals, the planner's on the calendar, research's in what the planner and X writer read. A date (YYYY-MM-DD, within 13 days) puts it on the calendar and it runs that morning. Nothing is posted until the founder approves.",
@@ -85,6 +85,7 @@ export const CMO_TOOL_SPECS: ToolSpec[] = [
         when: { type: "string", description: "\"now\" or a date YYYY-MM-DD." },
         handles: { type: "array", items: { type: "string" }, description: "Research only: up to 4 X handles to study." },
         thread: { type: "boolean", description: "x_writer only: true when the founder asked for an X thread." },
+        post_platform: { type: "string", enum: ["x", "threads", "linkedin"], description: "x_writer only, when = now: the platform the post is for. Leave it out for X." },
         platforms: {
           type: "array",
           items: { type: "string", enum: [...SALES_PLATFORMS] },
@@ -236,8 +237,10 @@ const taskInput = z.object({
   when: z.string().trim().regex(/^(now|\d{4}-\d{2}-\d{2})$/).default("now"),
   handles: z.array(z.string().trim().min(1).max(80)).max(4).optional(),
   thread: z.boolean().optional(),
+  post_platform: z.enum(["x", "threads", "linkedin"]).optional(),
   platforms: z.array(z.enum(SALES_PLATFORMS)).min(1).max(4).optional(),
 });
+const POST_PLATFORM_LABEL = { x: "X", threads: "Threads", linkedin: "LinkedIn" } as const;
 const JOB_OF = { planner: "plan_week", x_writer: "post_draft", sales: "sales_scan", research: "competitor_research" } as const;
 const DEPARTMENT_OF = { x_writer: "post", sales: "sales" } as const;
 /**
@@ -421,6 +424,9 @@ async function runTool(supabase: SupabaseClient, name: string, input: unknown, t
       if (task.thread && task.agent !== "x_writer") return invalid("thread is for x_writer only.");
       if (task.thread && task.when !== "now") return invalid("A thread is written now; when must be \"now\".");
       if (task.platforms && task.agent !== "sales") return invalid("platforms is for sales only.");
+      if (task.post_platform && task.agent !== "x_writer") return invalid("post_platform is for x_writer only.");
+      if (task.post_platform && task.post_platform !== "x" && task.thread) return invalid("A thread is for X only.");
+      if (task.post_platform && task.post_platform !== "x" && task.when !== "now") return invalid("A post for Threads or LinkedIn is written now; when must be \"now\".");
       const scheduled = task.when !== "now";
       try {
         if (scheduled) {
@@ -446,13 +452,13 @@ async function runTool(supabase: SupabaseClient, name: string, input: unknown, t
           if (nowhere) return invalid(nowhere);
         }
         const input =
-          kind === "post_draft" ? { idea: task.brief, brief: task.brief, ...(task.thread ? { thread: true } : {}) }
+          kind === "post_draft" ? { idea: task.brief, brief: task.brief, ...(task.thread ? { thread: true } : {}), ...(task.post_platform && task.post_platform !== "x" ? { platform: task.post_platform } : {}) }
           : kind === "competitor_research" ? { brief: task.brief, handles: task.handles ?? [] }
           : kind === "sales_scan" && task.platforms ? { brief: task.brief, platforms: task.platforms }
           : { brief: task.brief };
         const late = turn.startedAt !== undefined && Date.now() - turn.startedAt > KICK_UNTIL_MS;
         const run = await startCmoRun(supabase, kind, input, { kick: !late });
-        const label = { plan_week: "Planning the week", post_draft: task.thread ? "Writing an X thread" : "Drafting a post for X", sales_scan: "Scanning conversations", competitor_research: "Researching competitors" }[kind];
+        const label = { plan_week: "Planning the week", post_draft: task.thread ? "Writing an X thread" : `Drafting a post for ${POST_PLATFORM_LABEL[task.post_platform ?? "x"]}`, sales_scan: "Scanning conversations", competitor_research: "Researching competitors" }[kind];
         return { ok: true, content: JSON.stringify({ started: true, run_id: run.id, status: run.status }), summary: label, ...opens({ screen: SCREEN_OF_AGENT[task.agent], ids: [run.id] }) };
       } catch (error) {
         return { ok: false, content: JSON.stringify({ error: error instanceof Error ? error.message : "Could not start this task." }), summary: "Could not start" };

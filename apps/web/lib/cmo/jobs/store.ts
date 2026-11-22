@@ -201,9 +201,9 @@ export function supabaseStore(admin: BaseClient): CmoStore {
     async saveVariant(userId, runId, itemId, platform, text, gen) {
       await rpc("cmo_save_variant", { p_user: userId, p_run: runId, p_item: itemId, p_platform: platform, p_text: text, p_gen: gen });
     },
-    async saveDraft(userId, runId, itemId, idea, body, priority) {
+    async saveDraft(userId, runId, itemId, idea, body, priority, platform) {
       const row = one<ItemRow>(
-        await rpc("cmo_save_draft", { p_user: userId, p_run: runId, p_item: itemId, p_idea: idea, p_body: body, p_priority: priority }),
+        await rpc("cmo_save_draft", { p_user: userId, p_run: runId, p_item: itemId, p_idea: idea, p_body: body, p_priority: priority, ...(platform ? { p_platform: platform } : {}) }),
       );
       if (!row) throw new Error("cmo_save_draft: returned no row");
       return row;

@@ -544,7 +544,8 @@ export type ApprovalCard = z.infer<typeof ApprovalCardSchema>;
 /** The one filled button of each kind; it always does what the head names. */
 export const PRIMARY_ACTION: Record<CardKind, string> = {
   post: "Approve",
-  reply: "Copy and open thread",
+  // A reply idea is finished in the founder's words in Sales, not copied from the Feed (owner, 2026-11-23).
+  reply: "Write it in Sales",
   goal: "Approve week",
   script: "Approve script",
   price: "Approve price",

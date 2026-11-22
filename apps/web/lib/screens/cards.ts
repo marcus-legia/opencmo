@@ -152,7 +152,7 @@ function build(row: ApprovalRow): Built | null {
       return {
         // The card's head already names the platform and community: the title is the thread's own.
         title: clip(`“${str(s.title).replace(/^[\s"“”]+|[\s"“”]+$/g, "")}”`, 300),
-        summary: clip(`${quotes[0] ? `“${quotes[0].text.replace(/^[\s"“”]+|[\s"“”]+$/g, "")}” ` : ""}${str(s.reply).trim() ? "Reply drafted, help first." : "Reply not written yet."}`, 400),
+        summary: clip(`${quotes[0] ? `“${quotes[0].text.replace(/^[\s"“”]+|[\s"“”]+$/g, "")}” ` : ""}${str(s.reply).trim() ? "A reply idea to write in your words." : "Reply idea not written yet."}`, 400),
         meta: `${matchLabel(score)} · you post it yourself`,
         body: {
           kind: "reply",

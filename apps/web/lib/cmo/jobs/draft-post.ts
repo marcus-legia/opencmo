@@ -104,6 +104,8 @@ export async function draftPost(ctx: JobContext): Promise<JobOutput> {
   // The CMO chat handed out a "now" task with a brief (H3): write that brief, and leave the calendar's due item alone.
   const asked = typeof run.input.idea === "string" && run.input.idea ? run.input.idea : "";
   const wanted = typeof run.input.item_id === "string" ? run.input.item_id : undefined;
+  // The platform the founder asked for (Post page's Kind, or the chat): X, Threads or LinkedIn. X when absent.
+  const askedFor = asked && typeof run.input.platform === "string" && ["x", "threads", "linkedin"].includes(run.input.platform) ? run.input.platform : undefined;
   const due = await ctx.step(
     "next_due_item",
     "Finding today's post",
@@ -154,7 +156,7 @@ export async function draftPost(ctx: JobContext): Promise<JobOutput> {
     rules.noProduct ? "The brief asks for no product pitch: do not name the product in any version." : "",
   ].filter(Boolean).join(" ");
   // One core post for a slot with 2+ targets (D3), else written for its one platform.
-  const profile = postProfile(due?.platform, itemTargets(due));
+  const profile = askedFor ? postProfile(askedFor) : postProfile(due?.platform, itemTargets(due));
   const agent = POST_WRITERS[profile.id] ?? "x_writer";
   const mine = recent.filter((i) => postProfile(i.platform, itemTargets(i)).id === profile.id).slice(0, 10);
 
@@ -256,7 +258,7 @@ export async function draftPost(ctx: JobContext): Promise<JobOutput> {
         rationale: draft.rationale,
         gen: { model: genModel(answered, fakeAllowed()), prompt_version: SYSTEM_VERSION },
         ...(sources.length ? { sources } : {}),
-      }, priority),
+      }, priority, due ? undefined : askedFor),
     () => "1 card in Approvals",
   );
   return { item_id: item.id };

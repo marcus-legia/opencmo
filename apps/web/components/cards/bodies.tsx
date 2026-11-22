@@ -298,7 +298,12 @@ export function ReplyBody({ body }: { body: Body<"reply"> }) {
       ) : null}
       {/* "You post it yourself" is on the card's meta line already. */}
       {body.draft.trim() ? (
-        <div className="v2-card-draft">{body.draft}</div>
+        <>
+          <p className="v2-card-meta" data-testid="reply-idea-badge">
+            <b>Reply idea</b> · write it in your own words before you post it.
+          </p>
+          <div className="v2-card-draft">{body.draft}</div>
+        </>
       ) : (
         // A card raised before its reply was written (a free scan, or a draft that failed its checks): the reply is
         // written and read in Sales, so this one points there instead of an empty box (E2E 2026-11-22).
