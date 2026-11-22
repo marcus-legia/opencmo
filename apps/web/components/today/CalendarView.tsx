@@ -31,16 +31,14 @@ const ST: Record<SlotStatus, [string, string]> = {
 };
 
 /**
- * The artboard's channel chips, one per platform a post or the founder's own video can still go to. TikTok and
- * Instagram left in wave 4b: a slot made before still shows under All.
+ * The artboard's channel chips, one per platform a post can still go to (`CONNECTABLE_PLATFORMS`). TikTok and
+ * Instagram left in wave 4b, Facebook and YouTube on 2026-11-22: a slot made before still shows under All.
  */
 const CHANS = [
   { id: "all", label: "All", platforms: null },
   { id: "x", label: "X", platforms: ["x"] },
   { id: "linkedin", label: "LinkedIn", platforms: ["linkedin"] },
   { id: "threads", label: "Threads", platforms: ["threads"] },
-  { id: "facebook", label: "Facebook", platforms: ["facebook"] },
-  { id: "youtube", label: "YouTube", platforms: ["youtube"] },
 ] as const;
 type ChanId = (typeof CHANS)[number]["id"];
 

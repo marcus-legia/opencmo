@@ -20,10 +20,12 @@ export type PublishPlatform = z.infer<typeof PublishPlatformSchema>;
 export const isPublishPlatform = (p: string): p is PublishPlatform => (PUBLISH_PLATFORMS as readonly string[]).includes(p);
 
 /**
- * What a founder can connect now (wave 4b): TikTok and Instagram are no longer offered. They stay in
- * `PUBLISH_PLATFORMS` only so an account or slot made before reads back; nothing new can reach them.
+ * What a founder can connect now: the three platforms Post plans for (owner, 2026-11-22). Every connected account is
+ * billed on Zernio's pay-per-use plan, so nothing beyond them is offered. TikTok and Instagram left in wave 4b,
+ * Facebook Pages and YouTube on 2026-11-22; they stay in `PUBLISH_PLATFORMS` only so an account or slot made before
+ * reads back (and can be disconnected); nothing new can reach them.
  */
-export const CONNECTABLE_PLATFORMS = ["x", "threads", "linkedin", "facebook", "youtube"] as const satisfies readonly PublishPlatform[];
+export const CONNECTABLE_PLATFORMS = ["x", "threads", "linkedin"] as const satisfies readonly PublishPlatform[];
 
 /** TikTok's privacy levels, as its creator info lists them; the card offers only the ones the account allows. */
 export const TIKTOK_PRIVACY = ["PUBLIC_TO_EVERYONE", "MUTUAL_FOLLOW_FRIENDS", "FOLLOWER_OF_CREATOR", "SELF_ONLY"] as const;
