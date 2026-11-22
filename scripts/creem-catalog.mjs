@@ -9,6 +9,10 @@
  *
  *   node scripts/creem-catalog.mjs                  # products + catalogue
  *   node scripts/creem-catalog.mjs --products-only  # products only, no database needed
+ *   node scripts/creem-catalog.mjs --live           # LIVE store: products, then prints the SQL for production
+ *
+ * `--live` needs the CLI logged in with a live key (`creem login --api-key creem_...`). It never writes to a database:
+ * it prints the `billing_catalog` rows as SQL, for the owner to run on production (production writes wait for him).
  */
 import { execFileSync } from "node:child_process";
 
@@ -27,7 +31,10 @@ const die = (message) => {
   process.exit(1);
 };
 
-const creem = (...args) => JSON.parse(execFileSync("creem", [...args, "--environment", "test", "--json"], { encoding: "utf8" }));
+const LIVE = process.argv.includes("--live");
+const MODE = LIVE ? "live" : "test";
+
+const creem = (...args) => JSON.parse(execFileSync("creem", [...args, "--environment", MODE, "--json"], { encoding: "utf8" }));
 
 function ensureProduct(item, existing) {
   const found = existing.find((product) => product.name === item.name && product.status !== "archived");
@@ -39,7 +46,7 @@ function ensureProduct(item, existing) {
   // billing period. A one-time product must leave the period out; "once" gets that same misleading refusal.
   const created = creem(
     "products", "create",
-    "--idempotency-key", `ferreto-test-${item.slug}`,
+    "--idempotency-key", `ferreto-${MODE}-${item.slug}`,
     "--data", JSON.stringify({
       name: item.name,
       description: item.kind === "plan" ? `${item.credits} credits per month` : `${item.credits} credits, one time`,
@@ -77,7 +84,11 @@ async function writeCatalog(rows) {
 }
 
 const login = creem("whoami");
-if (!login.authenticated || login.environment !== "test" || !login.api_url?.includes("test-api")) {
+if (LIVE) {
+  if (!login.authenticated || login.environment !== "live" || login.api_url?.includes("test-api")) {
+    die("log the Creem CLI in with a live key first: creem login --api-key creem_...");
+  }
+} else if (!login.authenticated || login.environment !== "test" || !login.api_url?.includes("test-api")) {
   die("log the Creem CLI in with a test key first: creem login --api-key creem_test_...");
 }
 
@@ -88,5 +99,11 @@ const rows = CATALOG.map(({ name, billing_type, billing_period, ...row }) => ({
   on_sale: true,
 }));
 
-if (!process.argv.includes("--products-only")) await writeCatalog(rows);
+const sql = (value) => (value === null ? "null" : typeof value === "string" ? `'${value.replace(/'/g, "''")}'` : String(value));
+if (LIVE) {
+  const columns = ["creem_product_id", "slug", "kind", "plan_id", "interval", "price_cents", "credits", "sort", "on_sale"];
+  console.log(`\n-- Production billing_catalog (run after review):\ninsert into public.billing_catalog (${columns.map((column) => (column === "interval" ? '"interval"' : column)).join(", ")}) values\n${rows
+    .map((row) => `  (${columns.map((column) => sql(row[column])).join(", ")})`)
+    .join(",\n")}\non conflict (creem_product_id) do nothing;\n`);
+} else if (!process.argv.includes("--products-only")) await writeCatalog(rows);
 console.table(rows.map(({ slug, creem_product_id, price_cents, credits }) => ({ slug, creem_product_id, price_cents, credits })));
