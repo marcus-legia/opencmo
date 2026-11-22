@@ -32,7 +32,7 @@ export const CMO_JOB_KINDS: CmoJobKind[] = ["plan_week", "post_draft", "sales_sc
 /** What a weekly goal counts. Only things the product can measure itself. */
 export type GoalMetric = "posts" | "replies" | "views";
 export type Goal = { id: string; week: string; goal: string; metric: GoalMetric; target: number; status: "proposed" | "approved" | "rejected"; result: number | null };
-/** What a week reached: posts approved, Reddit replies the founder marked, views on posts. */
+/** What a week reached: posts approved, replies the founder marked (any platform), views on posts. */
 export type WeekResults = Record<GoalMetric, number>;
 
 /** What a memory or a lesson is about; a job reads its own topic plus `general`. */

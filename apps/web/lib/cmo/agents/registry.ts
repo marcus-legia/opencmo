@@ -31,7 +31,7 @@ export type AgentSpec = {
 export const AGENT_SPECS: Record<AgentId, AgentSpec> = {
   cmo: { id: "cmo", label: "CMO", role: "Talks with the founder, researches with social tools, and hands tasks to the other agents.", tier: "draft" },
   onboarding: { id: "onboarding", label: "Onboarding", role: "Reads the website and drafts the four marketing documents.", tier: "draft" },
-  planner: { id: "planner", label: "Planner", role: "Plans the week of posts, Reddit replies and short videos.", tier: "draft" },
+  planner: { id: "planner", label: "Planner", role: "Plans the week of posts and replies to people who asked.", tier: "draft" },
   x_writer: { id: "x_writer", label: "X writer", role: "Drafts X posts for the founder to approve and post.", tier: "draft" },
   threads_writer: { id: "threads_writer", label: "Threads writer", role: "Drafts Threads posts for the founder to approve and post.", tier: "draft" },
   linkedin_writer: { id: "linkedin_writer", label: "LinkedIn writer", role: "Drafts LinkedIn posts for the founder to approve and post.", tier: "draft" },

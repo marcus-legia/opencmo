@@ -1,6 +1,7 @@
 /**
  * Zernio's analytics for the founder's own connected accounts (P6 A1, F5). Kept apart from the publish adapter:
- * reading numbers never posts, and it needs Zernio's analytics add-on (a 402 without it), which is its own owner gate.
+ * reading numbers never posts. Analytics is included in Zernio's usage-based billing (no add-on, docs read 2026-11-23);
+ * a 402 means the whole Zernio team is paused for payment (`PAYMENT_REQUIRED`), which is the owner's to fix.
  *
  * Endpoints, from Zernio's OpenAPI (`zernio.com/openapi.json`, v1.429.1, read 2026-10-31):
  * - `GET /v1/analytics?profileId&source=late&fromDate&toDate&page&limit`: posts published through Zernio with their
@@ -195,7 +196,7 @@ export function createZernioAnalytics(options: { apiKey: string; baseUrl?: strin
       }
       if (res.status >= 500 && attempt === 0) continue;
       if (res.ok) return body;
-      if (res.status === 402) throw new PublishError("not_configured", "Account numbers are not set up on our side yet.", false);
+      if (res.status === 402) throw new PublishError("not_configured", "Account numbers are paused on our side for now.", false);
       throw zernioError(res.status, body, "reading its numbers");
     }
   }
