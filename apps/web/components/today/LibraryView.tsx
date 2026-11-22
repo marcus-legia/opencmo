@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 
 import type { LibraryCounts } from "@/app/api/v1/library/counts/route";
 import { api } from "@/components/clipping/api";
+import { bare } from "@/lib/cmo/quote";
 import { fillChat } from "@/components/dashboard/TodayBlock";
 import { useScreen } from "@/components/screens/useScreen";
 import { useShellState } from "@/components/shell-v2/ShellState";
@@ -65,7 +66,7 @@ function ThemeCard({ theme, onWrite }: { theme: LibraryThemeView; onWrite: (name
         <ul style={{ listStyle: "none", margin: "0", padding: "0", display: "flex", flexDirection: "column", gap: "6px" }}>
           {quotes.map((q) => (
             <li key={q.id} data-testid="library-quote" style={{ padding: "8px 10px", borderRadius: "7px", background: "var(--hover)", fontSize: "13.5px", lineHeight: "1.5" }}>
-              “{q.text}” <span className="meta">{q.where}</span>
+              “{bare(q.text)}” <span className="meta">{q.where}</span>
             </li>
           ))}
         </ul>

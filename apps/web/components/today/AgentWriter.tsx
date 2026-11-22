@@ -210,7 +210,7 @@ export function AgentWriter() {
               {thisWeek.length ? (
                 <span className="chip">
                   <span className="live"></span>
-                  {thisWeek.length} drafts this week
+                  {thisWeek.length} {thisWeek.length === 1 ? "draft" : "drafts"} this week
                 </span>
               ) : null}
               <span style={{ marginLeft: "auto" }}>

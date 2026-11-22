@@ -131,7 +131,7 @@ export function SetupScreen() {
   return (
     <>
       <header style={{ height: "56px", display: "flex", alignItems: "center", gap: "10px", padding: "0 24px", borderBottom: "1px solid var(--line)" }}>
-        <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: "24px", height: "24px", borderRadius: "6px", background: "var(--text)", color: "var(--bg)", fontWeight: "700", fontSize: "13px" }}>O</span>
+        <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: "24px", height: "24px", borderRadius: "6px", background: "var(--text)", color: "var(--bg)", fontWeight: "700", fontSize: "13px" }}>F</span>
         <span style={{ fontWeight: "600" }}>Ferreto</span>
         <div style={{ flex: "1 1 auto" }}></div>
         <nav className="stepper" aria-label="Setup steps">
@@ -157,7 +157,7 @@ export function SetupScreen() {
         )}
         {error ? <p className="meta">{error}</p> : null}
         {phase === "loading" && !error ? <p className="meta">Loading…</p> : null}
-        {phase === "form" && docs ? <WebsiteStep initial={site || docs.lastRun?.input.site || ""} error={submitError} onStart={(value) => void start(value)} /> : null}
+        {phase === "form" && docs ? <WebsiteStep initial={site || docs.site || docs.lastRun?.input.site || ""} error={submitError} onStart={(value) => void start(value)} /> : null}
         {phase === "working" ? (
           <div style={{ display: "flex", flexWrap: "wrap", gap: "32px", alignItems: "flex-start" }}>
             <div style={{ flex: "1 1 420px", minWidth: "0" }}>

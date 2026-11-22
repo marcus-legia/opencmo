@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { BillingButton } from "@/components/billing/BillingButton";
 import { BillingV2 } from "@/components/billing/BillingV2";
 import { AccountUsageLoader } from "@/components/clipping/web/AccountUsage";
@@ -9,6 +10,8 @@ import { isPaidPlan } from "@/lib/pricing";
 import { UI_V2 } from "@/lib/screens/flag";
 import { createServerClient } from "@/lib/supabase/server";
 import type { LedgerEntry } from "@/lib/types";
+
+export const metadata: Metadata = { title: "Billing" };
 
 /**
  * This page checks neither the session nor the balance: `app/app/layout.tsx` already redirected and loaded both for the

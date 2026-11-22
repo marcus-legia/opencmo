@@ -37,7 +37,7 @@ export const AGENT_SPECS: Record<AgentId, AgentSpec> = {
   linkedin_writer: { id: "linkedin_writer", label: "LinkedIn writer", role: "Drafts LinkedIn posts for the founder to approve and post.", tier: "draft" },
   facebook_writer: { id: "facebook_writer", label: "Facebook writer", role: "Drafts Facebook Page posts for the founder to approve and post.", tier: "draft" },
   youtube_writer: { id: "youtube_writer", label: "YouTube writer", role: "Writes the YouTube title and description of the founder's finished video.", tier: "draft" },
-  sales: { id: "sales", label: "Sales", role: "Finds Reddit threads where people need the product and drafts helpful replies.", tier: "draft" },
+  sales: { id: "sales", label: "Sales", role: "Finds conversations on Reddit, Hacker News, Facebook groups and Threads where people need the product, and drafts helpful replies.", tier: "draft" },
   research: { id: "research", label: "Research", role: "Finds competitor and niche posts that outperform, and why they worked.", tier: "draft" },
   checker: { id: "checker", label: "Checker", role: "Reviews drafts and scores threads in a separate context.", tier: "check" },
   captions: { id: "captions", label: "Captions", role: "Translates captions in the editor.", tier: "check" },

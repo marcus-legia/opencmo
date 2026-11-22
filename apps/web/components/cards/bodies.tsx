@@ -1,9 +1,11 @@
+
 "use client";
 
 import Link from "next/link";
 import { type ReactNode, useMemo, useState } from "react";
 
 import { Button, Tabs, Toggle } from "@/components/ui";
+import { bare, isTheirWords } from "@/lib/cmo/quote";
 import type { CardBody, ScheduleOptions } from "@/lib/screens/approval-card";
 import { DEPARTMENT_LABEL, PLATFORM_LABEL, type Platform } from "@/lib/screens/common";
 
@@ -262,11 +264,11 @@ export function ReplyBody({ body }: { body: Body<"reply"> }) {
   return (
     <>
       <p className="v2-card-strong">
-        {body.community} · “{body.threadTitle}”
+        {body.community} · “{bare(body.threadTitle)}”
       </p>
       {body.quotes.map((quote) => (
         <blockquote key={quote.text} className="v2-card-quote">
-          “{quote.text}” <span className="v2-muted">({quote.from})</span>
+          {isTheirWords(quote.from) ? `“${bare(quote.text)}”` : bare(quote.text)} <span className="v2-muted">({quote.from})</span>
         </blockquote>
       ))}
       {body.parts.length > 0 ? (
@@ -295,7 +297,15 @@ export function ReplyBody({ body }: { body: Body<"reply"> }) {
         </p>
       ) : null}
       {/* "You post it yourself" is on the card's meta line already. */}
-      <div className="v2-card-draft">{body.draft}</div>
+      {body.draft.trim() ? (
+        <div className="v2-card-draft">{body.draft}</div>
+      ) : (
+        // A card raised before its reply was written (a free scan, or a draft that failed its checks): the reply is
+        // written and read in Sales, so this one points there instead of an empty box (E2E 2026-11-22).
+        <p className="v2-card-meta" data-testid="reply-not-written">
+          No reply on this card yet. <Link href="/app/sales">Open it in Sales</Link> to write it, or reply in your own words and mark it replied.
+        </p>
+      )}
     </>
   );
 }

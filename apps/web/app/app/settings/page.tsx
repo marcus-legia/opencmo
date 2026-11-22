@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 
 import { SettingsView } from "@/components/clipping/web/SettingsView";
@@ -6,9 +7,12 @@ import { UI_V2 } from "@/lib/screens/flag";
 import { SettingsScreen } from "@/components/screens/settings/SettingsScreen";
 import { SettingsFrame } from "@/components/today/SettingsFrame";
 import { mcpEndpoint } from "@/lib/cmo/connect";
+import { editorLive } from "@/lib/editor-flag";
 import { isPaidPlan } from "@/lib/pricing";
 import { createServerClient } from "@/lib/supabase/server";
 import { currentUser } from "@/lib/supabase/user";
+
+export const metadata: Metadata = { title: "Settings" };
 
 export default async function SettingsPage() {
   // MCP (API keys, Connected apps) is a paid-plan feature; the cards show the upgrade path instead.
@@ -25,8 +29,8 @@ export default async function SettingsPage() {
   const ownerLinks = owner ? <OwnerLinks /> : null;
   if (UI_V2)
     return (
-      <SettingsFrame current="general">
-        <SettingsScreen mcpEndpoint={mcpEndpoint()} paid={paid} />
+      <SettingsFrame current="general" keys={editorLive()}>
+        <SettingsScreen mcpEndpoint={mcpEndpoint()} paid={paid} editor={editorLive()} />
         {ownerLinks}
       </SettingsFrame>
     );

@@ -288,6 +288,7 @@ export function ChatPanel({
       const append = (more: string) => setMessages((m) => m.map((msg) => (msg.id === replyId ? { ...msg, text: msg.text + more } : msg)));
       let done: Done = {};
       let turnNumber = 0;
+      let afterTool = false;
       try {
         const response = await fetch(`/api/v1/agent/sessions/${sessionId}/${path}`, {
           method: "POST",
@@ -303,8 +304,19 @@ export function ChatPanel({
               return m.map((msg, i) => (i === at || (i === at - 1 && prompt !== null && msg.role === "user") ? { ...msg, turn: turnNumber } : msg));
             });
           }
-          if (event === "text") append(String(data.text));
-          if (event === "tool_start") setWorking(workingLabel(String(data.name)));
+          if (event === "text") {
+            const more = String(data.text);
+            // Text written after a tool ran is a new paragraph: without the break it ran into the line before it
+            // ("…trimming.The writer is drafting", E2E 2026-11-22).
+            if (afterTool && more.trim()) {
+              afterTool = false;
+              setMessages((m) => m.map((msg) => (msg.id === replyId ? { ...msg, text: msg.text && !/\s$/.test(msg.text) ? `${msg.text}\n\n${more.trimStart()}` : msg.text + more } : msg)));
+            } else append(more);
+          }
+          if (event === "tool_start") {
+            afterTool = true;
+            setWorking(workingLabel(String(data.name)));
+          }
           if (event === "tool_result") {
             setWorking(null);
             const opened = data.ok && drivesPanel ? openPanel((data.view as { open?: unknown } | undefined)?.open) : false;

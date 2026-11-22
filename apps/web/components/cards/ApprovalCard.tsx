@@ -321,7 +321,8 @@ export function ApprovalCard({
         return [primary(editing ? "Approve edit" : "Approve"), editAction(), ...(postChangeTime ? [postChangeTime] : []), ...declineAction];
       case "reply":
         return [
-          { label: PRIMARY_ACTION.reply, variant: "primary", run: copyReply },
+          // Nothing to copy until the reply is written (in Sales): the thread still opens from there.
+          ...(card.body.kind === "reply" && card.body.draft.trim() ? [{ label: PRIMARY_ACTION.reply, variant: "primary" as const, run: copyReply }] : []),
           { label: "I replied", variant: "secondary", run: () => run({ action: "replied" }) },
           ...declineAction,
         ];

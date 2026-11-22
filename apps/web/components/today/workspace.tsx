@@ -56,7 +56,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         ready: true,
         name: text(product.name),
         category: text(product.category),
-        site: text(docs?.lastRun?.input.site),
+        site: text(docs?.site) ?? text(docs?.lastRun?.input.site),
         summary: text(product.description) ?? text(product.one_liner),
         competitors: rivals
           .map((c) => c as Record<string, unknown>)

@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { ApiError, api, jsonBody } from "@/components/clipping/api";
 import { TEXT_PLATFORMS, dayTargets, type PostingPlan } from "@/lib/cmo/posting-plan";
+import { CONNECTABLE_PLATFORMS } from "@/lib/departments/publish/types";
 import type { ScheduleScreen } from "@/lib/screens/schedule";
 
 import { PlatformLogo, type LogoPlatform } from "./platform-logos";
@@ -105,7 +106,8 @@ export function PostingPlanPanel({ initial, accounts, live, onSaved }: { initial
               <p>Written for you every morning. One post goes to every platform you turn on.</p>
             </div>
           </div>
-          {TEXT_PLATFORMS.map((id) => (
+          {/* Facebook Pages are not connectable since 2026-11-22: its row stays only for a plan that still has it on. */}
+          {TEXT_PLATFORMS.filter((id) => (CONNECTABLE_PLATFORMS as readonly string[]).includes(id) || plan.text[id] > 0).map((id) => (
             <Row key={id} platform={id} name={TEXT_LABEL[id]} per="day" value={plan.text[id]} max={TEXT_MAX} connected={connected(id)} byHand onChange={(n) => set("text", id, n)} />
           ))}
         </div>

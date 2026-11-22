@@ -617,9 +617,12 @@ export async function draftReplies(
 ): Promise<{ replyFor: Map<number, string>; gen: { model: string; prompt_version: string } }> {
   const { docs, memories, voice, threads: toDraft } = input;
   let answered: string | null = null;
+  // Code checks every draft: one with a link, too long, or naming the product where it may not, never reaches a card.
+  const products = productNames(docs);
+  const problemsOf = (index: number, text: string) => (toDraft[index] ? replyProblems(text, mayMention(toDraft[index]!.rule), products) : ["no such thread"]);
   const replies = !toDraft.length ? [] : await ctx.step("draft_reply", `Drafting ${toDraft.length} replies`, async () => {
     const avoid = avoidList(docs);
-    return (
+    const first = (
       await ctx.think({
         title: `Draft a helpful reply for each of ${toDraft.length} threads (the founder posts them)`,
         fake: () => ({
@@ -641,15 +644,40 @@ export async function draftReplies(
         failure: "We could not draft the replies. Try again in a minute.",
       })
     ).replies;
-  }, (r) => `${r.length} replies drafted`);
+    // One rewrite for the drafts the checks refused, told exactly what was wrong. Before, such a thread got no reply,
+    // and a paid scan dropped the person altogether (E2E 2026-11-22: an r/SaaS thread that allows a disclosed mention).
+    const good = new Map(first.filter((r) => toDraft[r.index] && !problemsOf(r.index, r.reply.trim()).length).map((r) => [r.index, r.reply.trim()] as const));
+    const refused = toDraft.map((_, index) => index).filter((index) => !good.has(index));
+    if (!refused.length) return [...good].map(([index, reply]) => ({ index, reply }));
+    const previous = new Map(first.map((r) => [r.index, r.reply.trim()] as const));
+    const fixed = await ctx
+      .think({
+        title: `Fix ${refused.length} ${refused.length === 1 ? "reply" : "replies"} that broke the rules`,
+        fake: () => ({ replies: refused.map((index) => ({ index, reply: "Talk to ten people who have the problem before you pitch anyone. Ask how they handle it today." })) }),
+        agent: "sales",
+        system: REPLY_SYSTEM,
+        prompt: `${documentsBlock(docs)}\n\n${voice ? `${voice}\n\n` : ""}${avoid.length ? `Words to avoid: ${avoid.join(", ")}\n\n` : ""}${refused
+          .map((index) => {
+            const draft = previous.get(index);
+            const why = draft ? problemsOf(index, draft) : ["no reply was written"];
+            return `${threadBlock(toDraft[index]!.thread, index).replace(`<thread index="${index}"`, `<thread index="${index}" mention="${mayMention(toDraft[index]!.rule) ? "yes" : "no"}"`)}\n<draft index="${index}">${escapeForTag(draft ?? "")}</draft>\nWhat is wrong: ${why.join("; ")}.`;
+          })
+          .join("\n\n")}\n\nRewrite each draft so it breaks none of the rules. Keep what helps. When unsure, leave the product out.`,
+        schema: ReplySchema,
+        label: "draft_reply",
+        failure: "We could not draft the replies. Try again in a minute.",
+      })
+      .then((r) => r.replies)
+      // The first drafts stand: a failed rewrite never fails the scan.
+      .catch((error: unknown) => {
+        if (error instanceof LlmError) return [] as { index: number; reply: string }[];
+        throw error;
+      });
+    for (const r of fixed) if (refused.includes(r.index) && !good.has(r.index) && !problemsOf(r.index, r.reply.trim()).length) good.set(r.index, r.reply.trim());
+    return [...good].map(([index, reply]) => ({ index, reply }));
+  }, (r) => `${r.length} ${r.length === 1 ? "reply" : "replies"} drafted`);
 
-  // Code checks every draft: one with a link, too long, or naming the product where it may not, never reaches a card.
-  const products = productNames(docs);
-  const replyFor = new Map(
-    replies
-      .map((r) => [r.index, r.reply.trim()] as const)
-      .filter(([index, text]) => toDraft[index] && !replyProblems(text, mayMention(toDraft[index]!.rule), products).length),
-  );
+  const replyFor = new Map(replies.map((r) => [r.index, r.reply] as const));
   return { replyFor, gen: { model: genModel(answered, fakeAllowed()), prompt_version: REPLY_VERSION } };
 }
 

@@ -22,6 +22,12 @@ import {
 import { matchLabel } from "../cmo/match";
 import { salesNeeds, salesRuleKind, type Department, type ScorePart } from "./common";
 
+/** "2026-11-16" → "16 Nov": a week's Monday as people read it on a card (E2E 2026-11-22). */
+function weekLabel(day: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return day;
+  return new Date(`${day}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
+}
+
 /** The columns of `approvals` the app reads (RLS: the founder's own). */
 export const APPROVAL_COLUMNS =
   "id, kind, department, ref_kind, ref_id, status, snapshot, content_hash, price_credits, post_at, account, expires_at, created_at, decided_at, decided_via, auto_at";
@@ -145,8 +151,8 @@ function build(row: ApprovalRow): Built | null {
       const score = typeof s.score === "number" ? Math.min(100, Math.max(0, Math.round(s.score))) : 0;
       return {
         // The card's head already names the platform and community: the title is the thread's own.
-        title: clip(`“${str(s.title)}”`, 300),
-        summary: clip(quotes[0] ? `“${quotes[0].text}” Reply drafted, help first.` : "Reply drafted, help first.", 400),
+        title: clip(`“${str(s.title).replace(/^[\s"“”]+|[\s"“”]+$/g, "")}”`, 300),
+        summary: clip(`${quotes[0] ? `“${quotes[0].text.replace(/^[\s"“”]+|[\s"“”]+$/g, "")}” ` : ""}${str(s.reply).trim() ? "Reply drafted, help first." : "Reply not written yet."}`, 400),
         meta: `${matchLabel(score)} · you post it yourself`,
         body: {
           kind: "reply",
@@ -178,8 +184,8 @@ function build(row: ApprovalRow): Built | null {
       const target = typeof s.target === "number" ? s.target : 1;
       return {
         title: clip(str(s.goal), 300),
-        summary: `Goal for the week of ${str(s.week)}: ${target} ${metric}. Approving it lets the plan aim at it.`,
-        meta: `Week of ${str(s.week)}`,
+        summary: `Goal for the week of ${weekLabel(str(s.week))}: ${target} ${metric}. Approving it lets the plan aim at it.`,
+        meta: `Week of ${weekLabel(str(s.week))}`,
         body: { kind: "goal", goalId: row.ref_id, week: str(s.week), goal: clip(str(s.goal), 200), metric, target, plan: [], budgetCredits: null },
       };
     }
@@ -200,9 +206,10 @@ function build(row: ApprovalRow): Built | null {
       if (!items.length || !/^\d{4}-\d{2}-\d{2}$/.test(str(s.week))) return null;
       const goal = str(s.goal) ? clip(str(s.goal), 200) : null;
       const count = (d: string) => items.filter((i) => i.department === d).length;
-      const parts = [count("post") && `${count("post")} posts`, count("video") && `${count("video")} for Studio`, count("sales") && `${count("sales")} Reddit`].filter(Boolean);
+      const n = (k: number, one: string, many: string) => `${k} ${k === 1 ? one : many}`;
+      const parts = [count("post") && n(count("post"), "post", "posts"), count("video") && `${count("video")} for Studio`, count("sales") && n(count("sales"), "reply", "replies")].filter(Boolean);
       return {
-        title: clip(`Week of ${str(s.week)}: ${parts.join(", ")}`, 300),
+        title: clip(`Week of ${weekLabel(str(s.week))}: ${parts.join(", ")}`, 300),
         summary: "Untick what you do not want this week; the rest goes ahead. Each post, reply and paid step still asks you on its own card.",
         meta: goal ? clip(`Goal: ${goal}`, 200) : "No goal approved for this week",
         body: { kind: "plan", week: str(s.week), goal, items },

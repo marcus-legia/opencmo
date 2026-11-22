@@ -4,14 +4,16 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Run by hand (Actions → CI → Run workflow) to include the editor's jobs below.
+  workflow_dispatch:
 
 # Read-only token: workflows from forks must not be able to write to the repo.
 permissions:
   contents: read
 
 # Every job runs on every pull request and every push to main: a full run catches what a path filter would miss.
-# The repo is private since 2026-10-16, so these minutes count against the plan's quota; a path filter is the lever
-# if they ever run out, not skipping jobs.
+# The repo is private since 2026-10-16, so these minutes count against the plan's quota. The editor's three jobs
+# (motion, browsers, parity) run only by hand while the editor is off in production (owner, 2026-11-23).
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -109,6 +111,7 @@ jobs:
           retention-days: 14
 
   motion:
+    if: github.event_name == 'workflow_dispatch'
     # Explainer renderer (packages/clip-motion): unit tests, then golden stills rendered by
     # Remotion in the same Chrome Headless Shell build the references were drawn with.
     name: motion (clip-motion)
@@ -137,6 +140,7 @@ jobs:
         run: npm run agent:eval -- --provider fake
 
   browsers:
+    if: github.event_name == 'workflow_dispatch'
     # The editor outside Chromium (Safari/Firefox): feature detection + library bytes
     # (OPFS, or IndexedDB when createWritable is missing as in Safari 17) on real engines.
     # Needs no Supabase/worker — see apps/web/e2e-compat/compat.spec.ts.
@@ -157,6 +161,7 @@ jobs:
         run: npx playwright test -c playwright.compat.config.ts
 
   parity:
+    if: github.event_name == 'workflow_dispatch'
     # The renderer must match the golden reference images (packages/editor-parity).
     # `--phase A3`: every sample, including text and the 7 caption presets. Reference
     # images are in the repo; samples whose reference is known-broken (`oracleBroken`) are skipped.
