@@ -49,7 +49,6 @@ export function StepsSection() {
             </li>
           ))}
         </ol>
-        <p data-rise="1" className="lv-fineprint">Includes the video editor, for clips from videos you record.</p>
       </div>
     </section>
   );

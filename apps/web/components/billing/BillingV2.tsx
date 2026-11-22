@@ -105,7 +105,7 @@ export function BillingV2({
                   </a>
                 ) : null}
                 {annual ? <SwitchAnnual billed={annual.billedPrice} /> : null}
-                {hasPortal ? <BillingButton path="/api/v1/billing/portal" label="Invoices and payment method" className="ghost" /> : null}
+                {hasPortal ? <BillingButton path="/api/v1/billing/portal" label="Manage or cancel subscription" className="ghost" /> : null}
               </div>
               <div className="meta" style={{ marginTop: "8px" }}>
                 Payments, invoices and cancelling are handled by Creem, our merchant of record.

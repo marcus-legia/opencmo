@@ -26,6 +26,7 @@ import { CMO_SKILLS } from "@/lib/cmo/skills/index.gen";
 import { SKILL_NAMES, skillText, type SkillName } from "@/lib/cmo/skills";
 
 import { APPROVAL_COLUMNS, approvalToCard, type ApprovalRow } from "@/lib/screens/cards";
+import { editorLive } from "@/lib/editor-flag";
 
 import { DECISION_TOOL_SPECS, DECISION_WRITES } from "./cmo-decisions";
 import { EDITOR_TOOL_SPECS } from "./cmo-editor";
@@ -204,8 +205,8 @@ export const CMO_TOOL_SPECS: ToolSpec[] = [
   ...DECISION_TOOL_SPECS,
   // CMO chat live (plan 2026-11-02): after the decisions, for the same reason.
   WAIT_FOR_RUN_SPEC,
-  // The editor handoff (plan 2026-11-02): last, for the same reason.
-  ...EDITOR_TOOL_SPECS,
+  // The editor handoff (plan 2026-11-02): last, for the same reason. Left out while the editor is off in production.
+  ...(editorLive() ? EDITOR_TOOL_SPECS : []),
   // Research chat (wave 3 B7): last, for the same reason.
   FIND_COMPETITORS_SPEC,
 ];

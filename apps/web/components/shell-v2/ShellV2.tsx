@@ -44,6 +44,8 @@ type Props = {
   chatLive: boolean;
   /** Production: hide every screen whose data is not live. */
   hideSample: boolean;
+  /** The editor is reachable (`lib/editor-flag.ts`). */
+  editorLive: boolean;
   children: ReactNode;
 };
 
@@ -100,13 +102,13 @@ export function ShellV2(props: Props) {
   // landing page) needs the hook, or every artboard's dark tokens never apply and "System" ignores a dark Mac.
   useApplyTheme();
   if (segment !== null && CLASSIC.has(segment)) {
-    const { hideSample: _hideSample, chatLive: _chatLive, usage: _usage, ...account } = props;
+    const { hideSample: _hideSample, chatLive: _chatLive, usage: _usage, editorLive: _editorLive, ...account } = props;
     return <WebShell {...account} />;
   }
   return <TodayFrame {...props} segment={segment} />;
 }
 
-function TodayFrame({ credits, plan, email, userId, pending, usage, chatLive, children, segment }: Props & { segment: string | null }) {
+function TodayFrame({ credits, plan, email, userId, pending, usage, chatLive, editorLive, children, segment }: Props & { segment: string | null }) {
   const router = useRouter();
   const [account, setAccount] = useState({ credits: credits ?? null, plan: plan ?? null, pending: pending ?? null, usage: usage ?? FREE_USAGE });
   // The feed's queue, once it has reported one: it wins over the server count so every number on screen agrees.
@@ -257,7 +259,7 @@ function TodayFrame({ credits, plan, email, userId, pending, usage, chatLive, ch
         <WorkspaceProvider>
           <div className={`k pg-${screen.page} td-frame`} data-chat={chatOpen ? "open" : undefined} data-context={contextOpen ? "open" : undefined} data-screen={screen.page}>
             {screen.top ? (
-              <TopBar variant={screen.top} usage={account.usage} email={email ?? null} logsOpen={logsOpen} onLogs={openLogs} onChat={focusChat} contextOpen={contextOpen} onContext={screen.chat === "column" ? () => setContextOpen((was) => !was) : undefined} />
+              <TopBar variant={screen.top} usage={account.usage} email={email ?? null} editor={editorLive} logsOpen={logsOpen} onLogs={openLogs} onChat={focusChat} contextOpen={contextOpen} onContext={screen.chat === "column" ? () => setContextOpen((was) => !was) : undefined} />
             ) : null}
             <div className={screen.chat === "column" ? "cols" : "td-body"}>
               {screen.chat === "column" ? <WorkspaceSide onClose={closeContext} /> : null}

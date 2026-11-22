@@ -59,7 +59,6 @@ export const PLANS: Plan[] = [
     features: [
       "Your first scan, free: the people asking, in their own words",
       "Reply drafts, more scans and posting come with a plan",
-      "The video editor, with a watermark on exports",
       "Account deleted 30 days after sign-up unless you buy a plan",
     ],
   },
@@ -82,7 +81,6 @@ export const PLANS: Plan[] = [
       "Replies, DMs and emails drafted from your business plan",
       "A week of posts for X, LinkedIn and Threads, approved in one go",
       ALLOWANCE_LINE,
-      "The video editor, 1080p exports with no watermark",
     ],
   },
   {

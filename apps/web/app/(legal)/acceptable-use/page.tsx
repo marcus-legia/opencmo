@@ -38,10 +38,6 @@ export default function AcceptableUsePage() {
           ),
         },
         {
-          heading: "Images and video",
-          body: <p>Images and video Ferreto generates for you are screened before and after they are created. Requests and results that break this policy are refused. You may not create realistic images of real, identifiable people, or anything that imitates a brand, logo or product you do not own.</p>,
-        },
-        {
           heading: "Reporting",
           body: <p>Report abuse, misuse of a public post, or copyright concerns to <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>. We review every report.</p>,
         },
