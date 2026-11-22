@@ -656,7 +656,7 @@ export async function draftReplies(
         fake: () => ({ replies: refused.map((index) => ({ index, reply: "Talk to ten people who have the problem before you pitch anyone. Ask how they handle it today." })) }),
         agent: "sales",
         system: REPLY_SYSTEM,
-        prompt: `${documentsBlock(docs)}\n\n${avoid.length ? `Words to avoid: ${avoid.join(", ")}\n\n` : ""}${refused
+        prompt: `${documentsBlock(docs)}\n\n${voice ? `${voice}\n\n` : ""}${avoid.length ? `Words to avoid: ${avoid.join(", ")}\n\n` : ""}${refused
           .map((index) => {
             const draft = previous.get(index);
             const why = draft ? problemsOf(index, draft) : ["no reply was written"];
