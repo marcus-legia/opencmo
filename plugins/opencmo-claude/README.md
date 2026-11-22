@@ -7,7 +7,7 @@ claude.ai.
 
 1. Create an API key in Ferreto → Settings → API keys.
 2. `export OPENCMO_API_KEY=ocm_…` (and `OPENCMO_MCP_URL=…` to use another server than
-   `https://ferreto.io/api/mcp`).
+   `https://trungthanh-marcus--opencmo-mcp.us-east.modal.run/mcp`).
 3. Install the plugin:
 
    ```bash

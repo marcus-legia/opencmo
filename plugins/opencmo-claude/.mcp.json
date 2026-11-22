@@ -2,7 +2,7 @@
   "mcpServers": {
     "opencmo": {
       "type": "http",
-      "url": "${OPENCMO_MCP_URL:-https://ferreto.io/api/mcp}",
+      "url": "${OPENCMO_MCP_URL:-https://trungthanh-marcus--opencmo-mcp.us-east.modal.run/mcp}",
       "headers": { "Authorization": "Bearer ${OPENCMO_API_KEY}" }
     }
   }
