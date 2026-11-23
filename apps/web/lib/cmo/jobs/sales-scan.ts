@@ -11,7 +11,7 @@
 
 import { z } from "zod";
 
-import { subredditDetails } from "../social/research";
+import { redditThread, subredditDetails } from "../social/research";
 import { HnBudget, HnReadError, searchHn, type HnThread } from "../social/hn";
 import { searchReddit, SocialReadError, type RedditThread } from "../social/reddit";
 import {
@@ -541,6 +541,40 @@ function fakeSummary(t: RedditThread): string {
  * P5 R1: each community's rules, read as data and cached for a week, decide whether the product may be named. Shared
  * by the scan and `sales_reply_drafts` (free scan A5), which reads them again only when the cache is stale.
  */
+/**
+ * The search answer comes trimmed: a Reddit thread has its title but not what the person wrote (owner, 2026-11-23:
+ * "show me their post so I can read it before I reply"). Reads the post of each Reddit thread still without text, at
+ * most MAX_CARDS lookups, so the card shows it and the reply idea answers it. A read that fails keeps the title only.
+ * Fills `thread.text` in place.
+ */
+export async function readRedditPosts(ctx: JobContext, items: { thread: ScanThread }[]): Promise<void> {
+  const bare = items.filter((r) => r.thread.platform === "reddit" && !r.thread.text.trim()).slice(0, MAX_CARDS);
+  if (!bare.length) return;
+  const budget = new ScBudget(MAX_CARDS);
+  await ctx.step(
+    "read_post",
+    `Reading ${bare.length === 1 ? "the post" : `${bare.length} posts`}`,
+    async () => {
+      const read = await Promise.all(
+        bare.map(async (r) => {
+          try {
+            const { post } = await redditThread(r.thread.url, budget, 1);
+            return post?.text.trim() ? post.text : null;
+          } catch (error) {
+            if (!(error instanceof SocialReadError)) throw error;
+            return null;
+          }
+        }),
+      );
+      bare.forEach((r, i) => {
+        if (read[i]) r.thread = { ...r.thread, text: read[i]! };
+      });
+      return read.filter(Boolean).length;
+    },
+    (n) => `${n} ${n === 1 ? "post" : "posts"} read`,
+  );
+}
+
 export async function readCommunityRules(ctx: JobContext, names: string[]): Promise<Record<string, RuleRead>> {
   const out = new Map<string, RuleRead>();
   const unread: { name: string; rules: string }[] = [];
@@ -1077,6 +1111,8 @@ export async function salesScan(ctx: JobContext): Promise<SalesScanOutput & JobO
     await ctx.step("create_card", "No conversations worth joining today", async () => 0);
     return output(scanned.length, { cards: 0 });
   }
+
+  await readRedditPosts(ctx, ranked);
 
   // P5 R1: each community's rules decide whether the product may be named.
   const verdicts = await ctx.step("check_rules", "Reading each community's rules", async () =>

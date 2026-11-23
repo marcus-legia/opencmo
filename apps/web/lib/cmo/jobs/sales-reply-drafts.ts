@@ -12,7 +12,7 @@ import { voiceBlock } from "../writer/context";
 import { safeForSales } from "../sales/ban-risk";
 import { recall } from "./context";
 import type { JobContext, JobOutput } from "./runner";
-import { draftReplies, readCommunityRules, subredditOf, type DraftTarget, type RuleRead } from "./sales-scan";
+import { draftReplies, readCommunityRules, readRedditPosts, subredditOf, type DraftTarget, type RuleRead } from "./sales-scan";
 import { mayMention, type SubredditVerdict, type UndraftedOpportunity } from "./types";
 
 /** The newest cards a run drafts: as many as two scans' worth, inside one model call. */
@@ -115,6 +115,8 @@ export async function salesReplyDrafts(ctx: JobContext): Promise<SalesReplyDraft
   }
   if (!planned.length) return { drafted: 0, cards: cards.length, refund: true };
 
+  // A card saved from a trimmed search has no post text: read it so the idea answers what the person wrote.
+  await readRedditPosts(ctx, targets);
   const { replyFor, gen } = await draftReplies(ctx, { docs, memories, voice, threads: targets });
 
   const drafted = await ctx.step(

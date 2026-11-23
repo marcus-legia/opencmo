@@ -18,6 +18,10 @@ export const ThreadSchema = z.object({
   postedAt: iso.nullable(),
   comments: z.number().int().min(0).nullable(),
   title: z.string().max(300),
+  /** What the person wrote (owner, 2026-11-23: read it before replying). Optional so older samples still parse. */
+  body: z.string().max(1500).optional(),
+  /** Who wrote it ("u/name", "@name"); empty when the source did not say. */
+  author: z.string().max(100).optional(),
   url: z.url(),
   /** The subreddit's rule for this thread. `skipped` threads get no draft. */
   rule: SalesRuleSchema,
