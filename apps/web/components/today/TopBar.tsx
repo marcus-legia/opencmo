@@ -13,6 +13,7 @@ import type { Autopilot } from "@/lib/screens/settings";
 
 import { publishAutopilot, useAutopilotChanges } from "./autopilot";
 
+import { CompanyLogo } from "./company-logo";
 import { siteLabel, useWorkspace } from "./workspace";
 
 /** What each view reads: hovering or focusing its link reads it ahead, so the click lands on data, not "Loading…". */
@@ -147,6 +148,9 @@ function UsageChip({ usage }: { usage: PlanUsage }) {
 }
 
 /** The business switcher: the product's initial and name, a menu with what has no other place in the frame. */
+/** Each view's section colour on the top bar (owner, 2026-11-23). The Feed stays neutral. */
+const NAV_SEC: Record<string, string | undefined> = { sales: "find", post: "post", analytics: "stats" };
+
 function Project({ menu }: { menu: ReactNode }) {
   const ws = useWorkspace();
   const name = ws.name ?? siteLabel(ws.site) ?? "Your business";
@@ -154,9 +158,7 @@ function Project({ menu }: { menu: ReactNode }) {
   return (
     <details className="td-menuwrap" ref={ref} onClick={(e) => (e.target as HTMLElement).closest("a") && ref.current?.removeAttribute("open")}>
       <summary className="pill" style={{ color: "var(--text)", gap: "8px", border: "0", padding: "0 8px", listStyle: "none" }}>
-        <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: "20px", height: "20px", borderRadius: "5px", background: "var(--accent)", color: "var(--accent-ink)", fontWeight: "700", fontSize: "12px" }}>
-          {name.charAt(0).toUpperCase()}
-        </span>
+        <CompanyLogo name={name} site={ws.site} size={24} />
         <span className="td-project-name" style={{ fontWeight: "600" }}>{name}</span>
         <Chevron />
       </summary>
@@ -283,7 +285,7 @@ export function TopBar({
         <div style={{ flex: "1 1 auto" }}></div>
         <nav className="td-views" aria-label="View">
           {views.map((v) => (
-            <Link key={v.id} href={v.href} aria-current={current === v.id ? "page" : undefined} onMouseEnter={readAhead(v.id)} onFocus={readAhead(v.id)}>
+            <Link key={v.id} href={v.href} data-sec={NAV_SEC[v.id]} aria-current={current === v.id ? "page" : undefined} onMouseEnter={readAhead(v.id)} onFocus={readAhead(v.id)}>
               {v.icon}
               {v.label}
             </Link>

@@ -28,7 +28,8 @@ test("add a competitor by website, see it in Research and the left panel, remove
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/app/research");
   await expect(page.getByRole("heading", { level: 1, name: "Competitors" })).toBeVisible();
-  await expect(page.getByTestId("research-empty")).toBeVisible();
+  // Before any is kept: the ones the Competitors document names, or "No competitors yet" when it names none.
+  await expect(page.getByTestId("research-named").or(page.getByTestId("research-empty"))).toBeVisible();
 
   await page.getByLabel("Add one").fill("chaser.test");
   await page.getByRole("button", { name: "Add", exact: true }).click();
@@ -58,7 +59,8 @@ test("add a competitor by website, see it in Research and the left panel, remove
 
   page.once("dialog", (dialog) => void dialog.accept());
   await card.getByRole("button", { name: "Remove" }).click();
-  await expect(page.getByTestId("research-empty")).toBeVisible();
+  // Before any is kept: the ones the Competitors document names, or "No competitors yet" when it names none.
+  await expect(page.getByTestId("research-named").or(page.getByTestId("research-empty"))).toBeVisible();
   const { count } = await db.from("competitors").select("id", { count: "exact", head: true }).eq("user_id", userId);
   expect(count).toBe(0);
 });

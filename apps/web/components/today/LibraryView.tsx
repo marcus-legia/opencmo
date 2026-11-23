@@ -13,6 +13,7 @@ import { useShellState } from "@/components/shell-v2/ShellState";
 import { PLATFORM_LABEL, SALES_PLATFORMS, type SalesPlatform } from "@/lib/cmo/social/conversations";
 import type { LibraryEntry } from "@/lib/cmo/library";
 import type { LibraryThemeView } from "@/lib/screens/library";
+import { hasLogo, PlatformBadge } from "./platform-logos";
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
@@ -49,7 +50,7 @@ function ThemeCard({ theme, onWrite }: { theme: LibraryThemeView; onWrite: (name
   // Two or three quotes, one per conversation, pain first: the words people used, never a title.
   const quotes = theme.entries.flatMap((entry) => {
     const quote = entry.quotes.find((q) => q.kind === "pain") ?? entry.quotes[0];
-    return quote ? [{ id: entry.opportunityId, text: quote.text, where: whereSaid(entry) }] : [];
+    return quote ? [{ id: entry.opportunityId, text: quote.text, where: whereSaid(entry), platform: entry.platform }] : [];
   });
   return (
     <section className="card" data-testid="library-theme" aria-labelledby={`theme-${theme.id}`} style={{ display: "flex", flexDirection: "column", gap: "10px", minWidth: "0" }}>
@@ -65,8 +66,11 @@ function ThemeCard({ theme, onWrite }: { theme: LibraryThemeView; onWrite: (name
       {quotes.length ? (
         <ul style={{ listStyle: "none", margin: "0", padding: "0", display: "flex", flexDirection: "column", gap: "6px" }}>
           {quotes.map((q) => (
-            <li key={q.id} data-testid="library-quote" style={{ padding: "8px 10px", borderRadius: "7px", background: "var(--hover)", fontSize: "13.5px", lineHeight: "1.5" }}>
-              “{bare(q.text)}” <span className="meta">{q.where}</span>
+            <li key={q.id} data-testid="library-quote" style={{ display: "flex", gap: "10px", alignItems: "flex-start", padding: "10px 12px", borderRadius: "11px", background: "var(--raised)", fontSize: "14px", lineHeight: "1.5" }}>
+              {hasLogo(q.platform) ? <PlatformBadge platform={q.platform} size={20} /> : null}
+              <span>
+                “{bare(q.text)}” <span className="meta">{q.where}</span>
+              </span>
             </li>
           ))}
         </ul>
@@ -107,12 +111,15 @@ export function LibraryView() {
   ];
 
   return (
-    <div style={{ maxWidth: "1180px", margin: "0 auto", padding: "22px 24px 40px" }} data-testid="v2-library">
-      <div style={{ display: "flex", alignItems: "baseline", gap: "12px", flexWrap: "wrap" }}>
-        <h1 style={{ margin: "0", fontSize: "22px", fontWeight: "600", letterSpacing: "-0.4px" }}>Library</h1>
-        <span className="meta" style={{ fontSize: "14px" }}>
-          What people said, saved from every Sales scan. Posts are written from here.
+    <div data-sec="find" style={{ maxWidth: "1180px", margin: "0 auto", padding: "22px 24px 40px" }} data-testid="v2-library">
+      <div className="sec-band">
+        <span className="sec-tile">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5v14ZM4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5" />
+          </svg>
         </span>
+        <h1>Library</h1>
+        {counts && counts.thisWeek > 0 ? <span className="sec-chip" style={{ color: "var(--ok)" }}>+{counts.thisWeek} this week</span> : null}
       </div>
 
       <nav aria-label="Filter by source" style={{ display: "flex", gap: "6px", flexWrap: "wrap", margin: "16px 0 14px" }}>
@@ -125,22 +132,18 @@ export function LibraryView() {
               scroll={false}
               aria-current={on ? "page" : undefined}
               data-testid="library-filter"
-              style={{
-                height: "30px",
-                padding: "0 12px",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "6px",
-                borderRadius: "999px",
-                border: `1px solid ${on ? "var(--text)" : "var(--line-2)"}`,
-                background: on ? "var(--text)" : "transparent",
-                color: on ? "var(--bg)" : "var(--muted)",
-                fontSize: "13px",
-                fontWeight: "500",
-                textDecoration: "none",
-              }}
+              className="pick-btn"
+              title={t.label}
+              style={{ textDecoration: "none", paddingLeft: t.id ? "6px" : "12px", opacity: t.n === 0 && !on ? 0.5 : undefined, ...(on ? { background: "var(--sec)", borderColor: "var(--sec)", color: "#fff" } : {}) }}
             >
-              {t.label}
+              {t.id && hasLogo(t.id) ? (
+                <>
+                  <PlatformBadge platform={t.id} size={24} />
+                  <span className="sr-only">{t.label}</span>
+                </>
+              ) : (
+                t.label
+              )}
               {t.n !== null ? <span className="mono">{t.n}</span> : null}
             </Link>
           );

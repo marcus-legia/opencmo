@@ -14,6 +14,7 @@ import { PLATFORM_LABEL, PLATFORMS, type Platform } from "@/lib/screens/common";
 import type { SettingsScreen } from "@/lib/screens/settings";
 
 import { cx, Panel } from "../parts";
+import { hasLogo, PlatformBadge } from "@/components/today/platform-logos";
 
 type Account = SettingsScreen["accounts"][number];
 
@@ -105,7 +106,7 @@ export function AccountsPanel({ accounts: given, live }: { accounts: Account[]; 
   }
 
   return (
-    <Panel id={ACCOUNTS_PANEL_ID} title="Connected accounts" sub="Posts go out on your own accounts, only at times you approved. One account per platform.">
+    <Panel id={ACCOUNTS_PANEL_ID} title="Connected accounts" sub="Your own accounts, one per platform. Nothing posts without your OK.">
       {note ? (
         <p className={cx("v2-panel-body", note.ok ? "scr-status-line is-ok" : "scr-status-line is-stuck")} role={note.ok ? "status" : "alert"}>
           {note.text}
@@ -123,6 +124,7 @@ export function AccountsPanel({ accounts: given, live }: { accounts: Account[]; 
             return (
               <div key={a.id} className={cx("scr-account", a.status === "reconnect" && "is-stuck")} data-testid="settings-account" data-platform={a.platform}>
                 <span className="scr-account-who">
+                  {hasLogo(a.platform) ? <PlatformBadge platform={a.platform} size={30} /> : null}
                   {a.avatarUrl ? <img src={a.avatarUrl} alt="" width={24} height={24} /> : null}
                   <span>
                     <b>{name}</b>

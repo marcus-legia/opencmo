@@ -1,0 +1,132 @@
+/*
+ * App redesign, owner 2026-11-23 (canvas "Ferreto app redesign"): fewer words, platforms as coloured icons, one accent
+ * colour per section, toggles over selects, the reply idea in Idea / Solution colours, a thin scrollbar.
+ */
+
+/* Section colours. Each page sets `--sec` / `--sec-wash` / `--sec-line` on its root (`data-sec`). */
+.k {
+  --sec-find: #3b4cca;  --sec-find-wash: #eceefb;  --sec-find-line: #d9ddf5;
+  --sec-idea: #b45309;  --sec-idea-ink: #92400e;   --sec-idea-wash: #fdf1e3; --sec-idea-line: #f2d9b8;
+  --sec-sol: #15803d;   --sec-sol-ink: #166534;    --sec-sol-wash: #e6f4ea;  --sec-sol-line: #cfe8d6;
+  --sec-post: #0e7490;  --sec-post-wash: #e0f2f7;  --sec-post-line: #c5e5ee;
+  --sec-stats: #be185d; --sec-stats-wash: #fce7f1; --sec-stats-line: #f6cde0;
+  --sec-biz: #6b5b3e;   --sec-biz-wash: #f1ece2;   --sec-biz-line: #e4dccb;
+  --say: #4b4540;
+}
+html[data-theme="dark"] .k {
+  --sec-find: #8b97ff;  --sec-find-wash: #1e2347;  --sec-find-line: #2c3366;
+  --sec-idea: #f0a04b;  --sec-idea-ink: #f5b76e;   --sec-idea-wash: #33240f; --sec-idea-line: #4a3517;
+  --sec-sol: #4cc497;   --sec-sol-ink: #6fd3ab;    --sec-sol-wash: #14301f;  --sec-sol-line: #1f4a30;
+  --sec-post: #4fc3dc;  --sec-post-wash: #0f2c35;  --sec-post-line: #18414d;
+  --sec-stats: #f472b6; --sec-stats-wash: #3a1428; --sec-stats-line: #55203c;
+  --sec-biz: #c9b58f;   --sec-biz-wash: #2a251c;   --sec-biz-line: #3b3428;
+  --say: #c9c1b6;
+}
+[data-sec="find"]  { --sec: var(--sec-find);  --sec-wash: var(--sec-find-wash);  --sec-line: var(--sec-find-line); }
+[data-sec="post"]  { --sec: var(--sec-post);  --sec-wash: var(--sec-post-wash);  --sec-line: var(--sec-post-line); }
+[data-sec="stats"] { --sec: var(--sec-stats); --sec-wash: var(--sec-stats-wash); --sec-line: var(--sec-stats-line); }
+[data-sec="biz"]   { --sec: var(--sec-biz);   --sec-wash: var(--sec-biz-wash);   --sec-line: var(--sec-biz-line); }
+[data-sec="sol"]   { --sec: var(--sec-sol);   --sec-wash: var(--sec-sol-wash);   --sec-line: var(--sec-sol-line); }
+
+/* A page head on its section's wash: the coloured tile, the title, the actions. */
+.sec-band { background: var(--sec-wash); border: 1px solid var(--sec-line); border-radius: 16px; padding: 16px 18px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 18px; }
+.sec-tile { width: 42px; height: 42px; border-radius: 12px; background: var(--sec); color: #fff; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+html[data-theme="dark"] .sec-tile { color: #0e0d0c; }
+.sec-tile svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.sec-band h1 { margin: 0; font-size: 24px; font-weight: 650; letter-spacing: -0.02em; }
+.sec-band .primary { background: var(--sec); border-color: var(--sec); }
+.sec-chip { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 9px; border-radius: 999px; background: var(--panel); font-size: 12px; font-weight: 650; color: var(--sec); }
+.sec-stat { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 12px; border-radius: 10px; background: var(--panel); font-weight: 700; font-size: 14px; }
+.sec-stat svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* Platform badge: the white mark on the brand colour. */
+.pl-badge { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+.pl-row { display: inline-flex; align-items: center; gap: 5px; }
+
+/* Company logo (competitors, you). */
+.co-logo { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; overflow: hidden; background: #fff; border: 1px solid var(--line); box-sizing: border-box; }
+.co-logo img { width: 100%; height: 100%; object-fit: contain; }
+.co-logo[data-letter] { color: #fff; font-weight: 700; border: 0; }
+.co-you { box-shadow: 0 0 0 2px var(--panel), 0 0 0 3.5px var(--sec-find); }
+
+/* The reply idea: Idea bold amber, Solution bold green, the words to say in italics under each (owner, 2026-11-23). */
+.idea-box { background: var(--sec-idea-wash); border: 1px solid var(--sec-idea-line); border-radius: 14px; padding: 14px 16px; display: flex; flex-direction: column; gap: 9px; }
+.idea-line { display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+.idea-key { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 9px; border-radius: 999px; font-size: 10.5px; font-weight: 750; letter-spacing: 0.09em; text-transform: uppercase; color: #fff; flex: 0 0 auto; margin-top: 1px; }
+html[data-theme="dark"] .idea-key { color: #0e0d0c; }
+.idea-key svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.idea-key[data-k="idea"] { background: var(--sec-idea); }
+.idea-key[data-k="solution"] { background: var(--sec-sol); }
+.idea-text { font-weight: 700; font-size: 15px; line-height: 1.45; flex: 1 1 200px; min-width: 0; }
+.idea-text[data-k="idea"] { color: var(--sec-idea-ink); }
+.idea-text[data-k="solution"] { color: var(--sec-sol-ink); }
+.idea-text[data-empty] { font-weight: 500; color: var(--subtle); font-style: italic; }
+.idea-say { margin: 0; padding-left: 12px; font-style: italic; color: var(--say); font-size: 14.5px; line-height: 1.55; border-left: 2px solid var(--sec-idea-line); }
+.idea-say[data-k="solution"] { border-left-color: var(--sec-sol-line); }
+.idea-badge { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: 999px; font-size: 12px; font-weight: 700; background: #fef3c7; color: var(--sec-idea-ink); }
+.idea-badge[data-mine] { background: #dcfce7; color: var(--sec-sol-ink); }
+html[data-theme="dark"] .idea-badge { background: var(--sec-idea-line); }
+html[data-theme="dark"] .idea-badge[data-mine] { background: var(--sec-sol-line); }
+.idea-badge svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.idea-meter { flex: 1 1 100px; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; min-width: 80px; }
+.idea-meter > span { display: block; height: 100%; background: var(--sec-sol); transition: width 0.16s; }
+.idea-mine { width: 100%; box-sizing: border-box; padding: 11px 13px; border-radius: 12px; border: 1.5px solid var(--sec-idea-line); background: var(--panel); color: var(--text); font: inherit; font-size: 15px; line-height: 1.55; resize: vertical; }
+.idea-mine:focus { outline: none; border-color: var(--sec-idea); }
+
+/* Day toggles and platform toggles: a row of buttons that switch on and off. */
+.day-row { display: flex; gap: 5px; flex-wrap: wrap; }
+.day-btn { width: 36px; height: 36px; border-radius: 10px; border: 1.5px solid var(--line-2); background: var(--panel); color: var(--muted); font: inherit; font-size: 13px; font-weight: 650; cursor: pointer; }
+.day-btn[aria-pressed="true"] { background: var(--sec, var(--accent)); border-color: var(--sec, var(--accent)); color: #fff; }
+.pick-btn { display: inline-flex; align-items: center; gap: 7px; height: 38px; padding: 0 12px 0 6px; border-radius: 11px; border: 1.5px solid var(--line-2); background: var(--panel); color: var(--text); font: inherit; font-size: 14px; font-weight: 550; cursor: pointer; }
+.pick-btn[aria-pressed="true"] { border-color: var(--sec, var(--accent)); box-shadow: inset 0 0 0 1px var(--sec, var(--accent)); }
+
+/* A small switch, for a row that is on or off. */
+.sw { width: 40px; height: 24px; border-radius: 999px; border: 0; padding: 0; position: relative; background: var(--line-2); cursor: pointer; flex: 0 0 auto; }
+.sw::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2); transition: left 0.16s; }
+.sw[aria-checked="true"] { background: var(--sec, var(--accent)); }
+.sw[aria-checked="true"]::after { left: 19px; }
+.sw:disabled { opacity: 0.5; cursor: default; }
+
+/* Score as a coloured square with the number: the label lives in its title. */
+.score-sq { width: 38px; height: 38px; border-radius: 11px; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14.5px; flex: 0 0 auto; background: var(--sec-find-wash); color: var(--sec-find); }
+.score-sq[data-strong] { background: var(--sec-find); color: #fff; }
+html[data-theme="dark"] .score-sq[data-strong] { color: #0e0d0c; }
+.score-sq[data-weak] { background: var(--raised); color: var(--muted); }
+.icon-meta { display: inline-flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.icon-meta > span { display: inline-flex; align-items: center; gap: 4px; }
+.icon-meta svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* Top bar: the open page in its section colour. */
+.k .td-views a[data-sec][aria-current="page"], .k .td-views button[data-sec][aria-current="page"] { color: var(--sec); }
+
+/* Scrollbar: thin, shown only while the pointer is over the area, no track or arrows (owner, 2026-11-23). */
+.k, .k * { scrollbar-width: thin; scrollbar-color: transparent transparent; }
+.k :hover { scrollbar-color: var(--line-2) transparent; }
+.k ::-webkit-scrollbar { width: 8px; height: 8px; }
+.k ::-webkit-scrollbar-track { background: transparent; }
+.k ::-webkit-scrollbar-button { display: none; }
+.k ::-webkit-scrollbar-thumb { background: transparent; border: 2px solid transparent; border-radius: 8px; background-clip: padding-box; }
+.k :hover::-webkit-scrollbar-thumb { background-color: var(--line-2); }
+.k .td-views a[data-sec] svg { color: var(--sec); }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+/* A row tile that holds a platform badge is the badge itself. */
+.k .tile:has(> .pl-badge) { background: none; border: 0; padding: 0; }
+.k .tile > .pl-badge { width: 100% !important; height: 100% !important; }
+.k .ask { flex-wrap: wrap; }
+.k .ask input { flex: 1 1 200px; }
+.k [data-sec] .ask .primary, .k [data-sec] .tabs [aria-selected="true"] { --accent: var(--sec); }
+.k [data-sec] .ask .primary { background: var(--sec); border-color: var(--sec); }
+.k [data-sec] .tabs [aria-selected="true"] { color: var(--sec); border-bottom-color: var(--sec); }
+
+/* Feed: the week's flow as coloured steps, icon and number; the word shows on wide screens only. */
+.k .flow.flow-v3 { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; border: 0; padding: 0; background: none; }
+.k .flow-v3 .flow-step { display: flex; align-items: center; gap: 8px; height: auto; padding: 10px 12px; border-radius: 12px; border: 1.5px solid transparent; background: var(--fs-wash); color: var(--fs); font: inherit; cursor: pointer; min-width: 0; }
+.k .flow-v3 .flow-step svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; flex: 0 0 auto; }
+.k .flow-v3 .flow-step b { font-size: 19px; font-weight: 650; color: inherit; }
+.k .flow-v3 .flow-step .flow-label { font-size: 12px; font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.k .flow-v3 .flow-step[aria-pressed="true"], .k .flow-v3 .flow-step:hover { border-color: var(--fs); background: var(--fs-wash); color: var(--fs); }
+@media (max-width: 1100px) { .k .flow-v3 .flow-step .flow-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); } }
+.k [data-sec] .seg [aria-selected="true"] { background: var(--sec); color: #fff; }
+html[data-theme="dark"] .k [data-sec] .seg [aria-selected="true"] { color: #0e0d0c; }
+.day-btn[data-on] { background: var(--sec, var(--accent)); border-color: var(--sec, var(--accent)); color: #fff; }
+.pick-btn:disabled { cursor: default; opacity: 0.7; }

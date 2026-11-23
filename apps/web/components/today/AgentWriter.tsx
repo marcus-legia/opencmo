@@ -15,6 +15,7 @@ import { PLATFORM_LABEL } from "@/lib/screens/common";
 import type { WriterScreen } from "@/lib/screens/writer";
 
 import { KIND_ICON, PLATFORM_ICON } from "./cards";
+import { PlatformBadge } from "./platform-logos";
 import { whereSaid } from "./LibraryView";
 import { PostViewSwitch } from "./TopBar";
 import { useDecide } from "./useDecide";
@@ -199,39 +200,30 @@ export function AgentWriter() {
   };
 
   return (
-    <div style={{ display: "flex", flexWrap: "wrap", maxWidth: "1320px", margin: "0 auto", padding: "22px 24px 40px", gap: "24px" }} data-testid="v2-writer">
+    <div data-sec="post" style={{ display: "flex", flexWrap: "wrap", maxWidth: "1320px", margin: "0 auto", padding: "22px 24px 40px", gap: "24px" }} data-testid="v2-writer">
       <main style={{ flex: "999 1 600px", minWidth: "0" }}>
-        <div style={{ display: "flex", alignItems: "flex-start", gap: "14px", flexWrap: "wrap" }}>
-          <span className="tile">
-            <svg className="i" viewBox="0 0 24 24" aria-hidden="true" style={{ width: "20px", height: "20px" }}>
+        <div className="sec-band">
+          <span className="sec-tile">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M12 20h9" />
               <path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z" />
             </svg>
           </span>
-          <div style={{ flex: "1 1 300px", minWidth: "0" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <h1 style={{ margin: "0", fontSize: "22px", fontWeight: "600", letterSpacing: "-0.4px" }}>Posts</h1>
-              {thisWeek.length ? (
-                <span className="chip">
-                  <span className="live"></span>
-                  {thisWeek.length} {thisWeek.length === 1 ? "draft" : "drafts"} this week
-                </span>
-              ) : null}
-              <span style={{ marginLeft: "auto" }}>
-                <PostViewSwitch current="list" />
-              </span>
-            </div>
-            <p style={{ margin: "4px 0 8px", color: "var(--muted)", fontSize: "14px", maxWidth: "640px" }}>
-              Posts for X, LinkedIn and Threads, written from what people asked in Sales. Nothing is posted until you approve it.
-            </p>
-            <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
-              <span className="meta">Reads</span>
-              <span className="chip">Library</span>
-              <span className="chip">Post plan</span>
-              <span className="chip">Product</span>
-              <span className="chip">Brand</span>
-            </div>
-          </div>
+          <h1>Posts</h1>
+          {thisWeek.length ? (
+            <span className="sec-chip">
+              <span className="live"></span>
+              {thisWeek.length} this week
+            </span>
+          ) : null}
+          <span className="pl-row" aria-label="For X, LinkedIn and Threads">
+            <PlatformBadge platform="x" size={20} />
+            <PlatformBadge platform="linkedin" size={20} />
+            <PlatformBadge platform="threads" size={20} />
+          </span>
+          <span style={{ marginLeft: "auto" }}>
+            <PostViewSwitch current="list" />
+          </span>
         </div>
 
         <AllowanceBanner state={usageState} />
@@ -253,16 +245,15 @@ export function AgentWriter() {
             Ask for a post
           </label>
           <input id="ask-writer" type="text" placeholder="Ask for a post" value={ask} onChange={(e) => setAsk(e.target.value)} />
-          <label htmlFor="ask-kind" style={{ position: "absolute", width: "1px", height: "1px", overflow: "hidden", clip: "rect(0 0 0 0)" }}>
-            Kind
-          </label>
-          <select id="ask-kind" className="pill" style={{ height: "30px" }} value={askKind} onChange={(e) => setAskKind(e.target.value as typeof askKind)}>
+          {/* Which platform, as the platforms' own icons: a toggle each instead of a select (owner, 2026-11-23). */}
+          <span role="group" aria-label="Platform" style={{ display: "inline-flex", gap: "6px", flexWrap: "wrap" }}>
             {ASK_KINDS.map((k) => (
-              <option key={k.id} value={k.id}>
-                {k.label}
-              </option>
+              <button key={k.id} type="button" className="pick-btn" aria-pressed={askKind === k.id} onClick={() => setAskKind(k.id)} data-testid={`ask-kind-${k.id}`}>
+                <PlatformBadge platform={k.id === "post" ? "x" : k.id} size={24} />
+                {k.label.replace(/ post$/, "")}
+              </button>
             ))}
-          </select>
+          </span>
           <button type="submit" className="primary">
             Write it
           </button>

@@ -3,9 +3,9 @@
 import { useState } from "react";
 
 import { useWorkspace } from "@/components/today/workspace";
-import { Button } from "@/components/ui";
 
 import { Panel } from "../parts";
+import { hasLogo, PlatformBadge } from "@/components/today/platform-logos";
 
 /** Where a founder's link can sit: their profile and their posts on each place they reply or post (wave 3 §7). */
 export const TRACKING_SOURCES = [
@@ -53,8 +53,8 @@ export function TrackingPanel() {
   return (
     <Panel id="settings-tracking" title="Tracking">
       <div className="v2-panel-body scr-form" data-testid="settings-tracking">
-        <p className="scr-small" style={{ margin: "0" }}>
-          Put these links in your profile and in posts where a link is allowed. Your own analytics then shows which place sent each visitor.
+        <p className="scr-small scr-muted" style={{ margin: "0" }}>
+          One link per place, for your profile and posts.
         </p>
         {site ? (
           <ul style={{ listStyle: "none", margin: "0", padding: "0", display: "flex", flexDirection: "column", gap: "8px" }}>
@@ -63,11 +63,14 @@ export function TrackingPanel() {
               if (!link) return null;
               return (
                 <li key={src} style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }} data-testid="tracking-link">
-                  <span style={{ width: "120px", flex: "0 0 auto" }}>{label}</span>
+                  {hasLogo(src) ? <PlatformBadge platform={src} size={28} label={label} /> : <span style={{ width: "120px", flex: "0 0 auto" }}>{label}</span>}
                   <code style={{ flex: "1 1 240px", minWidth: "0", overflowWrap: "anywhere", fontSize: "12.5px" }}>{link}</code>
-                  <Button type="button" variant="secondary" onClick={() => void copy(src, link)} aria-label={`Copy the ${label} link`}>
-                    {copied === src ? "Copied" : "Copy"}
-                  </Button>
+                  <button type="button" className="ib" onClick={() => void copy(src, link)} aria-label={`Copy the ${label} link`} title={copied === src ? "Copied" : "Copy"} style={copied === src ? { color: "var(--ok)", borderColor: "var(--ok)" } : undefined}>
+                    <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
+                      {copied === src ? <path d="M20 6 9 17l-5-5" /> : <><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></>}
+                    </svg>
+                    <span className="sr-only">{copied === src ? "Copied" : "Copy"}</span>
+                  </button>
                 </li>
               );
             })}
@@ -77,9 +80,6 @@ export function TrackingPanel() {
             Add your website in Your business to get your links.
           </p>
         )}
-        <p className="scr-small scr-muted" style={{ margin: "0" }}>
-          How &quot;Signed up&quot; is counted: Ferreto adds no script to your site, so it counts the people you mark as signed up in Sales › Following up. Your analytics shows the visits these links bring.
-        </p>
       </div>
     </Panel>
   );

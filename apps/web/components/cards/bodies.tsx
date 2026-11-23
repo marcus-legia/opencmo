@@ -1,6 +1,7 @@
 
 "use client";
 
+import { IdeaDraft } from "@/components/today/IdeaDraft";
 import Link from "next/link";
 import { type ReactNode, useMemo, useState } from "react";
 
@@ -299,10 +300,15 @@ export function ReplyBody({ body }: { body: Body<"reply"> }) {
       {/* "You post it yourself" is on the card's meta line already. */}
       {body.draft.trim() ? (
         <>
+          <IdeaDraft draft={body.draft} compact />
           <p className="v2-card-meta" data-testid="reply-idea-badge">
-            <b>Reply idea</b> · write it in your own words before you post it.
+            <span className="idea-badge">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+              </svg>
+              Write it in your own words
+            </span>
           </p>
-          <div className="v2-card-draft">{body.draft}</div>
         </>
       ) : (
         // A card raised before its reply was written (a free scan, or a draft that failed its checks): the reply is

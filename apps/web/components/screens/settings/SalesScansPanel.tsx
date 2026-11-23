@@ -11,6 +11,10 @@ import { Panel } from "../parts";
  * Settings › Sales scans (wave 3, C6): how often Sales scans on its own (A5's `sales_settings.cadence`), Monday,
  * Wednesday and Friday by default. Scan now on the Sales page works any day; where Sales looks stays on its own tab.
  */
+const WEEK = ["M", "T", "W", "T", "F", "S", "S"];
+/** The days each choice scans on, Monday = 0. */
+const SCAN_DAYS: Record<Cadence, number[]> = { mwf: [0, 2, 4], weekdays: [0, 1, 2, 3, 4], monday: [0] };
+
 export function SalesScansPanel() {
   const [cadence, setCadence] = useState<Cadence | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -46,20 +50,28 @@ export function SalesScansPanel() {
   return (
     <Panel id="settings-sales-scans" title="Sales scans">
       <div className="v2-panel-body scr-form" data-testid="settings-sales-scans">
-        <label className="v2-field" htmlFor="scan-cadence">
-          When Sales scans on its own
-          <select id="scan-cadence" className="v2-input" value={cadence ?? ""} disabled={cadence === null || busy} onChange={(e) => void change(e.target.value as Cadence)}>
-            {cadence === null ? <option value="">Loading…</option> : null}
-            {SCAN_CADENCES.map((c) => (
-              <option key={c} value={c}>
-                {CADENCE_LABEL[c]}
-              </option>
-            ))}
-          </select>
-        </label>
-        <p className="scr-small scr-muted" style={{ margin: "0" }}>
-          Scans are part of your plan&apos;s monthly allowance. You can still press Scan now on the Sales page any day. Where Sales looks is in Sales › Settings.
-        </p>
+        {/* The days as a week of squares, one button per choice instead of a select (owner, 2026-11-23). */}
+        <div role="group" aria-label="When Sales scans on its own" data-sec="find" style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+          {SCAN_CADENCES.map((c) => (
+            <button
+              key={c}
+              type="button"
+              className="pick-btn"
+              aria-pressed={cadence === c}
+              disabled={cadence === null || busy}
+              onClick={() => void change(c)}
+              aria-label={CADENCE_LABEL[c]}
+              title={CADENCE_LABEL[c]}
+              style={{ height: "auto", padding: "8px 10px", justifyContent: "flex-start", gap: "4px" }}
+            >
+              {WEEK.map((d, i) => (
+                <span key={i} aria-hidden="true" className="day-btn" data-on={SCAN_DAYS[c].includes(i) || undefined} style={{ width: "30px", height: "30px", display: "inline-flex", alignItems: "center", justifyContent: "center", cursor: "inherit" }}>
+                  {d}
+                </span>
+              ))}
+            </button>
+          ))}
+        </div>
         {note ? (
           <p role="status" className="scr-small" style={{ margin: "0" }}>
             {note}

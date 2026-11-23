@@ -9,6 +9,7 @@ import { useShellState } from "@/components/shell-v2/ShellState";
 import { useScreen } from "@/components/screens/useScreen";
 import { BEST_HOURS, type Range } from "@/lib/screens/analytics";
 import { PLATFORM_LABEL } from "@/lib/screens/common";
+import { hasLogo, PlatformBadge } from "./platform-logos";
 
 const RANGES: { id: Range; label: string; title: string; compare: string }[] = [
   { id: 7, label: "Week", title: "This week", compare: "compared with last week" },
@@ -26,6 +27,14 @@ const postDay = (iso: string | undefined) => (iso ? new Intl.DateTimeFormat("en-
  * competitors' outliers. Numbers come from the connected accounts (`/screens/analytics`), the goal from the feed, the
  * replies from Sales and the outliers from Research; a block without data says so instead of drawing zeros.
  */
+/** The funnel's steps, one icon each, the same as the Context column's tiles. */
+const STEP_ICON = {
+  found: "M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14ZM20 20l-3.5-3.5",
+  replied: "M9 17 4 12l5-5M20 18v-2a4 4 0 0 0-4-4H4",
+  answered: "M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12Z",
+  signed: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM16 11l2 2 4-4",
+} as const;
+
 const SOURCE_LABEL: Record<FunnelRow["source"], string> = { all: "All sources", reddit: "Reddit", hn: "Hacker News", facebook: "Facebook groups", threads: "Threads" };
 
 /**
@@ -48,10 +57,10 @@ function FunnelSection({ days }: { days: number }) {
   const all = rows?.find((r) => r.source === "all") ?? null;
   const steps = all
     ? [
-        { label: "People found", n: all.found, of: null as string | null },
-        { label: "You replied", n: all.replied, of: rate(all.replied, all.found) && `${rate(all.replied, all.found)} of found` },
-        { label: "Answered back", n: all.answeredBack, of: rate(all.answeredBack, all.replied) && `${rate(all.answeredBack, all.replied)} of replies` },
-        { label: "Signed up", n: all.signedUp, of: all.signedUp ? "marked by you" : null },
+        { label: "People found", n: all.found, of: null as string | null, sec: "find", d: STEP_ICON.found },
+        { label: "You replied", n: all.replied, of: rate(all.replied, all.found) && `${rate(all.replied, all.found)} of found`, sec: "idea", d: STEP_ICON.replied },
+        { label: "Answered back", n: all.answeredBack, of: rate(all.answeredBack, all.replied) && `${rate(all.answeredBack, all.replied)} of replies`, sec: "post", d: STEP_ICON.answered },
+        { label: "Signed up", n: all.signedUp, of: all.signedUp ? "marked by you" : null, sec: "sol", d: STEP_ICON.signed },
       ]
     : [];
   const top = Math.max(1, all?.found ?? 0);
@@ -68,9 +77,16 @@ function FunnelSection({ days }: { days: number }) {
         <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: "10px" }}>
           {steps.map((s) => (
             <div key={s.label} data-testid="analytics-funnel-step" style={{ display: "grid", gridTemplateColumns: "minmax(0,140px) minmax(0,1fr) minmax(0,180px)", gap: "10px", alignItems: "center" }}>
-              <span style={{ fontSize: "13.5px" }}>{s.label}</span>
-              <span style={{ height: "10px", borderRadius: "5px", background: "var(--line-2)" }}>
-                <span style={{ display: "block", width: `${Math.round((s.n / top) * 100)}%`, height: "10px", borderRadius: "5px", background: "var(--accent)" }}></span>
+              <span style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13.5px" }}>
+                <span style={{ width: "30px", height: "30px", borderRadius: "9px", background: `var(--sec-${s.sec}-wash)`, color: `var(--sec-${s.sec})`, display: "inline-flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto" }}>
+                  <svg viewBox="0 0 24 24" aria-hidden="true" style={{ width: "16px", height: "16px", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round" }}>
+                    <path d={s.d} />
+                  </svg>
+                </span>
+                {s.label}
+              </span>
+              <span style={{ height: "14px", borderRadius: "7px", background: "var(--raised)" }}>
+                <span style={{ display: "block", width: `${Math.max(s.n ? 3 : 0, Math.round((s.n / top) * 100))}%`, height: "14px", borderRadius: "7px", background: `var(--sec-${s.sec})` }}></span>
               </span>
               <span style={{ fontSize: "13.5px" }}>
                 <b>{s.n}</b> {s.of ? <span className="meta">· {s.of}</span> : null}
@@ -84,17 +100,40 @@ function FunnelSection({ days }: { days: number }) {
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13.5px" }} data-testid="analytics-funnel-sources">
             <thead>
               <tr className="meta" style={{ textAlign: "left" }}>
-                <th style={{ fontWeight: "500", padding: "4px 0" }}>Source</th>
-                <th style={{ fontWeight: "500", textAlign: "right" }}>Found</th>
-                <th style={{ fontWeight: "500", textAlign: "right" }}>Replied</th>
-                <th style={{ fontWeight: "500", textAlign: "right" }}>Answered back</th>
-                <th style={{ fontWeight: "500", textAlign: "right" }}>Signed up</th>
+                <th style={{ fontWeight: "500", padding: "4px 0" }}>
+                  <span className="sr-only">Source</span>
+                </th>
+                <th style={{ fontWeight: "500", textAlign: "right" }} title="Found">
+                  <svg viewBox="0 0 24 24" role="img" aria-label="Found" style={{ width: "15px", height: "15px", color: "var(--sec-find)", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round" }}>
+                    <path d={STEP_ICON.found} />
+                  </svg>
+                </th>
+                <th style={{ fontWeight: "500", textAlign: "right" }} title="Replied">
+                  <svg viewBox="0 0 24 24" role="img" aria-label="Replied" style={{ width: "15px", height: "15px", color: "var(--sec-idea)", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round" }}>
+                    <path d={STEP_ICON.replied} />
+                  </svg>
+                </th>
+                <th style={{ fontWeight: "500", textAlign: "right" }} title="Answered back">
+                  <svg viewBox="0 0 24 24" role="img" aria-label="Answered back" style={{ width: "15px", height: "15px", color: "var(--sec-post)", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round" }}>
+                    <path d={STEP_ICON.answered} />
+                  </svg>
+                </th>
+                <th style={{ fontWeight: "500", textAlign: "right" }} title="Signed up">
+                  <svg viewBox="0 0 24 24" role="img" aria-label="Signed up" style={{ width: "15px", height: "15px", color: "var(--sec-sol)", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round" }}>
+                    <path d={STEP_ICON.signed} />
+                  </svg>
+                </th>
               </tr>
             </thead>
             <tbody>
               {sources.map((r) => (
                 <tr key={r.source} style={{ borderTop: "1px solid var(--line)" }}>
-                  <td style={{ padding: "6px 0" }}>{SOURCE_LABEL[r.source]}</td>
+                  <td style={{ padding: "6px 0" }}>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}>
+                      {hasLogo(r.source) ? <PlatformBadge platform={r.source} size={24} /> : null}
+                      {SOURCE_LABEL[r.source]}
+                    </span>
+                  </td>
                   <td style={{ textAlign: "right" }}>{r.found}</td>
                   <td style={{ textAlign: "right" }}>{r.replied}</td>
                   <td style={{ textAlign: "right" }}>{r.answeredBack}</td>
@@ -143,9 +182,14 @@ export function AnalyticsView() {
   const published = kpi("posts_measured");
 
   return (
-    <main style={{ maxWidth: "1180px", margin: "0 auto", padding: "22px 24px 40px" }} data-testid="v2-analytics">
-      <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", marginBottom: "16px" }}>
-        <h1 style={{ margin: "0", fontSize: "22px", fontWeight: "600", letterSpacing: "-0.4px" }}>{meta.title}</h1>
+    <main data-sec="stats" style={{ maxWidth: "1180px", margin: "0 auto", padding: "22px 24px 40px" }} data-testid="v2-analytics">
+      <div className="sec-band">
+        <span className="sec-tile">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M3 3v18h18M7 15l4-4 3 3 5-6" />
+          </svg>
+        </span>
+        <h1>{meta.title}</h1>
         <span className="meta">
           {days.length ? `${dayShort(days[Math.max(0, days.length - range)]!.day)} – ${dayShort(days[days.length - 1]!.day)} · ` : ""}
           {meta.compare}
