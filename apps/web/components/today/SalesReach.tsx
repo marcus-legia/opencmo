@@ -226,9 +226,11 @@ export function ReachPanel({ t, publicReply, onSent }: { t: Thread; publicReply:
                 type="button"
                 className="primary"
                 disabled={!dm.trim()}
-                onClick={async () => {
-                  setNote((await copy(dm)) ? "Copied. Paste it in the chat." : "Select the message and copy it.");
+                onClick={() => {
+                  // Open in the click itself, not after the copy's await: a late open is blocked as a popup.
+                  const copying = copy(dm);
                   window.open(CHAT_URL[t.platform] ?? t.url, "_blank", "noopener,noreferrer");
+                  void copying.then((ok) => setNote(ok ? "Copied. Paste it in the chat." : "Select the message and copy it."));
                 }}
               >
                 Copy and open {CHAT_NAME[t.platform] ?? `${PLATFORM_LABEL[t.platform]} chat`}
@@ -453,9 +455,11 @@ export function FollowingUp({ threads, live, onStatus }: { threads: Thread[]; li
                   type="button"
                   className="primary"
                   disabled={!dmText.trim()}
-                  onClick={async () => {
-                    if (await copy(dmText)) setCopied(t.id);
+                  onClick={() => {
+                    // Open in the click itself, not after the copy's await: a late open is blocked as a popup.
+                    const copying = copy(dmText);
                     window.open(CHAT_URL[t.platform] ?? t.url, "_blank", "noopener,noreferrer");
+                    void copying.then((ok) => ok && setCopied(t.id));
                   }}
                 >
                   {copied === t.id ? "Copied · chat opened" : `Copy and open ${CHAT_NAME[t.platform] ?? `${PLATFORM_LABEL[t.platform]} chat`}`}
