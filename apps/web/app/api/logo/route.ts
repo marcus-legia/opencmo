@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { logoHost } from "@/lib/cmo/logo";
+import { logoHost, rasterType } from "@/lib/cmo/logo";
 import { fetchIcon } from "@/lib/cmo/site";
 import { currentUser } from "@/lib/supabase/user";
 
@@ -19,8 +19,22 @@ export const runtime = "nodejs";
 /** Where a site keeps its icon when Google's service has none yet (a new domain such as ferreto.io in November 2026). */
 const OWN_ICONS = ["/apple-touch-icon.png", "/apple-icon.png", "/favicon.ico", "/icon.png"];
 
-const image = (type: string, body: ArrayBuffer | Buffer) =>
-  new NextResponse(new Uint8Array(body), { headers: { "content-type": type, "cache-control": "private, max-age=604800, immutable", "x-content-type-options": "nosniff" } });
+/** The icon with a type read from its own bytes, or null when the bytes are not a raster image. */
+function image(body: ArrayBuffer | Buffer): NextResponse | null {
+  const bytes = new Uint8Array(body);
+  const type = rasterType(bytes);
+  if (!type) return null;
+  return new NextResponse(bytes, {
+    headers: {
+      "content-type": type,
+      "cache-control": "private, max-age=604800, immutable",
+      "x-content-type-options": "nosniff",
+      // Opened on its own, it is still an image and nothing else: no script, no frame, no form.
+      "content-security-policy": "default-src 'none'; sandbox",
+      "content-disposition": "inline; filename=icon",
+    },
+  });
+}
 
 export async function GET(request: NextRequest) {
   // Signed-in only: the route makes outbound requests, so it is not an open fetcher for anyone on the web.
@@ -33,7 +47,8 @@ export async function GET(request: NextRequest) {
     // Raster only: an SVG served from this origin could run script if opened on its own.
     if (res.ok && RASTER.test(type)) {
       const body = await res.arrayBuffer();
-      if (body.byteLength <= 200_000) return image(type, body);
+      const answer = body.byteLength <= 200_000 ? image(body) : null;
+      if (answer) return answer;
     }
   } catch {
     // The site's own icon is tried next.
@@ -42,7 +57,8 @@ export async function GET(request: NextRequest) {
   for (const path of OWN_ICONS) {
     try {
       const icon = await fetchIcon(new URL(`https://${host}${path}`));
-      if (icon) return image(icon.type, icon.body);
+      const answer = icon ? image(icon.body) : null;
+      if (answer) return answer;
     } catch {
       // Not reachable or not public: the next path, then the letter.
     }

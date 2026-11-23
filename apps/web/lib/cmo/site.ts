@@ -165,7 +165,7 @@ const ICON_BYTES = 200_000;
  * One small raster image (a site's icon), with the same checks as `fetchPage` on every hop. Null when there is none,
  * it is not a raster image (an SVG could carry script) or it is over 200 KB.
  */
-export async function fetchIcon(start: URL, resolve: Resolver = publicAddresses): Promise<{ type: string; body: Buffer } | null> {
+export async function fetchIcon(start: URL, resolve: Resolver = publicAddresses): Promise<{ body: Buffer } | null> {
   let url = start;
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
     const { host } = checkHop(url);
@@ -193,7 +193,8 @@ export async function fetchIcon(start: URL, resolve: Resolver = publicAddresses)
       }
       chunks.push(chunk as Buffer);
     }
-    return { type, body: Buffer.concat(chunks) };
+    // The caller decides the type from the bytes (`rasterType`); the header only filters out what is clearly not one.
+    return { body: Buffer.concat(chunks) };
   }
   return null;
 }
