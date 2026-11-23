@@ -18,7 +18,8 @@ export function logoHost(raw: string): string | null {
 /** The same-origin address of a company's icon, or null when the site is not a host name. */
 export function logoSrc(site: string | null | undefined): string | null {
   const host = site ? logoHost(site) : null;
-  return host ? `/api/logo?d=${encodeURIComponent(host)}` : null;
+  // `v` changes when the route learns to find more icons: a browser keeps a 404 for a day (v2: the site's own icon).
+  return host ? `/api/logo?d=${encodeURIComponent(host)}&v=2` : null;
 }
 
 /**
