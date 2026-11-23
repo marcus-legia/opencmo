@@ -32,6 +32,17 @@ export function parseIdea(draft: string): IdeaPart[] {
     const said = line.replace(MARKS, "");
     if (said) last.say.push(said);
   }
+  // An idea from before the labels is often one paragraph: its first sentence is the point, the rest is said.
+  const first = parts[0];
+  if (first && !draft.match(LABEL) && !first.say.length) {
+    const sentences = first.text.match(/[^.!?]+[.!?]+(?=\s|$)|[^.!?]+$/g)?.map((x) => x.trim()).filter(Boolean) ?? [];
+    // "Welcome!" is not a point: a sentence under four words joins the next one.
+    while (sentences.length > 1 && sentences[0]!.split(/\s+/).length < 4) sentences.splice(0, 2, `${sentences[0]} ${sentences[1]}`);
+    if (sentences.length > 1) {
+      first.text = sentences[0]!;
+      first.say = sentences.slice(1);
+    }
+  }
   // A reply with only an idea still carries the word "Solution" (owner: both keywords always show), empty.
   if (parts.length && !parts.some((p) => p.kind === "solution")) parts.push({ kind: "solution", text: "", say: [] });
   return parts;

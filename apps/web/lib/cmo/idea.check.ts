@@ -30,6 +30,15 @@ import { ownShare, OWN_ENOUGH, parseIdea } from "@/lib/cmo/idea";
   assert.equal(parts[1]!.text, "");
 }
 
+// One old paragraph: the first sentence is the idea, the rest are words to say.
+{
+  const parts = parseIdea("Start with direct contact, the owner answers calls. Visit ten practices. Ask what annoys them.");
+  assert.equal(parts[0]!.text, "Start with direct contact, the owner answers calls.");
+  assert.deepEqual(parts[0]!.say, ["Visit ten practices.", "Ask what annoys them."]);
+}
+
+assert.equal(parseIdea("Welcome! Start with direct contact. Then ask.")[0]!.text, "Welcome! Start with direct contact.");
+
 assert.deepEqual(parseIdea(""), []);
 
 // Copying the idea back is not "your words"; a reply in the founder's own words is.
