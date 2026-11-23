@@ -123,9 +123,13 @@ const LogsIcon = () => (
 function UsageChip({ usage }: { usage: PlanUsage }) {
   if (usage.plan !== "pro") {
     return (
-      <Link href="/app/billing" className="pill td-usage" aria-label="Free plan: see plans" data-testid="usage-chip" style={{ textDecoration: "none" }}>
+      // Orange, not a grey pill (owner, 2026-11-23: "I can't see the Upgrade button anywhere").
+      <Link href="/app/billing#billing-plans" className="td-upgrade" aria-label="Free plan: upgrade" data-testid="usage-chip">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M12 19V5M5 12l7-7 7 7" />
+        </svg>
         <span className="td-pill-more">Free · </span>
-        <span>See plans</span>
+        <span>Upgrade</span>
       </Link>
     );
   }
@@ -153,7 +157,8 @@ const NAV_SEC: Record<string, string | undefined> = { sales: "find", post: "post
 
 function Project({ menu }: { menu: ReactNode }) {
   const ws = useWorkspace();
-  const name = ws.name ?? siteLabel(ws.site) ?? "Your business";
+  // Blank until the workspace loads, like the context column: no placeholder name flashing first.
+  const name = ws.ready ? (ws.name ?? siteLabel(ws.site) ?? "Your business") : "";
   const ref = useRef<HTMLDetailsElement>(null);
   return (
     <details className="td-menuwrap" ref={ref} onClick={(e) => (e.target as HTMLElement).closest("a") && ref.current?.removeAttribute("open")}>

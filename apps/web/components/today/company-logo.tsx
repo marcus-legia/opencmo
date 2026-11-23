@@ -14,13 +14,15 @@ function letterColor(name: string): string {
 
 /**
  * A company's own icon (owner, 2026-11-23: competitors with their logos, and yours shown too). No site or no icon:
- * the first letter on a colour taken from the name. `you` rings it in the Sales colour.
+ * the first letter on a colour taken from the name. `you` rings it in the Sales colour. No name yet (the workspace is
+ * still loading): a blank tile, so the page never flashes a placeholder letter before the real logo.
  */
 export function CompanyLogo({ name, site, size = 22, you = false }: { name: string; site?: string | null; size?: number; you?: boolean }) {
   const src = logoSrc(site);
   const [broken, setBroken] = useState(false);
   const radius = Math.round(size * 0.27);
   const cls = you ? "co-logo co-you" : "co-logo";
+  if (!name.trim()) return <span className={cls} data-wait="" aria-hidden="true" style={{ width: size, height: size, borderRadius: radius }} />;
   if (!src || broken) {
     return (
       <span className={cls} data-letter="" aria-hidden="true" style={{ width: size, height: size, borderRadius: radius, background: letterColor(name), fontSize: Math.round(size * 0.5) }}>

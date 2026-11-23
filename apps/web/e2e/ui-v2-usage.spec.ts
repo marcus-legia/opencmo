@@ -127,7 +127,7 @@ test("a free founder's chip leads to the plans", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/app/sales");
   const chip = page.getByRole("banner").getByTestId("usage-chip");
-  await expect(chip).toHaveText(/Free · See plans/);
+  await expect(chip).toHaveText(/Free · Upgrade/);
   await chip.click();
   await expect(page).toHaveURL(/\/app\/billing/);
   await expect(page.getByTestId("billing-usage")).toHaveCount(0);
