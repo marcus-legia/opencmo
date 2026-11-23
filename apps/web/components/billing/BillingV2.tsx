@@ -1,9 +1,10 @@
 import { BillingButton } from "@/components/billing/BillingButton";
+import { OfferCard, type OfferPlan } from "@/components/billing/OfferCard";
 import { SwitchAnnual } from "@/components/billing/SwitchAnnual";
 import { LocalTime } from "@/components/LocalTime";
 import { SettingsFrame } from "@/components/today/SettingsFrame";
 import type { SellablePlan } from "@/lib/billing-catalog";
-import { dollars } from "@/components/landing/data";
+import { dollars, USUAL_WAY } from "@/components/landing/data";
 import type { PlanUsage } from "@/lib/billing/usage";
 import { SUPPORT_EMAIL } from "@/lib/site";
 import type { LedgerEntry } from "@/lib/types";
@@ -60,6 +61,14 @@ export function BillingV2({
   // Only a paid monthly founder, and only while the annual row is on sale (A7).
   const annual = paid && usage.interval === "month" ? plans.find((plan) => plan.interval === "year" && plan.slug) : undefined;
   const shown = plans.filter((plan) => plan.id === "free" || plan.slug || plan.id === planId);
+  const offer = (interval: "month" | "year"): OfferPlan | undefined => {
+    const plan = plans.find((candidate) => candidate.interval === interval && candidate.slug);
+    return plan?.slug ? { slug: plan.slug, price: plan.price, billedPrice: plan.billedPrice } : undefined;
+  };
+  const monthlyOffer = offer("month");
+  const annualOffer = offer("year");
+  // A free account sees the offer as the landing page shows it (owner, 2026-11-23) instead of the grid of plan boxes.
+  const showOffer = !paid && Boolean(monthlyOffer || annualOffer);
   return (
     <SettingsFrame current="billing">
       <div data-testid="v2-billing" style={{ display: "contents" }}>
@@ -101,8 +110,8 @@ export function BillingV2({
               ) : null}
               <div style={{ display: "flex", gap: "8px", marginTop: "14px", flexWrap: "wrap" }}>
                 {!paid ? (
-                  <a href="#billing-plans" className="ghost" style={{ textDecoration: "none" }}>
-                    See plans
+                  <a href="#billing-plans" className="td-upgrade">
+                    Upgrade to Pro →
                   </a>
                 ) : null}
                 {annual ? <SwitchAnnual billed={annual.billedPrice} /> : null}
@@ -150,6 +159,25 @@ export function BillingV2({
           </div>
         </section>
 
+        {showOffer ? (
+          <section id="billing-plans" className="up-billing" data-testid="billing-offer">
+            <article aria-label="The usual way" className="up-usual">
+              <h3>The usual way, by hand</h3>
+              <ul>
+                {USUAL_WAY.map((row) => (
+                  <li key={row.who}>
+                    {row.who}
+                    <span>{row.cost}</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="up-usual-total">Or one plan that searches, scores and drafts for you.</p>
+            </article>
+            <OfferCard monthly={monthlyOffer} annual={annualOffer} site={site} label={start ? "Start with Pro" : "Upgrade now"} />
+          </section>
+        ) : null}
+
+        {showOffer ? null : (
         <section className="card" id="billing-plans">
           <div className="hd">
             <h2>Plans</h2>
@@ -189,6 +217,7 @@ export function BillingV2({
             </div>
           </div>
         </section>
+        )}
 
         {paid && packs.length > 0 ? (
           <section className="card" id="billing-packs">

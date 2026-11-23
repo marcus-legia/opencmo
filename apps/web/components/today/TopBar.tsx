@@ -123,9 +123,13 @@ const LogsIcon = () => (
 function UsageChip({ usage }: { usage: PlanUsage }) {
   if (usage.plan !== "pro") {
     return (
-      <Link href="/app/billing" className="pill td-usage" aria-label="Free plan: see plans" data-testid="usage-chip" style={{ textDecoration: "none" }}>
+      // Orange, not a grey pill (owner, 2026-11-23: "I can't see the Upgrade button anywhere").
+      <Link href="/app/billing#billing-plans" className="td-upgrade" aria-label="Free plan: upgrade" data-testid="usage-chip">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M12 19V5M5 12l7-7 7 7" />
+        </svg>
         <span className="td-pill-more">Free · </span>
-        <span>See plans</span>
+        <span>Upgrade</span>
       </Link>
     );
   }
