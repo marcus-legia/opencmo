@@ -58,9 +58,12 @@ test("a photo added on the post card goes out with the post on every platform", 
     .poll(async () => ((await db.from("content_items").select("photos").eq("id", itemId).single()).data?.photos as string[] | undefined)?.length)
     .toBe(1);
   // Saving the photos raises the post's card again (they are part of what is approved): find it afresh.
-  card = await openFeedCard(page, "Post for 3 platforms");
-  await expect(card.getByRole("img", { name: "Photo 1" })).toBeVisible({ timeout: 30_000 });
-  await card.screenshot({ path: testInfo.outputPath("post-card-photo.png") });
+  // The queue can draw the raised card once more while it settles: the screenshot (a record, not a check) tries again.
+  await expect(async () => {
+    card = await openFeedCard(page, "Post for 3 platforms");
+    await expect(card.getByRole("img", { name: "Photo 1" })).toBeVisible({ timeout: 30_000 });
+    await card.screenshot({ path: testInfo.outputPath("post-card-photo.png"), timeout: 10_000 });
+  }).toPass({ timeout: 90_000 });
 
   await card.getByRole("button", { name: "Approve", exact: true }).click();
   await expect.poll(async () => (await db.from("content_items").select("status").eq("id", itemId).single()).data?.status).toBe("approved");
