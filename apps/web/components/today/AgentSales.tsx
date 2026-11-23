@@ -515,14 +515,17 @@ function ThreadRow({ t, free, open, onToggle, onBack, onPlan, onDecide, onSent }
   const locked = free && !skipped && t.draft === null;
   const lead = t.quotes[0] ?? null;
 
-  async function copyAndOpen() {
-    try {
-      await navigator.clipboard.writeText(draft);
-      setCopied(true);
-    } catch {
-      // The thread still opens; the founder can select the draft and copy it by hand.
-    }
+  function copyAndOpen() {
+    // The tab opens in the click itself: opened after an await, Safari and some Chrome setups block it as a popup
+    // (owner, 2026-11-23: "the Reddit link often does not open"). The copy starts first and finishes on its own.
+    const copying = navigator.clipboard?.writeText(draft) ?? Promise.reject(new Error("no clipboard"));
     window.open(t.url, "_blank", "noopener,noreferrer");
+    copying.then(
+      () => setCopied(true),
+      () => {
+        // The thread still opened; the founder can select the draft and copy it by hand.
+      },
+    );
   }
   async function run(action: "replied" | "dismissed", why?: string) {
     setBusy(true);
