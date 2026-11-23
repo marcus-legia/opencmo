@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 
 import { api } from "@/components/clipping/api";
 import { useShellState } from "@/components/shell-v2/ShellState";
@@ -11,17 +11,8 @@ import { DOCUMENT_KINDS, type DocumentKind } from "@/lib/cmo/documents";
 
 import { ContextDrawer, DOC_ROWS, isDocId, missingDocument, type DocId } from "./ContextDrawer";
 import { useLibraryCounts } from "./LibraryView";
-import { Mark } from "./ResearchView";
+import { CompanyLogo } from "./company-logo";
 import { siteLabel, useWorkspace } from "./workspace";
-
-const DocIcon = () => (
-  <svg className="i s" viewBox="0 0 24 24" aria-hidden="true" style={{ marginTop: "2px", color: "var(--muted)" }}>
-    <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
-    <path d="M14 2v4a2 2 0 0 0 2 2h4" />
-    <path d="M16 13H8" />
-    <path d="M16 17H8" />
-  </svg>
-);
 
 const isToday = (iso: string | undefined) => (iso ? new Date(iso).toDateString() === new Date().toDateString() : false);
 
@@ -86,16 +77,18 @@ export function ContextColumn({ goal, onClose }: { goal: { text: string | null; 
   const week = useFunnelWeek();
   // The competitors the founder keeps in Research (wave 3); before any, the ones the Competitors document names.
   const rivals = kept?.length
-    ? kept.map((c) => ({ key: c.id, name: c.name }))
-    : ws.competitors.map((c) => ({ key: c.name, name: c.name || siteLabel(c.website) || "?" }));
+    ? kept.map((c) => ({ key: c.id, name: c.name, site: c.site }))
+    : ws.competitors.map((c) => ({ key: c.name, name: c.name || siteLabel(c.website) || "?", site: c.website }));
   const pct = goal && goal.total > 0 ? Math.round((goal.done / goal.total) * 100) : 0;
 
-  const chip = (icon: ReactNode, label: string) => (
-    <span className="chip" key={label}>
-      {icon}
-      {label}
-    </span>
-  );
+  const name = ws.name ?? site ?? "Your business";
+  const ICON = { fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round" } as const;
+  const steps = [
+    { label: "Found", n: week?.found, sec: "find", d: "M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14ZM20 20l-3.5-3.5" },
+    { label: "Replied", n: week?.replied, sec: "idea", d: "M9 17 4 12l5-5M20 18v-2a4 4 0 0 0-4-4H4" },
+    { label: "Answered back", n: week?.answeredBack, sec: "post", d: "M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12Z" },
+    { label: "Signed up", n: week?.signedUp, sec: "sol", d: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM16 11l2 2 4-4" },
+  ] as const;
 
   return (
     <aside className="left" id="td-context" aria-label="Context">
@@ -107,111 +100,111 @@ export function ContextColumn({ goal, onClose }: { goal: { text: string | null; 
           </svg>
         </button>
       ) : null}
-      <div className="sec" style={{ padding: "0 6px" }}>
-        <h2>Context</h2>
-        <button type="button" className="ib" aria-label="Edit context" onClick={() => openDoc("product")}>
+      {/* The product, by its own logo (owner, 2026-11-23: fewer words; the summary lives in the Product document). */}
+      <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px", borderRadius: "14px", background: "var(--raised)", margin: "0 0 10px" }} data-testid="context-product">
+        <CompanyLogo name={name} site={ws.site} size={38} />
+        <span style={{ flex: "1", minWidth: "0", display: "flex", flexDirection: "column", gap: "3px" }}>
+          <b style={{ fontSize: "15px", fontWeight: "650", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</b>
+          <span style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", color: "var(--muted)", minWidth: "0" }}>
+            {site ? <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{site}</span> : null}
+            {ws.category ? <span style={{ padding: "1px 6px", borderRadius: "5px", background: "var(--sec-find-wash)", color: "var(--sec-find)", fontWeight: "650", flex: "0 0 auto" }}>{ws.category}</span> : null}
+          </span>
+        </span>
+        <button type="button" className="ib" aria-label="Edit context" title="Edit context" onClick={() => openDoc("product")}>
           <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
             <path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z" />
           </svg>
         </button>
       </div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", padding: "0 6px", marginBottom: "10px" }}>
-        {ws.category
-          ? chip(
-              <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z" />
-                <circle cx="7.5" cy="7.5" r=".5" />
-              </svg>,
-              ws.category,
-            )
-          : null}
-        {site
-          ? chip(
-              <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
-                <circle cx="12" cy="12" r="10" />
-                <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" />
-                <path d="M2 12h20" />
-              </svg>,
-              site,
-            )
-          : null}
-      </div>
-      {ws.summary ? (
-        <>
-          <p style={{ margin: "0 6px 4px", color: "var(--muted)", fontSize: "13.5px", lineHeight: "1.5", display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{ws.summary}</p>
-          <button type="button" className="td-ctx-more" onClick={() => openDoc("product")} style={{ border: "0", background: "transparent", color: "var(--text)", fontSize: "13px", padding: "0 6px", marginBottom: "16px", textDecoration: "underline", textUnderlineOffset: "2px" }}>
-            View more
-          </button>
-        </>
-      ) : null}
 
-      {/* One card for the documents (owner, 2026-11-18: the list here repeated the drawer's own list). */}
-      <button
-        type="button"
-        onClick={() => router.push(`/app/business${missing ? `?d=${missing}` : ""}`)}
-        data-testid="context-documents"
-        style={{ width: "100%", display: "flex", alignItems: "center", gap: "10px", padding: "10px", margin: "0 0 12px", border: "1px solid var(--line)", borderRadius: "10px", background: "transparent", textAlign: "left", font: "inherit", color: "inherit", cursor: "pointer" }}
-      >
-        <DocIcon />
-        <span style={{ flex: "1", minWidth: "0", display: "flex", flexDirection: "column" }}>
-          <span style={{ fontSize: "13.5px", fontWeight: "500" }}>Your business</span>
-          <span className="meta">{missing ? "One document still to write" : `${docCount} documents every step reads`}</span>
-        </span>
-        {DOC_ROWS.some((row) => (DOCUMENT_KINDS as readonly string[]).includes(row.id) && isToday(ws.documents[row.id as DocumentKind]?.at)) ? <span className="live" title="Updated today"></span> : null}
-        <span className="meta" style={{ color: "var(--accent)" }}>Open</span>
-      </button>
-
-      {/* What people said (wave 3): Post writes from it, so it sits under the business it serves. */}
-      <a
-        href="/app/library"
-        data-testid="context-library"
-        aria-current={pathname === "/app/library" ? "page" : undefined}
-        style={{ display: "flex", alignItems: "center", gap: "8px", padding: "10px", margin: "0 0 12px", border: `1px solid ${pathname === "/app/library" ? "var(--accent)" : "var(--line)"}`, borderRadius: "10px", color: "inherit", textDecoration: "none" }}
-      >
-        <span style={{ fontSize: "13.5px", fontWeight: "500" }}>Library</span>
-        <span className="meta">{library ? `${library.total} ${library.total === 1 ? "conversation" : "conversations"}` : ""}</span>
-        {library && library.thisWeek > 0 ? (
-          <span className="meta" style={{ marginLeft: "auto", color: "var(--ok)" }}>
-            +{library.thisWeek} this week
+      {/* Your business and Library side by side, each a coloured icon and a number. */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: "8px", margin: "0 0 14px" }}>
+        <button
+          type="button"
+          onClick={() => router.push(`/app/business${missing ? `?d=${missing}` : ""}`)}
+          data-testid="context-documents"
+          title={missing ? "Your business: one document still to write" : `Your business: ${docCount} documents every step reads`}
+          style={{ display: "flex", alignItems: "center", gap: "8px", padding: "9px", border: "1px solid var(--line)", borderRadius: "12px", background: "transparent", font: "inherit", color: "inherit", cursor: "pointer", textAlign: "left" }}
+        >
+          <span className="sec-tile" data-sec="biz" style={{ width: "28px", height: "28px", borderRadius: "8px" }}>
+            <svg viewBox="0 0 24 24" aria-hidden="true" style={{ width: "15px", height: "15px" }}>
+              <rect x="3" y="7" width="18" height="13" rx="2" />
+              <path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+            </svg>
           </span>
-        ) : null}
-      </a>
+          <span style={{ display: "flex", flexDirection: "column", lineHeight: "1.2" }}>
+            <b style={{ fontSize: "13px" }}>Business</b>
+            <span className="meta" style={{ color: missing ? "var(--warn)" : undefined }}>{missing ? "1 to write" : docCount}</span>
+          </span>
+          {DOC_ROWS.some((row) => (DOCUMENT_KINDS as readonly string[]).includes(row.id) && isToday(ws.documents[row.id as DocumentKind]?.at)) ? <span className="live" title="Updated today" style={{ marginLeft: "auto" }}></span> : null}
+        </button>
+        <a
+          href="/app/library"
+          data-testid="context-library"
+          aria-current={pathname === "/app/library" ? "page" : undefined}
+          title="Library: what people said"
+          style={{ display: "flex", alignItems: "center", gap: "8px", padding: "9px", border: `1px solid ${pathname === "/app/library" ? "var(--sec-find)" : "var(--line)"}`, borderRadius: "12px", color: "inherit", textDecoration: "none" }}
+        >
+          <span className="sec-tile" data-sec="find" style={{ width: "28px", height: "28px", borderRadius: "8px" }}>
+            <svg viewBox="0 0 24 24" aria-hidden="true" style={{ width: "15px", height: "15px" }}>
+              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5v14ZM4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5" />
+            </svg>
+          </span>
+          <span style={{ display: "flex", flexDirection: "column", lineHeight: "1.2" }}>
+            <b style={{ fontSize: "13px" }}>Library</b>
+            <span className="meta">
+              {library ? library.total : "–"}
+              {library ? <span className="sr-only">{library.total === 1 ? " conversation" : " conversations"}</span> : null}
+              {library && library.thisWeek > 0 ? (
+                <span style={{ color: "var(--ok)", fontWeight: "650" }}>
+                  {" "}+{library.thisWeek}
+                  <span className="sr-only"> this week</span>
+                </span>
+              ) : null}
+            </span>
+          </span>
+        </a>
+      </div>
 
-      {/* The funnel of the week (wave 3): people, not posts. The week's goal stays under it. */}
-      <div style={{ borderTop: "1px solid var(--line)", paddingTop: "12px", marginTop: "10px" }} data-testid="context-funnel">
+      {/* The funnel of the week: one colour and icon per step, the label in its title. */}
+      <div style={{ borderTop: "1px solid var(--line)", paddingTop: "12px" }} data-testid="context-funnel">
         <div className="sec" style={{ padding: "0 6px" }}>
           <h2>This week</h2>
-          <a href="/app/analytics" className="meta" style={{ color: "var(--accent)", textDecoration: "none" }}>
-            Analytics
+          <a href="/app/analytics" aria-label="Analytics" title="Analytics" style={{ color: "var(--sec-stats)", display: "inline-flex" }}>
+            <svg viewBox="0 0 24 24" aria-hidden="true" style={{ width: "16px", height: "16px", ...ICON }}>
+              <path d="M3 3v18h18M7 15l4-4 3 3 5-6" />
+            </svg>
           </a>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: "6px", padding: "0 6px", textAlign: "center" }}>
-          {(
-            [
-              ["Found", week?.found],
-              ["Replied", week?.replied],
-              ["Answered back", week?.answeredBack],
-              ["Signed up", week?.signedUp],
-            ] as const
-          ).map(([label, n]) => (
-            <div key={label} data-testid="context-funnel-step" style={{ display: "flex", flexDirection: "column", padding: "6px 0", borderRadius: "7px", background: "var(--hover)" }}>
-              <b style={{ fontSize: "16px", fontWeight: "600" }}>{n ?? "–"}</b>
-              <span style={{ fontSize: "11px", lineHeight: "1.25", color: "var(--text)" }}>
-                {label}
-              </span>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: "6px", padding: "0 6px" }}>
+          {steps.map((step) => (
+            <div key={step.label} data-testid="context-funnel-step" title={step.label} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 10px", borderRadius: "11px", background: `var(--sec-${step.sec}-wash)`, color: `var(--sec-${step.sec})` }}>
+              <svg viewBox="0 0 24 24" role="img" aria-label={step.label} style={{ width: "17px", height: "17px", ...ICON }}>
+                <path d={step.d} />
+              </svg>
+              <b style={{ fontSize: "18px", fontWeight: "650" }}>{step.n ?? "–"}</b>
+              <span className="sr-only">{step.label}</span>
             </div>
           ))}
         </div>
-        <div style={{ padding: "8px 6px 0" }}>
-          <div className="meta" style={{ marginBottom: "4px" }}>
-            {goal?.text ? `Goal: ${goal.text}` : "No goal yet. It comes with the week's plan."}
-            {goal && goal.total > 0 ? ` · ${goal.done} / ${goal.total}` : ""}
-          </div>
+        <div style={{ padding: "8px 6px 0", display: "flex", alignItems: "center", gap: "8px" }} title={goal?.text ? `Goal: ${goal.text}` : "No goal yet. It comes with the week's plan."}>
+          <svg viewBox="0 0 24 24" aria-hidden="true" style={{ width: "14px", height: "14px", color: "var(--muted)", flex: "0 0 auto", ...ICON }}>
+            <circle cx="12" cy="12" r="9" />
+            <circle cx="12" cy="12" r="5" />
+            <circle cx="12" cy="12" r="1" />
+          </svg>
           {goal && goal.total > 0 ? (
-            <div style={{ height: "4px", borderRadius: "4px", background: "var(--line-2)" }}>
-              <div style={{ width: `${pct}%`, height: "4px", borderRadius: "4px", background: "var(--accent)" }}></div>
-            </div>
-          ) : null}
+            <>
+              <span style={{ flex: "1", height: "6px", borderRadius: "3px", background: "var(--line)", overflow: "hidden" }}>
+                <span style={{ display: "block", width: `${Math.max(pct, 3)}%`, height: "6px", background: "var(--sec-sol)" }}></span>
+              </span>
+              <b style={{ fontSize: "12.5px" }}>
+                {goal.done}/{goal.total}
+              </b>
+            </>
+          ) : (
+            <span className="meta">No goal yet</span>
+          )}
         </div>
       </div>
 
@@ -223,14 +216,21 @@ export function ContextColumn({ goal, onClose }: { goal: { text: string | null; 
               {rivals.length}
             </span>
           </h2>
-          <a href="/app/research" className="meta" style={{ color: "var(--accent)", textDecoration: "none" }}>
-            Research
+          <a href="/app/research" aria-label="Research" title="Research" style={{ color: "var(--sec-find)", display: "inline-flex" }}>
+            <svg viewBox="0 0 24 24" aria-hidden="true" style={{ width: "16px", height: "16px", ...ICON }}>
+              <path d="M5 12h14M13 6l6 6-6 6" />
+            </svg>
           </a>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: "2px" }}>
-          {rivals.slice(0, 8).map((c, i) => (
+        <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+          <div className="doc" style={{ alignItems: "center", background: "var(--sec-find-wash)", borderRadius: "10px" }}>
+            <CompanyLogo name={name} site={ws.site} size={20} />
+            <span style={{ fontSize: "13.5px", fontWeight: "600", flex: "1", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
+            <span style={{ fontSize: "10.5px", fontWeight: "750", letterSpacing: "0.1em", color: "var(--sec-find)" }}>YOU</span>
+          </div>
+          {rivals.slice(0, 8).map((c) => (
             <div key={c.key} className="doc" style={{ alignItems: "center" }}>
-              <Mark name={c.name} index={i} size={18} />
+              <CompanyLogo name={c.name} site={c.site} size={20} />
               <span style={{ fontSize: "13.5px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.name}</span>
             </div>
           ))}

@@ -357,12 +357,13 @@ export function Feed({ email }: { email?: string | null }) {
     };
   }, [data, slots]);
 
-  const steps: { id: Step; label: string }[] = [
-    { id: "planned", label: "planned" },
-    { id: "waiting", label: "waiting on you" },
-    { id: "making", label: "being made" },
-    { id: "scheduled", label: "scheduled" },
-    { id: "posted", label: "posted" },
+  // One colour and icon per step (owner, 2026-11-23: icons over words); the word stays for screen readers and the title.
+  const steps: { id: Step; label: string; sec: string; d: string }[] = [
+    { id: "planned", label: "planned", sec: "biz", d: "M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z" },
+    { id: "waiting", label: "waiting on you", sec: "idea", d: "M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0" },
+    { id: "making", label: "being made", sec: "find", d: "m12 3-1.9 5.8L4 12l6.1 3.2L12 21l1.9-5.8L20 12l-6.1-3.2Z" },
+    { id: "scheduled", label: "scheduled", sec: "post", d: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM12 7v5l3 2" },
+    { id: "posted", label: "posted", sec: "sol", d: "m22 2-7 20-4-9-9-4ZM22 2 11 13" },
   ];
 
   const cards = (data?.queue ?? []).filter((c) => c.status === "waiting" && !later.has(c.id));
@@ -494,7 +495,7 @@ export function Feed({ email }: { email?: string | null }) {
                     ? held > 0
                       ? `Nothing in the queue today. ${held} ${held === 1 ? "card is" : "cards are"} held until tomorrow.`
                       : "Nothing waits on you. Your team keeps working."
-                    : `${needs} ${needs === 1 ? "item needs" : "items need"} your attention today. Approve, edit or skip.`}
+                    : `${needs} ${needs === 1 ? "item needs" : "items need"} your attention today.`}
               </p>
             </div>
             {/* The planner lives on the calendar: a founder who lands here first needs a way to it (which platforms, how often). */}
@@ -535,19 +536,15 @@ export function Feed({ email }: { email?: string | null }) {
 
           <AllowanceBanner state={usageState} />
           <FreeLockedCard state={usageState} where="feed" />
-          <div className="flow" role="group" aria-label="This week's workflow" style={{ marginBottom: "22px" }}>
-            {steps.map((s, i) => (
-              <span key={s.id} style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                <button type="button" aria-pressed={step === s.id} onClick={() => setStep(s.id)} data-testid={`flow-${s.id}`}>
-                  <b>{counts[s.id]}</b>
-                  {s.label}
-                </button>
-                {i < steps.length - 1 ? (
-                  <svg className="i s ar" viewBox="0 0 24 24" aria-hidden="true">
-                    <path d="m9 18 6-6-6-6" />
-                  </svg>
-                ) : null}
-              </span>
+          <div className="flow flow-v3" role="group" aria-label="This week's workflow" style={{ marginBottom: "22px" }}>
+            {steps.map((s) => (
+              <button key={s.id} type="button" className="flow-step" data-step-sec={s.sec} aria-pressed={step === s.id} onClick={() => setStep(s.id)} data-testid={`flow-${s.id}`} title={`${counts[s.id]} ${s.label}`} style={{ ["--fs" as string]: `var(--sec-${s.sec})`, ["--fs-wash" as string]: `var(--sec-${s.sec}-wash)` }}>
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d={s.d} />
+                </svg>
+                <b>{counts[s.id]}</b>
+                <span className="flow-label">{s.label}</span>
+              </button>
             ))}
           </div>
 

@@ -4,17 +4,19 @@ import type { ApprovalCard as Card, CardKind } from "@/lib/screens/approval-card
 import { PLATFORM_LABEL } from "@/lib/screens/common";
 import { PLATFORM_LABEL as SALES_LABEL } from "@/lib/cmo/social/conversations";
 
-import { PlatformMark } from "./platform-logos";
+import { PlatformBadge } from "./platform-logos";
 
 /** A row's tile by platform: the platform's own mark, so a founder sees where it goes before reading. */
 export const PLATFORM_ICON: Record<string, ReactNode> = {
-  x: <PlatformMark platform="x" />,
-  threads: <PlatformMark platform="threads" />,
-  linkedin: <PlatformMark platform="linkedin" />,
-  facebook: <PlatformMark platform="facebook" />,
-  tiktok: <PlatformMark platform="tiktok" />,
-  instagram: <PlatformMark platform="instagram" />,
-  youtube: <PlatformMark platform="youtube" />,
+  x: <PlatformBadge platform="x" />,
+  threads: <PlatformBadge platform="threads" />,
+  linkedin: <PlatformBadge platform="linkedin" />,
+  facebook: <PlatformBadge platform="facebook" />,
+  tiktok: <PlatformBadge platform="tiktok" />,
+  instagram: <PlatformBadge platform="instagram" />,
+  youtube: <PlatformBadge platform="youtube" />,
+  reddit: <PlatformBadge platform="reddit" />,
+  hn: <PlatformBadge platform="hn" />,
 };
 
 /** One post written for several platforms: a pen, not one platform's mark. */
@@ -32,6 +34,8 @@ const targetCount = (card: Card) => (card.body.kind === "post" ? (card.body.targ
 export function cardIcon(card: Card): ReactNode {
   if (card.kind === "post" && targetCount(card) > 1) return CORE_POST_ICON;
   if ((card.kind === "post" || card.kind === "schedule") && card.account) return PLATFORM_ICON[card.account.platform] ?? KIND_ICON[card.kind];
+  // A reply shows where the person is: Reddit when the card is older than the platform field.
+  if (card.body.kind === "reply") return PLATFORM_ICON[card.body.platform ?? "reddit"] ?? KIND_ICON.reply;
   return KIND_ICON[card.kind];
 }
 

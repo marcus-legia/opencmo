@@ -238,6 +238,15 @@ function SamplesEditor({ value, onChange }: { value: string[]; onChange: (next: 
   );
 }
 
+/** One icon per document (owner, 2026-11-23: icons over words). */
+const DOC_ICON: Record<string, string> = {
+  product: "m21 8-9-5-9 5 9 5 9-5ZM3 8v8l9 5 9-5V8M12 13v8",
+  strategy: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10ZM12 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z",
+  competitors: "M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM23 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8",
+  post_plan: "M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z",
+  brand: "M12 2a10 10 0 0 0 0 20 2 2 0 0 0 2-2c0-1.1-.9-2 0-3 .8-.9 2-1 3-1a5 5 0 0 0 5-5c0-5-4.5-9-10-9Z",
+};
+
 /**
  * Your business (wave 3, canvas board Documents): the five documents every step reads, on one page. Edit opens the
  * document's form in place and Save writes a new version. "Read my website again" first says which documents the
@@ -321,9 +330,15 @@ export function BusinessView() {
   const name = text(state?.documents.product?.body.name) || ws.name || "";
 
   return (
-    <div style={{ maxWidth: "1180px", margin: "0 auto", padding: "22px 24px 40px", display: "flex", gap: "28px", flexWrap: "wrap", alignItems: "flex-start" }} data-testid="v2-business">
-      <nav aria-label="Documents" style={{ flex: "1 1 220px", maxWidth: "260px", display: "flex", flexDirection: "column", gap: "4px" }}>
-        <span className="meta" style={{ fontWeight: "500", marginBottom: "4px" }}>
+    <div data-sec="biz" style={{ maxWidth: "1180px", margin: "0 auto", padding: "22px 24px 40px", display: "flex", gap: "28px", flexWrap: "wrap", alignItems: "flex-start" }} data-testid="v2-business">
+      <nav aria-label="Documents" style={{ flex: "1 1 220px", maxWidth: "260px", display: "flex", flexDirection: "column", gap: "4px", padding: "12px", borderRadius: "16px", background: "var(--sec-wash)", border: "1px solid var(--sec-line)", boxSizing: "border-box" }}>
+        <span style={{ display: "flex", alignItems: "center", gap: "10px", fontWeight: "650", fontSize: "16px", margin: "2px 2px 8px" }}>
+          <span className="sec-tile" style={{ width: "34px", height: "34px", borderRadius: "10px" }}>
+            <svg viewBox="0 0 24 24" aria-hidden="true" style={{ width: "17px", height: "17px" }}>
+              <rect x="3" y="7" width="18" height="13" rx="2" />
+              <path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+            </svg>
+          </span>
           Your business
         </span>
         {DOCUMENT_KINDS.map((k) => (
@@ -333,14 +348,19 @@ export function BusinessView() {
             aria-pressed={k === kind}
             onClick={() => pick(k)}
             data-testid="business-doc"
-            style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: "1px", padding: "8px 10px", borderRadius: "8px", border: `1px solid ${k === kind ? "var(--accent)" : "transparent"}`, background: k === kind ? "var(--hover)" : "transparent", color: "inherit", font: "inherit", textAlign: "left", cursor: "pointer" }}
+            title={`Read by ${ABOUT[k].readers}`}
+            style={{ display: "flex", alignItems: "center", gap: "10px", padding: "9px 10px", borderRadius: "11px", border: `1px solid ${k === kind ? "var(--sec-line)" : "transparent"}`, background: k === kind ? "var(--panel)" : "transparent", color: "inherit", font: "inherit", textAlign: "left", cursor: "pointer" }}
           >
-            <span style={{ fontWeight: "500" }}>{ABOUT[k].title}</span>
-            <span className="meta">Read by {ABOUT[k].readers}</span>
+            <span style={{ width: "30px", height: "30px", borderRadius: "9px", display: "inline-flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto", background: k === kind ? "var(--sec)" : "var(--panel)", color: k === kind ? "#fff" : "var(--sec)" }}>
+              <svg viewBox="0 0 24 24" aria-hidden="true" style={{ width: "16px", height: "16px", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round" }}>
+                <path d={DOC_ICON[k] ?? DOC_ICON.product} />
+              </svg>
+            </span>
+            <span style={{ fontWeight: k === kind ? "650" : "500" }}>{ABOUT[k].title}</span>
           </button>
         ))}
         <div style={{ marginTop: "12px", paddingTop: "12px", borderTop: "1px solid var(--line)", display: "flex", flexDirection: "column", gap: "8px" }}>
-          <span className="meta">{site ? `Drafted from ${siteLabel(site)}. Every step reads these before it writes.` : "Every step reads these before it writes."}</span>
+          {site ? <span className="meta">From {siteLabel(site)}</span> : null}
           {site ? (
             <button type="button" className="ghost" disabled={reading || !state} onClick={() => (edited.length ? setConfirming(true) : void readAgain())} style={{ alignSelf: "flex-start" }}>
               {reading ? "Reading your website…" : "Read my website again"}

@@ -1,5 +1,6 @@
 "use client";
 
+import { OWN_ENOUGH, ownShare } from "@/lib/cmo/idea";
 import { STRONG_MATCH, matchLabel } from "@/lib/cmo/match";
 import { bare, isTheirWords } from "@/lib/cmo/quote";
 import dynamic from "next/dynamic";
@@ -17,7 +18,9 @@ import { PLATFORM_LABEL, SALES_PLATFORMS, type SalesPlatform } from "@/lib/cmo/s
 import type { SalesScreen } from "@/lib/screens/sales";
 import { createClient } from "@/lib/supabase/client";
 
+import { IdeaDraft } from "./IdeaDraft";
 import { usePhone } from "./phone";
+import { hasLogo, PlatformBadge } from "./platform-logos";
 import { useWorkspace } from "./workspace";
 
 // Reaching out, Following up and the settings tab open after the list: their code loads when first shown, which keeps
@@ -420,30 +423,39 @@ function NoOneAsked({ scan, onEdit, freeLeft }: { scan: NonNullable<SalesScreen[
 }
 
 /**
- * The reply idea Sales wrote, for the founder to turn into their own reply (owner, 2026-11-23): a finished, pasted
- * reply reads like a reply farm. The badge asks for their own words until they changed the text.
+ * The reply idea Sales wrote and the founder's own reply under it (owner, 2026-11-23): a finished, pasted reply reads
+ * like a reply farm. The idea shows as Idea / Solution with words to say; the founder writes the reply in the box, and
+ * the badge turns green once most of it is their own words.
  */
-function ReplyIdea({ id, draft, onDraft, done, edited, checks }: { id: string; draft: string; onDraft: (text: string) => void; done: boolean; edited: boolean; checks: string | null }) {
+function ReplyIdea({ id, idea, mine, onMine, done, checks }: { id: string; idea: string; mine: string; onMine: (text: string) => void; done: boolean; checks: string | null }) {
+  const share = ownShare(mine, idea);
+  const yours = share >= OWN_ENOUGH;
   return (
-    <div>
-      <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", marginBottom: "6px" }}>
-        <label className="meta" htmlFor={`reply-${id}`}>
-          Reply idea
-        </label>
-        {done ? null : edited ? (
-          <span className="chip" data-testid="reply-idea-edited" style={{ color: "var(--ok)" }}>
-            In your words
-          </span>
-        ) : (
-          <span className="chip" data-testid="reply-idea-badge" style={{ color: "var(--warn)" }}>
-            Write it in your own words
-          </span>
-        )}
-      </div>
-      <textarea id={`reply-${id}`} className="reply" value={draft} onChange={(e) => onDraft(e.target.value)} disabled={done} rows={4} style={{ width: "100%", resize: "vertical", font: "inherit", fontSize: "15px", lineHeight: "1.55", color: "var(--text)" }} />
-      <div className="meta" style={{ marginTop: "6px" }}>
-        {done ? checks : `An idea, not a reply: add what you know first-hand and say it your way, then copy it.${checks ? ` ${checks}.` : ""}`}
-      </div>
+    <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+      <IdeaDraft draft={idea} />
+      {done ? (
+        checks ? <div className="meta">{checks}</div> : null
+      ) : (
+        <>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+            <label htmlFor={`reply-${id}`} style={{ fontSize: "12px", fontWeight: "700", letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--muted)" }}>
+              Your reply
+            </label>
+            <span style={{ flex: "1 1 auto" }}></span>
+            <span className="idea-badge" data-mine={yours || undefined} data-testid={yours ? "reply-idea-edited" : "reply-idea-badge"}>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d={yours ? "M20 6 9 17l-5-5" : "M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"} />
+              </svg>
+              {yours ? `${share}% yours` : `Write it in your own words · ${share}%`}
+            </span>
+          </div>
+          <textarea id={`reply-${id}`} className="idea-mine" value={mine} onChange={(e) => onMine(e.target.value)} rows={4} placeholder="Say it the way you would, with what you know first-hand" />
+          <div className="idea-meter" role="meter" aria-label="Your own words" aria-valuemin={0} aria-valuemax={100} aria-valuenow={share}>
+            <span style={{ width: `${share}%` }}></span>
+          </div>
+          {checks ? <div className="meta">{checks}</div> : null}
+        </>
+      )}
     </div>
   );
 }
@@ -453,16 +465,10 @@ function ReplyIdea({ id, draft, onDraft, done, edited, checks }: { id: string; d
  * list and its actions held at the bottom of the screen (canvas board "Sales on a phone").
  */
 function ThreadRow({ t, free, open, onToggle, onBack, onPlan, onDecide, onSent }: { t: Thread; free: boolean; open: boolean; onToggle: () => void; onBack?: () => void; onPlan: (action: string) => void; onDecide: (t: Thread, action: "replied" | "dismissed", reason?: string, text?: string) => Promise<void>; onSent: (t: Thread, via: "dm" | "email") => Promise<void> }) {
-  const [draft, setDraft] = useState(t.draft ?? "");
-  // A reply written while the card is open ("Write the replies") arrives as a new `t.draft`: show it, unless the
-  // founder already typed their own (E2E 2026-11-22: the box stayed empty until a reload).
-  const [shownDraft, setShownDraft] = useState(t.draft);
-  if (t.draft !== shownDraft) {
-    setShownDraft(t.draft);
-    if (!draft.trim() || draft === (shownDraft ?? "")) setDraft(t.draft ?? "");
-  }
-  // The idea is the founder's to finish (owner, 2026-11-23): Copy and open waits until they changed it.
-  const edited = draft.trim() !== "" && draft.trim() !== (t.draft ?? "").trim();
+  // The founder's own reply. The idea (`t.draft`) shows above it and is never the text that gets copied.
+  const [draft, setDraft] = useState("");
+  // Copy and open waits until most of the reply is the founder's own words (owner, 2026-11-23).
+  const edited = ownShare(draft, t.draft ?? "") >= OWN_ENOUGH;
   const [copied, setCopied] = useState(false);
   const [dismissing, setDismissing] = useState(false);
   const [reason, setReason] = useState<string>(DISMISS_REASONS[0]);
@@ -487,7 +493,7 @@ function ThreadRow({ t, free, open, onToggle, onBack, onPlan, onDecide, onSent }
     // The reply that counts is the one the founder posted: an edited draft goes with "replied", so the 1-in-10 mention
     // rule and the learning read what went out, not the draft.
     const posted = draft.trim();
-    await onDecide(t, action, why, action === "replied" && posted && posted !== (t.draft ?? "").trim() ? posted.slice(0, 3000) : undefined);
+    await onDecide(t, action, why, action === "replied" && posted ? posted.slice(0, 3000) : undefined);
     setBusy(false);
   }
 
@@ -510,17 +516,45 @@ function ThreadRow({ t, free, open, onToggle, onBack, onPlan, onDecide, onSent }
         </>
       ) : null}
       <button type="button" className="row" onClick={onToggle} aria-expanded={open} hidden={Boolean(onBack)}>
-        <span className={tone(t.score)}>{matchLabel(t.score)}</span>
+        {hasLogo(t.platform) ? <PlatformBadge platform={t.platform} size={30} label={PLATFORM_LABEL[t.platform]} dim={done} /> : null}
         <span style={{ flex: "1 1 auto", minWidth: "0" }}>
-          <span style={{ display: "block", fontSize: "14.5px", fontWeight: "500", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: done ? "var(--muted)" : undefined }}>{t.title}</span>
-          <span className="meta">
-            {[PLATFORM_LABEL[t.platform], t.community !== PLATFORM_LABEL[t.platform] ? t.community : null, t.postedAt ? ago(t.postedAt) : null, t.comments != null ? `${t.comments} comments` : null, done ? (t.status === "replied" ? "you replied" : "dismissed") : null].filter(Boolean).join(" · ")}
+          <span style={{ display: "block", fontSize: "14.5px", fontWeight: "600", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: done ? "var(--muted)" : undefined }}>{t.title}</span>
+          <span className="meta icon-meta">
+            {t.community !== PLATFORM_LABEL[t.platform] ? <span>{t.community}</span> : null}
+            {t.postedAt ? (
+              <span title={`Posted ${ago(t.postedAt)}`}>
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M12 7v5l3 2" />
+                </svg>
+                {ago(t.postedAt).replace(/ ago$/, "")}
+              </span>
+            ) : null}
+            {t.comments != null ? (
+              <span title={`${t.comments} comments`}>
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12Z" />
+                </svg>
+                {t.comments}
+              </span>
+            ) : null}
+            {done ? (
+              <span style={{ color: t.status === "replied" ? "var(--sec-idea)" : undefined, fontWeight: "600" }}>
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d={t.status === "replied" ? "M9 17 4 12l5-5M20 18v-2a4 4 0 0 0-4-4H4" : "M18 6 6 18M6 6l12 12"} />
+                </svg>
+                {t.status === "replied" ? "Replied" : "Dismissed"}
+              </span>
+            ) : null}
           </span>
           {lead && !open && !done ? (
             <span className="quote" style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", marginTop: "6px", fontSize: "13.5px" }}>
               “{bare(lead.text)}”
             </span>
           ) : null}
+        </span>
+        <span className="score-sq" data-strong={t.score >= STRONG_MATCH || undefined} data-weak={t.score < 50 || undefined} title={`${matchLabel(t.score)} · ${t.score}/100`} aria-label={`${matchLabel(t.score)}, ${t.score} of 100`}>
+          {t.score}
         </span>
         <svg className="i s" viewBox="0 0 24 24" aria-hidden="true" style={{ color: "var(--subtle)" }}>
           <path d={open ? "m18 15-6-6-6 6" : "m6 9 6 6 6-6"} />
@@ -559,11 +593,11 @@ function ThreadRow({ t, free, open, onToggle, onBack, onPlan, onDecide, onSent }
               t={t}
               onSent={(via) => onSent(t, via)}
               publicReply={
-                <ReplyIdea id={t.id} draft={draft} onDraft={setDraft} done={done} edited={edited} checks={t.draftChecks} />
+                <ReplyIdea id={t.id} idea={t.draft} mine={draft} onMine={setDraft} done={done} checks={t.draftChecks} />
               }
             />
           ) : (
-            <ReplyIdea id={t.id} draft={draft} onDraft={setDraft} done={done} edited={edited} checks={t.draftChecks} />
+            <ReplyIdea id={t.id} idea={t.draft} mine={draft} onMine={setDraft} done={done} checks={t.draftChecks} />
           )}
           {done ? (
             <div style={{ display: "flex", justifyContent: "flex-end" }}>
@@ -606,7 +640,7 @@ function ThreadRow({ t, free, open, onToggle, onBack, onPlan, onDecide, onSent }
                   type="button"
                   className="primary"
                   disabled={!draft.trim() || !edited}
-                  title={edited ? undefined : "Write the reply in your own words first"}
+                  title={edited ? undefined : "Write most of the reply in your own words first"}
                   onClick={() => void copyAndOpen()}
                 >
                   <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
@@ -812,33 +846,36 @@ export function AgentSales() {
   }
 
   return (
-    <div className="sales-page" style={{ display: "flex", flexWrap: "wrap", maxWidth: "1320px", margin: "0 auto", padding: "22px 24px 40px", gap: "24px" }} data-testid="v2-sales">
+    <div className="sales-page" data-sec="find" style={{ display: "flex", flexWrap: "wrap", maxWidth: "1320px", margin: "0 auto", padding: "22px 24px 40px", gap: "24px" }} data-testid="v2-sales">
       <main style={{ flex: "999 1 600px", minWidth: "0" }}>
-        <div style={{ display: "flex", alignItems: "flex-start", gap: "14px", flexWrap: "wrap" }}>
-          <span className="tile">
-            <svg className="i" viewBox="0 0 24 24" aria-hidden="true" style={{ width: "20px", height: "20px" }}>
-              <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
+        <div className="sec-band">
+          <span className="sec-tile">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="11" cy="11" r="7" />
+              <path d="m20 20-3.5-3.5" />
             </svg>
           </span>
-          <div style={{ flex: "1 1 300px", minWidth: "0" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <h1 style={{ margin: "0", fontSize: "22px", fontWeight: "600", letterSpacing: "-0.4px" }}>Sales</h1>
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px", flex: "1 1 200px", minWidth: "0" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+              <h1>Sales</h1>
               {lastScan ? (
-                <span className="chip">
-                  <span className="live"></span>Scanned {ago(lastScan) === "just now" ? "just now" : `${ago(lastScan)} ago`}
+                <span className="sec-chip" title="Last scan" style={{ color: "var(--ok)" }}>
+                  <span className="live"></span>
+                  {ago(lastScan) === "just now" ? "Scanned just now" : `Scanned ${ago(lastScan)} ago`}
                 </span>
               ) : null}
             </div>
-            <p style={{ margin: "4px 0 8px", color: "var(--muted)", fontSize: "14px", maxWidth: "620px" }}>
-              Finds public conversations where people describe the problem {name} solves, scores each one with the exact words, and drafts a help-first reply. You post it yourself; Sales has no post button.
-            </p>
-            <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
-              <span className="meta">Reads</span>
-              <span className="chip">Product</span>
-              <span className="chip">Competitors</span>
-              <span className="chip">Brand voice</span>
-            </div>
+            {/* Where it looks, as the platforms' own icons (owner, 2026-11-23: fewer words). */}
+            <span className="pl-row" aria-label={`Looks on ${(data?.settings.platforms ?? SALES_PLATFORMS).map((p) => PLATFORM_LABEL[p]).join(", ")}`}>
+              {SALES_PLATFORMS.map((p) => (hasLogo(p) ? <PlatformBadge key={p} platform={p} size={20} dim={!(data?.settings.platforms ?? SALES_PLATFORMS).includes(p)} /> : null))}
+            </span>
           </div>
+          <span className="sec-stat" title="Replied since Monday" style={{ color: "var(--sec-idea)" }}>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M9 17 4 12l5-5M20 18v-2a4 4 0 0 0-4-4H4" />
+            </svg>
+            {week?.replied ?? 0}
+          </span>
           <ScanNow scanning={scanActive(scan) && scan.kind === "sales_scan"} paused={paused !== null} platforms={data?.settings.platforms} free={free} freeLeft={freeLeft} onPlan={setPlanFor} onStarted={startedScan} />
         </div>
         {scan ? <ScanProgress scan={scan} onClose={() => setScan(null)} /> : null}
@@ -996,9 +1033,13 @@ export function AgentSales() {
             const on = (data?.settings.platforms ?? SALES_PLATFORMS).includes(p);
             const excluded = data?.settings.excludedSubreddits.length ?? 0;
             return (
-              <div key={p} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 0" }}>
-                <span>{PLATFORM_LABEL[p]}</span>
-                <span className="meta">{!on ? "off" : p === "reddit" && excluded ? `all but ${excluded} excluded` : "on"}</span>
+              <div key={p} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "6px 0" }}>
+                {hasLogo(p) ? <PlatformBadge platform={p} size={26} dim={!on} /> : null}
+                <span style={{ flex: "1", color: on ? undefined : "var(--muted)" }}>
+                  {PLATFORM_LABEL[p]}
+                  {on && p === "reddit" && excluded ? <span className="meta"> · {excluded} excluded</span> : null}
+                </span>
+                <button type="button" className="sw" role="switch" aria-checked={on} aria-label={`${PLATFORM_LABEL[p]}: change in Settings`} title="Change in Settings" onClick={() => setTab("settings")}></button>
               </div>
             );
           })}
