@@ -561,3 +561,7 @@ html:not([data-theme="dark"]) .k { --ok: #16744c; --warn: #8f5a0e; }
 .pg-agentsales .reach-tabs button[aria-selected="true"] { background: var(--raised); color: var(--text); box-shadow: 0 1px 2px rgba(0, 0, 0, .12); }
 .pg-agentsales .reach-locked { display: flex; flex-direction: column; gap: 6px; padding: 12px; border: 1px dashed var(--line-2); border-radius: 10px; font-size: 13.5px; }
 .pg-agentsales .reach-locked-draft { margin-top: 4px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--subtle); font-size: 13.5px; line-height: 1.5; opacity: .7; }
+
+/* A disabled primary button reads as disabled (2026-11-23: "Copy and open thread" waits for the founder's own words). */
+.td-frame .primary:disabled { opacity: 0.45; cursor: not-allowed; }
+.td-frame .primary:disabled:hover { background: var(--accent); }
