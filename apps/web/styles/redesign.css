@@ -130,3 +130,5 @@ html[data-theme="dark"] .score-sq[data-strong] { color: #0e0d0c; }
 html[data-theme="dark"] .k [data-sec] .seg [aria-selected="true"] { color: #0e0d0c; }
 .day-btn[data-on] { background: var(--sec, var(--accent)); border-color: var(--sec, var(--accent)); color: #fff; }
 .pick-btn:disabled { cursor: default; opacity: 0.7; }
+/* X and Threads are near-black: on the dark theme they get a lighter tile and an edge so they do not disappear. */
+html[data-theme="dark"] .pl-badge[data-ink] { background: #2b2d31 !important; box-shadow: inset 0 0 0 1px #4a4d55; }

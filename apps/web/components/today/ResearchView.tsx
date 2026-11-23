@@ -11,24 +11,6 @@ import { CompanyLogo } from "./company-logo";
 import { ResearchChat } from "./ResearchChat";
 import { siteLabel, useWorkspace } from "./workspace";
 
-/** The colour squares of the competitors' marks, in order (the canvas draws each in its own colour). */
-// Every mark holds white text at 4.5:1 or more (axe color-contrast, WCAG AA).
-export const MARKS = ["#17724b", "#c2410c", "#0067c2", "#2d3e50", "#1a5fd6", "#c81e1e", "#7a4fc4", "#8a6d0f"];
-
-/** "Invoice Ninja" → "IN", "Bonsai" → "B". */
-export function markOf(name: string): string {
-  const words = name.trim().split(/\s+/).filter(Boolean);
-  return (words.length > 1 ? words.slice(0, 2).map((w) => w[0]) : [words[0]?.[0] ?? "?"]).join("").toUpperCase();
-}
-
-export function Mark({ name, index, size = 28 }: { name: string; index: number; size?: number }) {
-  return (
-    <span aria-hidden="true" style={{ flex: "none", width: `${size}px`, height: `${size}px`, borderRadius: "7px", background: MARKS[index % MARKS.length], color: "#fff", display: "grid", placeItems: "center", fontSize: `${Math.round(size * 0.42)}px`, fontWeight: "700" }}>
-      {markOf(name)}
-    </span>
-  );
-}
-
 /** This week's Monday as `YYYY-MM-DD` (UTC), the key `my_competitor_mentions` counts by. */
 function mondayOf(day = new Date()): string {
   const d = new Date(Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate() - ((day.getUTCDay() + 6) % 7)));

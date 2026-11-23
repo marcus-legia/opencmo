@@ -55,7 +55,7 @@ export function PlatformBadge({ platform, size = 28, label, dim = false }: { pla
   const logo = LOGOS[platform];
   const style: CSSProperties = { width: size, height: size, borderRadius: Math.round(size * 0.28), background: logo.color ?? INK, opacity: dim ? 0.35 : undefined, filter: dim ? "grayscale(1)" : undefined };
   return (
-    <span className="pl-badge" style={style} role={label ? "img" : undefined} aria-label={label} aria-hidden={label ? undefined : true} title={label}>
+    <span className="pl-badge" data-ink={logo.color ? undefined : ""} style={style} role={label ? "img" : undefined} aria-label={label} aria-hidden={label ? undefined : true} title={label}>
       {/* The Hacker News mark is a Y inside a square: drawn without the square, it needs the larger box. */}
       <svg viewBox={platform === "hn" ? "5 4 14 16" : "0 0 24 24"} width={Math.round(size * 0.6)} height={Math.round(size * 0.6)} fill="#fff">
         <path d={platform === "hn" ? logo.path.replace(/^M0 24V0h24v24H0z/, "") : logo.path} />

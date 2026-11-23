@@ -96,7 +96,7 @@ function pinned(addresses: Resolved[]): LookupFunction {
 
 type Answer = { status: number; headers: http.IncomingHttpHeaders; body: Readable };
 
-function get(url: URL, addresses: Resolved[]): Promise<Answer> {
+function get(url: URL, addresses: Resolved[], accept = "text/html,application/xhtml+xml"): Promise<Answer> {
   const client = url.protocol === "https:" ? https : http;
   return new Promise((resolve, reject) => {
     const request = client.get(url, {
@@ -105,7 +105,7 @@ function get(url: URL, addresses: Resolved[]): Promise<Answer> {
       // A pinned lookup is per request; a pooled socket could belong to another host's answer.
       agent: false,
       signal: AbortSignal.timeout(TIMEOUT_MS),
-      headers: { "user-agent": "FerretoBot/1.0 (+https://ferreto.io)", accept: "text/html,application/xhtml+xml" },
+      headers: { "user-agent": "FerretoBot/1.0 (+https://ferreto.io)", accept },
     });
     request.on("response", (response) => resolve({ status: response.statusCode ?? 0, headers: response.headers, body: response }));
     request.on("error", reject);
@@ -156,6 +156,47 @@ export async function fetchPage(start: URL, resolve: Resolver = publicAddresses)
     }
   }
   throw new SiteError("That website redirects too many times.");
+}
+
+const RASTER = /^image\/(?:png|x-icon|vnd\.microsoft\.icon|jpeg|gif|webp)\b/;
+const ICON_BYTES = 200_000;
+
+/**
+ * One small raster image (a site's icon), with the same checks as `fetchPage` on every hop. Null when there is none,
+ * it is not a raster image (an SVG could carry script) or it is over 200 KB.
+ */
+export async function fetchIcon(start: URL, resolve: Resolver = publicAddresses): Promise<{ body: Buffer } | null> {
+  let url = start;
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    const { host } = checkHop(url);
+    const addresses = await resolve(host);
+    const response = await get(url, addresses, "image/png,image/x-icon,image/*;q=0.8");
+    if (response.status >= 300 && response.status < 400) {
+      response.body.resume();
+      const next = response.headers.location;
+      if (!next) return null;
+      url = new URL(next, url);
+      continue;
+    }
+    const type = String(response.headers["content-type"] ?? "");
+    if (response.status !== 200 || !RASTER.test(type)) {
+      response.body.resume();
+      return null;
+    }
+    const chunks: Buffer[] = [];
+    let size = 0;
+    for await (const chunk of response.body) {
+      size += (chunk as Buffer).byteLength;
+      if (size > ICON_BYTES) {
+        response.body.destroy();
+        return null;
+      }
+      chunks.push(chunk as Buffer);
+    }
+    // The caller decides the type from the bytes (`rasterType`); the header only filters out what is clearly not one.
+    return { body: Buffer.concat(chunks) };
+  }
+  return null;
 }
 
 const decode = (s: string) =>
