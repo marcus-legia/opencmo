@@ -21,7 +21,7 @@ export function salesScanCard(brief?: string, platforms?: SalesPlatform[]): Pric
     changes: [
       brief ? `Scan ${where}: ${clip(brief, 200)}` : `Scan ${where} for people who describe the problem you solve`,
       "Up to 8 searches written from your customers' pains, skipping the subreddits and term pairs in your Sales settings",
-      "Draft replies for the 5 best threads into Approvals. You post them yourself.",
+      "An idea for each reply to the 5 best threads. You write it in your own words and post it yourself.",
     ],
     credits: JOB_PRICES.sales_scan ?? 0,
   };
