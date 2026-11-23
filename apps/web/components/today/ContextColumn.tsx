@@ -81,7 +81,8 @@ export function ContextColumn({ goal, onClose }: { goal: { text: string | null; 
     : ws.competitors.map((c) => ({ key: c.name, name: c.name || siteLabel(c.website) || "?", site: c.website }));
   const pct = goal && goal.total > 0 ? Math.round((goal.done / goal.total) * 100) : 0;
 
-  const name = ws.name ?? site ?? "Your business";
+  // Blank until the workspace loads: a placeholder name and letter would flash before the real product.
+  const name = ws.ready ? (ws.name ?? site ?? "Your business") : "";
   const ICON = { fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round" } as const;
   const steps = [
     { label: "Found", n: week?.found, sec: "find", d: "M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14ZM20 20l-3.5-3.5" },
@@ -213,7 +214,7 @@ export function ContextColumn({ goal, onClose }: { goal: { text: string | null; 
           <h2>
             Competitors{" "}
             <span className="meta" style={{ marginLeft: "4px" }}>
-              {rivals.length}
+              {ws.ready ? rivals.length : ""}
             </span>
           </h2>
           <a href="/app/research" aria-label="Research" title="Research" style={{ color: "var(--sec-find)", display: "inline-flex" }}>
@@ -239,7 +240,7 @@ export function ContextColumn({ goal, onClose }: { goal: { text: string | null; 
           <a href="/app/research" className="meta" style={{ display: "block", padding: "4px 6px 0" }}>
             {rivals.length - 8} more
           </a>
-        ) : rivals.length === 0 ? (
+        ) : ws.ready && kept !== null && rivals.length === 0 ? (
           <a href="/app/research" className="meta" style={{ display: "block", padding: "4px 6px 0" }}>
             Add the tools your customers compare you with
           </a>

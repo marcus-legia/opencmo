@@ -153,7 +153,8 @@ const NAV_SEC: Record<string, string | undefined> = { sales: "find", post: "post
 
 function Project({ menu }: { menu: ReactNode }) {
   const ws = useWorkspace();
-  const name = ws.name ?? siteLabel(ws.site) ?? "Your business";
+  // Blank until the workspace loads, like the context column: no placeholder name flashing first.
+  const name = ws.ready ? (ws.name ?? siteLabel(ws.site) ?? "Your business") : "";
   const ref = useRef<HTMLDetailsElement>(null);
   return (
     <details className="td-menuwrap" ref={ref} onClick={(e) => (e.target as HTMLElement).closest("a") && ref.current?.removeAttribute("open")}>
