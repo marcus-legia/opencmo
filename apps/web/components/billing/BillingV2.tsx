@@ -3,6 +3,7 @@ import { SwitchAnnual } from "@/components/billing/SwitchAnnual";
 import { LocalTime } from "@/components/LocalTime";
 import { SettingsFrame } from "@/components/today/SettingsFrame";
 import type { SellablePlan } from "@/lib/billing-catalog";
+import { dollars } from "@/components/landing/data";
 import type { PlanUsage } from "@/lib/billing/usage";
 import { SUPPORT_EMAIL } from "@/lib/site";
 import type { LedgerEntry } from "@/lib/types";
@@ -88,7 +89,7 @@ export function BillingV2({
                 <div style={{ marginTop: "6px", color: "var(--muted)" }}>
                   {[
                     // A price only from its catalogue row: no row, no number (cmo-review-2 S2.7).
-                    current?.slug ? (current.interval === "year" ? `$${current.billedPrice} a year` : `$${current.price} a month`) : null,
+                    current?.slug ? (current.interval === "year" ? `$${current.billedPrice} a year` : `$${dollars(current.price)} a month`) : null,
                     usage.interval === "month" && usage.resetsAt ? `renews on ${day(usage.resetsAt)}` : null,
                   ]
                     .filter(Boolean)
@@ -167,7 +168,7 @@ export function BillingV2({
                     {/* A paid plan's price comes only from its catalogue row: no row, no number (cmo-review-2 S2.7). */}
                     {plan.id === "free" || plan.slug ? (
                       <span>
-                        {plan.listPrice ? <del className="meta">${plan.listPrice}</del> : null} <b style={{ fontSize: "20px" }}>${plan.price}</b>
+                        {plan.listPrice ? <del className="meta">${dollars(plan.listPrice)}</del> : null} <b style={{ fontSize: "20px" }}>${dollars(plan.price)}</b>
                         <span className="meta"> / month</span>
                       </span>
                     ) : null}

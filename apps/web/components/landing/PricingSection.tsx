@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { BRAND, INCLUDED, savePercent, USUAL_WAY, type Prices } from "./data";
+import { BRAND, dollars, INCLUDED, savePercent, USUAL_WAY, type Prices } from "./data";
 import { LineIcon, LogoMark } from "./Glyphs";
 
 /**
@@ -21,7 +21,7 @@ export function PricingSection({ prices, action }: { prices: Prices; action: str
           <div className="lv-stack-16">
             <p className="lv-eyebrow">Pricing</p>
             <h2 id="pricing-title" className="lv-h2 is-lg">One plan. <span className="lv-accent">Everything included.</span></h2>
-            <p className="lv-lede is-wide">The searches, the drafted replies, the weekly posts and the editor, for one price.</p>
+            <p className="lv-lede is-wide">The searches, the reply ideas, the drafted DMs and emails and the weekly posts, for one price.</p>
           </div>
           <div role="radiogroup" aria-label="Billing" className="lv-segment is-billing">
             <button type="button" role="radio" aria-checked={!annual} className={annual ? "" : "is-on"} onClick={() => setAnnual(false)}>Monthly</button>
@@ -47,8 +47,8 @@ export function PricingSection({ prices, action }: { prices: Prices; action: str
             </div>
             <div className="lv-offer-price">
               <p>
-                {annual && <s>${prices.monthly}</s>}
-                <strong>${price}</strong>
+                {annual && <s>${dollars(prices.monthly)}</s>}
+                <strong>${dollars(price)}</strong>
                 <span>/ month</span>
               </p>
               <span>{annual ? `Billed $${prices.annualBilled} once a year` : `Billed monthly · switch to annual to save ${save}%`}</span>
