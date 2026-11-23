@@ -138,7 +138,7 @@ html[data-theme="dark"] .pl-badge[data-ink] { background: #2b2d31 !important; bo
  * The paywall in the landing's pricing look (owner, 2026-11-23): the brand-orange offer card, a big price, the included
  * lines on white tiles and one white button that catches the eye. Used by the plan sheet, Billing and the top-bar chip.
  */
-.up-offer { --up-brand: #ef4a1a; --up-ink: #2b2723; --up-paper: #f3f3ee; --up-mono: "Source Code Pro", ui-monospace, monospace;
+.up-offer { --up-brand: #d23d16; --up-ink: #2b2723; --up-paper: #f3f3ee; --up-mono: "Source Code Pro", ui-monospace, monospace;
   position: relative; display: flex; flex-direction: column; gap: 20px; padding: clamp(22px, 3vw, 36px); background: var(--up-brand); color: #fff;
   border-radius: 16px; overflow: hidden; font-family: Inter, system-ui, sans-serif; }
 .up-offer::after { content: ""; position: absolute; right: -80px; top: -80px; width: 260px; height: 260px; border-radius: 50%; background: radial-gradient(circle, rgb(255 255 255 / .22), transparent 70%); pointer-events: none; }
@@ -147,23 +147,23 @@ html[data-theme="dark"] .pl-badge[data-ink] { background: #2b2d31 !important; bo
 .up-offer-head h3 img { filter: brightness(0) invert(1); }
 .up-offer-pro { padding: 3px 9px; border-radius: 999px; background: #fff; color: var(--up-brand); font: 600 11px var(--up-mono); letter-spacing: .1em; text-transform: uppercase; }
 .up-segment { display: flex; gap: 2px; padding: 3px; border-radius: 999px; background: rgb(0 0 0 / .16); }
-.up-segment button { display: flex; align-items: center; gap: 6px; padding: 7px 14px; border: 0; border-radius: 999px; background: transparent; color: rgb(255 255 255 / .85); font: 500 11.5px var(--up-mono); letter-spacing: .08em; text-transform: uppercase; cursor: pointer; }
+.up-segment button { display: flex; align-items: center; gap: 6px; padding: 7px 14px; border: 0; border-radius: 999px; background: transparent; color: #fff; font: 500 11.5px var(--up-mono); letter-spacing: .08em; text-transform: uppercase; cursor: pointer; }
 .up-segment button.is-on { background: #fff; color: var(--up-ink); }
 .up-save { padding: 2px 6px; border-radius: 999px; background: #2557d6; color: #fff; font: 600 10px var(--up-mono); letter-spacing: .02em; }
 .up-offer-price { display: flex; flex-direction: column; gap: 6px; position: relative; z-index: 1; }
 .up-offer-price p { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin: 0; }
-.up-offer-price s { font: 400 24px Inter, system-ui, sans-serif; color: rgb(255 255 255 / .6); }
+.up-offer-price s { font: 400 24px Inter, system-ui, sans-serif; color: rgb(255 255 255 / .8); }
 .up-offer-price strong { font: 500 clamp(64px, 8vw, 104px)/.85 Inter, system-ui, sans-serif; letter-spacing: -.06em; color: #fff; }
-.up-offer-price p span { font-size: 15px; color: rgb(255 255 255 / .85); }
-.up-offer-price > span { font-size: 13.5px; color: rgb(255 255 255 / .88); }
+.up-offer-price p span { font-size: 15px; color: #fff; }
+.up-offer-price > span { font-size: 13.5px; color: #fff; }
 .up-included { margin: 0; padding: 18px 0 0; list-style: none; display: flex; flex-direction: column; gap: 12px; border-top: 1px solid rgb(255 255 255 / .35); }
 .up-included li { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 12px; align-items: start; }
 .up-included-icon { width: 28px; height: 28px; border-radius: 7px; background: #fff; color: var(--up-brand); display: grid; place-items: center; }
 .up-included li > span:last-child { display: flex; flex-direction: column; gap: 1px; }
 .up-included b { font-weight: 600; font-size: 14px; color: #fff; }
-.up-included small { font-size: 13px; line-height: 1.45; color: rgb(255 255 255 / .86); }
+.up-included small { font-size: 13px; line-height: 1.45; color: #fff; opacity: .95; }
 .up-cta-zone { display: flex; flex-direction: column; gap: 10px; align-items: stretch; }
-.up-cta-zone > small { font-size: 12px; text-align: center; color: rgb(255 255 255 / .85); }
+.up-cta-zone > small { font-size: 12px; text-align: center; color: #fff; }
 .up-cta-zone .field-error { margin: 0; padding: 8px 10px; border-radius: 8px; background: #fff; color: #b23a2e; font-size: 13px; }
 .up-cta { position: relative; overflow: hidden; min-height: 54px; padding: 0 24px; border: 0; border-radius: 999px; background: #fff; color: var(--up-ink);
   font: 600 14px var(--up-mono); letter-spacing: .1em; text-transform: uppercase; cursor: pointer;
@@ -196,7 +196,7 @@ dialog.v2-dialog.up-sheet { width: min(520px, calc(100vw - 24px)); max-height: c
 @media (max-width: 900px) { .up-billing { grid-template-columns: 1fr; } .up-billing .up-offer { order: -1; } }
 
 /* The top-bar chip for a free account: an orange Upgrade pill, not a grey link. */
-.td-upgrade { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px 0 10px; border-radius: 999px; background: #ef4a1a; color: #fff !important; font-weight: 650; font-size: 13px; text-decoration: none; box-shadow: 0 4px 14px -4px rgb(239 74 26 / .7); transition: background .2s, transform .15s; }
+.td-upgrade { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px 0 10px; border-radius: 999px; background: #d23d16; color: #fff !important; font-weight: 650; font-size: 13px; text-decoration: none; box-shadow: 0 4px 14px -4px rgb(210 61 22 / .7); transition: background .2s, transform .15s; }
 .td-upgrade:hover { background: #c93a0f; transform: translateY(-1px); }
-.td-upgrade .td-pill-more { opacity: .85; font-weight: 500; }
+.td-upgrade .td-pill-more { font-weight: 500; }
 .td-upgrade svg { width: 14px; height: 14px; }
