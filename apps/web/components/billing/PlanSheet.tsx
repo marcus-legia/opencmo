@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { BillingButton } from "@/components/billing/BillingButton";
 import { api } from "@/components/clipping/api";
-import { INCLUDED, savePercent } from "@/components/landing/data";
+import { dollars, INCLUDED, savePercent } from "@/components/landing/data";
 import type { PlanOffer } from "@/lib/plan-offer";
 import { SUPPORT_EMAIL } from "@/lib/site";
 
@@ -125,7 +125,7 @@ export function PlanSheet({ open, onClose, action = "approve and post" }: { open
                       {plan.interval === "year" && save > 0 ? <span className="v2-chip is-running">Save {save}%</span> : null}
                     </span>
                     <span className="td-plan-price">
-                      <b>${plan.price}</b>
+                      <b>${dollars(plan.price)}</b>
                       <span className="v2-muted"> / month</span>
                     </span>
                     <span className="v2-mono is-muted">{billedNote(plan)}</span>

@@ -80,6 +80,11 @@ export const PROMISES = [
 /** Giá chạy trên trang: đọc từ PLANS ở server rồi truyền xuống (pricing.ts là server-only). */
 export type Prices = { monthly: number; annual: number; annualBilled: number };
 
+/** "$69", "$57.50": an annual plan's month is 690 / 12, which printed as "$57.5" on the landing page (2026-11-23). */
+export function dollars(amount: number): string {
+  return Number.isInteger(amount) ? String(amount) : amount.toFixed(2);
+}
+
 export function savePercent(p: Prices): number {
   return Math.round((1 - p.annual / p.monthly) * 100);
 }
@@ -95,9 +100,9 @@ export const USUAL_WAY = [
 export const INCLUDED = [
   { icon: STEP_ICON.find, title: "Searches on four platforms", body: "Reddit, Hacker News, Threads and Facebook groups" },
   { icon: STEP_ICON.score, title: "Scored threads", body: "Each with the quote that shows why" },
-  { icon: STEP_ICON.reach, title: "Replies, DMs and emails", body: "Drafted from your business plan, checked against each community's rules" },
+  { icon: STEP_ICON.reach, title: "Reply ideas, DMs and emails", body: "An idea for each reply you write yourself, and drafted DMs and emails, from your business plan and each community's rules" },
   { icon: STEP_ICON.post, title: "A week of posts", body: "For X, LinkedIn and Threads, approved in one go" },
-  { icon: LUCIDE.wand, title: "Monthly credits for the AI work", body: "One allowance you can see in Settings, no per-click prices" },
+  { icon: LUCIDE.wand, title: "A fair-use allowance", body: "One monthly allowance, shown as a bar in the app, no per-click prices" },
 ];
 
 export function faqs(p: Prices | null): { q: string; a: string }[] {

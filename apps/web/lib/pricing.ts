@@ -39,7 +39,7 @@ export type Plan = {
  * prints the credit count (review 2026-11-21, X2): `withCatalogPrice` swaps this line for the sentence a plan with a
  * catalogue row can promise, and a plan with no row keeps this one.
  */
-const ALLOWANCE_LINE = "Monthly credits for the AI work";
+const ALLOWANCE_LINE = "A fair-use allowance";
 
 export const PLANS: Plan[] = [
   {
