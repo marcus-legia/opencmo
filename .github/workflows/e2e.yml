@@ -84,10 +84,14 @@ jobs:
 
       - name: Whole suite, default app
         if: matrix.suite == 'full-v1'
+        env:
+          E2E_SERVER_TIMEOUT_MS: "420000"
         run: npm run test:e2e --workspace @opencmo/web
 
       - name: Whole suite, v2 app
         if: matrix.suite == 'full-v2'
+        env:
+          E2E_SERVER_TIMEOUT_MS: "420000"
         run: npm run test:e2e:v2 --workspace @opencmo/web
 
       - name: New visual baselines
