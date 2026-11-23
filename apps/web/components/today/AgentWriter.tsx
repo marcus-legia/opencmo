@@ -246,7 +246,7 @@ export function AgentWriter() {
           </label>
           <input id="ask-writer" type="text" placeholder="Ask for a post" value={ask} onChange={(e) => setAsk(e.target.value)} />
           {/* Which platform, as the platforms' own icons: a toggle each instead of a select (owner, 2026-11-23). */}
-          <span role="group" aria-label="Platform" style={{ display: "inline-flex", gap: "6px", flexWrap: "wrap" }}>
+          <span role="group" aria-label="Write for" style={{ display: "inline-flex", gap: "6px", flexWrap: "wrap" }}>
             {ASK_KINDS.map((k) => (
               <button key={k.id} type="button" className="pick-btn" aria-pressed={askKind === k.id} onClick={() => setAskKind(k.id)} data-testid={`ask-kind-${k.id}`}>
                 <PlatformBadge platform={k.id === "post" ? "x" : k.id} size={24} />
