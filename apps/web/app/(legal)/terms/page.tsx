@@ -16,7 +16,7 @@ export default function TermsPage() {
           heading: "1. What Ferreto is",
           body: (
             <>
-              <p>Ferreto is software. It reads the website you give it, finds public conversations where people describe the problem your product solves, and drafts replies, direct messages, emails and posts for you. It is not an agency and does not provide human marketing or sales services.</p>
+              <p>Ferreto is software. It reads the website you give it, finds public conversations where people describe the problem your product solves, suggests what to say in replies, and drafts direct messages, emails and posts for you. It is not an agency and does not provide human marketing or sales services.</p>
               <p>Ferreto does not reply to, message or email anyone on its own. You send replies, messages and emails yourself, from your own accounts. Posts are published only to accounts you have connected yourself, and only after you approve them or, if you turn on autopilot for a platform, at the time shown on a post you left untouched. You can turn autopilot off at any time.</p>
             </>
           ),

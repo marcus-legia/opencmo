@@ -36,7 +36,7 @@ export function blogUrl(path = "/"): string {
 }
 
 export const SITE_DESCRIPTION =
-  "Ferreto finds the people already asking for what you built on Reddit, Hacker News, Threads and Facebook groups, with their own words as proof and a draft reply you post yourself. A week of posts comes with it.";
+  "Ferreto finds the people already asking for what you built on Reddit, Hacker News, Threads and Facebook groups, with their own words as proof and an idea for a reply you write and post yourself. A week of posts comes with it.";
 
 /** Email hỗ trợ — phải TRÙNG email khai với bên thanh toán (Creem đối chiếu khi duyệt). */
 export const SUPPORT_EMAIL = "support@ferreto.io";

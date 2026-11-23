@@ -58,7 +58,7 @@ export const PLANS: Plan[] = [
     // gets is the free first run (CMO review 3, 3.1), so the list says exactly that.
     features: [
       "Your first scan, free: the people asking, in their own words",
-      "Reply drafts, more scans and posting come with a plan",
+      "Reply ideas, more scans and posting come with a plan",
       "Account deleted 30 days after sign-up unless you buy a plan",
     ],
   },
@@ -78,7 +78,7 @@ export const PLANS: Plan[] = [
     quota: { previews: 100, exports: 30, storageBytes: 10 * 1024 ** 3, storageObjects: 1000 },
     features: [
       "Searches on Reddit, Hacker News, Threads and Facebook groups, each person with the quote that shows why",
-      "Replies, DMs and emails drafted from your business plan",
+      "An idea for each reply, plus DMs and emails drafted from your business plan",
       "A week of posts for X, LinkedIn and Threads, approved in one go",
       ALLOWANCE_LINE,
     ],

@@ -34,8 +34,8 @@ export function Hero({ action }: { action: string }) {
         </h1>
         <p data-intro="1" className="lv-hero-sub">
           {BRAND} reads your website, then searches Reddit, Hacker News, Threads and Facebook groups for people describing
-          the problem you solve. Each one comes with the quote that shows why, and a draft reply based on your business
-          plan. You post it from your own account.
+          the problem you solve. Each one comes with the quote that shows why, and an idea for your reply based on your
+          business plan. You write it in your own words and post it from your own account.
         </p>
         {/* `site` travels through login (LoginForm → auth/callback) into the app. */}
         <form data-intro="1" action={action} className="lv-pill-form">
