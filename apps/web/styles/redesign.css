@@ -68,7 +68,7 @@ html[data-theme="dark"] .idea-key { color: #0e0d0c; }
 html[data-theme="dark"] .idea-badge { background: var(--sec-idea-line); }
 html[data-theme="dark"] .idea-badge[data-mine] { background: var(--sec-sol-line); }
 .idea-badge svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
-.idea-meter { flex: 1 1 100px; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; min-width: 80px; }
+.idea-meter { flex: 0 0 auto; width: 100%; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; min-width: 80px; }
 .idea-meter > span { display: block; height: 100%; background: var(--sec-sol); transition: width 0.16s; }
 .idea-mine { width: 100%; box-sizing: border-box; padding: 11px 13px; border-radius: 12px; border: 1.5px solid var(--sec-idea-line); background: var(--panel); color: var(--text); font: inherit; font-size: 15px; line-height: 1.55; resize: vertical; }
 .idea-mine:focus { outline: none; border-color: var(--sec-idea); }
