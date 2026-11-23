@@ -76,6 +76,10 @@ jobs:
 
       - name: Smoke set
         if: matrix.suite == 'smoke'
+        # The server is a cold `next build` then `next start`; on a hosted runner the build passed 3 minutes in
+        # November 2026 (#262, #263), so the wait for it is 7 minutes here.
+        env:
+          E2E_SERVER_TIMEOUT_MS: "420000"
         run: npm run test:e2e:smoke --workspace @opencmo/web
 
       - name: Whole suite, default app
