@@ -11,7 +11,7 @@ assert.equal(logoHost("127.0.0.1"), null);
 assert.equal(logoHost("http://user@evil.com:8080/"), "evil.com");
 assert.equal(logoHost("localhost"), null);
 assert.equal(logoSrc(""), null);
-assert.equal(logoSrc("syften.com"), "/api/logo?d=syften.com");
+assert.equal(logoSrc("syften.com"), "/api/logo?d=syften.com&v=2");
 
 assert.equal(rasterType(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0])), "image/png");
 assert.equal(rasterType(new Uint8Array([0xff, 0xd8, 0xff, 0xe0])), "image/jpeg");
