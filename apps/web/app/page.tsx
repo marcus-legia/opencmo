@@ -16,7 +16,7 @@ import { offerPrices, plansOnSale, type SellablePlan } from "@/lib/billing-catal
 import { SITE_NAME, SITE_URL, absoluteUrl } from "@/lib/site";
 import { currentUser } from "@/lib/supabase/user";
 
-const DESCRIPTION = `${BRAND} reads your website and finds people on Reddit, Hacker News, Threads and Facebook groups who describe the problem you solve. It drafts a reply built from your business plan; you post it from your own account.`;
+const DESCRIPTION = `${BRAND} reads your website and finds people on Reddit, Hacker News, Threads and Facebook groups who describe the problem you solve. It gives you an idea for each reply, built from your business plan; you write it in your own words and post it from your own account.`;
 
 export const metadata: Metadata = {
   title: { absolute: `${BRAND}: find the people asking for what you built` },

@@ -36,7 +36,7 @@ export const BEATS: Beat[] = [
   {
     num: "IV.",
     title: "You reach out *as yourself.*",
-    body: "It drafts a reply, a DM or an email that helps first, checked against the community's rules. You edit it and send it from your account. Then it plans your posts for the week on X, LinkedIn and Threads.",
+    body: "It suggests what to say in a reply that helps first, checked against the community's rules, and drafts a DM or an email when someone is ready for one. You write the reply in your own words and send everything from your account. Then it plans your posts for the week on X, LinkedIn and Threads.",
     logos: POST_CHANNELS,
   },
 ];
@@ -58,20 +58,20 @@ export const FIT = {
 export const STEPS = [
   { icon: STEP_ICON.find, title: "Find", body: "Through the week, or whenever you ask, it searches Reddit, Hacker News, Threads and Facebook groups for people describing the problem you solve." },
   { icon: STEP_ICON.score, title: "Score", body: "Each thread gets a score out of 100, with the quote that earned it: the pain, the fit with what you sell, how fresh it is." },
-  { icon: STEP_ICON.reach, title: "Reach", body: "It drafts a reply, a DM or an email that helps first, using what it knows about your product, and tells you when a community allows no self-promotion. You edit it and send it yourself." },
+  { icon: STEP_ICON.reach, title: "Reach", body: "It gives you the idea for a reply that helps first, using what it knows about your product, and tells you when a community allows no self-promotion. You write it in your own words and send it yourself. When someone is ready, it drafts a DM or an email." },
   { icon: STEP_ICON.followUp, title: "Follow up", body: "Once you reply, it rereads the thread to see if they answered, and you mark who signed up or became a customer. If they go quiet for four days, it drafts one short follow-up." },
   { icon: STEP_ICON.post, title: "Post", body: "It plans a week of posts for X, LinkedIn and Threads. You approve the week once." },
 ];
 
 /** The scroll-darkened walkthrough that replaced the demo videos: Sales, then Post. The editor is off for now (`lib/editor-flag.ts`). */
 export const SHOWCASE: Beat[] = [
-  { num: "Sales", title: "The people who *need what you built.*", body: "Sales searches Reddit, Hacker News, Threads and Facebook groups and brings back the people who need what you built, with the quote and a drafted reply.", logos: SALES_SOURCES },
+  { num: "Sales", title: "The people who *need what you built.*", body: "Sales searches Reddit, Hacker News, Threads and Facebook groups and brings back the people who need what you built, with the quote and an idea for your reply.", logos: SALES_SOURCES },
   { num: "Post", title: "Posts about *what people asked.*", body: "The questions Sales found become the week's posts for X, LinkedIn and Threads, each citing the conversations behind it. You approve the week once.", logos: POST_CHANNELS },
 ];
 
 /** What the product never does: assist, never act (CLAUDE.md "Product rules"). */
 export const PROMISES = [
-  `${BRAND} drafts. You read, edit and post from your own accounts.`,
+  `${BRAND} suggests replies and drafts posts. You write, edit and post from your own accounts.`,
   "It never likes, follows, comments or replies on its own, and never uses extra accounts.",
   "It tells you when a subreddit bans self-promotion, so you help instead of pitch.",
   "We don't promise a number of customers. You see every conversation it found and what came of it.",
@@ -103,12 +103,12 @@ export const INCLUDED = [
 export function faqs(p: Prices | null): { q: string; a: string }[] {
   const price = p ? ` $${p.annual} a month billed annually, or $${p.monthly} month to month.` : "";
   return [
-    { q: `What does ${BRAND} do?`, a: `${BRAND} reads your website, then searches Reddit, Hacker News, Threads and Facebook groups for people describing the problem you solve. Each one comes with the quote that shows why, and a draft reply based on your business plan; when someone is ready for more, a DM or an email too. You send it from your own account. It also plans a week of posts for X, LinkedIn and Threads from what those people asked.` },
+    { q: `What does ${BRAND} do?`, a: `${BRAND} reads your website, then searches Reddit, Hacker News, Threads and Facebook groups for people describing the problem you solve. Each one comes with the quote that shows why, and an idea for your reply based on your business plan, which you write in your own words; when someone is ready for more, a drafted DM or email too. You send it from your own account. It also plans a week of posts for X, LinkedIn and Threads from what those people asked.` },
     { q: `Does ${BRAND} post anything without me?`, a: "Not unless you ask it to. Every reply and post waits for you to approve, edit or skip it. If you turn on autopilot for X, Threads or LinkedIn, a single post you leave untouched goes out at the time its card shows. Replies always wait for you." },
-    { q: "Which platforms does Sales search?", a: "Reddit, Hacker News, Threads and Facebook groups. It drafts a reply; you post it yourself." },
-    { q: "Will it like, follow or DM people for me?", a: `No. There are no automated likes, follows, DMs or replies. ${BRAND} drafts a reply, and a DM or an email when someone is ready for one; you decide what to send and where.` },
+    { q: "Which platforms does Sales search?", a: "Reddit, Hacker News, Threads and Facebook groups. It suggests what to say; you write the reply and post it yourself." },
+    { q: "Will it like, follow or DM people for me?", a: `No. There are no automated likes, follows, DMs or replies. ${BRAND} suggests what to say in a reply, and drafts a DM or an email when someone is ready for one; you write it, and you decide what to send and where.` },
     { q: "Is there a free trial?", a: `Your first scan is free, with no card. Give it your website, and within minutes you see the people asking for what you built, each with the words they wrote. If no one has asked in the last 30 days, it tells you so, with the searches it ran. Pick a plan and it writes a reply to each one. You post each reply yourself; nothing is posted for you.${price}` },
-    { q: "What does the plan include?", a: `The searches, the drafted replies and the weekly posts, under a fair-use allowance. A bar in the app shows how much of this month's allowance you used. If it runs out, new searches pause until it resets; your drafts and posts keep working.${price}` },
+    { q: "What does the plan include?", a: `The searches, the reply ideas and the weekly posts, under a fair-use allowance. A bar in the app shows how much of this month's allowance you used. If it runs out, new searches pause until it resets; your drafts and posts keep working.${price}` },
     { q: "Can I cancel?", a: "Yes, anytime, from Settings in the app. If it was not right for you, ask for a full refund within 7 days of your first charge." },
   ];
 }
