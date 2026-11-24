@@ -55,6 +55,8 @@ export type JobContext = {
   searchHn?: (query: string) => Promise<HnThread[]>;
   /** Stands in for the Facebook groups and Threads finders (Sales finder B1: evals, checks); production leaves it unset. */
   searchConversations?: ConversationSearch;
+  /** Stands in for reading one Reddit post's text (checks); production leaves it unset. */
+  readPost?: (url: string) => Promise<string | null>;
   /** Stands in for Zernio's analytics (checks); unset = picked from env like the publish adapter, null = none. */
   analytics?: PublishAnalytics | null;
 };
@@ -63,6 +65,7 @@ export type RunOptions = {
   searchReddit?: JobContext["searchReddit"];
   searchHn?: JobContext["searchHn"];
   searchConversations?: JobContext["searchConversations"];
+  readPost?: JobContext["readPost"];
   analytics?: JobContext["analytics"];
   /** Stands in for the model (checks that read the request a job sends); production leaves it unset. */
   think?: JobContext["think"];
@@ -137,6 +140,7 @@ export async function runOne(store: CmoStore, run: QueuedRun, opts: RunOptions =
     searchReddit: opts.searchReddit,
     searchHn: opts.searchHn,
     searchConversations: opts.searchConversations,
+    readPost: opts.readPost,
     ...(opts.analytics !== undefined ? { analytics: opts.analytics } : {}),
   };
 
@@ -184,7 +188,7 @@ export async function drainCmoQueue(store: CmoStore, opts: { runId?: string; bud
     const run = await store.claim(opts.runId);
     if (!run) break;
     try {
-      await runOne(store, run, { searchReddit: opts.searchReddit, searchHn: opts.searchHn, searchConversations: opts.searchConversations, analytics: opts.analytics, think: opts.think });
+      await runOne(store, run, { searchReddit: opts.searchReddit, searchHn: opts.searchHn, searchConversations: opts.searchConversations, readPost: opts.readPost, analytics: opts.analytics, think: opts.think });
     } catch (error) {
       // Our store failed (completing a finished job): the run keeps its lease and is claimed
       // again when it runs out. The other runs in this drain still go.

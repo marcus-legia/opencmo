@@ -35,7 +35,7 @@ import { safeForSales } from "../sales/ban-risk";
 import { NO_AI_SLOP, skillText } from "../skills";
 import { fakeAllowed, LlmError } from "./llm";
 import { LIBRARY_LIMITS, type LibraryQuote, type LibrarySaveItem } from "../library";
-import { isFresh, personKey, platformHasDms, reachLevel, type ReachCheck, type ReachLevel, type ReachSaveItem } from "../reach";
+import { FRESH_DAYS, isFresh, personKey, platformHasDms, reachLevel, type ReachCheck, type ReachLevel, type ReachSaveItem } from "../reach";
 import type { JobContext, JobOutput } from "./runner";
 import { mayMention, toVerdict, type Documents, type Opportunity, type SalesScanOutput, type SalesSettings, type ScorePart, type SubredditVerdict } from "./types";
 
@@ -43,6 +43,11 @@ export const PASS_SCORE = 60;
 const MAX_QUERIES = 8;
 const MAX_THREADS = 30;
 const MAX_CARDS = 5;
+/**
+ * Threads kept after the first scoring, whose posts are read and scored again (owner test 2026-11-23): Reddit search
+ * gives titles only, so the first scoring could not see "I'm a solo founder, no users yet" in the post.
+ */
+const CANDIDATES = MAX_CARDS * 2;
 const MAX_AGE_DAYS = 30;
 /** P6 R4: Hacker News joins the scan. A few searches, a few threads: it is a smaller, sharper room than Reddit. */
 const HN_QUERIES = 3;
@@ -140,6 +145,9 @@ export const ScoreSchema = z.object({
         quote: z.string().describe("Exact words where the author says who they are or what they run, showing they are like the ideal customer; empty for a vendor, a promoter, or when it is unclear"),
       }),
       asksForTools: z.boolean().describe("True when the post asks for a tool, an app, a service or recommendations"),
+      sellsService: z
+        .boolean()
+        .describe("True when the author sells to the kind of people the founder sells to (an agency, a freelancer or consultant offering their work, a vendor) instead of being one of them"),
       invites: z.object({ quote: z.string().describe("Exact words inviting people to message or email them (\"DM me\", \"email me\"), or empty") }),
     }),
   ),
@@ -286,9 +294,10 @@ For each thread:
 - theme: a short name for the problem (2 to 5 words). Reuse a name from <themes> when the thread is about the same problem; write a new one only when none fits.
 - buyer: the author's exact words saying who they are or what they run ("I run a two-person studio"), when that makes them like the ideal customer. Leave it empty for a vendor promoting a product, a consultant selling a service, or an author who does not say.
 - asksForTools: true when they ask for a tool, an app, a service or recommendations.
+- sellsService: true when the author sells to the kind of people the founder sells to (an agency, a freelancer or consultant offering their work, a vendor) instead of being one of them.
 - invites: their exact words inviting people to message or email them ("DM me", "email me"), or empty.
 - pain (0-25): how clearly the person describes the pain. Quote their exact words.
-- fit (0-25): how well the product fits this person and situation, judged from the product documents.
+- fit (0-25): how well the product fits this person and situation, judged from the product documents and the Strategy's ideal customer. 0 to 5 when the author is not that kind of customer (for example, they sell services to them).
 - evidence (0-15): signs they want a solution now (asking for tools, a system, recommendations). Quote their exact words.
 - exclude: true for health, medical, personal finance or legal advice, off-topic threads, or vendors promoting their own product.
 Quotes must be copied exactly from the thread. If there is nothing to quote, leave it empty and score low.
@@ -417,11 +426,10 @@ export function emailIn(text: string): string | null {
 }
 
 /**
- * A vendor talks about what they made or sell, not what they need: "I built X", "launching today", "50% off for the
- * first 100 users". Code holds this whatever the model said, since a vendor's own words are also "in the thread".
+ * A launch promotion: "launching today", "50% off for the first 100 users". Code holds this whatever the model said.
+ * "I want my first 10 customers" is not one: that founder is the person Sales looks for (owner test, 2026-11-23).
  */
-const VENDOR_SAYS = /\b(i|we)(\s*['’]ve|\s+have)?\s+(just\s+)?(built|made|launched|created|developed)\b|\bmy (own )?(app|tool|product|startup|saas|agency services)\b/i;
-const PROMO = /\blaunch(ing|ed) (today|this week)\b|\b\d{1,3}\s?% off\b|\bfirst \d+ (users|customers)\b|\bpromo code\b|\bsign up (now|today)\b/i;
+const PROMO = /\blaunch(ing|ed) (today|this week)\b|\b\d{1,3}\s?% off\b|\b(for|to) the first \d+ (users|customers)\b|\bfirst \d+ (users|customers) (get|will get)\b|\bpromo code\b|\bsign up (now|today)\b/i;
 
 /** Hosts that are a platform or a short link, never the person's own business site. */
 const NOT_A_BUSINESS_SITE = /(^|\.)(reddit\.com|redd\.it|ycombinator\.com|facebook\.com|fb\.com|fb\.me|threads\.(com|net)|instagram\.com|x\.com|twitter\.com|t\.co|linkedin\.com|lnkd\.in|youtube\.com|youtu\.be|tiktok\.com|google\.[a-z.]+|goo\.gl|bit\.ly|tinyurl\.com|imgur\.com|github\.com|medium\.com|substack\.com|discord\.(gg|com)|t\.me|wa\.me)$/i;
@@ -459,15 +467,19 @@ const short = (quote: string) => (quote.length <= 100 ? quote : `${quote.slice(0
  */
 export function reachFor(
   thread: ScanThread,
-  s: Pick<Scored, "buyer" | "asksForTools" | "invites"> & { exclude?: boolean },
+  s: Pick<Scored, "buyer" | "asksForTools" | "invites"> & { exclude?: boolean; sellsService?: boolean },
   parts: ScorePart[],
   rule: RuleRead,
   now: Date,
   /** An address found on the business site the post links (B1): counts like one in the post. */
   siteEmail: string | null = null,
 ): { level: ReachLevel; reach: ReachCheck } {
+  // Owner, 2026-11-24: every card already holds someone describing the problem, so "buyer" means not selling to the
+  // founder's customers. A founder who says "I built a SaaS, no users yet" is the customer here, not a vendor: the
+  // model judges selling against the Strategy's ideal customer, code only drops launch promotions.
   const buyerQuote = s.buyer.quote.trim();
-  const buyer = !s.exclude && quoteIn(buyerQuote, thread) && !VENDOR_SAYS.test(buyerQuote) && !PROMO.test(`${thread.title} ${thread.text}`);
+  const saysWho = quoteIn(buyerQuote, thread);
+  const buyer = !s.exclude && !s.sellsService && !PROMO.test(`${thread.title} ${thread.text}`);
   const evidence = parts.find((p) => p.label === "Evidence");
   const wantsNow = Boolean(evidence && evidence.score > 0);
   const invite = s.invites.quote.trim();
@@ -480,10 +492,10 @@ export function reachFor(
   const emailFound = inPost ?? siteEmail;
   const days = thread.postedAt ? Math.max(0, Math.floor((now.getTime() - Date.parse(thread.postedAt)) / 86_400_000)) : null;
   const reasons = [
-    buyer ? `Says who they are: “${short(buyerQuote)}”` : "Not clear they are a buyer like your customers",
+    !buyer ? "Sells to the same people you do" : saysWho ? `Says who they are: “${short(buyerQuote)}”` : "Describes the problem; not selling anything",
     wantsNow ? "Wants a fix now" : "Not asking for a fix yet",
     warm ? "Invites a message" : asksForTools ? "Asks for tools, but has not answered you yet" : "Has not answered you yet",
-    days === null ? "Posting date unknown" : fresh ? `Posted ${days === 0 ? "today" : days === 1 ? "yesterday" : `${days} days ago`}` : "Posted more than a week ago",
+    days === null ? "Posting date unknown" : fresh ? `Posted ${days === 0 ? "today" : days === 1 ? "yesterday" : `${days} days ago`}` : `Posted more than ${FRESH_DAYS} days ago`,
     !platformHasDms(platform)
       ? `${PLATFORM_LABEL[platform]} has no DMs`
       : rule.noDms
@@ -527,6 +539,7 @@ function fakeScores(threads: RedditThread[]): Scored[] {
     theme: "Chasing late invoices",
     buyer: { quote: /\b(i['’]m a|i run|solo|small studio|freelancer)\b[^.!?]*/i.exec(t.text)?.[0] ?? "" },
     asksForTools: /\b(tool|app|system|something that|recommend)/i.test(t.text),
+    sellsService: /\b(i['’]m a freelancer|i build (websites|sites|apps) for|my (agency|services)|hire me)\b/i.test(`${t.title} ${t.text}`),
     invites: { quote: /\b(dm|pm|message|email) me\b/i.exec(t.text)?.[0] ?? "" },
   }));
 }
@@ -544,13 +557,13 @@ function fakeSummary(t: RedditThread): string {
 /**
  * The search answer comes trimmed: a Reddit thread has its title but not what the person wrote (owner, 2026-11-23:
  * "show me their post so I can read it before I reply"). Reads the post of each Reddit thread still without text, at
- * most MAX_CARDS lookups, so the card shows it and the reply idea answers it. A read that fails keeps the title only.
+ * most `limit` lookups, so the card shows it and the reply idea answers it. A read that fails keeps the title only.
  * Fills `thread.text` in place.
  */
-export async function readRedditPosts(ctx: JobContext, items: { thread: ScanThread }[]): Promise<void> {
-  const bare = items.filter((r) => r.thread.platform === "reddit" && !r.thread.text.trim()).slice(0, MAX_CARDS);
+export async function readRedditPosts(ctx: JobContext, items: { thread: ScanThread }[], limit = MAX_CARDS): Promise<void> {
+  const bare = items.filter((r) => r.thread.platform === "reddit" && !r.thread.text.trim()).slice(0, limit);
   if (!bare.length) return;
-  const budget = new ScBudget(MAX_CARDS);
+  const budget = new ScBudget(limit);
   await ctx.step(
     "read_post",
     `Reading ${bare.length === 1 ? "the post" : `${bare.length} posts`}`,
@@ -558,6 +571,7 @@ export async function readRedditPosts(ctx: JobContext, items: { thread: ScanThre
       const read = await Promise.all(
         bare.map(async (r) => {
           try {
+            if (ctx.readPost) return (await ctx.readPost(r.thread.url))?.trim() || null;
             const { post } = await redditThread(r.thread.url, budget, 1);
             return post?.text.trim() ? post.text : null;
           } catch (error) {
@@ -573,6 +587,55 @@ export async function readRedditPosts(ctx: JobContext, items: { thread: ScanThre
     },
     (n) => `${n} ${n === 1 ? "post" : "posts"} read`,
   );
+}
+
+type Candidate = { thread: ScanThread; scored: Scored; result: { score: number; parts: ScorePart[] } };
+
+/**
+ * The threads whose post was just read (`readUrls` were bare before) are scored again from their full text; the rest
+ * keep their score. Then the best `MAX_CARDS` that still pass. A model that fails here keeps the first scores: the
+ * scan has its cards either way.
+ */
+export async function rescoreRead(
+  ctx: JobContext,
+  input: { docs: Documents; themes: string[] },
+  candidates: Candidate[],
+  readUrls: Set<string>,
+): Promise<Candidate[]> {
+  const read = candidates.filter((c) => readUrls.has(c.thread.url) && c.thread.text.trim());
+  const best = (list: Candidate[]) => list.filter((c) => c.result.score >= PASS_SCORE).sort((a, b) => b.result.score - a.result.score).slice(0, MAX_CARDS);
+  if (!read.length) return best(candidates);
+  return ctx.step("rescore_read", `Scoring ${read.length === 1 ? "the post" : `${read.length} posts`} it read`, async () => {
+    let scores: Scored[];
+    try {
+      scores = (
+        await ctx.think({
+          title: `Score ${read.length} threads again from what the person wrote`,
+          fake: () => ({ scores: fakeScores(read.map((c) => c.thread)) }),
+          agent: "checker",
+          system: SCORE_SYSTEM,
+          prompt: `${documentsBlock({ product: input.docs.product, strategy: input.docs.strategy })}\n\n${themesBlock(input.themes)}\n\n${read.map((c, i) => threadBlock(c.thread, i)).join("\n\n")}\n\nScore every thread.`,
+          schema: ScoreSchema,
+          maxTokens: 6000,
+          label: "rescore_read",
+          failure: "We could not score the posts again.",
+        })
+      ).scores;
+    } catch (error) {
+      console.error("[cmo] sales_scan: posts not scored again", error);
+      return best(candidates);
+    }
+    const byIndex = new Map(scores.map((s) => [s.index, s]));
+    const again = new Map(
+      read.flatMap((c, i) => {
+        const scored = byIndex.get(i);
+        const result = scored ? scoreThread(c.thread, scored, ctx.now.getTime()) : null;
+        // A thread the model skipped keeps its first score; one that no longer scores is dropped.
+        return scored ? [[c.thread.url, result ? { ...c, scored, result } : null] as const] : [];
+      }),
+    );
+    return best(candidates.flatMap((c) => (again.has(c.thread.url) ? (again.get(c.thread.url) ? [again.get(c.thread.url)!] : []) : [c])));
+  }, (r) => (r.length ? `${r.length} worth joining (score ${PASS_SCORE}+)` : "None scored high enough"));
 }
 
 export async function readCommunityRules(ctx: JobContext, names: string[]): Promise<Record<string, RuleRead>> {
@@ -1073,7 +1136,7 @@ export async function salesScan(ctx: JobContext): Promise<SalesScanOutput & JobO
     return output(0, { cards: 0 });
   }
 
-  const ranked = await ctx.step("score_thread", "Scoring each thread", async () => {
+  const candidates = await ctx.step("score_thread", "Scoring each thread", async () => {
     const scores = (
           await ctx.think({
             title: `Score ${scanned.length} threads for pain, fit and evidence, quoting their exact words`,
@@ -1104,15 +1167,17 @@ export async function salesScan(ctx: JobContext): Promise<SalesScanOutput & JobO
         people.add(person);
         return true;
       })
-      .slice(0, MAX_CARDS);
-  }, (r) => (r.length ? `${r.length} worth joining (score ${PASS_SCORE}+)` : "None scored high enough"));
+      .slice(0, CANDIDATES);
+  }, (r) => (r.length ? `${r.length} worth a closer look (score ${PASS_SCORE}+)` : "None scored high enough"));
+
+  const bareUrls = new Set(candidates.filter((r) => r.thread.platform === "reddit" && !r.thread.text.trim()).map((r) => r.thread.url));
+  await readRedditPosts(ctx, candidates, CANDIDATES);
+  const ranked = await rescoreRead(ctx, { docs, themes }, candidates, bareUrls);
 
   if (!ranked.length) {
     await ctx.step("create_card", "No conversations worth joining today", async () => 0);
     return output(scanned.length, { cards: 0 });
   }
-
-  await readRedditPosts(ctx, ranked);
 
   // P5 R1: each community's rules decide whether the product may be named.
   const verdicts = await ctx.step("check_rules", "Reading each community's rules", async () =>
@@ -1121,22 +1186,32 @@ export async function salesScan(ctx: JobContext): Promise<SalesScanOutput & JobO
 
   // At most one product mention in the founder's last ten replies: once it is used, every draft is help only. A draft
   // that may name the product and still waits on the founder counts too: posting both would break the rule.
-  let allowance = mentionsUsed + mentionsWaiting >= 1 ? 0 : 1;
-  const planned = ranked.map((r) => {
+  const allowance = mentionsUsed + mentionsWaiting >= 1 ? 0 : 1;
+  const reads = ranked.map((r) => {
     const read: RuleRead =
       r.thread.platform === "hn" ? HN_RULE
       : r.thread.platform === "facebook" ? FACEBOOK_RULE
       : r.thread.platform === "threads" ? THREADS_RULE
       : (verdicts[subredditOf(r.thread.community)] ?? { verdict: "not_verified", summary: "Rules not read: help only" });
-    const needs = { minKarma: read.minKarma ?? null, minAccountAgeDays: read.minAccountAgeDays ?? null };
     // Self-promotion kept to a megathread: an ordinary thread there is help only.
-    const rule: RuleRead = mayMention(read.verdict) && read.megathread
-      ? { ...read, verdict: "no_product_mention", summary: `${read.summary.replace(/\.$/, "")} · self-promotion only in the megathread`.slice(0, 200) }
+    return mayMention(read.verdict) && read.megathread
+      ? { ...read, verdict: "no_product_mention" as const, summary: `${read.summary.replace(/\.$/, "")} · self-promotion only in the megathread`.slice(0, 200) }
       : read;
-    if (mayMention(rule.verdict) && allowance > 0) {
-      allowance -= 1;
-      return { ...r, rule: rule.verdict, why: rule.summary, needs, read: rule };
-    }
+  });
+  // The one mention goes where it helps most (owner test 2026-11-23: it went to the weakest card while a post asking
+  // for this kind of tool got "help only"): a post asking for tools first, then the best score.
+  const mentionAt = new Set(
+    ranked
+      .map((r, i) => ({ i, tools: Boolean(r.scored.asksForTools), score: r.result.score }))
+      .filter(({ i }) => mayMention(reads[i]!.verdict))
+      .sort((a, b) => Number(b.tools) - Number(a.tools) || b.score - a.score)
+      .slice(0, allowance)
+      .map(({ i }) => i),
+  );
+  const planned = ranked.map((r, i) => {
+    const rule = reads[i]!;
+    const needs = { minKarma: rule.minKarma ?? null, minAccountAgeDays: rule.minAccountAgeDays ?? null };
+    if (mayMention(rule.verdict) && mentionAt.has(i)) return { ...r, rule: rule.verdict, why: rule.summary, needs, read: rule };
     if (mayMention(rule.verdict)) {
       const why = mentionsUsed >= 1
         ? `Help only this time: you named the product in ${mentionsUsed} of your last ${MENTION_WINDOW} replies`

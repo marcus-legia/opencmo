@@ -4,7 +4,7 @@ import { useState } from "react";
 
 import { api, jsonBody } from "@/components/clipping/api";
 import { emailBody, emailOpening, emailSubject, mailLinks } from "@/lib/cmo/email-links";
-import { PERSON_STATUSES, type PersonStatus, type ReachCheck } from "@/lib/cmo/reach";
+import { FRESH_DAYS, PERSON_STATUSES, type PersonStatus, type ReachCheck } from "@/lib/cmo/reach";
 import { PLATFORM_LABEL, type SalesPlatform } from "@/lib/cmo/social/conversations";
 import type { SalesScreen } from "@/lib/screens/sales";
 
@@ -37,7 +37,7 @@ const CHAT_URL: Partial<Record<SalesPlatform, string>> = {
  * The five checks of "Ready to reach out", each with its line from the scan (`reasons`, in the same order as
  * `sales-scan.ts` writes them). Read from the post and its thread only, never a profile.
  */
-const CHECK_LABELS = ["A buyer like your customers", "Wants it now", "Warm", "Fresh", "A way to reach them"] as const;
+const CHECK_LABELS = ["Not selling to your customers", "Wants it now", "Warm", "Fresh", "A way to reach them"] as const;
 
 function checksOf(reach: ReachCheck | null): { label: string; ok: boolean | null; why: string }[] {
   // Found before the checks existed (or a check that did not parse): the five checks show as not checked yet.
@@ -45,7 +45,7 @@ function checksOf(reach: ReachCheck | null): { label: string; ok: boolean | null
   const r = reach.reasons;
   const way = reach.dmAllowed || reach.emailFound !== null;
   return [
-    { label: "A buyer like your customers", ok: reach.buyer, why: r[0] ?? "" },
+    { label: "Not selling to your customers", ok: reach.buyer, why: r[0] ?? "" },
     { label: "Wants it now", ok: reach.wantsNow, why: r[1] ?? "" },
     { label: "Warm", ok: reach.warm, why: r[2] ?? "" },
     { label: "Fresh", ok: reach.fresh, why: r[3] ?? "" },
@@ -122,13 +122,19 @@ export function ReachPanel({ t, publicReply, onSent }: { t: Thread; publicReply:
   const dmLock = !hasDms
     ? `${PLATFORM_LABEL[t.platform]} has no private messages. Reply in public.`
     : level === "reply_first"
-      ? "Reply in public first: they have not answered you yet, and their post does not ask for tools."
+      ? !reach
+        ? "Found before Ferreto checked who is ready for a DM."
+        : !reach.dmAllowed
+          ? "This community's rules forbid DMs. Reply in public."
+          : !reach.buyer
+            ? "They sell to the same people you do. Reply in public if it helps."
+            : `Posted more than ${FRESH_DAYS} days ago. Reply in public first.`
       : !person.dmDraft
         ? "No DM drafted for this person yet."
         : null;
   const subject = emailSubject(t.title);
   const links = reach?.emailFound ? mailLinks(reach.emailFound, subject, email) : { gmail: null, mailto: null };
-  const emailLock = level !== "email_ready" || !reach?.emailFound ? (reach?.emailFound ? "They have not answered you yet." : "No address they published themselves was found.") : null;
+  const emailLock = !reach?.emailFound ? "No address they published themselves was found." : level !== "email_ready" ? (dmLock ?? "Reply in public first.") : null;
 
   async function sent(via: "dm" | "email") {
     setBusy(true);
@@ -209,13 +215,18 @@ export function ReachPanel({ t, publicReply, onSent }: { t: Thread; publicReply:
             kind="dm"
             testId="sales-dm-locked"
             why={dmLock}
-            opens={hasDms ? "they answer your public reply, or their post asks for tools. Mark them as answered in Following up and write the DM there." : "never on this platform: reply in public."}
+            opens={hasDms ? "they answer your public reply. Mark them as answered in Following up and write the DM there." : "never on this platform: reply in public."}
           />
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: "8px" }} data-testid="sales-dm">
             <label className="meta" htmlFor={`dm-${t.id}`}>
               One message, no sequence. Check the community allows DMs before you send it.
             </label>
+            {!reach?.warm ? (
+              <p className="meta" style={{ margin: "0" }} data-testid="sales-dm-timing">
+                They have not answered you yet. Keep it short and about their post; it lands best after your public reply.
+              </p>
+            ) : null}
             <textarea id={`dm-${t.id}`} className="reply" rows={4} value={dm} onChange={(e) => setDm(e.target.value)} style={{ width: "100%", resize: "vertical", font: "inherit", fontSize: "15px", lineHeight: "1.55", color: "var(--text)" }} />
             <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "flex-end", alignItems: "center" }}>
               {note ? <span className="meta">{note}</span> : null}
@@ -246,7 +257,7 @@ export function ReachPanel({ t, publicReply, onSent }: { t: Thread; publicReply:
             kind="email"
             testId="sales-email-locked"
             why={emailLock}
-            opens="they published an email address themselves (in the post, the thread or their own site) and answered you."
+            opens="they published an email address themselves (in the post, the thread or their own site)."
           />
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: "8px" }} data-testid="sales-email">
