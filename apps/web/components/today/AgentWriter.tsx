@@ -40,7 +40,11 @@ const when = (d: Draft) => {
 };
 /** A waiting draft whose card is not in the queue says why: held past the day's budget, or no card at all. */
 const badgeOf = (d: Draft): [string, string] =>
-  d.column === "waiting" && d.cardState === "held" ? ["Held", "badge b-plan"] : d.column === "waiting" && d.cardState === "missing" ? ["No card", "badge b-plan"] : BADGE[d.column];
+  d.column === "waiting" && d.cardState === "held" ? ["Held", "badge b-plan"]
+  : d.column === "waiting" && d.cardState === "missing" ? ["No card", "badge b-plan"]
+  // An approved post with no connected account never goes out on its own (owner, 2026-11-24).
+  : d.column === "scheduled" && d.connected === false ? ["Post it yourself", "badge b-wait"]
+  : BADGE[d.column];
 const kindOf = (d: Draft) => (d.kind === "post" ? `${PLATFORM_LABEL[d.platform]} post` : KIND_LABEL[d.kind]);
 const iconOf = (d: Draft) => (d.kind === "caption" ? KIND_ICON.price : (PLATFORM_ICON[d.platform] ?? KIND_ICON.post));
 

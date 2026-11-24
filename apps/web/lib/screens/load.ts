@@ -10,6 +10,7 @@ import { readyStyles } from "@/lib/agent/styles";
 import { DOCUMENTS, DOCUMENT_KINDS, type DocumentKind } from "@/lib/cmo/documents";
 import { JOB_PRICES, classifyOrder, nextCheckAt, type OrderLedgerRow } from "@/lib/cmo/jobs/progress";
 import { storedSources } from "@/lib/cmo/jobs/library-sources";
+import { connectedPlatforms, withConnected } from "./connected";
 import { mondayOf } from "@/lib/cmo/jobs/summarize-memory";
 import { chosenChannels, planOrDefault } from "@/lib/cmo/posting-plan";
 import { localDay, localMidnight, localMonday } from "@/lib/time-zone";
@@ -715,6 +716,12 @@ async function settings({ supabase, userId }: LoadContext): Promise<Partial<Sett
 
 type SocialAccountDb = { id: string; platform: string; handle: string; avatar_url: string | null; status: string; updated_at: string };
 
+/** The founder's connected platforms, or null when the read failed (rows then say nothing either way). */
+async function connectedSet(supabase: SupabaseClient): Promise<Set<string> | null> {
+  const { data, error } = await supabase.from("social_accounts").select("platform, status").eq("status", "connected");
+  return error ? null : connectedPlatforms((data ?? []) as { platform: string; status: string }[]);
+}
+
 async function socialAccounts(supabase: SupabaseClient): Promise<SocialAccountDb[]> {
   return must(
     await supabase.from("social_accounts").select("id, platform, handle, avatar_url, status, updated_at").order("connected_at"),
@@ -840,10 +847,11 @@ async function scheduleSlots(supabase: SupabaseClient, from: Date, to: Date): Pr
   const items = [...new Set(slots.flatMap((s) => (s.deliverable?.ref_kind === "content_item" ? [s.deliverable.ref_id] : [])))];
   const clips = [...new Set(slots.flatMap((s) => (s.deliverable?.ref_kind === "clip" ? [s.deliverable.ref_id] : [])))];
   const approvals = [...new Set(slots.flatMap((s) => (s.approval_id ? [s.approval_id] : [])))];
-  const [itemRows, clipRows, waitingRows] = await Promise.all([
+  const [itemRows, clipRows, waitingRows, connected] = await Promise.all([
     items.length ? supabase.from("content_items").select("id, idea, body").in("id", items) : Promise.resolve({ data: [] }),
     clips.length ? supabase.from("clips").select("id, hook").in("id", clips) : Promise.resolve({ data: [] }),
     approvals.length ? supabase.from("approvals").select("id").in("id", approvals).eq("status", "waiting") : Promise.resolve({ data: [] }),
+    slots.length ? connectedSet(supabase) : Promise.resolve(null),
   ]);
   const titles = new Map<string, string>([
     ...((itemRows.data ?? []) as { id: string; idea: string | null; body: { text?: string } | null }[]).map(
@@ -869,6 +877,7 @@ async function scheduleSlots(supabase: SupabaseClient, from: Date, to: Date): Pr
       // A card still waiting (a time to approve, a failed post's Retry, a copy-and-open) opens from its slot.
       approvalId: s.approval_id && waiting.has(s.approval_id) ? s.approval_id : null,
       url: status === "posted" && s.external_url?.startsWith("https://") ? s.external_url : null,
+      ...(connected ? { connected: connected.has(platform) } : {}),
     }];
   });
 }
@@ -1108,6 +1117,7 @@ async function writer({ supabase }: LoadContext): Promise<Partial<WriterScreen>>
       const dayText = (day: string) => WEEKDAY[new Date(`${day}T00:00:00Z`).getUTCDay()]!;
       const batchOf = new Map((must(shorts, "shorts") as { short_clip_id: string; batch_id: string }[]).map((s) => [s.short_clip_id, s.batch_id]));
       const postRows = must(posts, "content_items") as ItemRow[];
+      const connected = await connectedSet(supabase);
       const links = await sourceLinks(supabase, postRows.flatMap((r) => storedSources(r.body as Record<string, unknown>).map((s) => s.opportunityId)));
       const postDrafts = postRows.map((r) => {
         const text = typeof r.body.text === "string" && r.body.text ? r.body.text : r.idea;
@@ -1183,7 +1193,7 @@ async function writer({ supabase }: LoadContext): Promise<Partial<WriterScreen>>
           text: null,
         };
       });
-      return [...postDrafts, ...captionDrafts];
+      return [...withConnected(postDrafts, connected), ...captionDrafts];
     },
     // What Writer reads first: the rules the founder approved, then their heaviest voice notes; the product rule.
     voice: async () => {

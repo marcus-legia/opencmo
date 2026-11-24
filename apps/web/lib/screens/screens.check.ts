@@ -13,6 +13,7 @@ import { approvalToCard, replyOpportunityIds, withReach, type ApprovalRow } from
 import { ALL_KINDS, SAMPLE_CARDS, SCHEDULE_SNAPSHOT, STATE_CARDS, STUDIO_SNAPSHOTS } from "./fixtures/cards";
 import { videoSteps } from "./video-steps";
 import { DraftSchema } from "./writer";
+import { connectedPlatforms, withConnected } from "./connected";
 import { LOADERS } from "./load";
 import { SCREEN_NAMES, SCREENS, compose, released, type ScreenName } from "./registry";
 
@@ -393,6 +394,13 @@ check("writer: a draft's source carries its thread link, or none (owner, 2026-11
   assert.equal(parsed.sources?.[0]?.url, "https://www.reddit.com/r/SaaS/comments/abc/x/");
   assert.equal(DraftSchema.parse({ ...draft, sources: [source] }).sources?.[0]?.url, undefined, "a draft saved before links still parses");
   assert.equal(DraftSchema.safeParse({ ...draft, sources: [{ ...source, url: "javascript:alert(1)" }] }).success, false, "only a web address");
+});
+
+check("an approved post with no connected account is not Scheduled (owner, 2026-11-24)", () => {
+  const rows = [{ id: "a", platform: "x", column: "scheduled" }, { id: "b", platform: "linkedin", column: "scheduled" }];
+  const connected = connectedPlatforms([{ platform: "linkedin", status: "connected" }, { platform: "x", status: "reconnect" }]);
+  assert.deepEqual(withConnected(rows, connected).map((r) => [r.id, r.connected]), [["a", false], ["b", true]]);
+  assert.deepEqual(withConnected(rows, null), rows, "a failed read says nothing either way");
 });
 
 if (failures.length) {
