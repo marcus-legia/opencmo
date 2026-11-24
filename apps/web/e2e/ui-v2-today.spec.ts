@@ -113,3 +113,20 @@ test("a platform quiet for days comes first and asks the CMO for a post", async 
     await db.from("content_items").delete().eq("id", old!.id);
   }
 });
+
+// Owner 2026-11-24: back from buying a plan (`/app?paid=1&connect=1`), the feed asks to connect the accounts you post
+// from; Later closes it and drops the flag. An account already connected skips it.
+test("after buying a plan the feed asks to connect your accounts, once", async ({ page }) => {
+  const user = state().users.b;
+  const db = admin();
+  const { data: accounts } = await db.from("social_accounts").select("id").eq("user_id", user.id).eq("status", "connected").limit(1);
+  test.skip(Boolean(accounts?.length), "this shared user has a connected account");
+  await signIn(page, user);
+  await page.goto("/app?paid=1&connect=1");
+  const sheet = page.getByTestId("connect-sheet");
+  await expect(sheet).toBeVisible();
+  await expect(sheet.getByTestId("connect-sheet-go")).toHaveAttribute("href", "/app/settings#settings-connected-accounts");
+  await sheet.getByRole("button", { name: "Later" }).first().click();
+  await expect(sheet).toHaveCount(0);
+  await expect.poll(() => new URL(page.url()).searchParams.get("connect")).toBeNull();
+});

@@ -15,6 +15,7 @@ import { Children, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import type { ReactNode } from "react";
 
 import { AllowanceBanner, FreeLockedCard, useUsageState } from "@/components/billing/UsageNotice";
+import { ConnectSheet } from "@/components/billing/ConnectSheet";
 import { PlanSheet } from "@/components/billing/PlanSheet";
 import { ApprovalCard, type DecideHandler } from "@/components/cards/ApprovalCard";
 import { RatingSheet } from "@/components/cards/RatingSheet";
@@ -302,6 +303,13 @@ export function Feed({ email }: { email?: string | null }) {
     window.history.replaceState(null, "", url.pathname + url.search);
     void reload();
   }, [reload]);
+  // `?connect=1`: back from buying a plan, connect the accounts you post from (owner 2026-11-24). Once: closing drops it.
+  const connecting = search.get("connect") === "1";
+  const closeConnect = useCallback(() => {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("connect");
+    window.history.replaceState(null, "", url.pathname + url.search);
+  }, []);
   useEffect(() => {
     if (workVersion > 0) void reload();
   }, [workVersion, reload]);
@@ -475,6 +483,7 @@ export function Feed({ email }: { email?: string | null }) {
   return (
     <>
       <PlanSheet open={planSheet} onClose={closePlanSheet} />
+      <ConnectSheet open={connecting} onClose={closeConnect} />
       <RatingSheet open={rating} onClose={closeRating} />
 
       <main className="mid" data-testid="v2-dashboard">

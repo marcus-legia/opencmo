@@ -13,7 +13,8 @@ import { api, jsonBody } from "@/components/clipping/api";
 import { useLive } from "@/components/clipping/useLive";
 import { useScreen } from "@/components/screens/useScreen";
 import { useOptionalShellState } from "@/components/shell-v2/ShellState";
-import { salesScanCard } from "@/lib/cmo/jobs/price-card";
+import { costLine, salesScanCard } from "@/lib/cmo/jobs/price-card";
+import { JOB_PRICES } from "@/lib/cmo/jobs/progress";
 import { PLATFORM_LABEL, SALES_PLATFORMS, type SalesPlatform } from "@/lib/cmo/social/conversations";
 import type { SalesScreen } from "@/lib/screens/sales";
 import { createClient } from "@/lib/supabase/client";
@@ -162,7 +163,7 @@ function ScanProgress({ scan, onClose }: { scan: Scan; onClose: () => void }) {
 }
 
 /**
- * Scan now: the same card as a scan asked in the CMO chat, with no price (included in the plan's fair use, wave 2);
+ * Scan now: the same card as a scan asked in the CMO chat, with its cost line (owner test 2026-11-23);
  * nothing runs until the founder approves it. An
  * unpaid account's first scan is free (`cmo_first_run_free`); after it, the button opens the plan sheet instead of
  * answering with the 402's text.
@@ -227,6 +228,9 @@ function ScanNow({ scanning, paused, platforms, free, freeLeft, onPlan, onStarte
           <li key={line}>{line}</li>
         ))}
       </ul>
+      <p className="meta" style={{ margin: "0 0 10px" }} data-testid="scan-cost">
+        {costLine(card.credits, freeLeft)}
+      </p>
       {error ? <div className="meta">{error}</div> : null}
       <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
         <button type="button" className="skip" disabled={step === "busy"} onClick={() => setStep("idle")}>
@@ -287,7 +291,8 @@ function WriteReplies({ count, busy, onPlan, onStarted }: { count: number; busy:
           Write the ideas
         </button>
       ) : (
-        <span style={{ display: "inline-flex", gap: "8px" }}>
+        <span style={{ display: "inline-flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+          <span className="meta" data-testid="write-cost">{costLine(JOB_PRICES.sales_reply_drafts ?? 0)}</span>
           <button type="button" className="skip" disabled={step === "busy"} onClick={() => setStep("idle")}>
             Cancel
           </button>
