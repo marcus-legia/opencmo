@@ -18203,27 +18203,25 @@ begin
   limit 1
   for update skip locked;
   if not found then
-    -- A run the week plan did not order (Scan now, the chat) is paid on its own, so its order gets the job's price and
-    -- the week grows by what it lacks to hand that out: never "Over budget … of 0", never a run left with no order.
-    -- The root is locked first, so two such runs at once do not both count the same free credits. The free credits are
-    -- counted as `work_order_create` counts them, so its check passes.
+    -- A run the week plan did not order (Scan now, the chat) is paid on its own: its order is created within what the
+    -- week has free (so `work_order_create`'s check passes, counted the same way, under a lock on the root so two such
+    -- runs do not count the same credits), then carries the job's price. The week's own budget is never raised here:
+    -- it is the cap `cmo_runs_budget_gate` holds the CMO's own runs to (security review 2026-11-24).
     v_price := coalesce(public.cmo_job_price(p_run.kind), 0);
     select * into v_root from public.work_orders where id = v_root.id for update;
     v_free := v_root.budget_credits - v_root.spent_credits - coalesce((
       select sum(budget_credits - spent_credits) from public.work_orders
       where parent_id = v_root.id and status not in ('done', 'failed', 'cancelled')), 0);
-    if v_price > v_free then
-      update public.work_orders set budget_credits = budget_credits + (v_price - v_free), updated_at = now() where id = v_root.id;
-    end if;
     v_row := public.work_order_create(p_run.user_id, v_root.week, v_root.id, p_run.kind,
       case p_run.kind
         when 'post_draft' then 'Draft a post' when 'sales_scan' then coalesce(p_run.input->>'brief', 'Find people asking')
         when 'competitor_research' then 'Competitor research' when 'niche_video_research' then 'What works on video in your niche' when 'pull_metrics' then 'Pull post metrics'
         when 'summarize_memory' then 'Weekly memory' when 'review_week' then 'Sunday review' else p_run.kind end,
-      jsonb_build_object('objective', coalesce(p_run.input->>'brief', p_run.kind)), v_price, null, '{}',
+      jsonb_build_object('objective', coalesce(p_run.input->>'brief', p_run.kind)), least(v_price, greatest(v_free, 0)), null, '{}',
       case when v_source in ('chat', 'mcp') then v_source when v_source = 'schedule' then 'loop' else 'founder' end);
   end if;
-  update public.work_orders set run_id = p_run.id, updated_at = now() where id = v_row.id returning * into v_row;
+  update public.work_orders set run_id = p_run.id, budget_credits = greatest(budget_credits, coalesce(v_price, 0)), updated_at = now()
+  where id = v_row.id returning * into v_row;
   return v_row;
 end;
 $_$;

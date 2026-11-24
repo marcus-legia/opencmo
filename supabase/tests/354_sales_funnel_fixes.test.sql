@@ -5,7 +5,7 @@ create extension if not exists pgtap with schema extensions;
 begin;
 set search_path to public, extensions;
 
-select plan(10);
+select plan(11);
 
 insert into auth.users (id, email) values ('e3540000-0000-4000-8000-00000000000a', 'funnel@test.local');
 
@@ -23,16 +23,20 @@ select is((select title from public.work_orders where run_id = 'e3540000-0000-40
 select ok(public.work_order_spend((select id from public.work_orders where run_id = 'e3540000-0000-4000-8000-0000000000a2'), 5),
   'spending its price stays within budget');
 
--- A week with 2 credits free still gets the order at its price (review: it raised and left no order, or showed 0).
+-- A week with 2 credits free still gets the order at its price, and the week's own budget stays as set.
 update public.work_orders r set budget_credits = r.spent_credits + 2 + coalesce((
   select sum(c.budget_credits - c.spent_credits) from public.work_orders c
   where c.parent_id = r.id and c.status not in ('done', 'failed', 'cancelled')), 0)
 where r.user_id = 'e3540000-0000-4000-8000-00000000000a' and r.parent_id is null;
+create temp table root_before as select budget_credits from public.work_orders
+  where user_id = 'e3540000-0000-4000-8000-00000000000a' and parent_id is null;
 insert into public.cmo_runs (id, user_id, kind, status, input, credits) values
   ('e3540000-0000-4000-8000-0000000000a3', 'e3540000-0000-4000-8000-00000000000a', 'sales_scan', 'running', '{"source":"chat"}', 5);
 select ok(exists (select 1 from public.work_orders where run_id = 'e3540000-0000-4000-8000-0000000000a3'), 'a scan past the free budget still has its order');
 select is((select budget_credits from public.work_orders where run_id = 'e3540000-0000-4000-8000-0000000000a3'), 5,
-  'still budgeted at its price: the week grows by what it lacked');
+  'still budgeted at its price');
+select is((select budget_credits from public.work_orders where user_id = 'e3540000-0000-4000-8000-00000000000a' and parent_id is null),
+  (select budget_credits from root_before), 'the week''s budget, the CMO''s cap, is not raised');
 
 -- The reach gate.
 insert into public.opportunities (id, user_id, run_id, platform, url, community, title, score, reply) values
