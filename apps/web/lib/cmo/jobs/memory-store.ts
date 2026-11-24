@@ -9,7 +9,7 @@ import type { VideoSource } from "../writer/types";
 import { latestPerTopic } from "./context";
 import { isoDay, type CmoStore, type DraftRating, type CompetitorInsight, type ConnectedAccountRow, type ReplyOutcomeDue, type MetricRow, type ZernioPostRow, type NicheVideoInsight, type SalesSettings, type SubredditRule, type Documents, type Goal, type ItemRow, type Lesson, type MemoryEvent, type Opportunity, type PostSource, type QueuedRun, type Step, type VoiceNoteRow, type WeekResults } from "./types";
 import type { AccountMetricRow } from "./metrics-source";
-import { defaultPostingPlan, type PostingPlan } from "../posting-plan";
+import { chosenChannels, defaultPostingPlan, type PostingPlan } from "../posting-plan";
 import { postProfile } from "../platforms";
 import { SALES_PLATFORMS } from "../social/conversations";
 
@@ -158,7 +158,7 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
       }
       return plan.length;
     },
-    postingPlan: async () => posting.plan ?? defaultPostingPlan(zernio.accounts.map((a) => a.platform)),
+    postingPlan: async () => posting.plan ?? defaultPostingPlan(zernio.accounts.map((a) => a.platform), chosenChannels(docs.post_plan)),
     async queueDueDrafts(run) {
       // As `enqueueDueDrafts`: one run per due item, at most three a day.
       const due = items.filter((i) => i.run_id === run.id && i.department === "post" && i.status === "planned" && i.day <= isoDay()).slice(0, 3);

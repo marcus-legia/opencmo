@@ -5,7 +5,7 @@
  */
 import assert from "node:assert/strict";
 
-import { PostingPlanSchema, TEXT_PLATFORMS, VIDEO_PLATFORMS, dayTargets, defaultPostingPlan, type PostingPlan } from "./posting-plan";
+import { PostingPlanSchema, TEXT_PLATFORMS, VIDEO_PLATFORMS, chosenChannels, dayTargets, defaultPostingPlan, planOrDefault, type PostingPlan } from "./posting-plan";
 
 const failures: string[] = [];
 function check(label: string, run: () => void): void {
@@ -41,6 +41,27 @@ check("connected platforms default to one a day, video stays off", () => {
   assert.equal(plan.text.x, 0);
   for (const p of VIDEO_PLATFORMS) assert.equal(plan.video[p], 0);
   assert.deepEqual(Object.keys(plan.text), [...TEXT_PLATFORMS]);
+});
+
+check("chosen channels fill the default with nothing connected", () => {
+  assert.deepEqual(defaultPostingPlan([], ["x", "threads"]).text, { x: 1, threads: 1, linkedin: 0, facebook: 0 });
+  assert.deepEqual(defaultPostingPlan([], []).text, { x: 1, threads: 0, linkedin: 0, facebook: 0 });
+});
+
+check("connected and chosen join; non-text channels are dropped", () => {
+  assert.deepEqual(defaultPostingPlan(["linkedin"], ["threads", "tiktok"]).text, { x: 0, threads: 1, linkedin: 1, facebook: 0 });
+});
+
+check("a saved plan wins over the chosen channels", () => {
+  assert.equal(planOrDefault({ text: { x: 2 }, video: {} }, [], ["threads"]).text.threads, 0);
+  assert.equal(planOrDefault({ text: { x: 2 }, video: {} }, [], ["threads"]).text.x, 2);
+  assert.equal(planOrDefault(null, [], ["threads"]).text.threads, 1);
+});
+
+check("chosenChannels keeps strings only", () => {
+  assert.deepEqual(chosenChannels({ channels: ["x", 3, null, "threads"] }), ["x", "threads"]);
+  assert.deepEqual(chosenChannels({ channels: "x" }), []);
+  assert.deepEqual(chosenChannels(undefined), []);
 });
 
 check("the schema rejects out-of-range counts", () => {

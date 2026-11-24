@@ -11,7 +11,7 @@ import { DOCUMENTS, DOCUMENT_KINDS, type DocumentKind } from "@/lib/cmo/document
 import { JOB_PRICES, classifyOrder, nextCheckAt, type OrderLedgerRow } from "@/lib/cmo/jobs/progress";
 import { storedSources } from "@/lib/cmo/jobs/library-sources";
 import { mondayOf } from "@/lib/cmo/jobs/summarize-memory";
-import { planOrDefault } from "@/lib/cmo/posting-plan";
+import { chosenChannels, planOrDefault } from "@/lib/cmo/posting-plan";
 import { localDay, localMidnight, localMonday } from "@/lib/time-zone";
 import { CONNECTABLE_PLATFORMS, PUBLISH_PLATFORMS } from "@/lib/departments/publish/types";
 import { isPaidPlan } from "@/lib/pricing";
@@ -809,12 +809,14 @@ async function schedule({ supabase, userId, params }: LoadContext): Promise<Part
     accounts: async () => accountList(await accounts, false),
     rules: async () => SCHEDULE_RULES,
     postingPlan: async () => {
-      const [saved, rows] = await Promise.all([
+      const [saved, rows, postPlan] = await Promise.all([
         supabase.from("profiles").select("posting_plan").eq("id", userId).maybeSingle<{ posting_plan: unknown }>(),
         accounts,
+        supabase.from("marketing_documents_latest").select("body").eq("kind", "post_plan").maybeSingle<{ body: unknown }>(),
       ]);
       if (saved.error) throw new Error(`profiles: ${saved.error.message}`);
-      return planOrDefault(saved.data?.posting_plan, rows.filter((r) => r.status === "connected").map((r) => r.platform));
+      if (postPlan.error) throw new Error(`post plan: ${postPlan.error.message}`);
+      return planOrDefault(saved.data?.posting_plan, rows.filter((r) => r.status === "connected").map((r) => r.platform), chosenChannels(postPlan.data?.body));
     },
   });
 }

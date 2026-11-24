@@ -8,7 +8,7 @@ import type { LibraryTopTheme } from "../library";
 import type { CmoStore, NudgeDue, DraftRating, CompetitorInsight, ConnectedAccountRow, ReplyOutcomeDue, ZernioPostRow, Documents, NicheVideoInsight, SubredditRule, Goal, ItemRow, Lesson, MemoryEvent, QueuedRun, UndraftedOpportunity } from "./types";
 import { SCAN_CADENCES, isoDay, toVerdict } from "./types";
 import { enqueueDueDrafts } from "../schedule";
-import { planOrDefault } from "../posting-plan";
+import { chosenChannels, planOrDefault } from "../posting-plan";
 import { personKey } from "../reach";
 import { SALES_PLATFORMS, parsePlatforms, type SalesPlatform } from "../social/conversations";
 
@@ -171,13 +171,19 @@ export function supabaseStore(admin: BaseClient): CmoStore {
     },
     planWeek: (userId, runId, items) => rpc<number>("cmo_plan_week", { p_user: userId, p_run: runId, p_items: items }),
     async postingPlan(userId) {
-      const [profile, accounts] = await Promise.all([
+      const [profile, accounts, postPlan] = await Promise.all([
         admin.from("profiles").select("posting_plan").eq("id", userId).maybeSingle(),
         admin.from("social_accounts").select("platform").eq("user_id", userId).eq("status", "connected"),
+        admin.from("marketing_documents_latest").select("body").eq("user_id", userId).eq("kind", "post_plan").maybeSingle(),
       ]);
       if (profile.error) throw new Error(`profiles: ${profile.error.message}`);
       if (accounts.error) throw new Error(`social_accounts: ${accounts.error.message}`);
-      return planOrDefault((profile.data as { posting_plan: unknown } | null)?.posting_plan, ((accounts.data ?? []) as { platform: string }[]).map((a) => a.platform));
+      if (postPlan.error) throw new Error(`post plan: ${postPlan.error.message}`);
+      return planOrDefault(
+        (profile.data as { posting_plan: unknown } | null)?.posting_plan,
+        ((accounts.data ?? []) as { platform: string }[]).map((a) => a.platform),
+        chosenChannels((postPlan.data as { body: unknown } | null)?.body),
+      );
     },
     async queueDueDrafts(run) {
       const { data, error } = await admin.from("content_items").select("id, platform").eq("user_id", run.user_id).eq("run_id", run.id)

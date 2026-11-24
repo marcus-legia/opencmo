@@ -1,23 +1,24 @@
 import { ApiError } from "@/lib/api/errors";
 import { rpcOrThrow, withApi } from "@/lib/api/handler";
-import { PostingPlanSchema, planOrDefault, type PostingPlan } from "@/lib/cmo/posting-plan";
+import { PostingPlanSchema, chosenChannels, planOrDefault, type PostingPlan } from "@/lib/cmo/posting-plan";
 
 export const dynamic = "force-dynamic";
 
 /**
  * The founder's posting plan (owner, 2026-11-12): which platforms get a post every day, how many, and how many video
  * scripts a week. `saved` is false while the founder has not chosen: the plan shown is the default for their connected
- * accounts, as the week plan reads it.
+ * accounts and the channels they chose in onboarding, as the week plan reads it.
  */
 export const GET = withApi({}, async ({ supabase, user }) => {
-  const [profile, accounts] = await Promise.all([
+  const [profile, accounts, postPlan] = await Promise.all([
     supabase.from("profiles").select("posting_plan").eq("id", user.id).maybeSingle<{ posting_plan: unknown }>(),
     supabase.from("social_accounts").select("platform").eq("status", "connected"),
+    supabase.from("marketing_documents_latest").select("body").eq("kind", "post_plan").maybeSingle<{ body: unknown }>(),
   ]);
-  if (profile.error || accounts.error) throw new ApiError(500, "Could not read your posting plan.");
+  if (profile.error || accounts.error || postPlan.error) throw new ApiError(500, "Could not read your posting plan.");
   const saved = PostingPlanSchema.safeParse(profile.data?.posting_plan).success;
   const connected = ((accounts.data ?? []) as { platform: string }[]).map((a) => a.platform);
-  return { plan: planOrDefault(profile.data?.posting_plan, connected), saved };
+  return { plan: planOrDefault(profile.data?.posting_plan, connected, chosenChannels(postPlan.data?.body)), saved };
 });
 
 /**

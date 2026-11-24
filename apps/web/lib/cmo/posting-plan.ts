@@ -28,9 +28,13 @@ export const PostingPlanSchema = z.object({
   video: counts(VIDEO_PLATFORMS, 7),
 }) as z.ZodType<PostingPlan>;
 
-/** Connected text platforms at 1 a day; X at 1 when nothing is connected; video all 0. */
-export function defaultPostingPlan(connected: readonly string[]): PostingPlan {
-  const on = TEXT_PLATFORMS.filter((p) => connected.includes(p));
+/**
+ * Connected text platforms and the ones the founder chose in onboarding (the Post plan's `channels`) at 1 a day; X at 1
+ * when there are none; video all 0. The chosen channels count because most founders connect nothing before the first
+ * week plan: reading only connected accounts planned X alone for a founder who picked X and Threads (2026-11-24).
+ */
+export function defaultPostingPlan(connected: readonly string[], chosen: readonly string[] = []): PostingPlan {
+  const on = TEXT_PLATFORMS.filter((p) => connected.includes(p) || chosen.includes(p));
   const picked = on.length ? on : (["x"] as const);
   return {
     text: Object.fromEntries(TEXT_PLATFORMS.map((p) => [p, (picked as readonly string[]).includes(p) ? 1 : 0])) as PostingPlan["text"],
@@ -46,8 +50,17 @@ export function dayTargets(plan: PostingPlan): string[][] {
   return days;
 }
 
-/** The founder's saved plan, else the default for their connected accounts; a saved value that no longer parses counts as unset. */
-export function planOrDefault(saved: unknown, connected: readonly string[]): PostingPlan {
+/**
+ * The founder's saved plan, else the default for their connected accounts and chosen channels; a saved value that no
+ * longer parses counts as unset.
+ */
+export function planOrDefault(saved: unknown, connected: readonly string[], chosen: readonly string[] = []): PostingPlan {
   const parsed = PostingPlanSchema.safeParse(saved);
-  return parsed.success ? parsed.data : defaultPostingPlan(connected);
+  return parsed.success ? parsed.data : defaultPostingPlan(connected, chosen);
+}
+
+/** The Post plan's `channels` as strings; anything else in the document reads as no choice. */
+export function chosenChannels(postPlan: unknown): string[] {
+  const channels = (postPlan as { channels?: unknown } | null | undefined)?.channels;
+  return Array.isArray(channels) ? channels.filter((c): c is string => typeof c === "string") : [];
 }
