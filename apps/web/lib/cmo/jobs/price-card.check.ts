@@ -9,5 +9,5 @@ import { JOB_PRICES } from "./progress";
 assert.equal(costLine(salesScanCard().credits), "Uses 5 credits of your monthly allowance.");
 assert.equal(costLine(1), "Uses 1 credit of your monthly allowance.");
 assert.equal(costLine(JOB_PRICES.sales_reply_drafts ?? 0), "Included: uses none of your allowance.");
-assert.equal(costLine(5, true), "Free: this is your one free scan.");
+assert.equal(costLine(5, true), "Free: this scan uses none of your allowance.");
 console.log("price-card: ok");

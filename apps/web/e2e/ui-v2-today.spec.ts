@@ -126,7 +126,7 @@ test("after buying a plan the feed asks to connect your accounts, once", async (
   const sheet = page.getByTestId("connect-sheet");
   await expect(sheet).toBeVisible();
   await expect(sheet.getByTestId("connect-sheet-go")).toHaveAttribute("href", "/app/settings#settings-connected-accounts");
-  await sheet.getByRole("button", { name: "Later" }).first().click();
+  await sheet.getByRole("button", { name: "Later", exact: true }).click();
   await expect(sheet).toHaveCount(0);
   await expect.poll(() => new URL(page.url()).searchParams.get("connect")).toBeNull();
 });
