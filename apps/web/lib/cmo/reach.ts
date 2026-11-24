@@ -85,7 +85,7 @@ export function reachReason(level: ReachLevel, check: ReachCheck | null): string
     return check.asksForTools ? "The post asks for tools or recommendations." : "They describe the problem you solve.";
   }
   const failed: [boolean, number, string][] = [
-    [check.buyer, 0, "Sells to the same people you do."],
+    [check.buyer, 0, "Not clearly a customer: may sell to the same people you do."],
     [check.fresh, 3, `Posted more than ${FRESH_DAYS} days ago.`],
     [check.dmAllowed, 4, "No private messages here."],
   ];

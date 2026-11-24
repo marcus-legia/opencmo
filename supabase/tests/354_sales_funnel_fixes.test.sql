@@ -23,7 +23,7 @@ select is((select title from public.work_orders where run_id = 'e3540000-0000-40
 select ok(public.work_order_spend((select id from public.work_orders where run_id = 'e3540000-0000-4000-8000-0000000000a2'), 5),
   'spending its price stays within budget');
 
--- A week with 2 credits free still gets the order, budgeted at what is left (review: it raised and left no order).
+-- A week with 2 credits free still gets the order at its price (review: it raised and left no order, or showed 0).
 update public.work_orders r set budget_credits = r.spent_credits + 2 + coalesce((
   select sum(c.budget_credits - c.spent_credits) from public.work_orders c
   where c.parent_id = r.id and c.status not in ('done', 'failed', 'cancelled')), 0)
@@ -31,8 +31,8 @@ where r.user_id = 'e3540000-0000-4000-8000-00000000000a' and r.parent_id is null
 insert into public.cmo_runs (id, user_id, kind, status, input, credits) values
   ('e3540000-0000-4000-8000-0000000000a3', 'e3540000-0000-4000-8000-00000000000a', 'sales_scan', 'running', '{"source":"chat"}', 5);
 select ok(exists (select 1 from public.work_orders where run_id = 'e3540000-0000-4000-8000-0000000000a3'), 'a scan past the free budget still has its order');
-select is((select budget_credits from public.work_orders where run_id = 'e3540000-0000-4000-8000-0000000000a3'), 2,
-  'budgeted at what the week has left');
+select is((select budget_credits from public.work_orders where run_id = 'e3540000-0000-4000-8000-0000000000a3'), 5,
+  'still budgeted at its price: the week grows by what it lacked');
 
 -- The reach gate.
 insert into public.opportunities (id, user_id, run_id, platform, url, community, title, score, reply) values

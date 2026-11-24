@@ -83,7 +83,7 @@ check("reach line: Reply first gives the first check that failed", () => {
 });
 check("reach line: no reason written falls back to a plain line", () => {
   assert.equal(reachReason("reply_first", { ...ready, fresh: false }), "Posted more than 14 days ago.");
-  assert.equal(reachReason("reply_first", { ...ready, buyer: false }), "Sells to the same people you do.");
+  assert.equal(reachReason("reply_first", { ...ready, buyer: false }), "Not clearly a customer: may sell to the same people you do.");
   assert.equal(reachReason("reply_first", null), "Reply in public first.");
 });
 check("one key per person: platform and handle, case and spaces ignored", () => {

@@ -5,6 +5,7 @@ import { useState } from "react";
 import { api, jsonBody } from "@/components/clipping/api";
 import { emailBody, emailOpening, emailSubject, mailLinks } from "@/lib/cmo/email-links";
 import { FRESH_DAYS, PERSON_STATUSES, type PersonStatus, type ReachCheck } from "@/lib/cmo/reach";
+import { oldDays } from "@/lib/cmo/sales-card";
 import { PLATFORM_LABEL, type SalesPlatform } from "@/lib/cmo/social/conversations";
 import type { SalesScreen } from "@/lib/screens/sales";
 
@@ -121,15 +122,19 @@ export function ReachPanel({ t, publicReply, onSent }: { t: Thread; publicReply:
   const hasDms = t.platform !== "hn";
   // Reply first says why, from the check that failed. DM ready with no draft yet (a card the 2026-11-24 rule opened,
   // or a draft the model could not write) is open: the founder writes the message.
+  // The level was set at the scan; a thread that has aged past the window since is locked by its age today.
+  const aged = oldDays(t.postedAt) !== null;
   const dmLock = !hasDms
     ? `${PLATFORM_LABEL[t.platform]} has no private messages. Reply in public.`
+    : aged && level !== "reply_first"
+      ? `Posted more than ${FRESH_DAYS} days ago. Reply in public first.`
     : level === "reply_first"
       ? !reach
         ? "Found before Ferreto checked who is ready for a DM."
         : !reach.dmAllowed
           ? "This community's rules forbid DMs. Reply in public."
           : !reach.buyer
-            ? "They sell to the same people you do. Reply in public if it helps."
+            ? "Not clearly a customer: they may sell to the same people you do. Reply in public first."
             : !reach.fresh
               ? t.postedAt
                 ? `Posted more than ${FRESH_DAYS} days ago. Reply in public first.`
@@ -138,7 +143,7 @@ export function ReachPanel({ t, publicReply, onSent }: { t: Thread; publicReply:
       : null;
   const subject = emailSubject(t.title);
   const links = reach?.emailFound ? mailLinks(reach.emailFound, subject, email) : { gmail: null, mailto: null };
-  const emailLock = !reach?.emailFound ? "No address they published themselves was found." : level !== "email_ready" ? (dmLock ?? "Reply in public first.") : null;
+  const emailLock = !reach?.emailFound ? "No address they published themselves was found." : level !== "email_ready" || aged ? (dmLock ?? "Reply in public first.") : null;
 
   async function sent(via: "dm" | "email") {
     setBusy(true);
