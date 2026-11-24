@@ -240,7 +240,7 @@ function runReach(env: EvalEnv): CaseResult[] {
     comments: 6,
     postedAt: at(6),
   };
-  const scored = (thread: ConversationThread, over: Partial<{ buyer: string; invite: string; asks: boolean; exclude: boolean }> = {}) => ({
+  const scored = (thread: ConversationThread, over: Partial<{ buyer: string; invite: string; asks: boolean; exclude: boolean; sells: boolean }> = {}) => ({
     index: 0,
     exclude: over.exclude ?? false,
     pain: { score: 22, quote: "Three of them are over 60 days late" },
@@ -248,6 +248,7 @@ function runReach(env: EvalEnv): CaseResult[] {
     evidence: { score: 12, quote: thread.text.includes("Is there a tool") ? "Is there a tool people actually use for this?" : "" },
     buyer: { quote: over.buyer ?? "I'm a freelance designer with about ten clients" },
     asksForTools: over.asks ?? true,
+    sellsService: over.sells ?? false,
     invites: { quote: over.invite ?? "DM me" },
   });
   const safe: RuleRead = { verdict: "safe", summary: "ok" };
@@ -262,10 +263,10 @@ function runReach(env: EvalEnv): CaseResult[] {
   const vendor = check({ ...base, text: "I built ReminderPro, launching today with 50% off. Is there a tool people actually use for this? DM me." }, { buyer: "I built ReminderPro, launching today" });
   const hn = check({ ...base, platform: "hn", url: "https://news.ycombinator.com/item?id=123", community: "Hacker News" });
   const noDms = check(base, {}, { verdict: "safe", summary: "ok", noDms: true });
-  const old = check({ ...base, postedAt: at(24 * 9) });
+  const old = check({ ...base, postedAt: at(24 * 16) });
   const cold = check({ ...base, text: base.text.replace(" Happy to try one, DM me.", "") }, { invite: "" });
   const emailed = check({ ...base, text: `${base.text} Or email me at dana@studio-dana.com` });
-  const invented = check(base, { buyer: "I run a ten-person agency" });
+  const seller = check({ ...base, text: `${base.text} I also build invoicing setups for other freelancers.` }, { sells: true });
 
   return [
     result("summary-not-title", sameAsTitle("How do you chase clients who pay 60 days late", base.title) && librarySummary(base.title, base) === null
@@ -277,10 +278,11 @@ function runReach(env: EvalEnv): CaseResult[] {
     result("hn-never-dm", !hn.reach.dmAllowed && hn.level === "reply_first" && hn.reach.reasons.includes("Hacker News has no DMs"), [hn.level, ...hn.reach.reasons]),
     result("rules-forbid-dms", noDms.level === "reply_first" && noDms.reach.reasons.includes("This community's rules forbid DMs"), [noDms.level]),
     result("stale-reply-first", !old.reach.fresh && old.level === "reply_first", [old.level]),
-    // Asking for tools stands in for warm for a DM (A1), never for an email.
+    // Not warm is no longer a lock (owner, 2026-11-24).
     result("asks-for-tools-dm", cold.level === "dm_ready" && !cold.reach.warm, [cold.level]),
     result("email-ready", emailed.level === "email_ready" && emailed.reach.emailFound === "dana@studio-dana.com", [emailed.level, String(emailed.reach.emailFound)]),
-    result("buyer-quote-must-hold", !invented.reach.buyer && invented.level === "reply_first", [invented.level]),
+    // Owner, 2026-11-24: someone selling to the founder's customers is never DM ready, however warm.
+    result("seller-reply-first", !seller.reach.buyer && seller.level === "reply_first", [seller.level]),
     // The business site the post links, never a platform or a short link.
     result("linked-site", linkedSite("see https://www.reddit.com/r/x and https://bit.ly/a, our site https://studio-dana.com/about.")?.href === "https://studio-dana.com/"
       && linkedSite("only https://www.linkedin.com/in/dana") === null),
