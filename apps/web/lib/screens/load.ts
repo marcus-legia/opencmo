@@ -1045,6 +1045,18 @@ function screenPlatform(label: string | null | undefined, fallback: WriterScreen
   return profileOf(profileIdOf(label) ?? "")?.platform ?? fallback;
 }
 
+/**
+ * The thread addresses of a draft's sources (its own opportunities, under RLS), so the card links them. A web address
+ * only; a read that fails loses the links, never the drafts.
+ */
+async function sourceLinks(supabase: LoadContext["supabase"], ids: string[]): Promise<Map<string, string>> {
+  const wanted = [...new Set(ids)].filter((id) => /^[0-9a-f-]{36}$/i.test(id)).slice(0, 300);
+  if (!wanted.length) return new Map();
+  const { data, error } = await supabase.from("opportunities").select("id, url").in("id", wanted);
+  if (error) return new Map();
+  return new Map(((data ?? []) as { id: string; url: string | null }[]).flatMap((o) => (o.url && /^https?:\/\//i.test(o.url) && o.url.length <= 2000 ? [[o.id, o.url] as const] : [])));
+}
+
 async function writer({ supabase }: LoadContext): Promise<Partial<WriterScreen>> {
   return parts<WriterScreen>("writer", {
     // Posts on their own platform, captions per platform (P3 A2: video words for one edit), and the briefs Writer
@@ -1095,7 +1107,9 @@ async function writer({ supabase }: LoadContext): Promise<Partial<WriterScreen>>
               : { cardState: "missing" as const, heldUntil: null, approvalId: null };
       const dayText = (day: string) => WEEKDAY[new Date(`${day}T00:00:00Z`).getUTCDay()]!;
       const batchOf = new Map((must(shorts, "shorts") as { short_clip_id: string; batch_id: string }[]).map((s) => [s.short_clip_id, s.batch_id]));
-      const postDrafts = (must(posts, "content_items") as ItemRow[]).map((r) => {
+      const postRows = must(posts, "content_items") as ItemRow[];
+      const links = await sourceLinks(supabase, postRows.flatMap((r) => storedSources(r.body as Record<string, unknown>).map((s) => s.opportunityId)));
+      const postDrafts = postRows.map((r) => {
         const text = typeof r.body.text === "string" && r.body.text ? r.body.text : r.idea;
         const edited = r.final_text !== null && r.final_text !== r.body.text;
         return {
@@ -1112,7 +1126,7 @@ async function writer({ supabase }: LoadContext): Promise<Partial<WriterScreen>>
           ...cardOf(r.status, cards.get(r.id)),
           ref: { kind: "content_item" as const, id: r.id },
           text: (r.final_text ?? text).slice(0, 5000),
-          sources: storedSources(r.body as Record<string, unknown>),
+          sources: storedSources(r.body as Record<string, unknown>).map((src) => ({ ...src, url: links.get(src.opportunityId) ?? null })),
         };
       });
       type VideoSlot = { platform: string; status: string; publish_at: string; published_at: string | null; approval_id: string | null; error: { message?: string } | null; deliverable: { ref_kind: string; ref_id: string } };

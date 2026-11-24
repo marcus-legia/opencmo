@@ -20,7 +20,7 @@ import { checkPostFor, moreAdvice } from "../writer/checks";
 import { fakePost } from "../writer/draft";
 import { profileBlock, voiceBlock, writerData, writerMemory } from "../writer/context";
 import { PostDraftSchema } from "../writer/types";
-import { briefRules } from "./check-post";
+import { briefRules, lengthProblem } from "./check-post";
 import { checkRules, correctionsBlock, documentsBlock, FOUNDER_WRITING_RULE, founderWritingBlock, insightBlock, postText } from "./context";
 import { threadProfile, writeThread } from "./draft-thread";
 import { genModel, promptVersion } from "./edit-taxonomy";
@@ -67,7 +67,9 @@ Rules:
 - When the platform shows only part of a post before "more", the hook lands before the cut.
 - No links and no hashtags in a post.
 - Use only facts and numbers from the documents. Never invent customers, results or numbers.
-- When <sources> is given, the post is about what those people struggle with: say it in your own words and add what the founder knows. Never name or quote a person, never use a post's title, never say where the founder found them, and take no number from them as a fact about the founder's customers.
+- When <sources> is given, the post is about what those people struggle with: say it in your own words and add what the founder knows. You may say the founder saw people asking about it this week; never name them, quote them or use a post's title, and take no number from them as a fact about the founder's customers.
+- Never claim first-hand experience, customers or results the documents do not give. With no such fact, write as an observation of what people asked and what helps.
+- When <platform> gives a length in words, stay inside it: short paragraphs, one idea each, a blank line between.
 - Respect the brand voice and the words to avoid in the Brand document.
 - ${FOUNDER_WRITING_RULE}
 - The founder's rules (<founder_rules>) come first. Then write the way <founder_voice> shows they write: newer and heavier notes count more, a note from this platform more than one from another. When their voice and the no-ai-slop guidance disagree, write it their way.
@@ -151,9 +153,14 @@ export async function draftPost(ctx: JobContext): Promise<JobOutput> {
   }
   // The patterns the founder's own writing uses pass the no-ai-slop gate for them.
   const rules = briefRules({ ...checkRules(docs), allowSlop: memory.allowSlop }, idea, fromFounder);
+  // The planner's angle (owner, 2026-11-24): most posts share, about one in five asks the reader to try the product. A
+  // founder's own brief says what it wants; an item planned before angles shares.
+  const angle = fromFounder ? null : due?.body?.angle === "cta" && !rules.noProduct ? "cta" : "share";
   const briefNote = [
     fromFounder ? "The founder wrote this brief: its facts and numbers are theirs. Use them; do not replace them with facts from the documents." : "",
     rules.noProduct ? "The brief asks for no product pitch: do not name the product in any version." : "",
+    angle === "share" ? "Share what people asked and what helps; no call to action." : "",
+    angle === "cta" ? "End with one plain line inviting them to try the product." : "",
   ].filter(Boolean).join(" ");
   // One core post for a slot with 2+ targets (D3), else written for its one platform.
   const profile = askedFor ? postProfile(askedFor) : postProfile(due?.platform, itemTargets(due));
@@ -203,8 +210,8 @@ export async function draftPost(ctx: JobContext): Promise<JobOutput> {
   }, () => "3 versions written");
 
   const problems = await ctx.step("check_post", "Checking against your strategy", async () => {
-    // The "more" cut is advice for the fix round, never a reason to drop a version.
-    const found = draft.versions.map((v) => [...checkPostFor(v.text, profile, rules), ...moreAdvice(v.text, profile)]);
+    // The "more" cut and the word range are advice for the fix round, never a reason to drop a version.
+    const found = draft.versions.map((v) => [...checkPostFor(v.text, profile, rules), ...moreAdvice(v.text, profile), ...[lengthProblem(v.text, profile)].filter((p): p is string => p !== null)]);
     if (fakeAllowed()) return found;
     const review = await structured({
       agent: "checker",

@@ -194,6 +194,10 @@ async function main() {
   assert.ok(card, "có thẻ chờ duyệt");
   assert.ok(typeof card!.body.text === "string" && (card!.body.text as string).length <= 280, "bài ≤ 280 ký tự");
   assert.equal(card!.day, isoDay(), "lấy mục tới hạn hôm nay");
+  // Owner, 2026-11-24: a draft from sources keeps them for the card's links, and no stranger's name, title or address
+  // reaches the post.
+  assert.equal((card!.body.sources as { opportunityId: string }[] | undefined)?.length, 1, "the draft keeps its source");
+  for (const leak of ["mo", "Clients pay late", "reddit.com"]) assert.ok(!new RegExp(`\\b${leak.replace(".", "\\.")}\\b`, "i").test(card!.body.text as string), `no "${leak}" in the post`);
   // A run named for an item that is no longer planned drafts nothing and gives the credit back.
   const gone = mem.enqueue("post_draft", { item_id: card!.id });
   const drafted = mem.items.filter((i) => i.status === "in_review").length;

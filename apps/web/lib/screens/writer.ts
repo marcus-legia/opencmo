@@ -20,6 +20,8 @@ export const DraftSourceSchema = z.object({
   summary: z.string().max(LIBRARY_LIMITS.summaryChars),
   platform: z.enum(SALES_PLATFORMS),
   community: z.string().max(120),
+  /** The thread's address, so the founder can read it again (owner, 2026-11-24); null when it could not be read. */
+  url: z.url({ protocol: /^https?$/ }).max(2000).nullable().optional(),
 });
 
 export const DraftSchema = z.object({

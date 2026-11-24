@@ -57,7 +57,10 @@ export function basedOn(sources: readonly Source[]): string {
   return `Based on ${sources.length} ${sources.length === 1 ? "conversation" : "conversations"} · ${where}`;
 }
 
-/** The conversations an open draft is written from: each one's summary and where it was said (never its title). */
+/**
+ * The conversations an open draft is written from: each one's summary and a link to its thread, named by where it was
+ * said (never the thread's title), so the founder can read it again before posting.
+ */
 function SourceList({ sources }: { sources: readonly Source[] }) {
   return (
     <section aria-label="What this post is based on" data-testid="writer-sources" style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
@@ -67,7 +70,14 @@ function SourceList({ sources }: { sources: readonly Source[] }) {
       <ul style={{ listStyle: "none", margin: "0", padding: "0", display: "flex", flexDirection: "column", gap: "4px" }}>
         {sources.map((s) => (
           <li key={s.opportunityId} data-testid="writer-source" style={{ fontSize: "13.5px" }}>
-            {s.summary} <span className="meta">{whereSaid(s)}</span>
+            {s.summary}{" "}
+            {s.url ? (
+              <a className="meta" href={s.url} target="_blank" rel="noopener noreferrer" data-testid="writer-source-link">
+                {whereSaid(s)} thread ↗
+              </a>
+            ) : (
+              <span className="meta">{whereSaid(s)}</span>
+            )}
           </li>
         ))}
       </ul>
