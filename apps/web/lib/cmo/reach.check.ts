@@ -3,7 +3,7 @@
  *
  *     cd apps/web && npx tsx lib/cmo/reach.check.ts
  *
- * Reply first is the default; DM ready and Email ready need every check the owner agreed on (redesign plan, 2026-11-19).
+ * Reply first is the default. DM ready: not a seller, DMs allowed, posted under 14 days ago (owner, 2026-11-24).
  */
 import assert from "node:assert/strict";
 
@@ -24,25 +24,27 @@ const ready: ReachCheck = {
   emailFound: null, reasons: [],
 };
 
-check("a person with every DM check is DM ready", () => assert.equal(reachLevel(ready), "dm_ready"));
-check("a post asking for tools stands in for warm for a DM", () =>
-  assert.equal(reachLevel({ ...ready, warm: false, asksForTools: true }), "dm_ready"));
-check("neither warm nor asking for tools is reply first", () =>
-  assert.equal(reachLevel({ ...ready, warm: false }), "reply_first"));
-for (const key of ["buyer", "wantsNow", "fresh", "dmAllowed"] as const) {
+// Owner, 2026-11-24: the funnel was too tight (five checks at once). Every card already has someone describing the
+// problem; a DM needs only that they are not selling, the community allows DMs, and the post is recent.
+check("a person with a problem in a place that allows DMs is DM ready", () => assert.equal(reachLevel(ready), "dm_ready"));
+check("not wanting it now, not warm and not asking for tools no longer lock the DM", () =>
+  assert.equal(reachLevel({ ...ready, wantsNow: false, warm: false, asksForTools: false }), "dm_ready"));
+for (const key of ["buyer", "fresh", "dmAllowed"] as const) {
   check(`without ${key} it is reply first`, () => assert.equal(reachLevel({ ...ready, [key]: false }), "reply_first"));
 }
-check("an address and warm make email ready", () =>
-  assert.equal(reachLevel({ ...ready, emailFound: "sam@studio.example" }), "email_ready"));
-check("an address without warm stays DM ready, even when the post asks for tools", () =>
-  assert.equal(reachLevel({ ...ready, warm: false, asksForTools: true, emailFound: "sam@studio.example" }), "dm_ready"));
-check("an address alone never skips the DM checks", () =>
-  assert.equal(reachLevel({ ...ready, dmAllowed: false, emailFound: "sam@studio.example" }), "reply_first"));
+check("an address they published makes email ready, warm or not", () => {
+  assert.equal(reachLevel({ ...ready, emailFound: "sam@studio.example" }), "email_ready");
+  assert.equal(reachLevel({ ...ready, warm: false, emailFound: "sam@studio.example" }), "email_ready");
+});
+check("an address alone never skips the DM checks", () => {
+  assert.equal(reachLevel({ ...ready, dmAllowed: false, emailFound: "sam@studio.example" }), "reply_first");
+  assert.equal(reachLevel({ ...ready, buyer: false, emailFound: "sam@studio.example" }), "reply_first");
+});
 
-check("fresh means under 7 days, and an unknown date is not fresh", () => {
+check("fresh means under 14 days, and an unknown date is not fresh", () => {
   const now = new Date("2026-11-20T12:00:00Z");
-  assert.equal(isFresh("2026-11-14T12:00:01Z", now), true);
-  assert.equal(isFresh("2026-11-13T12:00:00Z", now), false);
+  assert.equal(isFresh("2026-11-07T12:00:01Z", now), true);
+  assert.equal(isFresh("2026-11-06T12:00:00Z", now), false);
   assert.equal(isFresh(null, now), false);
   assert.equal(isFresh("not a date", now), false);
   assert.equal(isFresh("2026-11-21T12:00:00Z", now), false);
@@ -73,13 +75,15 @@ check("reach line: email ready names the address line", () =>
 check("reach line: DM ready and warm gives the warm line", () => assert.equal(reachReason("dm_ready", { ...ready, reasons }), "Answered your reply."));
 check("reach line: DM ready from a post asking for tools says so", () =>
   assert.equal(reachReason("dm_ready", { ...ready, warm: false, asksForTools: true, reasons }), "The post asks for tools or recommendations."));
+check("reach line: DM ready on the problem alone says so", () =>
+  assert.equal(reachReason("dm_ready", { ...ready, warm: false, reasons }), "They describe the problem you solve."));
 check("reach line: Reply first gives the first check that failed", () => {
   assert.equal(reachReason("reply_first", { ...ready, fresh: false, dmAllowed: false, reasons }), "Posted 2 days ago.");
   assert.equal(reachReason("reply_first", { ...ready, buyer: false, reasons }), "Runs a 3-person agency.");
 });
 check("reach line: no reason written falls back to a plain line", () => {
-  assert.equal(reachReason("reply_first", { ...ready, fresh: false }), "Posted more than 7 days ago.");
-  assert.equal(reachReason("reply_first", { ...ready, warm: false }), "Not warm yet: reply in public first.");
+  assert.equal(reachReason("reply_first", { ...ready, fresh: false }), "Posted more than 14 days ago.");
+  assert.equal(reachReason("reply_first", { ...ready, buyer: false }), "Not clearly a customer: may sell to the same people you do.");
   assert.equal(reachReason("reply_first", null), "Reply in public first.");
 });
 check("one key per person: platform and handle, case and spaces ignored", () => {

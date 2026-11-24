@@ -2,6 +2,7 @@
 
 import { OWN_ENOUGH, ownShare } from "@/lib/cmo/idea";
 import { STRONG_MATCH, matchLabel } from "@/lib/cmo/match";
+import { oldDays, ruleHeadline } from "@/lib/cmo/sales-card";
 import { bare, isTheirWords } from "@/lib/cmo/quote";
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -465,10 +466,20 @@ function ReplyIdea({ id, idea, mine, onMine, done, checks }: { id: string; idea:
   );
 }
 
-/**
- * One thread: a row that opens in place, or, on a phone (`onBack`), the open person full width with a way back to the
- * list and its actions held at the bottom of the screen (canvas board "Sales on a phone").
- */
+/** The community's rule as one badge (`ruleHeadline`), with the rule reader's line beside it. */
+function RuleBadge({ t }: { t: Thread }) {
+  const kind = t.rule.kind;
+  const tone = kind === "mention_allowed" || kind === "requires_disclosure" ? "ok" : kind === "skipped" ? "no" : "help";
+  return (
+    <div className="rule-badge-row" data-testid="sales-rule">
+      <span className="rule-badge" data-tone={tone}>
+        {ruleHeadline(t)}
+      </span>
+      {t.rule.text ? <span className="meta">{t.rule.text}</span> : null}
+    </div>
+  );
+}
+
 /**
  * What the person wrote, first thing in an open card (owner, 2026-11-23: "I need to read their post before I can write a
  * reply"). Long posts fold to eight lines. A Reddit card saved before posts were read has only its title: the link to
@@ -505,6 +516,10 @@ function TheirPost({ t }: { t: Thread }) {
   );
 }
 
+/**
+ * One thread: a row that opens in place, or, on a phone (`onBack`), the open person full width with a way back to the
+ * list and its actions held at the bottom of the screen (canvas board "Sales on a phone").
+ */
 function ThreadRow({ t, free, open, onToggle, onBack, onPlan, onDecide, onSent }: { t: Thread; free: boolean; open: boolean; onToggle: () => void; onBack?: () => void; onPlan: (action: string) => void; onDecide: (t: Thread, action: "replied" | "dismissed", reason?: string, text?: string) => Promise<void>; onSent: (t: Thread, via: "dm" | "email") => Promise<void> }) {
   // The founder's own reply. The idea (`t.draft`) shows above it and is never the text that gets copied.
   const [draft, setDraft] = useState("");
@@ -607,6 +622,11 @@ function ThreadRow({ t, free, open, onToggle, onBack, onPlan, onDecide, onSent }
       {open ? (
         <div className="th-body">
           <TheirPost t={t} />
+          {oldDays(t.postedAt) !== null ? (
+            <p className="meta" style={{ margin: "0" }} data-testid="sales-old-thread">
+              Old thread: posted {oldDays(t.postedAt)} days ago. Reply only if people are still answering in it.
+            </p>
+          ) : null}
           {t.quotes.length ? (
             <div>
               <div className="meta" style={{ marginBottom: "6px" }}>
@@ -619,7 +639,7 @@ function ThreadRow({ t, free, open, onToggle, onBack, onPlan, onDecide, onSent }
               ))}
             </div>
           ) : null}
-          <div className="meta">{t.rule.text}</div>
+          <RuleBadge t={t} />
           {skipped ? (
             <div className="meta">Sales did not draft a reply. The community&apos;s rules leave no room for one.</div>
           ) : locked ? (
