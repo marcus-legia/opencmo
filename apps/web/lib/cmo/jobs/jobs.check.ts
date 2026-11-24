@@ -191,9 +191,9 @@ async function main() {
   assert.equal(w2.status, "done", `W2 xong (${w2.error})`);
   assert.deepEqual(w2.steps.map((s) => s.tool), ["next_due_item", "read_doc", "draft_post", "check_post", "create_card"]);
   const card = mem.items.find((i) => i.status === "in_review");
-  assert.ok(card, "có thẻ chờ duyệt");
-  assert.ok(typeof card!.body.text === "string" && (card!.body.text as string).length <= 280, "bài ≤ 280 ký tự");
-  assert.equal(card!.day, isoDay(), "lấy mục tới hạn hôm nay");
+  assert.ok(card, "a card waits for review");
+  assert.ok(typeof card!.body.text === "string" && (card!.body.text as string).length <= 280, "the post is at most 280 characters");
+  assert.equal(card!.day, isoDay(), "it takes the item due today");
   // Owner, 2026-11-24: a draft from sources keeps them for the card's links, and no stranger's name, title or address
   // reaches the post.
   assert.equal((card!.body.sources as { opportunityId: string }[] | undefined)?.length, 1, "the draft keeps its source");

@@ -52,6 +52,8 @@ export const DraftSchema = z.object({
   sources: z.array(DraftSourceSchema).max(3).optional(),
   /** False when no account is connected for its platform: an approved post never goes out on its own (2026-11-24). */
   connected: z.boolean().optional(),
+  /** Platforms of a core post with no connected account while others have one: the founder posts it there by hand. */
+  postYourself: z.array(z.string().max(20)).max(4).optional(),
 });
 
 export const VoiceLineSchema = z.object({ text: z.string().max(200), source: z.string().max(120) });

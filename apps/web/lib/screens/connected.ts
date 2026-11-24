@@ -9,10 +9,20 @@ export function connectedPlatforms(rows: readonly { platform: string; status: st
 }
 
 /**
- * Each row with `connected` set: true only when every platform it goes to has a connected account (a core post goes
- * to all of `targets`, else to `platform`). Null (a read that failed) leaves rows as they were.
+ * Each row with `connected` set: false only when none of the platforms it goes to has a connected account (a core post
+ * goes to all of `targets`, else to `platform`), since a connected one still posts on its own. `postYourself` names the
+ * ones the founder posts by hand when some are connected and some are not (review 2026-11-24: "Post it yourself" on a
+ * core post whose X was connected made a founder post to X by hand, and X got it twice). Null (a read that failed)
+ * leaves rows as they were.
  */
-export function withConnected<T extends { platform: string; targets?: readonly string[] }>(rows: T[], connected: ReadonlySet<string> | null): (T & { connected?: boolean })[] {
+export function withConnected<T extends { platform: string; targets?: readonly string[] }>(
+  rows: T[],
+  connected: ReadonlySet<string> | null,
+): (T & { connected?: boolean; postYourself?: string[] })[] {
   if (!connected) return rows;
-  return rows.map((r) => ({ ...r, connected: (r.targets?.length ? r.targets : [r.platform]).every((p) => connected.has(p)) }));
+  return rows.map((r) => {
+    const goes = r.targets?.length ? r.targets : [r.platform];
+    const missing = goes.filter((p) => !connected.has(p));
+    return { ...r, connected: missing.length < goes.length, ...(missing.length && missing.length < goes.length ? { postYourself: missing } : {}) };
+  });
 }

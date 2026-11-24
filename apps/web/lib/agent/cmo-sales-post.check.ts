@@ -1,7 +1,8 @@
 /**
- * The chat writes a post from a Sales conversation (owner, 2026-11-24): `list_approvals` names each conversation by
- * the Library line our model wrote, never the stranger's title, text or url, and `create_task` hands its id to the
- * writer.
+ * The chat writes a post from a Sales conversation (owner, 2026-11-24): `list_conversations` names each conversation by
+ * the Library line our model wrote, never the stranger's title, text or url, and taints the turn (that line came from a
+ * stranger's post); `list_approvals` keeps computed fields only, so a decision after it is not gated. `create_task`
+ * hands the id to the writer.
  *
  *     NODE_OPTIONS=--conditions=react-server tsx lib/agent/cmo-sales-post.check.ts
  */
@@ -9,7 +10,7 @@ import assert from "node:assert/strict";
 
 import type { SupabaseClient } from "@/lib/api/handler";
 
-import { runCmoTool } from "./cmo-tools";
+import { TAINTING_TOOLS, runCmoTool } from "./cmo-tools";
 
 const OPP = "5b0c7a7e-1f9e-4c3e-9a51-2d1f7b6c0a11";
 
@@ -44,9 +45,16 @@ async function main() {
     rpcs,
   );
 
-  const listed = await runCmoTool(client, "list_approvals", {});
+  const approvals = await runCmoTool(client, "list_approvals", {});
+  assert.ok(approvals.ok);
+  const plain = (JSON.parse(approvals.content) as { untrusted_data: { sales_conversations: Record<string, unknown>[] } }).untrusted_data.sales_conversations[0]!;
+  assert.ok(!("summary" in plain) && !("theme" in plain), "list_approvals carries no model text from a stranger's post");
+  assert.ok(!TAINTING_TOOLS.has("list_approvals"), "so a decision after it is not gated");
+
+  const listed = await runCmoTool(client, "list_conversations", {});
   assert.ok(listed.ok);
-  const conversation = (JSON.parse(listed.content) as { untrusted_data: { sales_conversations: Record<string, unknown>[] } }).untrusted_data.sales_conversations[0]!;
+  assert.ok(TAINTING_TOOLS.has("list_conversations"), "list_conversations taints the turn");
+  const conversation = (JSON.parse(listed.content) as { untrusted_data: { conversations: Record<string, unknown>[] } }).untrusted_data.conversations[0]!;
   assert.equal(conversation.id, OPP);
   assert.equal(conversation.summary, "A founder with no audience asks where to find first customers.");
   assert.equal(conversation.theme, "Finding first customers");
@@ -59,7 +67,7 @@ async function main() {
   const later = await runCmoTool(client, "create_task", { agent: "x_writer", brief: "A post on first customers", when: "2026-11-30", opportunity_id: OPP });
   assert.ok(!later.ok && later.content.includes("written now"));
   const notId = await runCmoTool(client, "create_task", { agent: "x_writer", brief: "A post on first customers", opportunity_id: "https://reddit.com/r/SaaS" });
-  assert.ok(!notId.ok, "an id, not a url");
+  assert.ok(!notId.ok && notId.content.includes("not a url"), "an id, not a url, and it says so");
   assert.equal(rpcs.length, 0, "nothing was queued for a refused task");
 
   const started = await runCmoTool(client, "create_task", { agent: "x_writer", brief: "A post on how to find first customers", when: "now", opportunity_id: OPP });

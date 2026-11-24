@@ -15,10 +15,10 @@ export const GET = withApi({}, async ({ supabase, user }) => {
     supabase.from("social_accounts").select("platform").eq("status", "connected"),
     supabase.from("marketing_documents_latest").select("body").eq("kind", "post_plan").maybeSingle<{ body: unknown }>(),
   ]);
-  if (profile.error || accounts.error || postPlan.error) throw new ApiError(500, "Could not read your posting plan.");
+  if (profile.error || accounts.error) throw new ApiError(500, "Could not read your posting plan.");
   const saved = PostingPlanSchema.safeParse(profile.data?.posting_plan).success;
   const connected = ((accounts.data ?? []) as { platform: string }[]).map((a) => a.platform);
-  return { plan: planOrDefault(profile.data?.posting_plan, connected, chosenChannels(postPlan.data?.body)), saved };
+  return { plan: planOrDefault(profile.data?.posting_plan, connected, chosenChannels(postPlan.error ? undefined : postPlan.data?.body)), saved };
 });
 
 /**

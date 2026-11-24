@@ -176,6 +176,11 @@ export function AgentWriter() {
             ) : null}
           </span>
           <span className={badge[1]}>{badge[0]}</span>
+          {d.column === "scheduled" && d.postYourself?.length ? (
+            <span className="meta" data-testid="writer-post-yourself">
+              post it yourself on {d.postYourself.map((p) => PLATFORM_LABEL[p as keyof typeof PLATFORM_LABEL] ?? p).join(" and ")}
+            </span>
+          ) : null}
           <span className="meta" style={{ minWidth: "64px", textAlign: "right", whiteSpace: "nowrap" }}>
             {/* A waiting draft's card says when it would go out ("Mon 09:00"): the row shows that, not the planned day. */}
             {!d.at && card?.body.kind === "post" && card.body.proposed?.at ? when({ ...d, at: card.body.proposed.at }) : when(d)}

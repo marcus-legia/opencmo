@@ -67,7 +67,7 @@ Rules:
 - When the platform shows only part of a post before "more", the hook lands before the cut.
 - No links and no hashtags in a post.
 - Use only facts and numbers from the documents. Never invent customers, results or numbers.
-- When <sources> is given, the post is about what those people struggle with: say it in your own words and add what the founder knows. You may say the founder saw people asking about it this week; never name them, quote them or use a post's title, and take no number from them as a fact about the founder's customers.
+- When <sources> is given, the post is about what those people struggle with: say it in your own words and add what the founder knows. You may say the founder has seen people asking about it (no time words like "this week": the sources can be older); never name them, quote them or use a post's title, and take no number from them as a fact about the founder's customers.
 - Never claim first-hand experience, customers or results the documents do not give. With no such fact, write as an observation of what people asked and what helps.
 - When <platform> gives a length in words, stay inside it: short paragraphs, one idea each, a blank line between.
 - Respect the brand voice and the words to avoid in the Brand document.

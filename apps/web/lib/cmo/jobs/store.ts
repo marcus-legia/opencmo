@@ -178,11 +178,12 @@ export function supabaseStore(admin: BaseClient): CmoStore {
       ]);
       if (profile.error) throw new Error(`profiles: ${profile.error.message}`);
       if (accounts.error) throw new Error(`social_accounts: ${accounts.error.message}`);
-      if (postPlan.error) throw new Error(`post plan: ${postPlan.error.message}`);
+      // The chosen channels only fill the default: a read that fails means none, never a failed week plan.
+      if (postPlan.error) console.error("[cmo] post plan not read for the posting plan", postPlan.error.message);
       return planOrDefault(
         (profile.data as { posting_plan: unknown } | null)?.posting_plan,
         ((accounts.data ?? []) as { platform: string }[]).map((a) => a.platform),
-        chosenChannels((postPlan.data as { body: unknown } | null)?.body),
+        chosenChannels(postPlan.error ? undefined : (postPlan.data as { body: unknown } | null)?.body),
       );
     },
     async queueDueDrafts(run) {

@@ -822,8 +822,8 @@ async function schedule({ supabase, userId, params }: LoadContext): Promise<Part
         supabase.from("marketing_documents_latest").select("body").eq("kind", "post_plan").maybeSingle<{ body: unknown }>(),
       ]);
       if (saved.error) throw new Error(`profiles: ${saved.error.message}`);
-      if (postPlan.error) throw new Error(`post plan: ${postPlan.error.message}`);
-      return planOrDefault(saved.data?.posting_plan, rows.filter((r) => r.status === "connected").map((r) => r.platform), chosenChannels(postPlan.data?.body));
+      // The chosen channels only fill the default: a read that fails means none, never a failed screen.
+      return planOrDefault(saved.data?.posting_plan, rows.filter((r) => r.status === "connected").map((r) => r.platform), chosenChannels(postPlan.error ? undefined : postPlan.data?.body));
     },
   });
 }
