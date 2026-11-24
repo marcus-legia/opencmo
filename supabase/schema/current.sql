@@ -5364,6 +5364,8 @@ begin
         else jsonb_build_object('targets', v_targets)
       end) || jsonb_strip_nulls(jsonb_build_object(
         'sources', v_sources,
+        -- The planner's angle (owner, 2026-11-24): about four posts in five share, one asks to try the product.
+        'angle', case when v_item->>'department' = 'post' and v_item->>'angle' in ('share', 'cta') then v_item->>'angle' end,
         -- A post planned with no Library sources from the founder's brief or the first week (onboarding): the draft
         -- writes it without sources instead of refusing it for an empty Library.
         'planned_from', case when v_item->>'department' = 'post' and v_sources is null

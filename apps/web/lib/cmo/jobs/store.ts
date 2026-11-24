@@ -8,7 +8,7 @@ import type { LibraryTopTheme } from "../library";
 import type { CmoStore, NudgeDue, DraftRating, CompetitorInsight, ConnectedAccountRow, ReplyOutcomeDue, ZernioPostRow, Documents, NicheVideoInsight, SubredditRule, Goal, ItemRow, Lesson, MemoryEvent, QueuedRun, UndraftedOpportunity } from "./types";
 import { SCAN_CADENCES, isoDay, toVerdict } from "./types";
 import { enqueueDueDrafts } from "../schedule";
-import { planOrDefault } from "../posting-plan";
+import { chosenChannels, planOrDefault } from "../posting-plan";
 import { personKey } from "../reach";
 import { SALES_PLATFORMS, parsePlatforms, type SalesPlatform } from "../social/conversations";
 
@@ -171,13 +171,20 @@ export function supabaseStore(admin: BaseClient): CmoStore {
     },
     planWeek: (userId, runId, items) => rpc<number>("cmo_plan_week", { p_user: userId, p_run: runId, p_items: items }),
     async postingPlan(userId) {
-      const [profile, accounts] = await Promise.all([
+      const [profile, accounts, postPlan] = await Promise.all([
         admin.from("profiles").select("posting_plan").eq("id", userId).maybeSingle(),
         admin.from("social_accounts").select("platform").eq("user_id", userId).eq("status", "connected"),
+        admin.from("marketing_documents_latest").select("body").eq("user_id", userId).eq("kind", "post_plan").maybeSingle(),
       ]);
       if (profile.error) throw new Error(`profiles: ${profile.error.message}`);
       if (accounts.error) throw new Error(`social_accounts: ${accounts.error.message}`);
-      return planOrDefault((profile.data as { posting_plan: unknown } | null)?.posting_plan, ((accounts.data ?? []) as { platform: string }[]).map((a) => a.platform));
+      // The chosen channels only fill the default: a read that fails means none, never a failed week plan.
+      if (postPlan.error) console.error("[cmo] post plan not read for the posting plan", postPlan.error.message);
+      return planOrDefault(
+        (profile.data as { posting_plan: unknown } | null)?.posting_plan,
+        ((accounts.data ?? []) as { platform: string }[]).map((a) => a.platform),
+        chosenChannels(postPlan.error ? undefined : (postPlan.data as { body: unknown } | null)?.body),
+      );
     },
     async queueDueDrafts(run) {
       const { data, error } = await admin.from("content_items").select("id, platform").eq("user_id", run.user_id).eq("run_id", run.id)
@@ -250,6 +257,17 @@ export function supabaseStore(admin: BaseClient): CmoStore {
     libraryThemeNames: (userId, limit = 30) => rpc<string[]>("cmo_library_theme_names", { p_user: userId, p_limit: limit }),
     libraryTopThemes: (userId, days = 14, limit = 5) =>
       rpc<LibraryTopTheme[]>("cmo_library_top_themes", { p_user: userId, p_days: days, p_limit: limit }).then((rows) => rows ?? []),
+    async opportunitySource(userId, opportunityId) {
+      const { data, error } = await admin
+        .from("library_entries")
+        .select("opportunity_id, summary, platform, community")
+        .eq("user_id", userId)
+        .eq("opportunity_id", opportunityId)
+        .maybeSingle<{ opportunity_id: string; summary: string; platform: string; community: string }>();
+      if (error) throw new Error(`library_entries: ${error.message}`);
+      if (!data || !(SALES_PLATFORMS as readonly string[]).includes(data.platform)) return null;
+      return { opportunityId: data.opportunity_id, summary: data.summary, platform: data.platform as SalesPlatform, community: data.community };
+    },
     saveReach: (userId, runId, items) => rpc<number>("cmo_save_reach", { p_user: userId, p_run: runId, p_items: items }),
     saveNudge: (userId, runId, id, text) => rpc<boolean>("cmo_save_nudge", { p_user: userId, p_run: runId, p_id: id, p_text: text }),
     markAnsweredBack: (userId, id) => rpc<boolean>("cmo_mark_answered_back", { p_user: userId, p_id: id }),

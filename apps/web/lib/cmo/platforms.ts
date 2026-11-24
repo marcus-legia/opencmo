@@ -84,6 +84,16 @@ export function postProfile(platform: string | null | undefined, targets?: reado
   return profile?.kind === "post" ? profile : X_PROFILE;
 }
 
+/**
+ * The words a post aims for on a platform that reads longer posts (owner, 2026-11-24: 100 to 200 words, short
+ * paragraphs). X keeps its own limit, and Threads its 500 characters (about 90 words), so neither has a range.
+ */
+const TARGET_WORDS: Readonly<Record<string, readonly [number, number]>> = { linkedin: [100, 200] };
+
+export function targetWords(profile: Pick<PlatformProfile, "id">): readonly [number, number] | undefined {
+  return TARGET_WORDS[profile.id];
+}
+
 /** The profiles Writer drafts posts for, in the file's order: X, Threads, LinkedIn. */
 export const POST_PROFILES = PROFILES.filter((p) => p.kind === "post");
 /** The profiles a video or short gets words for: captions and the YouTube title and description. */

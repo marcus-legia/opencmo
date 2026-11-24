@@ -8,7 +8,7 @@
  * read in a skill, never a check that drops a draft.
  */
 
-import { countHashtags } from "../platforms";
+import { countHashtags, targetWords, type PlatformProfile } from "../platforms";
 import { slopIssues } from "../slop";
 import { xLength } from "@/lib/departments/publish/split";
 
@@ -97,4 +97,20 @@ export function checkPost(text: string, rules: CheckRules, profile: { limit: num
     if (named) issues.push(`It names ${named}, and the brief asks for no product pitch. Help the reader without the product.`);
   }
   return issues;
+}
+
+/** Words in a post, as a reader counts them. */
+export const wordCount = (text: string) => text.trim().split(/\s+/).filter(Boolean).length;
+
+/**
+ * Outside the platform's word range (`targetWords`, LinkedIn's 100 to 200): advice for the one fix round, never a
+ * reason to drop a version. Null on a platform with no range (X, Threads) or inside it.
+ */
+export function lengthProblem(text: string, profile: Pick<PlatformProfile, "id">): string | null {
+  const range = targetWords(profile);
+  if (!range) return null;
+  const n = wordCount(text);
+  if (n < range[0]) return `It is too short: ${n} words; aim for ${range[0]} to ${range[1]}.`;
+  if (n > range[1]) return `It is too long: ${n} words; aim for ${range[0]} to ${range[1]}.`;
+  return null;
 }

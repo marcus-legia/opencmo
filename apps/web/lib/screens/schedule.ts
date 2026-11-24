@@ -19,6 +19,8 @@ export const SlotSchema = z.object({
   approvalId: z.string().nullable(),
   /** The live post, once it went out (P4 C2): the calendar's Posted marker links to it. */
   url: z.url().nullable().optional(),
+  /** False when no account is connected for its platform: it never goes out on its own (owner, 2026-11-24). */
+  connected: z.boolean().optional(),
 });
 
 export const ScheduleScreenSchema = z.object({

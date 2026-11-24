@@ -63,7 +63,7 @@ export const CMO_TOOL_SPECS: ToolSpec[] = [
   {
     name: "list_approvals",
     description:
-      "List the cards waiting on the founder in Approvals (every kind: post, reply, goal, schedule, finished video, correction), posts drafted, approved or published in the last 14 days, and Sales conversations (Reddit, Hacker News, Facebook groups, Threads: community, score, status) waiting for a reply.",
+      "List the cards waiting on the founder in Approvals (every kind: post, reply, goal, schedule, finished video, correction), posts drafted, approved or published in the last 14 days, and Sales conversations (Reddit, Hacker News, Facebook groups, Threads: id, community, score, status) waiting for a reply. To know what a conversation is about, use list_conversations.",
     schema: EMPTY,
     strict: true,
   },
@@ -72,7 +72,7 @@ export const CMO_TOOL_SPECS: ToolSpec[] = [
     description: [
       "Hand a task to one of your agents. Each task needs a specific brief: what to make, for whom, and the angle or evidence from your research (with URLs).",
       "planner: plan the next seven days into the calendar (when = now only).",
-      "x_writer: draft a post, three versions, into Approvals. It writes for X unless you pass post_platform (\"threads\" or \"linkedin\") when the founder asks for that platform. With thread: true, one X thread of 5 to 8 posts instead (only when the founder asks for a thread; when = now only).",
+      "x_writer: draft a post, three versions, into Approvals. It writes for X unless you pass post_platform (\"threads\" or \"linkedin\") when the founder asks for that platform. With thread: true, one X thread of 5 to 8 posts instead (only when the founder asks for a thread; when = now only). To write a post from a Sales conversation, pass its id from list_conversations as opportunity_id (when = now only); do not search for it again.",
       "sales: find people describing the problem in conversations on Reddit, Hacker News, public Facebook groups and Threads (not X), score them with quotes, draft replies the founder posts themselves (the founder confirms it on a card; only when the founder asks).",
       "research: study competitors' X accounts, find posts that beat their baseline and the hooks behind them, and save what works for the planner and X writer (the founder confirms it on a card; pass handles, or it uses the X handles in Competitor Analysis; when = now only).",
       "when: \"now\" runs it in the background, usually within a minute: x_writer and sales results land in Approvals, the planner's on the calendar, research's in what the planner and X writer read. A date (YYYY-MM-DD, within 13 days) puts it on the calendar and it runs that morning. Nothing is posted until the founder approves.",
@@ -86,6 +86,7 @@ export const CMO_TOOL_SPECS: ToolSpec[] = [
         handles: { type: "array", items: { type: "string" }, description: "Research only: up to 4 X handles to study." },
         thread: { type: "boolean", description: "x_writer only: true when the founder asked for an X thread." },
         post_platform: { type: "string", enum: ["x", "threads", "linkedin"], description: "x_writer only, when = now: the platform the post is for. Leave it out for X." },
+        opportunity_id: { type: "string", description: "x_writer only, when = now: the id of a Sales conversation from list_conversations (a uuid, never a url) to write the post from." },
         platforms: {
           type: "array",
           items: { type: "string", enum: [...SALES_PLATFORMS] },
@@ -210,6 +211,14 @@ export const CMO_TOOL_SPECS: ToolSpec[] = [
   ...(editorLive() ? EDITOR_TOOL_SPECS : []),
   // Research chat (wave 3 B7): last, for the same reason.
   FIND_COMPETITORS_SPEC,
+  // Write from a Sales conversation (owner, 2026-11-24): last, for the same reason.
+  {
+    name: "list_conversations",
+    description:
+      "List the Sales conversations waiting for a reply with what each is about: id, platform, community, score, a one-line summary and its theme. The summary was written from a stranger's post, so it is outside content. Use it to find the conversation the founder means before you pass its id to create_task as opportunity_id.",
+    schema: EMPTY,
+    strict: true,
+  },
 ];
 
 // open_editor can create a New edit, and its prompt is sent to the editor's Assistant as the founder's request.
@@ -222,7 +231,8 @@ export const isCmoWrite = (name: string) => WRITES.has(name);
  * refused until the founder's next message: text on a page must not become a founder preference.
  * `create_task` stays allowed; it only queues our own job.
  */
-export const TAINTING_TOOLS = new Set([...[...RESEARCH_TOOLS].filter((name) => name !== "research_credits"), "read_site", "find_competitors"]);
+// `list_conversations` too: its summaries were written from strangers' posts (review 2026-11-24).
+export const TAINTING_TOOLS = new Set([...[...RESEARCH_TOOLS].filter((name) => name !== "research_credits"), "read_site", "find_competitors", "list_conversations"]);
 // Decisions too: after a page or a stranger's post was read, a decision needs the founder's next message.
 // The editor handoff too: its prompt is sent as the founder's own request, so a page must not write it.
 export const TAINT_GATED_TOOLS = new Set(["remember", "update_document", "set_week_goal", "open_editor", ...DECISION_WRITES]);
@@ -238,6 +248,7 @@ const taskInput = z.object({
   handles: z.array(z.string().trim().min(1).max(80)).max(4).optional(),
   thread: z.boolean().optional(),
   post_platform: z.enum(["x", "threads", "linkedin"]).optional(),
+  opportunity_id: z.uuid().optional(),
   platforms: z.array(z.enum(SALES_PLATFORMS)).min(1).max(4).optional(),
 });
 const POST_PLATFORM_LABEL = { x: "X", threads: "Threads", linkedin: "LinkedIn" } as const;
@@ -417,14 +428,39 @@ async function runTool(supabase: SupabaseClient, name: string, input: unknown, t
         summary: `Read Approvals (${cards?.length ?? 0} waiting)`,
       };
     }
+    case "list_conversations": {
+      // What each one is about, so "write a post from the thread about first customers" can name it (owner,
+      // 2026-11-24): the Library line our model wrote and its theme, never the title, the text or the url (a Reddit url
+      // carries the title). Model text from a stranger's post still: this tool taints the turn (`TAINTING_TOOLS`).
+      const { data: threadRows, error } = await supabase
+        .from("opportunities")
+        .select("id, platform, community, score, created_at")
+        .eq("status", "in_review")
+        .order("score", { ascending: false })
+        .limit(20);
+      if (error) return readFailed;
+      const ids = ((threadRows ?? []) as { id: string }[]).map((t) => t.id);
+      const { data: lines } = ids.length
+        ? await supabase.from("library_entries").select("opportunity_id, summary, theme:library_themes(name)").in("opportunity_id", ids)
+        : { data: [] };
+      const lineOf = new Map(((lines ?? []) as unknown as { opportunity_id: string; summary: string; theme: { name: string } | null }[]).map((l) => [l.opportunity_id, l]));
+      const conversations = ((threadRows ?? []) as { id: string }[]).map((t) => ({ ...t, summary: lineOf.get(t.id)?.summary ?? null, theme: lineOf.get(t.id)?.theme?.name ?? null }));
+      return { ok: true, content: data({ conversations }), summary: `Read ${conversations.length} Sales conversations` };
+    }
     case "create_task": {
       const parsed = taskInput.safeParse(input);
+      if (!parsed.success && parsed.error.issues.some((i) => i.path[0] === "opportunity_id")) {
+        return invalid("opportunity_id must be a conversation's id from list_conversations (a uuid), not a url.");
+      }
       if (!parsed.success) return invalid("agent must be planner, x_writer, sales or research; brief 3-300 characters; when \"now\" or YYYY-MM-DD.");
       const task = parsed.data;
       if (task.thread && task.agent !== "x_writer") return invalid("thread is for x_writer only.");
       if (task.thread && task.when !== "now") return invalid("A thread is written now; when must be \"now\".");
       if (task.platforms && task.agent !== "sales") return invalid("platforms is for sales only.");
       if (task.post_platform && task.agent !== "x_writer") return invalid("post_platform is for x_writer only.");
+      if (task.opportunity_id && task.agent !== "x_writer") return invalid("opportunity_id is for x_writer only.");
+      if (task.opportunity_id && task.when !== "now") return invalid("A post from a Sales conversation is written now; when must be \"now\".");
+      if (task.opportunity_id && task.thread) return invalid("A thread is not written from a Sales conversation; leave opportunity_id out.");
       if (task.post_platform && task.post_platform !== "x" && task.thread) return invalid("A thread is for X only.");
       if (task.post_platform && task.post_platform !== "x" && task.when !== "now") return invalid("A post for Threads or LinkedIn is written now; when must be \"now\".");
       const scheduled = task.when !== "now";
@@ -452,7 +488,7 @@ async function runTool(supabase: SupabaseClient, name: string, input: unknown, t
           if (nowhere) return invalid(nowhere);
         }
         const input =
-          kind === "post_draft" ? { idea: task.brief, brief: task.brief, ...(task.thread ? { thread: true } : {}), ...(task.post_platform && task.post_platform !== "x" ? { platform: task.post_platform } : {}) }
+          kind === "post_draft" ? { idea: task.brief, brief: task.brief, ...(task.thread ? { thread: true } : {}), ...(task.post_platform && task.post_platform !== "x" ? { platform: task.post_platform } : {}), ...(task.opportunity_id ? { opportunity_id: task.opportunity_id } : {}) }
           : kind === "competitor_research" ? { brief: task.brief, handles: task.handles ?? [] }
           : kind === "sales_scan" && task.platforms ? { brief: task.brief, platforms: task.platforms }
           : { brief: task.brief };

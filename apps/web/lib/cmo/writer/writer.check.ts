@@ -116,6 +116,10 @@ assert.ok(checkYoutube({ title: "Late invoices #saas", description: "d", hashtag
 // The data after the cached prefix: profile, then the founder's rules, then their voice (newest, heaviest first).
 assert.match(profileBlock(threads), /platform: threads \(Threads\)[\s\S]*limit: 500 characters[\s\S]*hashtags: none[\s\S]*links: none/);
 assert.match(profileBlock(youtube), /title limit: 100 characters; description limit: 5000 characters/);
+// Owner, 2026-11-24: LinkedIn posts aim for 100 to 200 words; X and Threads keep their character limits only.
+assert.match(profileBlock(profileOf("linkedin")!), /length: 100 to 200 words, in short paragraphs/);
+assert.doesNotMatch(profileBlock(profileOf("x")!), /length:/);
+assert.doesNotMatch(profileBlock(threads), /length:/);
 const voice = voiceBlock([
   { body: "Old note", platform: "x", weight: 0.2, createdAt: "2026-09-01T00:00:00Z" },
   { body: "Cuts the last line", platform: "linkedin", weight: 0.9, createdAt: "2026-10-20T00:00:00Z" },

@@ -9,7 +9,7 @@ import type { VideoSource } from "../writer/types";
 import { latestPerTopic } from "./context";
 import { isoDay, type CmoStore, type DraftRating, type CompetitorInsight, type ConnectedAccountRow, type ReplyOutcomeDue, type MetricRow, type ZernioPostRow, type NicheVideoInsight, type SalesSettings, type SubredditRule, type Documents, type Goal, type ItemRow, type Lesson, type MemoryEvent, type Opportunity, type PostSource, type QueuedRun, type Step, type VoiceNoteRow, type WeekResults } from "./types";
 import type { AccountMetricRow } from "./metrics-source";
-import { defaultPostingPlan, type PostingPlan } from "../posting-plan";
+import { chosenChannels, defaultPostingPlan, type PostingPlan } from "../posting-plan";
 import { postProfile } from "../platforms";
 import { SALES_PLATFORMS } from "../social/conversations";
 
@@ -158,7 +158,7 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
       }
       return plan.length;
     },
-    postingPlan: async () => posting.plan ?? defaultPostingPlan(zernio.accounts.map((a) => a.platform)),
+    postingPlan: async () => posting.plan ?? defaultPostingPlan(zernio.accounts.map((a) => a.platform), chosenChannels(docs.post_plan)),
     async queueDueDrafts(run) {
       // As `enqueueDueDrafts`: one run per due item, at most three a day.
       const due = items.filter((i) => i.run_id === run.id && i.department === "post" && i.status === "planned" && i.day <= isoDay()).slice(0, 3);
@@ -278,6 +278,12 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
       if (!p || p.status !== "replied") return false;
       p.status = "answered_back";
       return true;
+    },
+    async opportunitySource(_u, opportunityId) {
+      // As `libraryTopThemes`: the memory Library keys lines by url, and the url is the opportunity id.
+      const line = library.get(opportunityId);
+      const opp = opps.find((o) => o.url === opportunityId);
+      return line && opp ? { opportunityId, summary: line.summary, platform: opp.platform ?? "reddit", community: opp.community } : null;
     },
     async libraryTopThemes(_u, days = 14, limit = 5) {
       // The memory Library keys lines by url; the opportunity id is the url there too (as `saveOpportunityReply`).

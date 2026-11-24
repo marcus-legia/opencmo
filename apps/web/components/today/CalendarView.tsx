@@ -42,6 +42,13 @@ const CHANS = [
 ] as const;
 type ChanId = (typeof CHANS)[number]["id"];
 
+/**
+ * A slot's legend state. An approved post whose platform has no connected account never goes out on its own (owner,
+ * 2026-11-24: "Scheduled" there made a founder think it would): it says the founder posts it.
+ */
+const unposted = (s: Slot) => s.status === "scheduled" && s.connected === false;
+const stOf = (s: Slot): [string, string] => (unposted(s) ? ["Post it yourself", "st wait"] : ST[s.status]);
+
 /** Slots that have not started posting can move (the same rule as before the redesign). */
 const MOVABLE: ReadonlySet<SlotStatus> = new Set(["proposed", "waiting_founder", "scheduled"]);
 
@@ -192,6 +199,11 @@ export function CalendarView() {
           <span>
             <span className="st sch">Scheduled</span>
           </span>
+          {slots.some(unposted) ? (
+            <span>
+              <span className="st wait">Post it yourself</span> no account connected
+            </span>
+          ) : null}
           <span>
             <span className="st post">Posted</span>
           </span>
@@ -247,7 +259,7 @@ export function CalendarView() {
                       <span className="n">{e.title}</span>
                       <span>
                         {e.status === "failed" ? <FailedMark /> : null}
-                        <span className={ST[e.status][1]}>{ST[e.status][0]}</span>
+                        <span className={stOf(e)[1]} data-testid="slot-state">{stOf(e)[0]}</span>
                       </span>
                     </button>
                   ))}
@@ -282,13 +294,18 @@ export function CalendarView() {
             </div>
             <div style={{ padding: "16px", display: "flex", flexDirection: "column", gap: "12px", flex: "1 1 auto" }}>
               <div>
-                <span className={ST[sel.status][1]}>{ST[sel.status][0]}</span>
+                <span className={stOf(sel)[1]}>{stOf(sel)[0]}</span>
               </div>
               <h2 style={{ margin: "0", fontSize: "17px", fontWeight: "600", letterSpacing: "-0.2px" }}>{sel.title}</h2>
               <div className="meta">
                 {sel.where.handle ? `${chanName(sel)} · ${sel.where.handle}` : chanName(sel)}
-                {sel.note ? ` · ${sel.note}` : ""}
+                {sel.note && !(unposted(sel) && sel.note === "post it yourself") ? ` · ${sel.note}` : ""}
               </div>
+              {unposted(sel) ? (
+                <p className="meta" style={{ margin: "0" }} data-testid="slot-not-connected">
+                  No {chanName(sel)} account is connected, so this does not go out on its own. Post it yourself at this time, or connect {chanName(sel)} and it goes out by itself.
+                </p>
+              ) : null}
               {(() => {
                 const card = sel.approvalId ? queue.find((c) => c.id === sel.approvalId) : undefined;
                 return card ? (
@@ -325,6 +342,10 @@ export function CalendarView() {
                 // A post that did not go out stays on its day; its card offers Retry at the approved time.
                 <Link href={`/app/inbox/${encodeURIComponent(sel.approvalId)}`} className="primary" style={{ textDecoration: "none" }}>
                   Retry
+                </Link>
+              ) : unposted(sel) ? (
+                <Link href="/app/settings#settings-connected-accounts" className="primary" style={{ textDecoration: "none" }} data-testid="slot-connect">
+                  Connect {chanName(sel)}
                 </Link>
               ) : sel.status === "failed" && sel.note !== "missed" && !sel.approvalId ? (
                 <Link href="/app/settings#settings-connected-accounts" className="primary" style={{ textDecoration: "none" }}>
