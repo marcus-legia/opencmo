@@ -40,7 +40,11 @@ const when = (d: Draft) => {
 };
 /** A waiting draft whose card is not in the queue says why: held past the day's budget, or no card at all. */
 const badgeOf = (d: Draft): [string, string] =>
-  d.column === "waiting" && d.cardState === "held" ? ["Held", "badge b-plan"] : d.column === "waiting" && d.cardState === "missing" ? ["No card", "badge b-plan"] : BADGE[d.column];
+  d.column === "waiting" && d.cardState === "held" ? ["Held", "badge b-plan"]
+  : d.column === "waiting" && d.cardState === "missing" ? ["No card", "badge b-plan"]
+  // An approved post with no connected account never goes out on its own (owner, 2026-11-24).
+  : d.column === "scheduled" && d.connected === false ? ["Post it yourself", "badge b-wait"]
+  : BADGE[d.column];
 const kindOf = (d: Draft) => (d.kind === "post" ? `${PLATFORM_LABEL[d.platform]} post` : KIND_LABEL[d.kind]);
 const iconOf = (d: Draft) => (d.kind === "caption" ? KIND_ICON.price : (PLATFORM_ICON[d.platform] ?? KIND_ICON.post));
 
@@ -57,7 +61,10 @@ export function basedOn(sources: readonly Source[]): string {
   return `Based on ${sources.length} ${sources.length === 1 ? "conversation" : "conversations"} · ${where}`;
 }
 
-/** The conversations an open draft is written from: each one's summary and where it was said (never its title). */
+/**
+ * The conversations an open draft is written from: each one's summary and a link to its thread, named by where it was
+ * said (never the thread's title), so the founder can read it again before posting.
+ */
 function SourceList({ sources }: { sources: readonly Source[] }) {
   return (
     <section aria-label="What this post is based on" data-testid="writer-sources" style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
@@ -67,7 +74,14 @@ function SourceList({ sources }: { sources: readonly Source[] }) {
       <ul style={{ listStyle: "none", margin: "0", padding: "0", display: "flex", flexDirection: "column", gap: "4px" }}>
         {sources.map((s) => (
           <li key={s.opportunityId} data-testid="writer-source" style={{ fontSize: "13.5px" }}>
-            {s.summary} <span className="meta">{whereSaid(s)}</span>
+            {s.summary}{" "}
+            {s.url ? (
+              <a className="meta" href={s.url} target="_blank" rel="noopener noreferrer" data-testid="writer-source-link">
+                {whereSaid(s)} thread ↗
+              </a>
+            ) : (
+              <span className="meta">{whereSaid(s)}</span>
+            )}
           </li>
         ))}
       </ul>
@@ -162,6 +176,11 @@ export function AgentWriter() {
             ) : null}
           </span>
           <span className={badge[1]}>{badge[0]}</span>
+          {d.column === "scheduled" && d.postYourself?.length ? (
+            <span className="meta" data-testid="writer-post-yourself">
+              post it yourself on {d.postYourself.map((p) => PLATFORM_LABEL[p as keyof typeof PLATFORM_LABEL] ?? p).join(" and ")}
+            </span>
+          ) : null}
           <span className="meta" style={{ minWidth: "64px", textAlign: "right", whiteSpace: "nowrap" }}>
             {/* A waiting draft's card says when it would go out ("Mon 09:00"): the row shows that, not the planned day. */}
             {!d.at && card?.body.kind === "post" && card.body.proposed?.at ? when({ ...d, at: card.body.proposed.at }) : when(d)}

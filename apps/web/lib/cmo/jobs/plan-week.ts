@@ -16,7 +16,7 @@ import { profileIdOf, profileOf } from "../platforms";
 import { dayTargets, type PostingPlan } from "../posting-plan";
 import { NO_AI_SLOP, skillText } from "../skills";
 import type { JobContext, JobOutput } from "./runner";
-import { isoDay, type Documents, type PlanItem, type PostSource } from "./types";
+import { isoDay, POST_ANGLES, type Documents, type PlanItem, type PostAngle, type PostSource } from "./types";
 import type { LibraryTopTheme } from "../library";
 import { libraryBlock, libraryRefs, NO_LIBRARY, sourcesFor, themeSources, type SourceRef } from "./library-sources";
 
@@ -36,6 +36,7 @@ export const PlanSchema = z.object({
         reason: z.string().describe("One sentence: why this, why now, citing the strategy or last week"),
         image: z.boolean().optional().describe("Posts only: true when the post is stronger with an image (a launch, a product screen, a before and after); false otherwise"),
         sources: z.array(z.string()).optional().describe("Posts only: the ids from <library> (c1, c2…) of the one to three conversations this post is written from"),
+        angle: z.enum(POST_ANGLES).optional().describe("Posts only: share (what people asked and what helps) or cta (ends with a soft call to try the product); about one post in five is cta"),
       }),
     )
     .describe("One post per slot in <post_slots>, and any Reddit items"),
@@ -52,6 +53,7 @@ Rules:
 - At most two posts a week get an image (image true): a launch, a product screen, a before and after. The image is the post's title on the founder's brand, or a frame of their product; nothing is generated. Every other item has image false.
 - Every item is specific to this product and its customers, and every reason cites the strategy, a pain, or what happened last week.
 - An idea is a topic note for the writer, not a headline: "How we approve each draft by hand before it goes out", not "Why manual approval is the secret to AI marketing". No headline formulas ("the secret to", "the hidden cost of", "the danger of", "why X beats Y", "here's why"), no hype, no dashes.
+- About four posts in five share: what people asked this week (from <library>) and what helps them, with what the founder knows. About one in five ends with a soft call to try the product. Mark each post's angle: share or cta.
 - At most one post a week is about the product itself (a launch, an update). The others help the founder's customers with what the founder knows, did or learned; they may mention the product only where it is the plain answer.
 - No two items on the same topic in one week, and none that repeats an item from the last two weeks.
 - Learn from the memories: they are reasons the founder skipped drafts and notes they gave you.
@@ -65,6 +67,9 @@ ${NO_AI_SLOP}`;
 
 /** Posts a week that get an image (C3): the Post image squad builds one when the founder approves the post. */
 export const MAX_IMAGES = 2;
+
+/** Call-to-action posts a week of `posts` posts may have: one in five, rounded up (2 of 7). */
+export const maxCta = (posts: number) => Math.ceil(posts / 5);
 
 
 
@@ -120,6 +125,9 @@ export function toPlanItems(
   const out: SourcedPlanItem[] = [];
 
   const slots = postsAllowed ? postSlots(posting) : [];
+  // The model's cta marks, in slot order, up to one post in five; every other post shares.
+  let ctas = 0;
+  const angleOf = (item: Answer | undefined): PostAngle => (item?.angle === "cta" && ctas < maxCta(slots.length) ? (ctas++, "cta") : "share");
   const taken = new Map<string, Answer>();
   const loose = new Map<number, Answer[]>();
   for (const item of plan.items) {
@@ -145,6 +153,7 @@ export function toPlanItems(
         idea: `What people say about ${theme.toLowerCase()}, and what you know about it`.slice(0, 300),
         reason: `People raised "${theme}" in your Sales conversations.`.slice(0, 300),
         sources: themeSources(theme, refs),
+        angle: "share",
       });
       continue;
     }
@@ -159,6 +168,7 @@ export function toPlanItems(
       reason: item ? text(item.reason) : `From your pillar "${fill!.pillar}".`,
       ...(item?.image && ++images <= MAX_IMAGES ? { image: true } : {}),
       ...(cited.length ? { sources: cited } : opts.plannedFrom ? { planned_from: opts.plannedFrom } : {}),
+      angle: angleOf(item ?? undefined),
     });
   }
 
@@ -200,7 +210,7 @@ function skeletonBlock(posting: PostingPlan): string {
 }
 
 /** The fake planner: one pillar idea per slot, one Reddit item. */
-function fakePlan(docs: Documents, posting: PostingPlan, brief?: unknown, library: LibraryTopTheme[] = []): Plan {
+export function fakePlan(docs: Documents, posting: PostingPlan, brief?: unknown, library: LibraryTopTheme[] = []): Plan {
   const base = pillarIdeas(docs);
   const refs = libraryRefs(library);
   const items: Plan["items"] = postSlots(posting).map((s, i) => {
@@ -213,6 +223,8 @@ function fakePlan(docs: Documents, posting: PostingPlan, brief?: unknown, librar
       idea: r ? `How to handle ${r.theme.toLowerCase()} without losing a good client` : base[i % base.length]!.idea,
       reason: r ? `People raised "${r.theme}" in your Sales conversations.` : `From your pillar "${base[i % base.length]!.pillar}".`,
       image: false,
+      // One in five ends with a call to try the product, as the prompt asks the model.
+      angle: i % 5 === 4 ? ("cta" as const) : ("share" as const),
       ...(r ? { sources: [r.ref] } : {}),
     };
   });

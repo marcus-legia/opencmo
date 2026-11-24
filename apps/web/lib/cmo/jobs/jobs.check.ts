@@ -18,7 +18,7 @@ import { mondayOf } from "./summarize-memory";
 import { goalBlock, knownNumbers, recall } from "./context";
 import { goalLine, nextGoalFallback } from "./review-week";
 import { pickDueItem } from "./draft-post";
-import { toPlanItems } from "./plan-week";
+import { fakePlan, toPlanItems } from "./plan-week";
 import type { PostingPlan } from "../posting-plan";
 import { drainCmoQueue } from "./runner";
 import { factIssues } from "./check-post";
@@ -81,6 +81,17 @@ async function main() {
   assert.deepEqual(two.slice(0, 4).map((p) => p.slot), [0, 1, 0, 1], "each post keeps its slot's index in the day, the retarget's order");
   assert.deepEqual(toPlanItems({ items: [post(0, "Anything")] }, plan({ threads: 1 }), { today, docs }).map((p) => [p.platform, p.targets]).slice(0, 1), [["Threads", ["threads"]]], "the label is the first target's");
   assert.deepEqual(toPlanItems({ items: [post(0, "Anything", 0)] }, plan({}), { today, docs }), [], "a plan with every count at 0 writes no post");
+
+  // Owner, 2026-11-24: about four posts in five share, one in five is a call to action. Every post carries its angle;
+  // the model's cta marks past one in five (rounded up) become share, in slot order.
+  {
+    const week = toPlanItems({ items: [] }, plan({ x: 1 }), { today, docs });
+    assert.ok(week.every((p) => p.angle === "share"), "a filled slot shares");
+    const asked = toPlanItems({ items: [0, 1, 2, 3, 4].map((d) => ({ ...post(d, `Idea ${d}`, 0), angle: "cta" as const })) }, plan({ x: 1 }), { today, docs });
+    assert.deepEqual(asked.map((p) => p.angle), ["cta", "cta", "share", "share", "share", "share", "share"], "at most two of seven are cta");
+    const fake = toPlanItems(fakePlan(docs, plan({ x: 1 })), plan({ x: 1 }), { today, docs });
+    assert.ok(fake.filter((p) => p.angle === "cta").length <= 2 && fake.filter((p) => p.angle === "share").length >= 5);
+  }
 
   // Wave 4b: video is not planned; an item the model still writes for it is dropped.
   assert.deepEqual(toPlanItems({ items: [{ day_offset: 2, department: "video", platform: "TikTok", idea: "Demo", reason: "r" } as never] }, plan({}), { today, docs }), [], "no video item");
@@ -180,9 +191,27 @@ async function main() {
   assert.equal(w2.status, "done", `W2 xong (${w2.error})`);
   assert.deepEqual(w2.steps.map((s) => s.tool), ["next_due_item", "read_doc", "draft_post", "check_post", "create_card"]);
   const card = mem.items.find((i) => i.status === "in_review");
-  assert.ok(card, "có thẻ chờ duyệt");
-  assert.ok(typeof card!.body.text === "string" && (card!.body.text as string).length <= 280, "bài ≤ 280 ký tự");
-  assert.equal(card!.day, isoDay(), "lấy mục tới hạn hôm nay");
+  assert.ok(card, "a card waits for review");
+  assert.ok(typeof card!.body.text === "string" && (card!.body.text as string).length <= 280, "the post is at most 280 characters");
+  assert.equal(card!.day, isoDay(), "it takes the item due today");
+  // Owner, 2026-11-24: a draft from sources keeps them for the card's links, and no stranger's name, title or address
+  // reaches the post.
+  assert.equal((card!.body.sources as { opportunityId: string }[] | undefined)?.length, 1, "the draft keeps its source");
+  for (const leak of ["mo", "Clients pay late", "reddit.com"]) assert.ok(!new RegExp(`\\b${leak.replace(".", "\\.")}\\b`, "i").test(card!.body.text as string), `no "${leak}" in the post`);
+  // Owner, 2026-11-24: the chat writes a post from a Sales conversation by its id. The founder's own becomes the
+  // draft's source; an id that is not theirs writes the brief with none.
+  {
+    const own = withLibrary(memoryStore(docs));
+    const url = own.opps[0]!.url;
+    const picked = own.enqueue("post_draft", { idea: "How to stop chasing late invoices", brief: "How to stop chasing late invoices", opportunity_id: url });
+    const stranger = own.enqueue("post_draft", { idea: "Late invoices, again", brief: "Late invoices, again", opportunity_id: "https://www.reddit.com/r/other/comments/zzz/" });
+    assert.equal(await drainCmoQueue(own.store), 2);
+    const [first, second] = own.items.filter((i) => i.status === "in_review");
+    assert.equal(picked.status, "done", `from a conversation (${picked.error})`);
+    assert.deepEqual((first!.body.sources as { opportunityId: string }[]).map((x) => x.opportunityId), [url], "the conversation is the source");
+    assert.equal(stranger.status, "done", `another id (${stranger.error})`);
+    assert.equal(second!.body.sources, undefined, "an id that is not the founder's adds no source");
+  }
   // A run named for an item that is no longer planned drafts nothing and gives the credit back.
   const gone = mem.enqueue("post_draft", { item_id: card!.id });
   const drafted = mem.items.filter((i) => i.status === "in_review").length;

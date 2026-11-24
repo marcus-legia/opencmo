@@ -20,6 +20,8 @@ export const DraftSourceSchema = z.object({
   summary: z.string().max(LIBRARY_LIMITS.summaryChars),
   platform: z.enum(SALES_PLATFORMS),
   community: z.string().max(120),
+  /** The thread's address, so the founder can read it again (owner, 2026-11-24); null when it could not be read. */
+  url: z.url({ protocol: /^https?$/ }).max(2000).nullable().optional(),
 });
 
 export const DraftSchema = z.object({
@@ -48,6 +50,10 @@ export const DraftSchema = z.object({
   text: z.string().max(5000).nullable().optional(),
   /** Posts only: the Library conversations it is written from ("Based on 3 conversations"); empty for a founder's brief. */
   sources: z.array(DraftSourceSchema).max(3).optional(),
+  /** False when no account is connected for its platform: an approved post never goes out on its own (2026-11-24). */
+  connected: z.boolean().optional(),
+  /** Platforms of a core post with no connected account while others have one: the founder posts it there by hand. */
+  postYourself: z.array(z.string().max(20)).max(4).optional(),
 });
 
 export const VoiceLineSchema = z.object({ text: z.string().max(200), source: z.string().max(120) });

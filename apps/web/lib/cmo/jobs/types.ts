@@ -174,7 +174,14 @@ export type ItemRow = {
  * label. `slot`: that slot's index within its day, so saving a new plan retargets each post by it (`save_posting_plan`).
  */
 /** `sources`: posts only, the Library conversations it is written from (B3); `cmo_plan_week` keeps the valid ones. */
-export type PlanItem = { department: "post" | "sales" | "video"; platform: string; day: string; idea: string; reason: string; image?: boolean; targets?: string[]; slot?: number; sources?: PostSource[]; planned_from?: "brief" | "onboarding" };
+export type PlanItem = { department: "post" | "sales" | "video"; platform: string; day: string; idea: string; reason: string; image?: boolean; targets?: string[]; slot?: number; sources?: PostSource[]; planned_from?: "brief" | "onboarding"; angle?: PostAngle };
+
+/**
+ * What a post does (owner, 2026-11-24): `share` tells what people asked this week and what helps; `cta` ends with a soft
+ * call to try the product. About four in five share. Absent on items planned before it: read as `share`.
+ */
+export const POST_ANGLES = ["share", "cta"] as const;
+export type PostAngle = (typeof POST_ANGLES)[number];
 
 export type Documents = Partial<Record<DocumentKind, Record<string, unknown>>>;
 
@@ -349,6 +356,11 @@ export interface CmoStore {
   libraryThemeNames(userId: string, limit?: number): Promise<string[]>;
   /** B3: themes with entries posted (or saved) in the last `days`, most entries first, five newest entries each. */
   libraryTopThemes(userId: string, days?: number, limit?: number): Promise<LibraryTopTheme[]>;
+  /**
+   * A Sales conversation of this founder as a post's source (the chat's "write a post from that thread", owner
+   * 2026-11-24): its Library line, never its title or author. Null for another founder's id or one with no Library line.
+   */
+  opportunitySource(userId: string, opportunityId: string): Promise<PostSource | null>;
   /**
    * Wave 3 A3: the scan's reach checks (`cmo_save_reach`). SQL works the level out from the checks (Hacker News never
    * has DMs) and keeps a `dm` draft only for a DM-ready person without one, at most 20 a day.

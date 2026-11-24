@@ -12,6 +12,8 @@ import { ApprovalCardSchema, CARD_KINDS, STUDIO_REF_KIND, ScheduleOptionsSchema,
 import { approvalToCard, replyOpportunityIds, withReach, type ApprovalRow } from "./cards";
 import { ALL_KINDS, SAMPLE_CARDS, SCHEDULE_SNAPSHOT, STATE_CARDS, STUDIO_SNAPSHOTS } from "./fixtures/cards";
 import { videoSteps } from "./video-steps";
+import { DraftSchema } from "./writer";
+import { connectedPlatforms, withConnected } from "./connected";
 import { LOADERS } from "./load";
 import { SCREEN_NAMES, SCREENS, compose, released, type ScreenName } from "./registry";
 
@@ -383,6 +385,27 @@ check("cards: a reply card on the Feed carries the person's reach level and its 
     undefined,
     "post",
   ]);
+});
+
+check("writer: a draft's source carries its thread link, or none (owner, 2026-11-24)", () => {
+  const source = { opportunityId: "00000000-0000-4000-8000-000000000001", summary: "Founders ask where to find first customers.", platform: "reddit", community: "SaaS" };
+  const draft = { id: "d1", kind: "post", platform: "x", at: null, dayText: "Mon", title: "t", column: "waiting", versions: 3, note: null, approvalId: null };
+  const parsed = DraftSchema.parse({ ...draft, sources: [{ ...source, url: "https://www.reddit.com/r/SaaS/comments/abc/x/" }] });
+  assert.equal(parsed.sources?.[0]?.url, "https://www.reddit.com/r/SaaS/comments/abc/x/");
+  assert.equal(DraftSchema.parse({ ...draft, sources: [source] }).sources?.[0]?.url, undefined, "a draft saved before links still parses");
+  assert.equal(DraftSchema.safeParse({ ...draft, sources: [{ ...source, url: "javascript:alert(1)" }] }).success, false, "only a web address");
+});
+
+check("an approved post with no connected account is not Scheduled (owner, 2026-11-24)", () => {
+  const rows = [{ id: "a", platform: "x", column: "scheduled" }, { id: "b", platform: "linkedin", column: "scheduled" }];
+  const connected = connectedPlatforms([{ platform: "linkedin", status: "connected" }, { platform: "x", status: "reconnect" }]);
+  assert.deepEqual(withConnected(rows, connected).map((r) => [r.id, r.connected]), [["a", false], ["b", true]]);
+  assert.deepEqual(withConnected(rows, null), rows, "a failed read says nothing either way");
+  const core = [{ id: "c", platform: "x", targets: ["x", "linkedin"] }];
+  assert.equal(withConnected(core, connected)[0]!.connected, true, "a core post with one target connected still goes out there");
+  assert.deepEqual(withConnected(core, connected)[0]!.postYourself, ["x"], "and names the one to post by hand");
+  assert.equal(withConnected(core, connectedPlatforms([]))[0]!.connected, false, "with none connected nothing goes out");
+  assert.equal(withConnected(core, connectedPlatforms([{ platform: "x", status: "connected" }, { platform: "linkedin", status: "connected" }]))[0]!.connected, true);
 });
 
 if (failures.length) {

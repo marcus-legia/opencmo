@@ -9,7 +9,7 @@
 
 import { correctionsBlock, documentsBlock, lessonsBlock, memoriesBlock } from "../jobs/context";
 import type { CmoStore, MemoryTopic } from "../jobs/types";
-import { profileOf } from "../platforms";
+import { profileOf, targetWords } from "../platforms";
 import { founderPatterns } from "../slop";
 import type { VoiceNote, WriterContext, WriterProfile } from "./types";
 
@@ -17,6 +17,7 @@ import type { VoiceNote, WriterContext, WriterProfile } from "./types";
 export const VOICE_NOTES_MAX = 12;
 
 export function profileBlock(profile: WriterProfile): string {
+  const words = profile.kind === "post" ? targetWords(profile) : undefined;
   const lines = [
     `platform: ${profile.id} (${profile.label})`,
     `kind: ${profile.kind}`,
@@ -25,6 +26,7 @@ export function profileBlock(profile: WriterProfile): string {
     `tone: ${profile.tone}`,
     `hashtags: ${profile.hashtags ? `at most ${profile.hashtags}` : "none"}`,
     `links: ${profile.links ? "allowed" : "none"}`,
+    ...(words ? [`length: ${words[0]} to ${words[1]} words, in short paragraphs`] : []),
   ];
   return `<platform>\n${lines.join("\n")}\n</platform>`;
 }

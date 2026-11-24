@@ -7,7 +7,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import { asksNoPitch, briefRules, checkPost, hasLink } from "./check-post";
+import { asksNoPitch, briefRules, checkPost, hasLink, lengthProblem } from "./check-post";
 
 const cases = JSON.parse(readFileSync(new URL("../../../../../packages/contracts/link-cases.json", import.meta.url), "utf8")) as { refused: string[]; allowed: string[] };
 const pgtap = readFileSync(new URL("../../../../../supabase/tests/244_review_followups.test.sql", import.meta.url), "utf8");
@@ -34,5 +34,13 @@ assert.ok(checkPost(arrows, briefRules(docs, brief, true), { limit: 280, platfor
   "X's own count decides an X post's length");
 assert.ok(!checkPost(arrows, briefRules(docs, brief, true), { limit: 500, platform: "Threads" }).some((issue) => /characters/.test(issue)),
   "Threads counts characters");
+
+// Owner, 2026-11-24: LinkedIn posts aim for 100 to 200 words; X and Threads keep their character limits only.
+const words = (n: number) => Array.from({ length: n }, () => "word").join(" ");
+assert.equal(lengthProblem(words(80), { id: "linkedin" }), "It is too short: 80 words; aim for 100 to 200.");
+assert.equal(lengthProblem(words(150), { id: "linkedin" }), null);
+assert.match(lengthProblem(words(230), { id: "linkedin" }) ?? "", /too long: 230 words/);
+assert.equal(lengthProblem(words(40), { id: "x" }), null, "X has no word range");
+assert.equal(lengthProblem(words(40), { id: "threads" }), null, "Threads keeps its 500 characters");
 
 console.log("check-post.check ok");

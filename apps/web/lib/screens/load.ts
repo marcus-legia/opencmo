@@ -10,8 +10,9 @@ import { readyStyles } from "@/lib/agent/styles";
 import { DOCUMENTS, DOCUMENT_KINDS, type DocumentKind } from "@/lib/cmo/documents";
 import { JOB_PRICES, classifyOrder, nextCheckAt, type OrderLedgerRow } from "@/lib/cmo/jobs/progress";
 import { storedSources } from "@/lib/cmo/jobs/library-sources";
+import { connectedPlatforms, withConnected } from "./connected";
 import { mondayOf } from "@/lib/cmo/jobs/summarize-memory";
-import { planOrDefault } from "@/lib/cmo/posting-plan";
+import { chosenChannels, planOrDefault } from "@/lib/cmo/posting-plan";
 import { localDay, localMidnight, localMonday } from "@/lib/time-zone";
 import { CONNECTABLE_PLATFORMS, PUBLISH_PLATFORMS } from "@/lib/departments/publish/types";
 import { isPaidPlan } from "@/lib/pricing";
@@ -715,6 +716,12 @@ async function settings({ supabase, userId }: LoadContext): Promise<Partial<Sett
 
 type SocialAccountDb = { id: string; platform: string; handle: string; avatar_url: string | null; status: string; updated_at: string };
 
+/** The founder's connected platforms, or null when the read failed (rows then say nothing either way). */
+async function connectedSet(supabase: SupabaseClient): Promise<Set<string> | null> {
+  const { data, error } = await supabase.from("social_accounts").select("platform, status").eq("status", "connected");
+  return error ? null : connectedPlatforms((data ?? []) as { platform: string; status: string }[]);
+}
+
 async function socialAccounts(supabase: SupabaseClient): Promise<SocialAccountDb[]> {
   return must(
     await supabase.from("social_accounts").select("id, platform, handle, avatar_url, status, updated_at").order("connected_at"),
@@ -809,12 +816,14 @@ async function schedule({ supabase, userId, params }: LoadContext): Promise<Part
     accounts: async () => accountList(await accounts, false),
     rules: async () => SCHEDULE_RULES,
     postingPlan: async () => {
-      const [saved, rows] = await Promise.all([
+      const [saved, rows, postPlan] = await Promise.all([
         supabase.from("profiles").select("posting_plan").eq("id", userId).maybeSingle<{ posting_plan: unknown }>(),
         accounts,
+        supabase.from("marketing_documents_latest").select("body").eq("kind", "post_plan").maybeSingle<{ body: unknown }>(),
       ]);
       if (saved.error) throw new Error(`profiles: ${saved.error.message}`);
-      return planOrDefault(saved.data?.posting_plan, rows.filter((r) => r.status === "connected").map((r) => r.platform));
+      // The chosen channels only fill the default: a read that fails means none, never a failed screen.
+      return planOrDefault(saved.data?.posting_plan, rows.filter((r) => r.status === "connected").map((r) => r.platform), chosenChannels(postPlan.error ? undefined : postPlan.data?.body));
     },
   });
 }
@@ -838,10 +847,11 @@ async function scheduleSlots(supabase: SupabaseClient, from: Date, to: Date): Pr
   const items = [...new Set(slots.flatMap((s) => (s.deliverable?.ref_kind === "content_item" ? [s.deliverable.ref_id] : [])))];
   const clips = [...new Set(slots.flatMap((s) => (s.deliverable?.ref_kind === "clip" ? [s.deliverable.ref_id] : [])))];
   const approvals = [...new Set(slots.flatMap((s) => (s.approval_id ? [s.approval_id] : [])))];
-  const [itemRows, clipRows, waitingRows] = await Promise.all([
+  const [itemRows, clipRows, waitingRows, connected] = await Promise.all([
     items.length ? supabase.from("content_items").select("id, idea, body").in("id", items) : Promise.resolve({ data: [] }),
     clips.length ? supabase.from("clips").select("id, hook").in("id", clips) : Promise.resolve({ data: [] }),
     approvals.length ? supabase.from("approvals").select("id").in("id", approvals).eq("status", "waiting") : Promise.resolve({ data: [] }),
+    slots.length ? connectedSet(supabase) : Promise.resolve(null),
   ]);
   const titles = new Map<string, string>([
     ...((itemRows.data ?? []) as { id: string; idea: string | null; body: { text?: string } | null }[]).map(
@@ -867,6 +877,7 @@ async function scheduleSlots(supabase: SupabaseClient, from: Date, to: Date): Pr
       // A card still waiting (a time to approve, a failed post's Retry, a copy-and-open) opens from its slot.
       approvalId: s.approval_id && waiting.has(s.approval_id) ? s.approval_id : null,
       url: status === "posted" && s.external_url?.startsWith("https://") ? s.external_url : null,
+      ...(connected ? { connected: connected.has(platform) } : {}),
     }];
   });
 }
@@ -1043,6 +1054,18 @@ function screenPlatform(label: string | null | undefined, fallback: WriterScreen
   return profileOf(profileIdOf(label) ?? "")?.platform ?? fallback;
 }
 
+/**
+ * The thread addresses of a draft's sources (its own opportunities, under RLS), so the card links them. A web address
+ * only; a read that fails loses the links, never the drafts.
+ */
+async function sourceLinks(supabase: LoadContext["supabase"], ids: string[]): Promise<Map<string, string>> {
+  const wanted = [...new Set(ids)].filter((id) => /^[0-9a-f-]{36}$/i.test(id)).slice(0, 300);
+  if (!wanted.length) return new Map();
+  const { data, error } = await supabase.from("opportunities").select("id, url").in("id", wanted);
+  if (error) return new Map();
+  return new Map(((data ?? []) as { id: string; url: string | null }[]).flatMap((o) => (o.url && /^https?:\/\//i.test(o.url) && o.url.length <= 2000 ? [[o.id, o.url] as const] : [])));
+}
+
 async function writer({ supabase }: LoadContext): Promise<Partial<WriterScreen>> {
   return parts<WriterScreen>("writer", {
     // Posts on their own platform, captions per platform (P3 A2: video words for one edit), and the briefs Writer
@@ -1093,7 +1116,17 @@ async function writer({ supabase }: LoadContext): Promise<Partial<WriterScreen>>
               : { cardState: "missing" as const, heldUntil: null, approvalId: null };
       const dayText = (day: string) => WEEKDAY[new Date(`${day}T00:00:00Z`).getUTCDay()]!;
       const batchOf = new Map((must(shorts, "shorts") as { short_clip_id: string; batch_id: string }[]).map((s) => [s.short_clip_id, s.batch_id]));
-      const postDrafts = (must(posts, "content_items") as ItemRow[]).map((r) => {
+      const postRows = must(posts, "content_items") as ItemRow[];
+      const [connected, links] = await Promise.all([
+        connectedSet(supabase),
+        sourceLinks(supabase, postRows.flatMap((r) => storedSources(r.body as Record<string, unknown>).map((s) => s.opportunityId))),
+      ]);
+      // A core post goes to every platform of its slot (`body.targets`): it goes out on its own only when all are connected.
+      const targetsOf = new Map(postRows.map((r) => {
+        const raw = (r.body as { targets?: unknown }).targets;
+        return [r.id, Array.isArray(raw) ? raw.filter((t): t is string => typeof t === "string") : []] as const;
+      }));
+      const postDrafts = postRows.map((r) => {
         const text = typeof r.body.text === "string" && r.body.text ? r.body.text : r.idea;
         const edited = r.final_text !== null && r.final_text !== r.body.text;
         return {
@@ -1110,7 +1143,7 @@ async function writer({ supabase }: LoadContext): Promise<Partial<WriterScreen>>
           ...cardOf(r.status, cards.get(r.id)),
           ref: { kind: "content_item" as const, id: r.id },
           text: (r.final_text ?? text).slice(0, 5000),
-          sources: storedSources(r.body as Record<string, unknown>),
+          sources: storedSources(r.body as Record<string, unknown>).map((src) => ({ ...src, url: links.get(src.opportunityId) ?? null })),
         };
       });
       type VideoSlot = { platform: string; status: string; publish_at: string; published_at: string | null; approval_id: string | null; error: { message?: string } | null; deliverable: { ref_kind: string; ref_id: string } };
@@ -1167,7 +1200,8 @@ async function writer({ supabase }: LoadContext): Promise<Partial<WriterScreen>>
           text: null,
         };
       });
-      return [...postDrafts, ...captionDrafts];
+      const postsConnected = withConnected(postDrafts.map((d) => ({ ...d, targets: targetsOf.get(d.id) ?? [] })), connected).map(({ targets: _targets, ...d }) => d);
+      return [...postsConnected, ...captionDrafts];
     },
     // What Writer reads first: the rules the founder approved, then their heaviest voice notes; the product rule.
     voice: async () => {
