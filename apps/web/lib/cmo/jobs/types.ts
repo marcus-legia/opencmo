@@ -174,7 +174,14 @@ export type ItemRow = {
  * label. `slot`: that slot's index within its day, so saving a new plan retargets each post by it (`save_posting_plan`).
  */
 /** `sources`: posts only, the Library conversations it is written from (B3); `cmo_plan_week` keeps the valid ones. */
-export type PlanItem = { department: "post" | "sales" | "video"; platform: string; day: string; idea: string; reason: string; image?: boolean; targets?: string[]; slot?: number; sources?: PostSource[]; planned_from?: "brief" | "onboarding" };
+export type PlanItem = { department: "post" | "sales" | "video"; platform: string; day: string; idea: string; reason: string; image?: boolean; targets?: string[]; slot?: number; sources?: PostSource[]; planned_from?: "brief" | "onboarding"; angle?: PostAngle };
+
+/**
+ * What a post does (owner, 2026-11-24): `share` tells what people asked this week and what helps; `cta` ends with a soft
+ * call to try the product. About four in five share. Absent on items planned before it: read as `share`.
+ */
+export const POST_ANGLES = ["share", "cta"] as const;
+export type PostAngle = (typeof POST_ANGLES)[number];
 
 export type Documents = Partial<Record<DocumentKind, Record<string, unknown>>>;
 

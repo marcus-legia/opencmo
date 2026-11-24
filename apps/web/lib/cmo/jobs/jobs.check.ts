@@ -18,7 +18,7 @@ import { mondayOf } from "./summarize-memory";
 import { goalBlock, knownNumbers, recall } from "./context";
 import { goalLine, nextGoalFallback } from "./review-week";
 import { pickDueItem } from "./draft-post";
-import { toPlanItems } from "./plan-week";
+import { fakePlan, toPlanItems } from "./plan-week";
 import type { PostingPlan } from "../posting-plan";
 import { drainCmoQueue } from "./runner";
 import { factIssues } from "./check-post";
@@ -81,6 +81,17 @@ async function main() {
   assert.deepEqual(two.slice(0, 4).map((p) => p.slot), [0, 1, 0, 1], "each post keeps its slot's index in the day, the retarget's order");
   assert.deepEqual(toPlanItems({ items: [post(0, "Anything")] }, plan({ threads: 1 }), { today, docs }).map((p) => [p.platform, p.targets]).slice(0, 1), [["Threads", ["threads"]]], "the label is the first target's");
   assert.deepEqual(toPlanItems({ items: [post(0, "Anything", 0)] }, plan({}), { today, docs }), [], "a plan with every count at 0 writes no post");
+
+  // Owner, 2026-11-24: about four posts in five share, one in five is a call to action. Every post carries its angle;
+  // the model's cta marks past one in five (rounded up) become share, in slot order.
+  {
+    const week = toPlanItems({ items: [] }, plan({ x: 1 }), { today, docs });
+    assert.ok(week.every((p) => p.angle === "share"), "a filled slot shares");
+    const asked = toPlanItems({ items: [0, 1, 2, 3, 4].map((d) => ({ ...post(d, `Idea ${d}`, 0), angle: "cta" as const })) }, plan({ x: 1 }), { today, docs });
+    assert.deepEqual(asked.map((p) => p.angle), ["cta", "cta", "share", "share", "share", "share", "share"], "at most two of seven are cta");
+    const fake = toPlanItems(fakePlan(docs, plan({ x: 1 })), plan({ x: 1 }), { today, docs });
+    assert.ok(fake.filter((p) => p.angle === "cta").length <= 2 && fake.filter((p) => p.angle === "share").length >= 5);
+  }
 
   // Wave 4b: video is not planned; an item the model still writes for it is dropped.
   assert.deepEqual(toPlanItems({ items: [{ day_offset: 2, department: "video", platform: "TikTok", idea: "Demo", reason: "r" } as never] }, plan({}), { today, docs }), [], "no video item");
