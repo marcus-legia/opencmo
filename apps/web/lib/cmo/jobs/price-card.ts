@@ -14,6 +14,16 @@ function joinLabels(labels: string[]): string {
   return labels.length <= 1 ? (labels[0] ?? "") : `${labels.slice(0, -1).join(", ")} and ${labels.at(-1)}`;
 }
 
+/**
+ * The cost line on a confirm box (owner test 2026-11-23: "Start the scan" and "Write them" did not say what they use).
+ * Runs are included in the plan and count against its monthly allowance; the free scan and 0-credit jobs use none.
+ */
+export function costLine(credits: number, free = false): string {
+  if (free) return "Free: this scan uses none of your allowance.";
+  if (credits <= 0) return "Included: uses none of your allowance.";
+  return `Uses ${credits} ${credits === 1 ? "credit" : "credits"} of your monthly allowance.`;
+}
+
 /** Missing or empty `platforms` means every place Sales looks. */
 export function salesScanCard(brief?: string, platforms?: SalesPlatform[]): PriceCard {
   const where = joinLabels((platforms?.length ? platforms : [...SALES_PLATFORMS]).map((p) => PLATFORM_LABEL[p]));

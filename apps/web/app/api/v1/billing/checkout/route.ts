@@ -21,7 +21,8 @@ const body = z.object({ product: z.string().min(1).max(64), site: z.string().tri
  */
 function successPath(kind: "plan" | "pack", site: string | undefined): string {
   if (kind === "pack") return "/app/billing?paid=1";
-  return site ? `/app?paid=1&site=${encodeURIComponent(site)}` : "/app?paid=1";
+  // A plan: back on the feed, which asks to connect the accounts you post from (`ConnectSheet`).
+  return site ? `/app?paid=1&connect=1&site=${encodeURIComponent(site)}` : "/app?paid=1&connect=1";
 }
 
 export const POST = withApi(
