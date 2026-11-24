@@ -357,6 +357,11 @@ export interface CmoStore {
   /** B3: themes with entries posted (or saved) in the last `days`, most entries first, five newest entries each. */
   libraryTopThemes(userId: string, days?: number, limit?: number): Promise<LibraryTopTheme[]>;
   /**
+   * A Sales conversation of this founder as a post's source (the chat's "write a post from that thread", owner
+   * 2026-11-24): its Library line, never its title or author. Null for another founder's id or one with no Library line.
+   */
+  opportunitySource(userId: string, opportunityId: string): Promise<PostSource | null>;
+  /**
    * Wave 3 A3: the scan's reach checks (`cmo_save_reach`). SQL works the level out from the checks (Hacker News never
    * has DMs) and keeps a `dm` draft only for a DM-ready person without one, at most 20 a day.
    */

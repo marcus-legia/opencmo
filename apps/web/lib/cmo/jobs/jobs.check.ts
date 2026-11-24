@@ -198,6 +198,20 @@ async function main() {
   // reaches the post.
   assert.equal((card!.body.sources as { opportunityId: string }[] | undefined)?.length, 1, "the draft keeps its source");
   for (const leak of ["mo", "Clients pay late", "reddit.com"]) assert.ok(!new RegExp(`\\b${leak.replace(".", "\\.")}\\b`, "i").test(card!.body.text as string), `no "${leak}" in the post`);
+  // Owner, 2026-11-24: the chat writes a post from a Sales conversation by its id. The founder's own becomes the
+  // draft's source; an id that is not theirs writes the brief with none.
+  {
+    const own = withLibrary(memoryStore(docs));
+    const url = own.opps[0]!.url;
+    const picked = own.enqueue("post_draft", { idea: "How to stop chasing late invoices", brief: "How to stop chasing late invoices", opportunity_id: url });
+    const stranger = own.enqueue("post_draft", { idea: "Late invoices, again", brief: "Late invoices, again", opportunity_id: "https://www.reddit.com/r/other/comments/zzz/" });
+    assert.equal(await drainCmoQueue(own.store), 2);
+    const [first, second] = own.items.filter((i) => i.status === "in_review");
+    assert.equal(picked.status, "done", `from a conversation (${picked.error})`);
+    assert.deepEqual((first!.body.sources as { opportunityId: string }[]).map((x) => x.opportunityId), [url], "the conversation is the source");
+    assert.equal(stranger.status, "done", `another id (${stranger.error})`);
+    assert.equal(second!.body.sources, undefined, "an id that is not the founder's adds no source");
+  }
   // A run named for an item that is no longer planned drafts nothing and gives the credit back.
   const gone = mem.enqueue("post_draft", { item_id: card!.id });
   const drafted = mem.items.filter((i) => i.status === "in_review").length;

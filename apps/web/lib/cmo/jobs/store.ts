@@ -256,6 +256,17 @@ export function supabaseStore(admin: BaseClient): CmoStore {
     libraryThemeNames: (userId, limit = 30) => rpc<string[]>("cmo_library_theme_names", { p_user: userId, p_limit: limit }),
     libraryTopThemes: (userId, days = 14, limit = 5) =>
       rpc<LibraryTopTheme[]>("cmo_library_top_themes", { p_user: userId, p_days: days, p_limit: limit }).then((rows) => rows ?? []),
+    async opportunitySource(userId, opportunityId) {
+      const { data, error } = await admin
+        .from("library_entries")
+        .select("opportunity_id, summary, platform, community")
+        .eq("user_id", userId)
+        .eq("opportunity_id", opportunityId)
+        .maybeSingle<{ opportunity_id: string; summary: string; platform: string; community: string }>();
+      if (error) throw new Error(`library_entries: ${error.message}`);
+      if (!data || !(SALES_PLATFORMS as readonly string[]).includes(data.platform)) return null;
+      return { opportunityId: data.opportunity_id, summary: data.summary, platform: data.platform as SalesPlatform, community: data.community };
+    },
     saveReach: (userId, runId, items) => rpc<number>("cmo_save_reach", { p_user: userId, p_run: runId, p_items: items }),
     saveNudge: (userId, runId, id, text) => rpc<boolean>("cmo_save_nudge", { p_user: userId, p_run: runId, p_id: id, p_text: text }),
     markAnsweredBack: (userId, id) => rpc<boolean>("cmo_mark_answered_back", { p_user: userId, p_id: id }),

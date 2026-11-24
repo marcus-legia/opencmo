@@ -142,8 +142,13 @@ export async function draftPost(ctx: JobContext): Promise<JobOutput> {
   // Wave 3 B3: the conversations this post is written from. The plan's own; for an item planned before them, the
   // Library theme closest to its idea. A founder's brief needs none; anything else needs the Library.
   const planned = storedSources(due?.body);
+  // The chat's "write a post from that Sales conversation" (owner, 2026-11-24) names it by id: only the founder's own,
+  // read as its Library line; another id writes the brief without a source.
+  const picked = asked && typeof run.input.opportunity_id === "string" && run.input.opportunity_id.length <= 500
+    ? await store.opportunitySource(run.user_id, run.input.opportunity_id)
+    : null;
   const closest = planned.length || fromFounder ? null : closestTheme(idea, library);
-  const sources: PostSource[] = planned.length ? planned : closest ? themeSources(closest.name, libraryRefs(library)) : [];
+  const sources: PostSource[] = picked ? [picked] : planned.length ? planned : closest ? themeSources(closest.name, libraryRefs(library)) : [];
   // The first week's drafts (onboarding) are the one exception: they are written before Sales has found anyone. So is
   // a post the plan made from the founder's brief or in the first week (`planned_from`), drafted on its day later.
   const plannedWithout = due?.body?.planned_from === "brief" || due?.body?.planned_from === "onboarding";
