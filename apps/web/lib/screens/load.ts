@@ -1117,8 +1117,15 @@ async function writer({ supabase }: LoadContext): Promise<Partial<WriterScreen>>
       const dayText = (day: string) => WEEKDAY[new Date(`${day}T00:00:00Z`).getUTCDay()]!;
       const batchOf = new Map((must(shorts, "shorts") as { short_clip_id: string; batch_id: string }[]).map((s) => [s.short_clip_id, s.batch_id]));
       const postRows = must(posts, "content_items") as ItemRow[];
-      const connected = await connectedSet(supabase);
-      const links = await sourceLinks(supabase, postRows.flatMap((r) => storedSources(r.body as Record<string, unknown>).map((s) => s.opportunityId)));
+      const [connected, links] = await Promise.all([
+        connectedSet(supabase),
+        sourceLinks(supabase, postRows.flatMap((r) => storedSources(r.body as Record<string, unknown>).map((s) => s.opportunityId))),
+      ]);
+      // A core post goes to every platform of its slot (`body.targets`): it goes out on its own only when all are connected.
+      const targetsOf = new Map(postRows.map((r) => {
+        const raw = (r.body as { targets?: unknown }).targets;
+        return [r.id, Array.isArray(raw) ? raw.filter((t): t is string => typeof t === "string") : []] as const;
+      }));
       const postDrafts = postRows.map((r) => {
         const text = typeof r.body.text === "string" && r.body.text ? r.body.text : r.idea;
         const edited = r.final_text !== null && r.final_text !== r.body.text;
@@ -1193,7 +1200,8 @@ async function writer({ supabase }: LoadContext): Promise<Partial<WriterScreen>>
           text: null,
         };
       });
-      return [...withConnected(postDrafts, connected), ...captionDrafts];
+      const postsConnected = withConnected(postDrafts.map((d) => ({ ...d, targets: targetsOf.get(d.id) ?? [] })), connected).map(({ targets: _targets, ...d }) => d);
+      return [...postsConnected, ...captionDrafts];
     },
     // What Writer reads first: the rules the founder approved, then their heaviest voice notes; the product rule.
     voice: async () => {

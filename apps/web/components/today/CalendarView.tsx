@@ -199,6 +199,11 @@ export function CalendarView() {
           <span>
             <span className="st sch">Scheduled</span>
           </span>
+          {slots.some(unposted) ? (
+            <span>
+              <span className="st wait">Post it yourself</span> no account connected
+            </span>
+          ) : null}
           <span>
             <span className="st post">Posted</span>
           </span>

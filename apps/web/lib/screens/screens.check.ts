@@ -401,6 +401,9 @@ check("an approved post with no connected account is not Scheduled (owner, 2026-
   const connected = connectedPlatforms([{ platform: "linkedin", status: "connected" }, { platform: "x", status: "reconnect" }]);
   assert.deepEqual(withConnected(rows, connected).map((r) => [r.id, r.connected]), [["a", false], ["b", true]]);
   assert.deepEqual(withConnected(rows, null), rows, "a failed read says nothing either way");
+  const core = [{ id: "c", platform: "x", targets: ["x", "linkedin"] }];
+  assert.equal(withConnected(core, connected)[0]!.connected, false, "a core post needs every target connected");
+  assert.equal(withConnected(core, connectedPlatforms([{ platform: "x", status: "connected" }, { platform: "linkedin", status: "connected" }]))[0]!.connected, true);
 });
 
 if (failures.length) {

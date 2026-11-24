@@ -144,8 +144,9 @@ export async function draftPost(ctx: JobContext): Promise<JobOutput> {
   const planned = storedSources(due?.body);
   // The chat's "write a post from that Sales conversation" (owner, 2026-11-24) names it by id: only the founder's own,
   // read as its Library line; another id writes the brief without a source.
+  // A read that fails drafts the brief without the link rather than failing the founder's request.
   const picked = asked && typeof run.input.opportunity_id === "string" && run.input.opportunity_id.length <= 500
-    ? await store.opportunitySource(run.user_id, run.input.opportunity_id)
+    ? await store.opportunitySource(run.user_id, run.input.opportunity_id).catch((error) => (console.error(`[cmo] post_draft ${run.id}: source not read`, error), null))
     : null;
   const closest = planned.length || fromFounder ? null : closestTheme(idea, library);
   const sources: PostSource[] = picked ? [picked] : planned.length ? planned : closest ? themeSources(closest.name, libraryRefs(library)) : [];
