@@ -296,7 +296,7 @@ async function main() {
   const w4 = mem3.enqueue("sales_scan");
   await drainCmoQueue(mem3.store);
   assert.equal(w4.status, "done", `W4 xong (${w4.error})`);
-  assert.deepEqual(w4.steps.map((s) => s.tool), ["read_doc", "make_queries", "reddit_search", "hn_search", "facebook_search", "threads_search", "score_thread", "check_rules", "draft_reply", "create_card", "save_library", "save_reach"]);
+  assert.deepEqual(w4.steps.map((s) => s.tool), ["read_doc", "make_queries", "reddit_search", "hn_search", "facebook_search", "threads_search", "score_thread", "check_rules", "draft_reply", "create_card", "save_library", "draft_dm", "save_reach"]);
   assert.ok(mem3.opps.length > 0 && mem3.opps.length <= 5, `1–5 thẻ (${mem3.opps.length})`);
   // Wave 3 B1: every card is in the Library, by a summary that is not its title.
   assert.equal(mem3.library.size, mem3.opps.length, "one Library line per card");
@@ -531,6 +531,49 @@ async function main() {
   assert.equal(memP.opps.length, 2, "no second card for u/Sam, one for new_one");
   // The store holds it too, as `cmo_save_opportunities` does, if the scan's own check is bypassed.
   assert.equal(await memP.store.saveOpportunities("u", runP.id, [{ ...memP.opps[0]!, url: "https://www.reddit.com/r/x/comments/again/", author: "U/SAM" }]), 0, "the store refuses a second card for a person");
+  // Owner test 2026-11-23: Reddit search gives titles only. The post is read, then scored again, so "I'm a solo founder"
+  // in the post makes a DM-ready person, and a freelancer selling to the same founders stays reply first.
+  const memR = memoryStore({ ...docs, strategy: { ...docs.strategy, pains: ["first customers"] } });
+  memR.salesSettings.platforms = ["reddit"];
+  const runR = memR.enqueue("sales_scan");
+  const bare = (n: number, title: string): RedditThread => ({ ...injected(n), title, text: "", author: `u/bare${n}`, postedAt: new Date(Date.now() - 3_600_000).toISOString() });
+  const posts: Record<string, string> = {
+    [bare(50, "").url]: "Quick question. I'm a solo founder with no users yet and I hate guessing where my first customers are.",
+    [bare(51, "").url]: "Quick question. I'm a freelancer, I build websites for small businesses and I hate chasing leads.",
+  };
+  await drainCmoQueue(memR.store, {
+    searchReddit: async () => [bare(50, "How do I find my first customers?"), bare(51, "Where do you find clients?")],
+    searchHn: async () => [],
+    searchConversations: async () => [],
+    readPost: async (url) => posts[url] ?? null,
+  });
+  assert.equal(runR.status, "done", `read then rescore (${runR.error})`);
+  assert.ok(runR.steps.some((s) => s.tool === "read_post") && runR.steps.some((s) => s.tool === "rescore_read"), runR.steps.map((s) => s.tool).join());
+  assert.equal(memR.people.get(bare(50, "").url)?.level, "dm_ready", `the founder found in the post is DM ready (${JSON.stringify(memR.people.get(bare(50, "").url)?.reach)})`);
+  assert.equal(memR.people.get(bare(51, "").url)?.level ?? "reply_first", "reply_first", "the freelancer is not");
+  // Owner test 2026-11-23: the one product mention goes to the post asking for tools, not to the higher score.
+  const memMention = memoryStore(docs);
+  memMention.salesSettings.platforms = ["reddit"];
+  memMention.rules.set("saas", { subreddit: "saas", verdict: "safe", summary: "r/SaaS: product mention allowed", read_at: new Date().toISOString() });
+  const saas = (n: number, text: string, comments: number): RedditThread => ({
+    ...injected(n), url: `https://www.reddit.com/r/SaaS/comments/m${n}/`, community: "SaaS", author: `u/m${n}`, text, comments,
+    postedAt: new Date(Date.now() - 3_600_000).toISOString(),
+  });
+  const runMention = memMention.enqueue("sales_scan");
+  await drainCmoQueue(memMention.store, {
+    searchReddit: async () => [
+      saas(60, "Every month the same story. I hate chasing late invoices by hand.", 90),
+      saas(61, "Every month the same story. I hate chasing late invoices, can anyone recommend a tool?", 0),
+    ],
+    searchHn: async () => [],
+    searchConversations: async () => [],
+  });
+  assert.equal(runMention.status, "done", `mention scan (${runMention.error})`);
+  const mentionCard = (n: number) => memMention.opps.find((o) => o.url.includes(`/m${n}/`));
+  assert.ok(mentionCard(60) && mentionCard(61), `both cards (${memMention.opps.map((o) => o.url).join()})`);
+  assert.ok(mentionCard(60)!.score > mentionCard(61)!.score, "the post without a tool question scores higher");
+  assert.equal(mentionCard(61)!.rule, "safe", "the post asking for tools gets the mention");
+  assert.equal(mentionCard(60)!.rule, "no_product_mention", "the other is help only");
   // Review 2026-11-21: a DM may say "I replied in the thread" only for a reply the founder posted, never a draft.
   const { draftMessages } = await import("./sales-scan");
   const prompts: string[] = [];
