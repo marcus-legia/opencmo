@@ -62,8 +62,10 @@ test("the free first run: website → documents, plan and drafts with no payment
   expect(((await again.json()) as { detail: { code: string } }).detail.code).toBe("plan_required");
 
   // Approve on the post card answers with the plan sheet; the draft stays waiting.
+  // The Post plan from onboarding picks the channels (owner, 2026-11-24), so the first post can be one core post for
+  // several platforms ("Post for 2 platforms ·"); it still opens on the first platform, X.
   await page.goto("/app");
-  const card = await openFeedCard(page, /\bpost · /i);
+  const card = await openFeedCard(page, /\bpost( for \d+ platforms)? · /i);
   await card.getByRole("button", { name: /^Approve( for this time)?$/ }).click();
   await expect(page.getByTestId("plan-sheet")).toBeVisible();
   await expect(page.getByTestId("plan-sheet")).toContainText("One plan. Everything included.");
@@ -128,7 +130,7 @@ test("the first week: website → plan card and a first draft, then I posted it 
 
   // The X draft, with no X account: Open X and I posted it on the card itself.
   await page.goto("/app");
-  const card = await openFeedCard(page, /\bpost · /i);
+  const card = await openFeedCard(page, /\bpost( for \d+ platforms)? · /i);
   await expect(card.getByRole("button", { name: "Open X" })).toBeVisible();
   const cardId = await card.getAttribute("data-card-id");
   const posted = page.waitForResponse((response) => response.url().endsWith(`/approvals/${cardId}/posted`));
