@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 
 import { oldDays, ruleHeadline } from "./sales-card";
 
-const help = { rule: { kind: "help_only" as const, text: "" }, platform: "reddit" as const, person: undefined };
+const help = { rule: { kind: "help_only" as const, text: "" }, platform: "reddit" as const, person: undefined, postedAt: null };
 assert.equal(ruleHeadline(help), "Help only · don't promote · DM them later");
 assert.equal(ruleHeadline({ ...help, platform: "hn" }), "Help only · don't promote", "Hacker News has no DMs");
 assert.equal(
@@ -15,6 +15,8 @@ assert.equal(
   "Help only · don't promote",
   "a community that forbids DMs never says DM them later",
 );
+assert.equal(ruleHeadline({ ...help, person: { reach: { dmAllowed: true, buyer: false } } as never }), "Help only · don't promote", "a seller is never DMed");
+assert.equal(ruleHeadline({ ...help, postedAt: "2026-10-01T00:00:00Z" }, Date.parse("2026-11-24T00:00:00Z")), "Help only · don't promote", "nor an old thread");
 assert.equal(ruleHeadline({ ...help, rule: { kind: "requires_disclosure", text: "" } }), "You may name it · say it's yours");
 assert.equal(ruleHeadline({ ...help, rule: { kind: "mention_allowed", text: "" } }), "You may name your product once");
 assert.equal(ruleHeadline({ ...help, rule: { kind: "skipped", text: "" } }), "Don't reply here");

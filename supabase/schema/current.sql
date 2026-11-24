@@ -6479,10 +6479,9 @@ begin
           select x from jsonb_array_elements_text(case when jsonb_typeof(v_r->'reasons') = 'array' then v_r->'reasons' else '[]'::jsonb end) x
           where btrim(x) <> '' limit 8
         ) s), '[]'::jsonb));
-    v_dm := (v_reach->>'buyer')::boolean and (v_reach->>'wantsNow')::boolean and (v_reach->>'fresh')::boolean
-      and (v_reach->>'dmAllowed')::boolean and ((v_reach->>'warm')::boolean or (v_reach->>'asksForTools')::boolean);
-    v_level := case when not v_dm then 'reply_first'
-      when v_email is not null and (v_reach->>'warm')::boolean then 'email_ready' else 'dm_ready' end;
+    -- Same rule as `reachLevel` (lib/cmo/reach.ts): not a seller, DMs allowed, recent. The rest only orders.
+    v_dm := (v_reach->>'buyer')::boolean and (v_reach->>'fresh')::boolean and (v_reach->>'dmAllowed')::boolean;
+    v_level := case when not v_dm then 'reply_first' when v_email is not null then 'email_ready' else 'dm_ready' end;
     v_text := left(nullif(btrim(coalesce(v_item->>'dm', '')), ''), 1000);
     if v_text is not null and (not v_dm or v_today >= 20 or v_opp.dm_draft is not null) then
       v_text := null;
@@ -18177,6 +18176,7 @@ declare
   v_row public.work_orders;
   v_root public.work_orders;
   v_source text := p_run.input->>'source';
+  v_free integer;
 begin
   select * into v_row from public.work_orders where run_id = p_run.id limit 1;
   if found or p_run.kind in ('onboard', 'plan_week') then
@@ -18202,12 +18202,17 @@ begin
   limit 1
   for update skip locked;
   if not found then
+    -- The job's price, within what the week still has free (as `work_orders_plan_week` hands out): past it the order
+    -- is still made, with what is left, and shows as over budget rather than not existing.
+    v_free := v_root.budget_credits - v_root.spent_credits - coalesce((
+      select sum(budget_credits - spent_credits) from public.work_orders
+      where parent_id = v_root.id and status not in ('done', 'failed', 'cancelled')), 0);
     v_row := public.work_order_create(p_run.user_id, v_root.week, v_root.id, p_run.kind,
       case p_run.kind
-        when 'post_draft' then 'Draft a post' when 'sales_scan' then coalesce(p_run.input->>'brief', 'Scan Reddit')
+        when 'post_draft' then 'Draft a post' when 'sales_scan' then coalesce(p_run.input->>'brief', 'Find people asking')
         when 'competitor_research' then 'Competitor research' when 'niche_video_research' then 'What works on video in your niche' when 'pull_metrics' then 'Pull post metrics'
         when 'summarize_memory' then 'Weekly memory' when 'review_week' then 'Sunday review' else p_run.kind end,
-      jsonb_build_object('objective', coalesce(p_run.input->>'brief', p_run.kind)), 0, null, '{}',
+      jsonb_build_object('objective', coalesce(p_run.input->>'brief', p_run.kind)), least(coalesce(public.cmo_job_price(p_run.kind), 0), greatest(v_free, 0)), null, '{}',
       case when v_source in ('chat', 'mcp') then v_source when v_source = 'schedule' then 'loop' else 'founder' end);
   end if;
   update public.work_orders set run_id = p_run.id, updated_at = now() where id = v_row.id returning * into v_row;

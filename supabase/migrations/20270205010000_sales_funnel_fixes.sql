@@ -18,6 +18,7 @@ declare
   v_row public.work_orders;
   v_root public.work_orders;
   v_source text := p_run.input->>'source';
+  v_free integer;
 begin
   select * into v_row from public.work_orders where run_id = p_run.id limit 1;
   if found or p_run.kind in ('onboard', 'plan_week') then
@@ -43,12 +44,17 @@ begin
   limit 1
   for update skip locked;
   if not found then
+    -- The job's price, within what the week still has free (as `work_orders_plan_week` hands out): past it the order
+    -- is still made, with what is left, and shows as over budget rather than not existing.
+    v_free := v_root.budget_credits - v_root.spent_credits - coalesce((
+      select sum(budget_credits - spent_credits) from public.work_orders
+      where parent_id = v_root.id and status not in ('done', 'failed', 'cancelled')), 0);
     v_row := public.work_order_create(p_run.user_id, v_root.week, v_root.id, p_run.kind,
       case p_run.kind
         when 'post_draft' then 'Draft a post' when 'sales_scan' then coalesce(p_run.input->>'brief', 'Find people asking')
         when 'competitor_research' then 'Competitor research' when 'niche_video_research' then 'What works on video in your niche' when 'pull_metrics' then 'Pull post metrics'
         when 'summarize_memory' then 'Weekly memory' when 'review_week' then 'Sunday review' else p_run.kind end,
-      jsonb_build_object('objective', coalesce(p_run.input->>'brief', p_run.kind)), coalesce(public.cmo_job_price(p_run.kind), 0), null, '{}',
+      jsonb_build_object('objective', coalesce(p_run.input->>'brief', p_run.kind)), least(coalesce(public.cmo_job_price(p_run.kind), 0), greatest(v_free, 0)), null, '{}',
       case when v_source in ('chat', 'mcp') then v_source when v_source = 'schedule' then 'loop' else 'founder' end);
   end if;
   update public.work_orders set run_id = p_run.id, updated_at = now() where id = v_row.id returning * into v_row;
@@ -131,23 +137,53 @@ $$;
 revoke all on function public.cmo_save_reach(uuid, uuid, jsonb) from public, anon, authenticated;
 grant execute on function public.cmo_save_reach(uuid, uuid, jsonb) to service_role;
 
-update public.work_orders o set
-  budget_credits = greatest(o.budget_credits, coalesce(public.cmo_job_price(o.kind), 0)),
-  title = case when o.kind = 'sales_scan' and o.title = 'Scan Reddit' then 'Find people asking' else o.title end,
-  updated_at = now()
-where o.parent_id is not null and o.item_id is null and o.budget_credits = 0 and public.cmo_job_price(o.kind) > 0
-  and o.status not in ('done', 'failed', 'cancelled');
+-- Open orders made that way: renamed, and budgeted at the job's price within what their week still has free.
+update public.work_orders o set title = 'Find people asking', updated_at = now()
+where o.kind = 'sales_scan' and o.title = 'Scan Reddit' and o.status not in ('done', 'failed', 'cancelled');
+do $$
+declare
+  v_order record;
+  v_free integer;
+begin
+  for v_order in
+    select o.id, o.kind, o.parent_id from public.work_orders o
+    where o.parent_id is not null and o.item_id is null and o.budget_credits = 0 and public.cmo_job_price(o.kind) > 0
+      and o.status not in ('done', 'failed', 'cancelled')
+    order by o.created_at
+  loop
+    select r.budget_credits - r.spent_credits - coalesce((
+      select sum(c.budget_credits - c.spent_credits) from public.work_orders c
+      where c.parent_id = r.id and c.status not in ('done', 'failed', 'cancelled')), 0)
+    into v_free from public.work_orders r where r.id = v_order.parent_id;
+    update public.work_orders set budget_credits = least(public.cmo_job_price(v_order.kind), greatest(coalesce(v_free, 0), 0)),
+      updated_at = now()
+    where id = v_order.id;
+  end loop;
+end;
+$$;
 
--- Open cards saved under the old gate: fresh is now 14 days, then the same rule from the checks they hold. No DM is
--- drafted here; the card says none is drafted yet, and the next scan or "Write the replies" drafts one.
+-- Cards saved under the old gate. `buyer` meant "said who they are in words that hold"; it now means "not selling to
+-- the founder's customers", so a card the old check could not place is not a seller unless it reads as a launch
+-- promotion (the code's PROMO). Fresh is 14 days now, with its reason line. Then the same rule for the level. No DM is
+-- drafted here: an open DM tab with no draft lets the founder write one.
+update public.opportunities o set reach = jsonb_set(jsonb_set(o.reach, '{buyer}', 'true'::jsonb), '{reasons,0}',
+    '"Describes the problem; not selling anything"'::jsonb)
+where o.reach is not null and o.reach->'buyer' = 'false'::jsonb
+  and o.reach->'reasons'->>0 = 'Not clear they are a buyer like your customers'
+  and (coalesce(o.title, '') || ' ' || coalesce(o.snippet, '')) !~* '(launch(ing|ed) (today|this week)|[0-9]{1,3} ?% off|(for|to) the first [0-9]+ (users|customers)|promo code|sign up (now|today))';
 update public.opportunities o set reach = jsonb_set(o.reach, '{fresh}',
     to_jsonb(o.posted_at is not null and o.posted_at <= now() and o.posted_at > now() - interval '14 days'))
-where o.reach is not null and o.status = 'in_review';
+where o.reach is not null;
+update public.opportunities o set reach = jsonb_set(o.reach, '{reasons,3}', to_jsonb(case
+    when (o.reach->>'fresh')::boolean then 'Posted ' || greatest(0, current_date - o.posted_at::date) || ' days ago'
+    else 'Posted more than 14 days ago' end))
+where o.reach is not null and o.posted_at is not null and jsonb_typeof(o.reach->'reasons') = 'array'
+  and o.reach->'reasons'->>3 = 'Posted more than a week ago';
 update public.opportunities o set reach_level = case
     when not (coalesce((o.reach->>'buyer')::boolean, false) and coalesce((o.reach->>'fresh')::boolean, false)
               and coalesce((o.reach->>'dmAllowed')::boolean, false)) then 'reply_first'
     when nullif(o.reach->>'emailFound', '') is not null then 'email_ready'
     else 'dm_ready' end
-where o.reach is not null and o.status = 'in_review';
+where o.reach is not null;
 
 commit;

@@ -461,15 +461,7 @@ function ReplyIdea({ id, idea, mine, onMine, done, checks }: { id: string; idea:
   );
 }
 
-/**
- * One thread: a row that opens in place, or, on a phone (`onBack`), the open person full width with a way back to the
- * list and its actions held at the bottom of the screen (canvas board "Sales on a phone").
- */
-/**
- * What the person wrote, first thing in an open card (owner, 2026-11-23: "I need to read their post before I can write a
- * reply"). Long posts fold to eight lines. A Reddit card saved before posts were read has only its title: the link to
- * read it on the platform takes the post's place.
- */
+/** The community's rule as one badge (`ruleHeadline`), with the rule reader's line beside it. */
 function RuleBadge({ t }: { t: Thread }) {
   const kind = t.rule.kind;
   const tone = kind === "mention_allowed" || kind === "requires_disclosure" ? "ok" : kind === "skipped" ? "no" : "help";
@@ -483,6 +475,11 @@ function RuleBadge({ t }: { t: Thread }) {
   );
 }
 
+/**
+ * What the person wrote, first thing in an open card (owner, 2026-11-23: "I need to read their post before I can write a
+ * reply"). Long posts fold to eight lines. A Reddit card saved before posts were read has only its title: the link to
+ * read it on the platform takes the post's place.
+ */
 function TheirPost({ t }: { t: Thread }) {
   const [all, setAll] = useState(false);
   const body = (t.body ?? "").trim();
@@ -514,6 +511,10 @@ function TheirPost({ t }: { t: Thread }) {
   );
 }
 
+/**
+ * One thread: a row that opens in place, or, on a phone (`onBack`), the open person full width with a way back to the
+ * list and its actions held at the bottom of the screen (canvas board "Sales on a phone").
+ */
 function ThreadRow({ t, free, open, onToggle, onBack, onPlan, onDecide, onSent }: { t: Thread; free: boolean; open: boolean; onToggle: () => void; onBack?: () => void; onPlan: (action: string) => void; onDecide: (t: Thread, action: "replied" | "dismissed", reason?: string, text?: string) => Promise<void>; onSent: (t: Thread, via: "dm" | "email") => Promise<void> }) {
   // The founder's own reply. The idea (`t.draft`) shows above it and is never the text that gets copied.
   const [draft, setDraft] = useState("");

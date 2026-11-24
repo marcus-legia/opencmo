@@ -40,7 +40,7 @@ export const ReachCheckSchema = z.object({
   fresh: z.boolean(),
   /** The platform has DMs and the community's rules allow them. */
   dmAllowed: z.boolean(),
-  /** The post asks for tools or recommendations: enough in place of `warm` for a DM, never for an email. */
+  /** The post asks for tools or recommendations: puts the person higher in who to message first. */
   asksForTools: z.boolean(),
   /** An address the person published in the post or thread, or on the business site the post links. */
   emailFound: z.email().max(254).nullable(),
@@ -79,7 +79,7 @@ export function reachReason(level: ReachLevel, check: ReachCheck | null): string
   const r = check?.reasons ?? [];
   const pick = (i: number, fallback: string) => (r[i]?.trim() ? r[i]!.trim() : fallback);
   if (!check) return "Reply in public first.";
-  if (level === "email_ready") return pick(5, "They published an address and answered you.");
+  if (level === "email_ready") return pick(5, "They published an address.");
   if (level === "dm_ready") {
     if (check.warm) return pick(2, "They answered you.");
     return check.asksForTools ? "The post asks for tools or recommendations." : "They describe the problem you solve.";

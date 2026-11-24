@@ -10,8 +10,10 @@ type Thread = SalesScreen["threads"][number];
  * What the community allows, as one badge the founder reads before writing (owner, 2026-11-23: "help only, don't
  * promote, DM them later"). The rule reader's own line stays under it for the detail.
  */
-export function ruleHeadline(t: Pick<Thread, "rule" | "platform" | "person">): string {
-  const dmLater = t.platform !== "hn" && t.person?.reach?.dmAllowed !== false;
+export function ruleHeadline(t: Pick<Thread, "rule" | "platform" | "person" | "postedAt">, now = Date.now()): string {
+  const reach = t.person?.reach;
+  // "DM them later" only for someone the DM gate can open: DMs here, not a seller, not an old thread.
+  const dmLater = t.platform !== "hn" && reach?.dmAllowed !== false && reach?.buyer !== false && reach?.fresh !== false && oldDays(t.postedAt, now) === null;
   switch (t.rule.kind) {
     case "mention_allowed":
       return "You may name your product once";

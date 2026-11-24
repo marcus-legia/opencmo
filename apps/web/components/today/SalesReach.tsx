@@ -119,6 +119,8 @@ export function ReachPanel({ t, publicReply, onSent }: { t: Thread; publicReply:
   const reach = person.reach;
   const level = person.reachLevel;
   const hasDms = t.platform !== "hn";
+  // Reply first says why, from the check that failed. DM ready with no draft yet (a card the 2026-11-24 rule opened,
+  // or a draft the model could not write) is open: the founder writes the message.
   const dmLock = !hasDms
     ? `${PLATFORM_LABEL[t.platform]} has no private messages. Reply in public.`
     : level === "reply_first"
@@ -128,10 +130,12 @@ export function ReachPanel({ t, publicReply, onSent }: { t: Thread; publicReply:
           ? "This community's rules forbid DMs. Reply in public."
           : !reach.buyer
             ? "They sell to the same people you do. Reply in public if it helps."
-            : `Posted more than ${FRESH_DAYS} days ago. Reply in public first.`
-      : !person.dmDraft
-        ? "No DM drafted for this person yet."
-        : null;
+            : !reach.fresh
+              ? t.postedAt
+                ? `Posted more than ${FRESH_DAYS} days ago. Reply in public first.`
+                : "We could not tell when this was posted. Reply in public first."
+              : "Reply in public first."
+      : null;
   const subject = emailSubject(t.title);
   const links = reach?.emailFound ? mailLinks(reach.emailFound, subject, email) : { gmail: null, mailto: null };
   const emailLock = !reach?.emailFound ? "No address they published themselves was found." : level !== "email_ready" ? (dmLock ?? "Reply in public first.") : null;
@@ -227,7 +231,7 @@ export function ReachPanel({ t, publicReply, onSent }: { t: Thread; publicReply:
                 They have not answered you yet. Keep it short and about their post; it lands best after your public reply.
               </p>
             ) : null}
-            <textarea id={`dm-${t.id}`} className="reply" rows={4} value={dm} onChange={(e) => setDm(e.target.value)} style={{ width: "100%", resize: "vertical", font: "inherit", fontSize: "15px", lineHeight: "1.55", color: "var(--text)" }} />
+            <textarea id={`dm-${t.id}`} className="reply" rows={4} value={dm} onChange={(e) => setDm(e.target.value)} placeholder="No draft yet. Write one short message about their post." style={{ width: "100%", resize: "vertical", font: "inherit", fontSize: "15px", lineHeight: "1.55", color: "var(--text)" }} />
             <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "flex-end", alignItems: "center" }}>
               {note ? <span className="meta">{note}</span> : null}
               <button type="button" className="ghost" disabled={busy} onClick={() => void sent("dm")}>

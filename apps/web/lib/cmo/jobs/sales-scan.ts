@@ -147,7 +147,7 @@ export const ScoreSchema = z.object({
       asksForTools: z.boolean().describe("True when the post asks for a tool, an app, a service or recommendations"),
       sellsService: z
         .boolean()
-        .describe("True when the author sells to the kind of people the founder sells to (an agency, a freelancer or consultant offering their work, a vendor) instead of being one of them"),
+        .describe("True when the author sells to the founder's ideal customers (per the Strategy) instead of being one of them; false when the ideal customer is someone like them (a founder selling to freelancers counts a freelancer as a customer)"),
       invites: z.object({ quote: z.string().describe("Exact words inviting people to message or email them (\"DM me\", \"email me\"), or empty") }),
     }),
   ),
@@ -294,10 +294,10 @@ For each thread:
 - theme: a short name for the problem (2 to 5 words). Reuse a name from <themes> when the thread is about the same problem; write a new one only when none fits.
 - buyer: the author's exact words saying who they are or what they run ("I run a two-person studio"), when that makes them like the ideal customer. Leave it empty for a vendor promoting a product, a consultant selling a service, or an author who does not say.
 - asksForTools: true when they ask for a tool, an app, a service or recommendations.
-- sellsService: true when the author sells to the kind of people the founder sells to (an agency, a freelancer or consultant offering their work, a vendor) instead of being one of them.
+- sellsService: true when the author sells to the founder's ideal customers (the Strategy says who they are) instead of being one of them: an agency, consultant or vendor pitching those customers. When the ideal customer is someone like the author (a product for freelancers, and the author is a freelancer), it is false.
 - invites: their exact words inviting people to message or email them ("DM me", "email me"), or empty.
 - pain (0-25): how clearly the person describes the pain. Quote their exact words.
-- fit (0-25): how well the product fits this person and situation, judged from the product documents and the Strategy's ideal customer. 0 to 5 when the author is not that kind of customer (for example, they sell services to them).
+- fit (0-25): how well the product fits this person and situation, judged from the product documents and the Strategy's ideal customer. 0 to 5 when the author is not that kind of customer but sells to them.
 - evidence (0-15): signs they want a solution now (asking for tools, a system, recommendations). Quote their exact words.
 - exclude: true for health, medical, personal finance or legal advice, off-topic threads, or vendors promoting their own product.
 Quotes must be copied exactly from the thread. If there is nothing to quote, leave it empty and score low.
@@ -539,7 +539,7 @@ function fakeScores(threads: RedditThread[]): Scored[] {
     theme: "Chasing late invoices",
     buyer: { quote: /\b(i['’]m a|i run|solo|small studio|freelancer)\b[^.!?]*/i.exec(t.text)?.[0] ?? "" },
     asksForTools: /\b(tool|app|system|something that|recommend)/i.test(t.text),
-    sellsService: /\b(i['’]m a freelancer|i build (websites|sites|apps) for|my (agency|services)|hire me)\b/i.test(`${t.title} ${t.text}`),
+    sellsService: /\b(i build (websites|sites|apps) for|my (agency|services)|hire me)\b/i.test(`${t.title} ${t.text}`),
     invites: { quote: /\b(dm|pm|message|email) me\b/i.exec(t.text)?.[0] ?? "" },
   }));
 }
