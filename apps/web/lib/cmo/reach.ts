@@ -11,6 +11,7 @@
  */
 import { z } from "zod";
 
+import { FRESH_DAYS } from "./reach-window";
 import type { SalesPlatform } from "./social/conversations";
 
 export const REACH_LEVELS = ["reply_first", "dm_ready", "email_ready"] as const;
@@ -19,8 +20,7 @@ export type ReachLevel = (typeof REACH_LEVELS)[number];
 export const PERSON_STATUSES = ["found", "replied", "answered_back", "talking", "signed_up", "customer", "not_interested"] as const;
 export type PersonStatus = (typeof PERSON_STATUSES)[number];
 
-/** A thread counts as fresh for a DM when it was posted less than this long ago. */
-export const FRESH_DAYS = 14;
+export { FRESH_DAYS };
 /** At most this many DM drafts a day per founder (wave 3 §9): it keeps reaching out personal. */
 export const DM_DRAFTS_PER_DAY = 20;
 /** Days without an answer before a nudge is drafted (redesign plan, "Reaching out"). */

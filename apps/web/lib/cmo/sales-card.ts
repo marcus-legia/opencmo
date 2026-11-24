@@ -1,7 +1,7 @@
 /**
  * Lines a Sales card shows, kept out of the component so they can be checked (`sales-card.check.ts`). Pure.
  */
-import { FRESH_DAYS } from "./reach";
+import { FRESH_DAYS } from "./reach-window";
 import type { SalesScreen } from "../screens/sales";
 
 type Thread = SalesScreen["threads"][number];
