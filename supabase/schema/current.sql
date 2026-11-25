@@ -3683,7 +3683,7 @@ CREATE TABLE public.cmo_runs (
     CONSTRAINT cmo_runs_credits_check CHECK ((credits >= 0)),
     CONSTRAINT cmo_runs_error_check CHECK ((char_length(error) <= 500)),
     CONSTRAINT cmo_runs_input_check CHECK (((jsonb_typeof(input) = 'object'::text) AND (octet_length((input)::text) <= 4096))),
-    CONSTRAINT cmo_runs_kind_check CHECK ((kind = ANY (ARRAY['onboard'::text, 'plan_week'::text, 'post_draft'::text, 'sales_scan'::text, 'competitor_research'::text, 'pull_metrics'::text, 'summarize_memory'::text, 'review_week'::text, 'write_caption'::text, 'write_video_brief'::text, 'write_slides'::text, 'publish_post'::text, 'niche_video_research'::text, 'distill_ratings'::text, 'repurpose_post'::text, 'photo_caption'::text, 'sales_reply_drafts'::text]))),
+    CONSTRAINT cmo_runs_kind_check CHECK ((kind = ANY (ARRAY['onboard'::text, 'plan_week'::text, 'post_draft'::text, 'sales_scan'::text, 'competitor_research'::text, 'pull_metrics'::text, 'summarize_memory'::text, 'review_week'::text, 'write_caption'::text, 'write_video_brief'::text, 'write_slides'::text, 'publish_post'::text, 'niche_video_research'::text, 'distill_ratings'::text, 'repurpose_post'::text, 'photo_caption'::text, 'sales_reply_drafts'::text, 'compose_check'::text]))),
     CONSTRAINT cmo_runs_output_check CHECK (((output IS NULL) OR ((jsonb_typeof(output) = 'object'::text) AND (octet_length((output)::text) <= 16384)))),
     CONSTRAINT cmo_runs_status_check CHECK ((status = ANY (ARRAY['queued'::text, 'running'::text, 'done'::text, 'failed'::text]))),
     CONSTRAINT cmo_runs_steps_check CHECK (((jsonb_typeof(steps) = 'array'::text) AND (octet_length((steps)::text) <= 16384)))
@@ -4914,6 +4914,7 @@ CREATE FUNCTION public.cmo_job_daily_limit(p_kind text) RETURNS integer
     when 'distill_ratings' then 2
     when 'repurpose_post' then 20
     when 'sales_reply_drafts' then 5
+    when 'compose_check' then 30
     else 0 end
 $$;
 
@@ -4933,6 +4934,8 @@ CREATE FUNCTION public.cmo_job_price(p_kind text) RETURNS integer
     when 'photo_caption' then 1
     -- Included in the plan (wave 2); `cmo_enqueue` keeps it paid-only.
     when 'sales_reply_drafts' then 0
+    -- The Composer's AI check (2026-11-25).
+    when 'compose_check' then 1
     else 0 end
 $$;
 
@@ -13350,7 +13353,9 @@ begin
       or (p_bucket = 'cmo-runs' and p_limit = 60 and p_window_seconds = 3600)
       or (p_bucket = 'onboarding' and p_limit = 20 and p_window_seconds = 3600)
       -- The CMO chat's thumbs (20270103010000).
-      or (p_bucket = 'feedback-turn' and p_limit = 60 and p_window_seconds = 3600);
+      or (p_bucket = 'feedback-turn' and p_limit = 60 and p_window_seconds = 3600)
+      -- The Composer's context (20270206010000): each call may read a sub's rules from Reddit.
+      or (p_bucket = 'composer' and p_limit = 120 and p_window_seconds = 3600);
   end if;
 
   if not v_allowed then
@@ -15180,6 +15185,37 @@ begin
   return p_plan;
 end;
 $$;
+
+
+--
+-- Name: save_reddit_account(text, integer, date); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.save_reddit_account(p_username text, p_karma integer DEFAULT NULL::integer, p_created date DEFAULT NULL::date) RETURNS TABLE(reddit_username text, reddit_karma integer, reddit_created_at date)
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $_$
+declare
+  v_user uuid := public.require_user();
+  v_name text := nullif(regexp_replace(btrim(coalesce(p_username, '')), '^/?u/', '', 'i'), '');
+begin
+  if v_name is not null and v_name !~ '^[A-Za-z0-9_-]{3,20}$' then
+    raise exception 'Use your Reddit username, like my_handle.' using errcode = '22023';
+  end if;
+  if p_karma is not null and (p_karma < 0 or p_karma > 10000000) then
+    raise exception 'Karma is a number from 0.' using errcode = '22023';
+  end if;
+  if p_created is not null and (p_created < date '2005-06-01' or p_created > current_date) then
+    raise exception 'Use the month your Reddit account was made.' using errcode = '22023';
+  end if;
+  update public.profiles p set
+    reddit_username = v_name,
+    reddit_karma = case when v_name is null then null else p_karma end,
+    reddit_created_at = case when v_name is null then null else date_trunc('month', p_created)::date end
+  where p.id = v_user;
+  return query select p.reddit_username, p.reddit_karma, p.reddit_created_at from public.profiles p where p.id = v_user;
+end;
+$_$;
 
 
 --
@@ -19029,6 +19065,9 @@ CREATE TABLE public.profiles (
     digest_days text DEFAULT 'weekdays'::text NOT NULL,
     sells_to text,
     first_touch jsonb,
+    reddit_username text,
+    reddit_karma integer,
+    reddit_created_at date,
     CONSTRAINT profiles_autopilot_hours_check CHECK ((autopilot_hours = ANY (ARRAY[6, 12, 24]))),
     CONSTRAINT profiles_autopilot_note_check CHECK ((char_length(autopilot_note) <= 200)),
     CONSTRAINT profiles_autopilot_platforms_check CHECK ((autopilot_platforms <@ ARRAY['x'::text, 'threads'::text, 'linkedin'::text])),
@@ -19038,6 +19077,9 @@ CREATE TABLE public.profiles (
     CONSTRAINT profiles_heard_from_check CHECK (((heard_from IS NULL) OR (heard_from = ANY (ARRAY['search'::text, 'x'::text, 'reddit'::text, 'linkedin'::text, 'youtube'::text, 'ai_assistant'::text, 'friend'::text, 'newsletter'::text, 'product_hunt'::text, 'hacker_news'::text, 'threads'::text, 'other'::text])))),
     CONSTRAINT profiles_heard_from_note_check CHECK (((heard_from_note IS NULL) OR (char_length(heard_from_note) <= 100))),
     CONSTRAINT profiles_post_platforms_check CHECK (((post_platforms IS NULL) OR (((cardinality(post_platforms) >= 1) AND (cardinality(post_platforms) <= 3)) AND (post_platforms <@ ARRAY['x'::text, 'threads'::text, 'linkedin'::text])))),
+    CONSTRAINT profiles_reddit_created_at_check CHECK (((reddit_created_at IS NULL) OR ((reddit_created_at >= '2005-06-01'::date) AND (reddit_created_at <= (CURRENT_DATE + 1))))),
+    CONSTRAINT profiles_reddit_karma_check CHECK (((reddit_karma IS NULL) OR ((reddit_karma >= 0) AND (reddit_karma <= 10000000)))),
+    CONSTRAINT profiles_reddit_username_check CHECK (((reddit_username IS NULL) OR (reddit_username ~ '^[A-Za-z0-9_-]{3,20}$'::text))),
     CONSTRAINT profiles_sells_to_check CHECK (((sells_to IS NULL) OR ((char_length(sells_to) >= 1) AND (char_length(sells_to) <= 160)))),
     CONSTRAINT profiles_timezone_check CHECK (((char_length(timezone) >= 1) AND (char_length(timezone) <= 64))),
     CONSTRAINT profiles_timezone_source_check CHECK ((timezone_source = ANY (ARRAY['default'::text, 'browser'::text, 'founder'::text]))),
@@ -20008,8 +20050,14 @@ CREATE TABLE public.subreddit_rules (
     min_account_age_days integer,
     megathread boolean DEFAULT false NOT NULL,
     no_dms boolean DEFAULT false NOT NULL,
+    rules_text text,
+    submit_text text,
+    guide jsonb,
+    CONSTRAINT subreddit_rules_guide_check CHECK (((guide IS NULL) OR (jsonb_typeof(guide) = 'object'::text))),
     CONSTRAINT subreddit_rules_min_account_age_days_check CHECK (((min_account_age_days >= 0) AND (min_account_age_days <= 3650))),
     CONSTRAINT subreddit_rules_min_karma_check CHECK (((min_karma >= 0) AND (min_karma <= 1000000))),
+    CONSTRAINT subreddit_rules_rules_text_check CHECK (((rules_text IS NULL) OR (char_length(rules_text) <= 6000))),
+    CONSTRAINT subreddit_rules_submit_text_check CHECK (((submit_text IS NULL) OR (char_length(submit_text) <= 2000))),
     CONSTRAINT subreddit_rules_subreddit_check CHECK ((subreddit ~ '^[a-z0-9_]{2,21}$'::text)),
     CONSTRAINT subreddit_rules_summary_check CHECK ((char_length(summary) <= 200)),
     CONSTRAINT subreddit_rules_verdict_check CHECK ((verdict = ANY (ARRAY['safe'::text, 'requires_disclosure'::text, 'no_product_mention'::text, 'not_verified'::text, 'skip'::text, 'mention_ok'::text, 'help_only'::text])))
