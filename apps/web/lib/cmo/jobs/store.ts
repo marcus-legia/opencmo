@@ -8,6 +8,7 @@ import type { LibraryTopTheme } from "../library";
 import type { CmoStore, NudgeDue, DraftRating, CompetitorInsight, ConnectedAccountRow, ReplyOutcomeDue, ZernioPostRow, Documents, NicheVideoInsight, SubredditRule, Goal, ItemRow, Lesson, MemoryEvent, QueuedRun, UndraftedOpportunity } from "./types";
 import { SCAN_CADENCES, isoDay, toVerdict } from "./types";
 import { enqueueDueDrafts } from "../schedule";
+import { recentFrom } from "./recent-scans";
 import { chosenChannels, planOrDefault } from "../posting-plan";
 import { personKey } from "../reach";
 import { SALES_PLATFORMS, parsePlatforms, type SalesPlatform } from "../social/conversations";
@@ -227,18 +228,19 @@ export function supabaseStore(admin: BaseClient): CmoStore {
     async recentScans(userId) {
       const { data, error } = await admin
         .from("cmo_runs")
-        .select("output")
+        .select("output, input")
         .eq("user_id", userId)
         .eq("kind", "sales_scan")
         .eq("status", "done")
         .gte("created_at", new Date(Date.now() - 14 * 86_400_000).toISOString())
         .order("created_at", { ascending: false })
         .limit(RECENT_SCANS);
-      // A read that fails only means the scan searches as it did before: never a failed scan.
-      if (error) return { queries: [], rejected: [] };
-      const outputs = ((data ?? []) as { output: { queries?: unknown; rejected?: unknown } | null }[]).map((r) => r.output ?? {});
-      const strings = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
-      return { queries: [...new Set(outputs.flatMap((o) => strings(o.queries)))].slice(0, 40), rejected: outputs.flatMap((o) => strings(o.rejected)) };
+      // A read that fails only means the scan searches as it did before: never a failed scan, but logged.
+      if (error) {
+        console.error("[cmo] sales_scan: recent scans not read", error.message);
+        return { queries: [], rejected: [] };
+      }
+      return recentFrom((data ?? []) as { output: unknown; input: unknown }[]);
     },
     async seenAuthors(userId) {
       // As `seenUrls`: an empty set after a failed read would make second cards for people already met.

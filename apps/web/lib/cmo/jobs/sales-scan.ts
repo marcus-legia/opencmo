@@ -613,6 +613,8 @@ export async function rescoreRead(
   input: { docs: Documents; themes: string[] },
   candidates: Candidate[],
   readUrls: Set<string>,
+  /** Filled with the threads the model scored again below the bar: passed over, as in the first scoring. */
+  passedOver: Set<string> = new Set(),
 ): Promise<Candidate[]> {
   const read = candidates.filter((c) => readUrls.has(c.thread.url) && c.thread.text.trim());
   const best = (list: Candidate[]) => list.filter((c) => c.result.score >= PASS_SCORE).sort((a, b) => b.result.score - a.result.score).slice(0, MAX_CARDS);
@@ -642,6 +644,7 @@ export async function rescoreRead(
       read.flatMap((c, i) => {
         const scored = byIndex.get(i);
         const result = scored ? scoreThread(c.thread, scored, ctx.now.getTime()) : null;
+        if (scored && (!result || result.score < PASS_SCORE)) passedOver.add(c.thread.url);
         // A thread the model skipped keeps its first score; one that no longer scores is dropped.
         return scored ? [[c.thread.url, result ? { ...c, scored, result } : null] as const] : [];
       }),
@@ -1173,8 +1176,11 @@ export async function salesScan(ctx: JobContext): Promise<SalesScanOutput & JobO
     const byIndex = new Map(scores.map((s) => [s.index, s]));
     // Two threads by one person in this scan: their best one only, so they get one card and at most one DM.
     const people = new Set<string>();
-    return scanned
-      .map((thread, i) => ({ thread, scored: byIndex.get(i), result: scoreThread(thread, byIndex.get(i), ctx.now.getTime()) }))
+    const all = scanned.map((thread, i) => ({ thread, scored: byIndex.get(i), result: scoreThread(thread, byIndex.get(i), ctx.now.getTime()) }));
+    // Passed over: scored by the model and under the bar (review 2026-11-25). A thread the model never scored (a cut
+    // reply) and one that passed but missed the card cut stay unseen, so a later scan can still offer them.
+    for (const r of all) if (r.scored && (!r.result || r.result.score < PASS_SCORE)) rejected.add(r.thread.url);
+    return all
       .filter((r): r is { thread: ScanThread; scored: Scored; result: { score: number; parts: ScorePart[] } } => r.result !== null && r.result.score >= PASS_SCORE)
       .sort((a, b) => b.result.score - a.result.score)
       .filter((r) => {
@@ -1192,9 +1198,7 @@ export async function salesScan(ctx: JobContext): Promise<SalesScanOutput & JobO
 
   const bareUrls = new Set(candidates.filter((r) => r.thread.platform === "reddit" && !r.thread.text.trim()).map((r) => r.thread.url));
   await readRedditPosts(ctx, candidates, CANDIDATES);
-  const ranked = await rescoreRead(ctx, { docs, themes }, candidates, bareUrls);
-  const keptUrls = new Set(ranked.map((r) => r.thread.url));
-  for (const t of scanned) if (!keptUrls.has(t.url)) rejected.add(t.url);
+  const ranked = await rescoreRead(ctx, { docs, themes }, candidates, bareUrls, rejected);
 
   if (!ranked.length) {
     await ctx.step("create_card", "No conversations worth joining today", async () => 0);

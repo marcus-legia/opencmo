@@ -571,6 +571,26 @@ async function main() {
   assert.equal(runRecent.status, "done", `recent scan (${runRecent.error})`);
   assert.equal((runRecent.output as { scanned: number }).scanned, 0, "the thread passed over last time is not scored again");
   assert.ok(queryPrompts[0]?.includes("<recent_searches>") && queryPrompts[0].includes("reddit find customers"), "the last searches reach the query writer");
+  // Review 2026-11-25: threads that pass but miss the five-card cut are not passed over; searches from a scan where a
+  // platform failed or a brief steered it may be used again.
+  const memCut = memoryStore(docs);
+  memCut.salesSettings.platforms = ["reddit"];
+  const runCut = memCut.enqueue("sales_scan");
+  await drainCmoQueue(memCut.store, {
+    searchReddit: async () => [70, 71, 72, 73, 74, 75, 76].map((n) => ({ ...injected(n), author: `u/cut${n}`, postedAt: new Date(Date.now() - 3_600_000).toISOString() })),
+    searchHn: async () => [],
+    searchConversations: async () => [],
+  });
+  assert.equal((runCut.output as { cards: number }).cards, 5, `five cards (${runCut.error})`);
+  assert.deepEqual((runCut.output as { rejected: string[] }).rejected, [], "the two good threads past the cut are not passed over");
+  const { recentFrom } = await import("./recent-scans");
+  const recentRead = recentFrom([
+    { output: { queries: ["a"], rejected: ["u1"], failed: [] } },
+    { output: { queries: ["b"], rejected: ["u2"], failed: ["reddit"] } },
+    { output: { queries: ["c"] }, input: { brief: "pricing pages" } },
+    { output: null },
+  ]);
+  assert.deepEqual(recentRead, { queries: ["a"], rejected: ["u1", "u2"] });
   // Owner test 2026-11-23: the one product mention goes to the post asking for tools, not to the higher score.
   const memMention = memoryStore(docs);
   memMention.salesSettings.platforms = ["reddit"];
