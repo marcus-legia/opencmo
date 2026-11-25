@@ -693,14 +693,14 @@ function ThreadRow({ t, free, open, onToggle, onBack, onPlan, onDecide, onSent }
             <div className="th-actions" style={{ display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "flex-end", alignItems: "center" }}>
               {dismissing ? (
                 <>
-                  <label className="meta" htmlFor={`why-${t.id}`}>
-                    Reason
-                  </label>
-                  <select id={`why-${t.id}`} value={reason} onChange={(e) => setReason(e.target.value)} className="pill" style={{ height: "32px" }}>
+                  {/* Chips, not a native select (owner, 2026-11-25: the dark-mode menu read as disabled). */}
+                  <span className="dismiss-why" role="group" aria-label="Why dismiss it" data-testid="sales-dismiss-reasons">
                     {DISMISS_REASONS.map((r) => (
-                      <option key={r}>{r}</option>
+                      <button key={r} type="button" className="dismiss-chip" aria-pressed={reason === r} onClick={() => setReason(r)}>
+                        {r}
+                      </button>
                     ))}
-                  </select>
+                  </span>
                   <button type="button" className="ghost" disabled={busy} onClick={() => void run("dismissed", reason)}>
                     Dismiss
                   </button>
