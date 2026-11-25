@@ -23,6 +23,12 @@ export const ThreadSchema = z.object({
   /** Who wrote it ("u/name", "@name"); empty when the source did not say. */
   author: z.string().max(100).optional(),
   url: z.url(),
+  /** Its place in the index (owner, 2026-11-25): "3.1" is Scan #3's best person; absent before a numbered scan. */
+  no: z.string().max(12).optional(),
+  /** The scan that found it (Scan #n). */
+  scanNo: z.number().int().positive().optional(),
+  /** The posts written from this person, newest first ("Used in Post #14"). */
+  usedIn: z.array(z.object({ no: z.number().int().positive(), id: z.string() })).max(10).optional(),
   /** The subreddit's rule for this thread. `skipped` threads get no draft. */
   rule: SalesRuleSchema,
   parts: z.array(ScorePartSchema),
@@ -96,6 +102,11 @@ export const SalesScreenSchema = z.object({
    */
   stuck: z.object({ text: z.string().max(200), creditsToFinish: z.number().int().positive(), found: z.number().int().min(0) }).nullable(),
   threads: z.array(ThreadSchema),
+  /** Every finished scan, newest first, as the index's sections (owner, 2026-11-25); empty for samples. */
+  scans: z
+    .array(z.object({ no: z.number().int().positive(), at: iso, cards: z.number().int().min(0), verdict: z.enum(["found", "none"]) }))
+    .max(50)
+    .default([]),
   /** The founder's Sales settings (`sales_settings`): subreddits never scanned; pairs of terms that must both appear. */
   settings: z.object({
     excludedSubreddits: z.array(z.string().max(21)).max(50),

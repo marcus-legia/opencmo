@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { AllowanceBanner, FreeLockedCard, useUsageState } from "@/components/billing/UsageNotice";
 import { ApprovalCard } from "@/components/cards/ApprovalCard";
@@ -19,10 +19,10 @@ import { PlatformBadge } from "./platform-logos";
 import { whereSaid } from "./LibraryView";
 import { PostViewSwitch } from "./TopBar";
 import { useDecide } from "./useDecide";
-import { dayLabel, draftsLeftOver, draftsThisWeek } from "./week";
+import { POST_SECTIONS, dayLabel, draftsThisWeek, postSections } from "./week";
 
 type Draft = WriterScreen["drafts"][number];
-type Tab = "week" | "drafts" | "voice";
+type Tab = "posts" | "voice";
 
 const KIND_LABEL: Record<Draft["kind"], string> = { post: "post", caption: "Caption" };
 const BADGE: Record<Draft["column"], [string, string]> = { planned: ["Planned", "badge b-plan"], waiting: ["Waiting", "badge b-wait"], drafting: ["Drafting", "badge b-new"], scheduled: ["Scheduled", "badge b-ok"], posted: ["Posted", "badge b-ok"] };
@@ -75,6 +75,11 @@ function SourceList({ sources }: { sources: readonly Source[] }) {
         {sources.map((s) => (
           <li key={s.opportunityId} data-testid="writer-source" style={{ fontSize: "13.5px" }}>
             {s.summary}{" "}
+            {s.ref ? (
+              <a className="idx-link" href={`/app/sales#thread-${s.opportunityId}`} data-testid="writer-source-sales">
+                From Scan #{s.ref.split(".")[0]} · {s.ref}
+              </a>
+            ) : null}{" "}
             {s.url ? (
               <a className="meta" href={s.url} target="_blank" rel="noopener noreferrer" data-testid="writer-source-link">
                 {whereSaid(s)} thread ↗
@@ -95,8 +100,20 @@ export function AgentWriter() {
   const usageState = useUsageState();
   const { focusChat, toast } = useShellState();
   const [showing, setShowing] = useState<string | null>(null);
-  const [tab, setTab] = useState<Tab>("week");
+  const [tab, setTab] = useState<Tab>("posts");
   const [open, setOpen] = useState<string | null>(null);
+  // A link from Sales ("Used in Post #14", `#post-<id>`) opens that post once the list is in (2026-11-25).
+  const linked = useRef(false);
+  const loadedIds = state.status === "ready" ? state.data.drafts.map((d) => d.id).join() : "";
+  useEffect(() => {
+    if (linked.current || !loadedIds) return;
+    const id = window.location.hash.match(/^#post-([0-9a-f-]{36})$/i)?.[1];
+    if (!id || !loadedIds.split(",").includes(id)) return;
+    linked.current = true;
+    setTab("posts");
+    setOpen(id);
+    requestAnimationFrame(() => document.getElementById(`post-${id}`)?.scrollIntoView({ block: "start" }));
+  }, [loadedIds]);
   const [ask, setAsk] = useState("");
   const [askKind, setAskKind] = useState<(typeof ASK_KINDS)[number]["id"]>("post");
   // The platforms this week's drafts are for: a chip each (as the Calendar's), when there is more than one.
@@ -119,14 +136,11 @@ export function AgentWriter() {
   const platforms = [...new Set(drafts.map((d) => d.platform))];
   // "This week" is this week's drafts by their day; older ones still open show apart, under "From last week".
   const thisWeek = draftsThisWeek(drafts);
-  const leftOver = draftsLeftOver(drafts);
-  const listed = tab === "week" ? [...thisWeek.filter((d) => d.column === "waiting"), ...thisWeek.filter((d) => d.column !== "waiting")] : tab === "drafts" ? drafts.filter((d) => d.column === "drafting" || d.column === "planned") : [];
   // A filter whose chips are gone (one platform left, or the chosen one no longer has drafts) no longer applies.
   const active = platform && platforms.length > 1 && platforms.includes(platform as Draft["platform"]) ? platform : null;
   const byPlatform = (list: Draft[]) => (active ? list.filter((d) => d.platform === active) : list);
-  const shown = byPlatform(listed);
-  // Last week's drafts sit under the same chips: a platform chosen above filters them too.
-  const shownLeftOver = byPlatform(leftOver);
+  // The index (owner, 2026-11-25): New drafts, Approved, Posted, Planned, each post numbered.
+  const sections = postSections(byPlatform(drafts));
   const firstOpen = open ?? waiting.find((d) => d.approvalId)?.id ?? waiting[0]?.id ?? null;
   // The side card: this week's first seven, in the order they go out.
   const week = thisWeek.slice(0, 7);
@@ -161,17 +175,23 @@ export function AgentWriter() {
     const badge = badgeOf(d);
     const isOpen = opens && firstOpen === d.id;
     return (
-      <div key={d.id} className="th" data-open={isOpen} data-testid="writer-row" data-platform={d.platform}>
+      <div key={d.id} className="th" data-open={isOpen} data-testid="writer-row" data-platform={d.platform} id={`post-${d.id}`}>
         <button type="button" className="row" onClick={opens ? () => setOpen(isOpen ? "" : d.id) : undefined} aria-expanded={opens ? isOpen : undefined} style={opens ? undefined : { cursor: "default" }}>
           <span className="st">{iconOf(d)}</span>
           <span style={{ flex: "1 1 auto", minWidth: "0", display: "flex", flexDirection: "column" }}>
             <span className="ttl">
+              {d.no ? (
+                <span className="idx-no" data-testid="writer-no">
+                  #{d.no}
+                </span>
+              ) : null}
               <span className="kind">{kindOf(d)} · </span>
               {d.title}
             </span>
             {d.sources?.length ? (
               <span className="meta" data-testid="writer-based-on" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                 {basedOn(d.sources)}
+                {d.sources.some((s) => s.ref) ? ` · From ${d.sources.flatMap((s) => (s.ref ? [`Scan #${s.ref.split(".")[0]} · ${s.ref}`] : [])).join(", ")}` : ""}
               </span>
             ) : null}
           </span>
@@ -281,8 +301,7 @@ export function AgentWriter() {
         <div className="tabs" role="tablist" aria-label="Writer">
           {(
             [
-              ["week", "This week"],
-              ["drafts", "All drafts"],
+              ["posts", "Posts"],
               ["voice", "Voice"],
             ] as const
           ).map(([id, label]) => (
@@ -313,19 +332,18 @@ export function AgentWriter() {
                 </div>
               ) : null}
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-              {shown.length === 0 && !(tab === "week" && shownLeftOver.length) ? <div className="meta">{active ? `No ${PLATFORM_LABEL[active as Draft["platform"]]} drafts here. Pick All to see the rest.` : "Nothing here yet. The week's posts are planned every Sunday from what people asked in Sales."}</div> : null}
-              {shown.map(renderRow)}
-              {tab === "week" && shownLeftOver.length ? (
-                <>
-                  <div style={{ display: "flex", alignItems: "baseline", gap: "8px", margin: "14px 0 2px" }} data-testid="writer-left-over">
-                    <span style={{ fontWeight: "600" }}>From last week</span>
-                    <span className="meta">· {shownLeftOver.length} not approved yet: approve or skip them</span>
-                  </div>
-                  {shownLeftOver.map(renderRow)}
-                </>
-              ) : null}
-            </div>
+            {drafts.length === 0 ? <div className="meta">Nothing here yet. The week&apos;s posts are planned every Sunday from what people asked in Sales.</div> : null}
+            {drafts.length
+              ? POST_SECTIONS.map(({ id, label, empty }) => (
+                  <section key={id} className="idx-section" aria-label={label} data-testid={`writer-section-${id}`}>
+                    <h2 className="idx-head">
+                      <span>{label}</span>
+                      <span className="meta">{sections[id].length}</span>
+                    </h2>
+                    {sections[id].length ? <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>{sections[id].map(renderRow)}</div> : <div className="meta">{active ? `No ${PLATFORM_LABEL[active as Draft["platform"]]} posts here.` : empty}</div>}
+                  </section>
+                ))
+              : null}
           </>
         ) : null}
 
