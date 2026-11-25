@@ -89,7 +89,7 @@ const when = (d: Draft) => d.at ?? (d.day ? `${d.day}T00:00:00Z` : "");
 export function postSections(drafts: Draft[]): Record<PostSectionId, Draft[]> {
   const pick = (cols: Draft["column"][]) => drafts.filter((d) => cols.includes(d.column));
   return {
-    new: pick(["waiting"]).sort((a, b) => (b.no ?? 0) - (a.no ?? 0) || when(b).localeCompare(when(a))),
+    new: pick(["waiting"]).sort((a, b) => (a.no ?? Infinity) - (b.no ?? Infinity) || when(b).localeCompare(when(a))),
     approved: pick(["scheduled"]).sort((a, b) => when(a).localeCompare(when(b))),
     posted: pick(["posted"]).sort((a, b) => when(b).localeCompare(when(a))),
     planned: pick(["planned", "drafting"]).sort((a, b) => when(a).localeCompare(when(b))),
