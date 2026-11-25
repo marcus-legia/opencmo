@@ -26,8 +26,9 @@ export type CmoJobKind =
   /** Daily core drafts D4: the founder's "Rewrite for <platform>" on a post card (`repurpose_post` in SQL queues it). */
   | "repurpose_post"
   /** Free scan A5: the reply drafts of the cards a free scan saved without one, after the founder pays. */
-  | "sales_reply_drafts";
-export const CMO_JOB_KINDS: CmoJobKind[] = ["plan_week", "post_draft", "sales_scan", "competitor_research", "pull_metrics", "summarize_memory", "review_week", "write_caption", "publish_post", "distill_ratings", "repurpose_post", "sales_reply_drafts"];
+  | "sales_reply_drafts"
+  | "compose_check";
+export const CMO_JOB_KINDS: CmoJobKind[] = ["plan_week", "post_draft", "sales_scan", "competitor_research", "pull_metrics", "summarize_memory", "review_week", "write_caption", "publish_post", "distill_ratings", "repurpose_post", "sales_reply_drafts", "compose_check"];
 
 /** What a weekly goal counts. Only things the product can measure itself. */
 export type GoalMetric = "posts" | "replies" | "views";
@@ -264,6 +265,10 @@ export type SubredditRule = {
   megathread?: boolean;
   /** Wave 3: the rules forbid DMs or soliciting, so nobody there is DM ready. */
   no_dms?: boolean;
+  /** The Composer (2026-11-25): the rules as the sub publishes them, its posting guidance, and the avoid/use guide. */
+  rules_text?: string | null;
+  submit_text?: string | null;
+  guide?: { avoid: string[]; use: string[] } | null;
 };
 /**
  * Free scan (docs/plans/cmo/2026-11-18-free-scan-plan.md): what a Sales scan returns. `queries` and `scanned` let the

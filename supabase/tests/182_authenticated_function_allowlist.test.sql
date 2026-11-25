@@ -167,6 +167,8 @@ insert into allowed values
   ('save_editor_skill(text,text,text)'),
   ('save_marketing_document(text,jsonb,uuid)'),
   ('save_posting_plan(jsonb)'),
+  -- The Composer (20270206010000): the founder's own Reddit account.
+  ('save_reddit_account(text,integer,date)'),
   ('save_scene_code(text)'),
   ('schedule_change(uuid,text,jsonb)'),
   ('schedule_mark_posted(uuid)'),
