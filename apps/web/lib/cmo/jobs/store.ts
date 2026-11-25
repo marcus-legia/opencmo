@@ -12,6 +12,9 @@ import { chosenChannels, planOrDefault } from "../posting-plan";
 import { personKey } from "../reach";
 import { SALES_PLATFORMS, parsePlatforms, type SalesPlatform } from "../social/conversations";
 
+/** Scans read back for their searches and passed-over threads (`recentScans`). */
+const RECENT_SCANS = 5;
+
 const ITEM_COLUMNS =
   "id, run_id, department, platform, day, idea, reason, status, priority, body, final_text, external_url, decided_at, published_at, created_at";
 
@@ -220,6 +223,22 @@ export function supabaseStore(admin: BaseClient): CmoStore {
       // An empty set after a failed read would re-score and re-draft threads that are already cards.
       if (error) throw new Error(`opportunities: ${error.message}`);
       return new Set(((data ?? []) as { url: string }[]).map((r) => r.url));
+    },
+    async recentScans(userId) {
+      const { data, error } = await admin
+        .from("cmo_runs")
+        .select("output")
+        .eq("user_id", userId)
+        .eq("kind", "sales_scan")
+        .eq("status", "done")
+        .gte("created_at", new Date(Date.now() - 14 * 86_400_000).toISOString())
+        .order("created_at", { ascending: false })
+        .limit(RECENT_SCANS);
+      // A read that fails only means the scan searches as it did before: never a failed scan.
+      if (error) return { queries: [], rejected: [] };
+      const outputs = ((data ?? []) as { output: { queries?: unknown; rejected?: unknown } | null }[]).map((r) => r.output ?? {});
+      const strings = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
+      return { queries: [...new Set(outputs.flatMap((o) => strings(o.queries)))].slice(0, 40), rejected: outputs.flatMap((o) => strings(o.rejected)) };
     },
     async seenAuthors(userId) {
       // As `seenUrls`: an empty set after a failed read would make second cards for people already met.

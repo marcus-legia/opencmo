@@ -285,6 +285,11 @@ export type SalesScanOutput = {
   scanned: number;
   /** "none" when cards === 0. */
   verdict: SalesScanVerdict;
+  /**
+   * Threads this scan scored and passed over (2026-11-25): the next scans skip them instead of scoring the same weak
+   * threads again. Absent on scans before it.
+   */
+  rejected?: string[];
 };
 
 /** The founder's Sales settings (`sales_settings`). */
@@ -344,6 +349,11 @@ export interface CmoStore {
   saveDraft(userId: string, runId: string, itemId: string | null, idea: string, body: Record<string, unknown>, priority: ItemRow["priority"], platform?: string): Promise<ItemRow>;
   /** Thread links that already became cards (dismissed ones too): W4 never offers them again. */
   seenUrls(userId: string): Promise<Set<string>>;
+  /**
+   * The founder's last finished scans (2026-11-25): what they searched, so the next one searches something else, and
+   * the threads they scored and passed over, so it does not score them again.
+   */
+  recentScans(userId: string): Promise<{ queries: string[]; rejected: string[] }>;
   /**
    * Everyone the founder already has a card for, as `personKey`s (`cmo_seen_authors`): W4 never makes a second card for
    * a person, whether open, replied to, messaged, not interested or not a fit.

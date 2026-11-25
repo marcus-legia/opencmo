@@ -192,6 +192,11 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
       return item;
     },
     seenUrls: async () => new Set(opps.map((o) => o.url)),
+    recentScans: async () => {
+      const done = runs.filter((r) => r.kind === "sales_scan" && r.status === "done").slice(-5);
+      const outs = done.map((r) => (r.output ?? {}) as { queries?: string[]; rejected?: string[] });
+      return { queries: [...new Set(outs.flatMap((o) => o.queries ?? []))], rejected: outs.flatMap((o) => o.rejected ?? []) };
+    },
     seenAuthors: async () => new Set(opps.map((o) => personKey(o.platform ?? "reddit", o.author)).filter((k): k is string => k !== null)),
     subredditRule: async (name) => rules.get(name.toLowerCase()) ?? null,
     async saveSubredditRule(rule) {
