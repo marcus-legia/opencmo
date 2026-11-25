@@ -45,6 +45,15 @@ const badgeOf = (d: Draft): [string, string] =>
   // An approved post with no connected account never goes out on its own (owner, 2026-11-24).
   : d.column === "scheduled" && d.connected === false ? ["Post it yourself", "badge b-wait"]
   : BADGE[d.column];
+/** "Open in Composer" (2026-11-25): a post draft for X, Threads or LinkedIn opens there with its words, to rework by hand. */
+const COMPOSE_PLATFORMS = new Set(["x", "threads", "linkedin"]);
+function composeHref(d: Draft, card: Card | undefined): string | null {
+  if (d.kind !== "post" || !COMPOSE_PLATFORMS.has(d.platform)) return null;
+  const tab = card?.body.kind === "post" ? (card.body.platforms.find((p) => p.platform === d.platform) ?? card.body.platforms[0]) : undefined;
+  const text = tab?.versions[0] ?? d.text ?? "";
+  if (!text.trim()) return null;
+  return `/app/compose?${new URLSearchParams({ platform: d.platform, text })}`;
+}
 const kindOf = (d: Draft) => (d.kind === "post" ? `${PLATFORM_LABEL[d.platform]} post` : KIND_LABEL[d.kind]);
 const iconOf = (d: Draft) => (d.kind === "caption" ? KIND_ICON.price : (PLATFORM_ICON[d.platform] ?? KIND_ICON.post));
 
@@ -224,12 +233,22 @@ export function AgentWriter() {
           <div className="detail td-cardhost">
             <ApprovalCard card={card} sample={sample} onDecide={onDecide} open />
             {d.sources?.length ? <SourceList sources={d.sources} /> : null}
+            {composeHref(d, card) ? (
+              <Link className="meta" href={composeHref(d, card)!} data-testid="writer-open-composer">
+                Open in Composer
+              </Link>
+            ) : null}
           </div>
         ) : null}
         {isOpen && !card && d.column === "waiting" ? (
           <div className="detail" data-testid="writer-show-now">
             {d.text ? <p className="post">{d.text}</p> : null}
             {d.sources?.length ? <SourceList sources={d.sources} /> : null}
+            {composeHref(d, undefined) ? (
+              <Link className="meta" href={composeHref(d, undefined)!} data-testid="writer-open-composer">
+                Open in Composer
+              </Link>
+            ) : null}
             <div className="meta">
               {d.cardState === "held"
                 ? `Held until ${d.heldUntil ? new Date(d.heldUntil).toLocaleString("en-GB", { weekday: "short", hour: "2-digit", minute: "2-digit" }) : "tomorrow"}: you get about ten new cards a day, so the rest wait for the next one.`
@@ -311,6 +330,13 @@ export function AgentWriter() {
             Write it
           </button>
         </form>
+        <p className="meta" style={{ margin: "8px 0 0" }}>
+          Or{" "}
+          <Link href="/app/compose" data-testid="writer-write-yourself">
+            write it yourself
+          </Link>
+          : Ferreto checks each line against the platform&apos;s rules and for lines that read as AI. Reddit posts are written there.
+        </p>
 
         <div className="tabs" role="tablist" aria-label="Writer">
           {(
