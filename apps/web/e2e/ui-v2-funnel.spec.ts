@@ -65,8 +65,8 @@ test("the funnel in the left panel and Analytics, and the scan days in Settings"
 
   await page.goto("/app/settings#settings-sales-scans");
   const scans = page.getByTestId("settings-sales-scans");
-  await expect(scans.getByRole("radio", { name: /^Monday, Wednesday and Friday/ })).toHaveAttribute("aria-checked", "true");
-  await scans.getByRole("radio", { name: /^Every weekday/ }).click();
+  await expect(scans.getByRole("button", { name: /^Monday, Wednesday and Friday/ })).toHaveAttribute("aria-pressed", "true");
+  await scans.getByRole("button", { name: /^Every weekday/ }).click();
   await expect(scans.getByRole("status")).toHaveText("Saved.");
   expect((await db.from("sales_settings").select("cadence").eq("user_id", userId).single()).data!.cadence).toBe("weekdays");
 

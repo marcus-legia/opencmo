@@ -51,14 +51,13 @@ export function SalesScansPanel() {
     <Panel id="settings-sales-scans" title="Sales scans" sub="The days Sales looks for new people on its own. Scan now on the Sales page works any day.">
       <div className="v2-panel-body scr-form" data-testid="settings-sales-scans">
         {/* One choice per row, its name next to the week it scans (owner, 2026-11-25: squares alone said nothing). */}
-        <div role="radiogroup" aria-label="When Sales scans on its own" data-sec="find" className="scr-cadence">
+        <div role="group" aria-label="When Sales scans on its own" data-sec="find" className="scr-cadence">
           {SCAN_CADENCES.map((c) => (
             <button
               key={c}
               type="button"
-              role="radio"
               className="scr-cadence-row"
-              aria-checked={cadence === c}
+              aria-pressed={cadence === c}
               disabled={cadence === null || busy}
               onClick={() => void change(c)}
               data-testid={`settings-cadence-${c}`}

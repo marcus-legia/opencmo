@@ -35,7 +35,7 @@ const monthLabel = (iso: string) => new Date(iso).toLocaleDateString("en-US", { 
  * Reddit as a row of Connected accounts (owner, 2026-11-25): the username only. Ferreto never signs in to Reddit and
  * never posts there; the Composer checks a post against the sub's rules and this account.
  */
-export function RedditAccountRow({ live }: { live: boolean }) {
+export function RedditAccountRow() {
   const [account, setAccount] = useState<AccountContext | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [username, setUsername] = useState("");
@@ -64,9 +64,15 @@ export function RedditAccountRow({ live }: { live: boolean }) {
     setNote(null);
     try {
       const profile = u ? await readRedditProfile(u) : null;
+      // The stored numbers belong to the stored username: another name, or none, never inherits them (review 2026-11-25).
+      const same = u !== "" && u === account?.username;
       const saved = await api<AccountContext>(
         "/composer/account",
-        jsonBody({ username: u, karma: profile?.karma ?? account?.karma ?? null, accountCreatedAt: profile?.month ?? account?.accountCreatedAt?.slice(0, 7) ?? null }, "PUT"),
+        jsonBody({
+          username: u,
+          karma: u ? (profile?.karma ?? (same ? account!.karma : null)) : null,
+          accountCreatedAt: u ? (profile?.month ?? (same ? (account!.accountCreatedAt?.slice(0, 7) ?? null) : null)) : null,
+        }, "PUT"),
       );
       setAccount(saved);
       setUsername(saved.username ?? "");
@@ -101,10 +107,11 @@ export function RedditAccountRow({ live }: { live: boolean }) {
       >
         <label className="scr-reddit-input">
           <span aria-hidden="true">u/</span>
-          <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="your_username" maxLength={24} aria-label="Your Reddit username" disabled={account === null || !live} data-testid="settings-reddit-username" />
+          <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="your_username" maxLength={24} aria-label="Your Reddit username" disabled={account === null} data-testid="settings-reddit-username" />
         </label>
-        <Button compact variant="secondary" type="submit" disabled={account === null || saving || !changed || !live}>
-          {saving ? "Saving…" : "Save"}
+        {/* Unchanged, it reads karma and age again: a first read Reddit refused can be tried again. */}
+        <Button compact variant="secondary" type="submit" disabled={account === null || saving || (!changed && !username.trim())}>
+          {saving ? "Saving…" : changed || !account?.username ? "Save" : "Refresh"}
         </Button>
       </form>
     </div>

@@ -339,10 +339,10 @@
 /* Sales scans: a radio row per choice, its name and its week (owner, 2026-11-25). */
 .scr-cadence { display: flex; flex-direction: column; gap: 6px; }
 .scr-cadence-row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 12px; border: 1px solid var(--v2-line); border-radius: 10px; background: transparent; color: var(--v2-ink); font: inherit; text-align: left; cursor: pointer; }
-.scr-cadence-row[aria-checked="true"] { border-color: var(--sec-find, var(--v2-ink)); background: color-mix(in srgb, var(--sec-find, #6b7cff) 10%, transparent); }
+.scr-cadence-row[aria-pressed="true"] { border-color: var(--sec-find, var(--v2-ink)); background: color-mix(in srgb, var(--sec-find, #6b7cff) 10%, transparent); }
 .scr-cadence-row:disabled { cursor: default; opacity: 0.7; }
 .scr-cadence-dot { flex: none; width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--v2-mute, #8a847b); }
-.scr-cadence-row[aria-checked="true"] .scr-cadence-dot { border-color: var(--sec-find, var(--v2-ink)); box-shadow: inset 0 0 0 3px var(--v2-card), inset 0 0 0 8px var(--sec-find, var(--v2-ink)); }
+.scr-cadence-row[aria-pressed="true"] .scr-cadence-dot { border-color: var(--sec-find, var(--v2-ink)); box-shadow: inset 0 0 0 3px var(--v2-card), inset 0 0 0 8px var(--sec-find, var(--v2-ink)); }
 .scr-cadence-name { flex: 1 1 auto; font-size: 14px; font-weight: 600; }
 .scr-cadence-week { display: inline-flex; gap: 4px; flex: none; }
 .scr-cadence-week .day-btn { width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; }

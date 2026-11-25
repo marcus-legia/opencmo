@@ -75,14 +75,20 @@ export function readiness(sub: SubredditContext | null, account: AccountContext,
     reasons.push(`${where} keeps self-promotion to its pinned thread.`);
   }
   // Only the username is asked (owner, 2026-11-25); karma and age come from the founder's browser when Reddit shares
-  // them. Without them the check rests on the posts found: a minimum the sub states stays unknown, and says so.
+  // them. Without one of them: a minimum the sub states for it stays unknown; else "ready" only for someone who has
+  // posted in the sub before, saying what was not checked; anyone else gets caution (review 2026-11-25).
   if (account.karma == null || account.accountCreatedAt == null) {
-    if (sub?.minKarma != null || sub?.minAccountAgeDays != null) {
-      reasons.push(`${where} asks for ${[sub.minKarma != null ? `${sub.minKarma} karma` : "", sub.minAccountAgeDays != null ? `an account ${sub.minAccountAgeDays} days old` : ""].filter(Boolean).join(" and ")}; Reddit did not share yours, so check your profile.`);
+    const missing = [
+      sub?.minKarma != null && account.karma == null ? `${sub.minKarma} karma` : "",
+      sub?.minAccountAgeDays != null && account.accountCreatedAt == null ? `an account ${sub.minAccountAgeDays} days old` : "",
+    ].filter(Boolean);
+    const notChecked = "Reddit did not share your karma and account age, so those were not checked.";
+    if (missing.length) {
+      reasons.push(`${where} asks for ${missing.join(" and ")}; Reddit did not share yours, so check your profile.`);
       return { level: caution ? "caution" : "unknown", reasons };
     }
-    if (caution) return { level: "caution", reasons };
-    return { level: "ready", reasons: [account.postsInSub ? `You have posted in ${where} before.` : `Nothing in ${where}'s rules stands in your way.`] };
+    if (!caution && sub && account.postsInSub) return { level: "ready", reasons: [`You have posted in ${where} before.`, notChecked] };
+    return { level: "caution", reasons: [...reasons, `New or low-karma accounts are often filtered on Reddit. ${notChecked}`] };
   }
   return caution ? { level: "caution", reasons } : { level: "ready", reasons: [`Your account meets what ${where} asks.`] };
 }
