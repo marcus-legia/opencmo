@@ -51,7 +51,9 @@ function securityHeaders(): { key: string; value: string }[] {
     "object-src 'none'",
     `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""}`,
     "style-src 'self' 'unsafe-inline'",
-    `connect-src 'self' ${origins} https://*.sentry.io`.replace(/\s+/g, " "),
+    // www.reddit.com: Settings reads the founder's own public karma and account age from their browser (2026-11-25);
+    // the server cannot (Reddit refuses it), and the founder then needs to type only their username.
+    `connect-src 'self' ${origins} https://*.sentry.io https://www.reddit.com`.replace(/\s+/g, " "),
     `media-src 'self' blob: ${httpOrigins}`.replace(/\s+/g, " ").trim(),
     `img-src 'self' data: blob: ${httpOrigins}`.replace(/\s+/g, " ").trim(),
     // Font phục vụ ở `/fonts/` (chép từ `packages/clip-media` lúc build) — cùng origin, không cần host ngoài.

@@ -1,44 +1,57 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import { api, jsonBody } from "@/components/clipping/api";
 import { Button } from "@/components/ui";
+import { api, jsonBody } from "@/components/clipping/api";
+import { PlatformBadge } from "@/components/today/platform-logos";
 import type { AccountContext, ComposerContext } from "@/lib/composer/types";
 
-import { Panel } from "../parts";
+const USERNAME = /^[A-Za-z0-9_-]{3,20}$/;
 
 /**
- * Settings › Reddit account (Composer, plan Task C3): the username, karma and account age the Composer checks a post
- * against. Neither Reddit nor the APIs Ferreto reads give karma or account age, so the founder types them once from
- * their Reddit profile; the username finds their posts in a sub. Ferreto never signs in to Reddit.
+ * The founder's public Reddit karma and account month, read by their own browser (owner, 2026-11-25: "only the
+ * username, the rest is too much"). The server cannot read Reddit; a browser usually can. Null when Reddit does not
+ * answer this way: the Composer then checks the account from its posts alone.
  */
-const USERNAME = /^[A-Za-z0-9_-]{3,20}$/;
-const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
+export async function readRedditProfile(username: string): Promise<{ karma: number | null; month: string | null } | null> {
+  try {
+    const res = await fetch(`https://www.reddit.com/user/${encodeURIComponent(username)}/about.json`, { credentials: "omit", cache: "no-store" });
+    if (!res.ok) return null;
+    const data = ((await res.json()) as { data?: { total_karma?: unknown; link_karma?: unknown; comment_karma?: unknown; created_utc?: unknown } }).data;
+    if (!data) return null;
+    const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? Math.round(v) : null);
+    const karma = num(data.total_karma) ?? (num(data.link_karma) !== null || num(data.comment_karma) !== null ? (num(data.link_karma) ?? 0) + (num(data.comment_karma) ?? 0) : null);
+    const created = num(data.created_utc);
+    return { karma, month: created ? new Date(created * 1000).toISOString().slice(0, 7) : null };
+  } catch {
+    return null;
+  }
+}
 
-export function RedditAccountPanel() {
+const monthLabel = (iso: string) => new Date(iso).toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" });
+
+/**
+ * Reddit as a row of Connected accounts (owner, 2026-11-25): the username only. Ferreto never signs in to Reddit and
+ * never posts there; the Composer checks a post against the sub's rules and this account.
+ */
+export function RedditAccountRow({ live }: { live: boolean }) {
   const [account, setAccount] = useState<AccountContext | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [username, setUsername] = useState("");
-  const [karma, setKarma] = useState("");
-  const [month, setMonth] = useState("");
   const [note, setNote] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
-    // The account rides on the context: X needs no Reddit call to answer it.
     api<ComposerContext>("/composer/context?platform=x")
       .then((ctx) => {
         if (!alive) return;
         setAccount(ctx.account);
         setUsername(ctx.account.username ?? "");
-        setKarma(ctx.account.karma === null ? "" : String(ctx.account.karma));
-        setMonth(ctx.account.accountCreatedAt ? ctx.account.accountCreatedAt.slice(0, 7) : "");
       })
-      // A failed read keeps the form off: saving a blank form would erase what is stored (review 2026-11-25).
-      .catch((err: unknown) => alive && setLoadError(err instanceof Error ? err.message : "Could not read your Reddit account. Reload the page to try again."));
+      // A failed read keeps the field off: saving over it would erase what is stored.
+      .catch((err: unknown) => alive && setLoadError(err instanceof Error ? err.message : "Could not read your Reddit account. Reload to try again."));
     return () => {
       alive = false;
     };
@@ -46,21 +59,18 @@ export function RedditAccountPanel() {
 
   async function save() {
     const u = username.trim().replace(/^\/?u\//i, "");
-    const k = karma.trim().replace(/[,\s]/g, "");
     if (u && !USERNAME.test(u)) return setNote("A Reddit username is 3 to 20 letters, numbers, - or _.");
-    if (k && !/^\d{1,8}$/.test(k)) return setNote("Karma is a whole number, as on your profile.");
-    if (month && !MONTH.test(month)) return setNote("Pick the month the account was made.");
     setSaving(true);
     setNote(null);
     try {
+      const profile = u ? await readRedditProfile(u) : null;
       const saved = await api<AccountContext>(
         "/composer/account",
-        // An empty username clears the account: the route takes "", not null.
-        jsonBody({ username: u, karma: k ? Number(k) : null, accountCreatedAt: month || null }, "PUT"),
+        jsonBody({ username: u, karma: profile?.karma ?? account?.karma ?? null, accountCreatedAt: profile?.month ?? account?.accountCreatedAt?.slice(0, 7) ?? null }, "PUT"),
       );
       setAccount(saved);
       setUsername(saved.username ?? "");
-      setNote("Saved.");
+      setNote(u ? (profile ? "Saved." : "Saved. Reddit did not share your karma here; the Composer checks your posts instead.") : "Removed.");
     } catch (err) {
       setNote(err instanceof Error ? err.message : "Could not save. Try again.");
     } finally {
@@ -68,46 +78,35 @@ export function RedditAccountPanel() {
     }
   }
 
+  const known = [account?.karma != null ? `${account.karma.toLocaleString("en-US")} karma` : null, account?.accountCreatedAt ? `since ${monthLabel(account.accountCreatedAt)}` : null].filter(Boolean).join(" · ");
+  const changed = username.trim().replace(/^\/?u\//i, "") !== (account?.username ?? "");
   return (
-    <Panel id="settings-reddit" title="Reddit account" sub="What the Composer checks a post against. Type it as on your Reddit profile; Ferreto never signs in to Reddit.">
+    <div className="scr-account scr-account-reddit" data-testid="settings-reddit" data-platform="reddit">
+      <span className="scr-account-who">
+        <PlatformBadge platform="reddit" size={30} />
+        <span>
+          <b>Reddit</b>
+          {account?.username && known ? <span className="scr-small scr-muted"> · {known}</span> : null}
+          <span className="scr-small scr-muted scr-account-note">You post on Reddit yourself. Ferreto checks your post against the sub&apos;s rules and your account.</span>
+          {loadError ? <span className="scr-status is-stuck scr-account-note" role="alert">{loadError}</span> : null}
+          {note ? <span className="scr-small scr-account-note" role="status">{note}</span> : null}
+        </span>
+      </span>
       <form
-        className="v2-panel-body scr-form"
-        data-testid="settings-reddit"
+        className="scr-reddit-form"
         onSubmit={(e) => {
           e.preventDefault();
           void save();
         }}
       >
-        <label className="v2-field">
-          <span>Username</span>
-          <span className="scr-inline-field">
-            <span className="scr-small">u/</span>
-            <input className="v2-input" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="your_username" maxLength={24} disabled={account === null} data-testid="settings-reddit-username" />
-          </span>
+        <label className="scr-reddit-input">
+          <span aria-hidden="true">u/</span>
+          <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="your_username" maxLength={24} aria-label="Your Reddit username" disabled={account === null || !live} data-testid="settings-reddit-username" />
         </label>
-        <label className="v2-field">
-          <span>Karma</span>
-          <input className="v2-input" inputMode="numeric" value={karma} onChange={(e) => setKarma(e.target.value)} placeholder="Optional" maxLength={12} disabled={account === null} data-testid="settings-reddit-karma" />
-        </label>
-        <label className="v2-field">
-          <span>Account made in</span>
-          <input className="v2-input" type="month" value={month} onChange={(e) => setMonth(e.target.value)} max={new Date().toISOString().slice(0, 7)} disabled={account === null} data-testid="settings-reddit-month" />
-        </label>
-        <span className="scr-inline-field" style={{ flexWrap: "wrap" }}>
-          <Button compact variant="secondary" type="submit" disabled={account === null || saving}>
-            {saving ? "Saving…" : "Save"}
-          </Button>
-          <Link className="scr-small" href="/app/compose">
-            Open the Composer
-          </Link>
-          {loadError ? <span className="meta" role="alert" data-testid="settings-reddit-error">{loadError}</span> : null}
-          {note ? (
-            <span role="status" className="scr-small">
-              {note}
-            </span>
-          ) : null}
-        </span>
+        <Button compact variant="secondary" type="submit" disabled={account === null || saving || !changed || !live}>
+          {saving ? "Saving…" : "Save"}
+        </Button>
       </form>
-    </Panel>
+    </div>
   );
 }

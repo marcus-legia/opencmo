@@ -32,8 +32,8 @@ export const LOW_KARMA = 50;
 export const NEW_ACCOUNT_DAYS = 30;
 
 /**
- * Ready, caution, not ready or unknown, with the reasons. Never "ready" while karma or account age is unknown: the
- * founder would read it as "safe to post".
+ * Ready, caution, not ready or unknown, with the reasons. With karma or age unknown, "ready" only when the sub states
+ * no minimum and nothing else gives caution; a stated minimum leaves it unknown.
  */
 export function readiness(sub: SubredditContext | null, account: AccountContext, now = new Date()): Readiness {
   const reasons: string[] = [];
@@ -74,9 +74,15 @@ export function readiness(sub: SubredditContext | null, account: AccountContext,
     caution = true;
     reasons.push(`${where} keeps self-promotion to its pinned thread.`);
   }
+  // Only the username is asked (owner, 2026-11-25); karma and age come from the founder's browser when Reddit shares
+  // them. Without them the check rests on the posts found: a minimum the sub states stays unknown, and says so.
   if (account.karma == null || account.accountCreatedAt == null) {
-    reasons.push("Add your karma and account age (on your Reddit profile) to check the rest.");
-    return { level: "unknown", reasons };
+    if (sub?.minKarma != null || sub?.minAccountAgeDays != null) {
+      reasons.push(`${where} asks for ${[sub.minKarma != null ? `${sub.minKarma} karma` : "", sub.minAccountAgeDays != null ? `an account ${sub.minAccountAgeDays} days old` : ""].filter(Boolean).join(" and ")}; Reddit did not share yours, so check your profile.`);
+      return { level: caution ? "caution" : "unknown", reasons };
+    }
+    if (caution) return { level: "caution", reasons };
+    return { level: "ready", reasons: [account.postsInSub ? `You have posted in ${where} before.` : `Nothing in ${where}'s rules stands in your way.`] };
   }
   return caution ? { level: "caution", reasons } : { level: "ready", reasons: [`Your account meets what ${where} asks.`] };
 }

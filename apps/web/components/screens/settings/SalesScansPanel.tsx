@@ -48,27 +48,33 @@ export function SalesScansPanel() {
   }
 
   return (
-    <Panel id="settings-sales-scans" title="Sales scans">
+    <Panel id="settings-sales-scans" title="Sales scans" sub="The days Sales looks for new people on its own. Scan now on the Sales page works any day.">
       <div className="v2-panel-body scr-form" data-testid="settings-sales-scans">
-        {/* The days as a week of squares, one button per choice instead of a select (owner, 2026-11-23). */}
-        <div role="group" aria-label="When Sales scans on its own" data-sec="find" style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+        {/* One choice per row, its name next to the week it scans (owner, 2026-11-25: squares alone said nothing). */}
+        <div role="radiogroup" aria-label="When Sales scans on its own" data-sec="find" className="scr-cadence">
           {SCAN_CADENCES.map((c) => (
             <button
               key={c}
               type="button"
-              className="pick-btn"
-              aria-pressed={cadence === c}
+              role="radio"
+              className="scr-cadence-row"
+              aria-checked={cadence === c}
               disabled={cadence === null || busy}
               onClick={() => void change(c)}
-              aria-label={CADENCE_LABEL[c]}
-              title={CADENCE_LABEL[c]}
-              style={{ height: "auto", padding: "8px 10px", justifyContent: "flex-start", gap: "4px" }}
+              data-testid={`settings-cadence-${c}`}
             >
-              {WEEK.map((d, i) => (
-                <span key={i} aria-hidden="true" className="day-btn" data-on={SCAN_DAYS[c].includes(i) || undefined} style={{ width: "30px", height: "30px", display: "inline-flex", alignItems: "center", justifyContent: "center", cursor: "inherit" }}>
-                  {d}
-                </span>
-              ))}
+              <span className="scr-cadence-dot" aria-hidden="true" />
+              <span className="scr-cadence-name">
+                {CADENCE_LABEL[c]}
+                {c === "mwf" ? <span className="scr-small scr-muted"> · recommended</span> : null}
+              </span>
+              <span className="scr-cadence-week" aria-hidden="true">
+                {WEEK.map((d, i) => (
+                  <span key={i} className="day-btn" data-on={SCAN_DAYS[c].includes(i) || undefined}>
+                    {d}
+                  </span>
+                ))}
+              </span>
             </button>
           ))}
         </div>
