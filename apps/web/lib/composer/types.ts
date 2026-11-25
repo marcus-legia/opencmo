@@ -22,7 +22,7 @@ export type AccountContext = {
   username: string | null;      // without "u/"
   karma: number | null;         // typed by the founder
   accountCreatedAt: string | null; // ISO month start, typed by the founder
-  postsInSub: number;           // from author: search, last 12 months
+  postsInSub: number | null;    // from author: search, last 12 months; null when the search could not tell
   lastPostInSubAt: string | null;
 };
 export type Readiness = { level: "ready" | "caution" | "not_ready" | "unknown"; reasons: string[] };

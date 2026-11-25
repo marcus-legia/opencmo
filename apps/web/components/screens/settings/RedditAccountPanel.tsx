@@ -24,6 +24,7 @@ export function RedditAccountPanel() {
   const [month, setMonth] = useState("");
   const [note, setNote] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -36,7 +37,8 @@ export function RedditAccountPanel() {
         setKarma(ctx.account.karma === null ? "" : String(ctx.account.karma));
         setMonth(ctx.account.accountCreatedAt ? ctx.account.accountCreatedAt.slice(0, 7) : "");
       })
-      .catch(() => alive && setAccount({ username: null, karma: null, accountCreatedAt: null, postsInSub: 0, lastPostInSubAt: null }));
+      // A failed read keeps the form off: saving a blank form would erase what is stored (review 2026-11-25).
+      .catch((err: unknown) => alive && setLoadError(err instanceof Error ? err.message : "Could not read your Reddit account. Reload the page to try again."));
     return () => {
       alive = false;
     };
@@ -53,7 +55,8 @@ export function RedditAccountPanel() {
     try {
       const saved = await api<AccountContext>(
         "/composer/account",
-        jsonBody({ username: u || null, karma: k ? Number(k) : null, accountCreatedAt: month ? `${month}-01` : null }, "PUT"),
+        // An empty username clears the account: the route takes "", not null.
+        jsonBody({ username: u, karma: k ? Number(k) : null, accountCreatedAt: month || null }, "PUT"),
       );
       setAccount(saved);
       setUsername(saved.username ?? "");
@@ -97,6 +100,7 @@ export function RedditAccountPanel() {
           <Link className="scr-small" href="/app/compose">
             Open the Composer
           </Link>
+          {loadError ? <span className="meta" role="alert" data-testid="settings-reddit-error">{loadError}</span> : null}
           {note ? (
             <span role="status" className="scr-small">
               {note}

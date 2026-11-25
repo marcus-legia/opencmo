@@ -67,7 +67,8 @@ export function sentences(text: string, field: Field = "body"): Sentence[] {
 const LINK = /\bhttps?:\/\/[^\s<>()]+|\bwww\.[a-z0-9-]+(?:\.[a-z0-9-]+)+[^\s<>()]*|\b[a-z0-9][a-z0-9-]*\.(?:com|io|app|ai|co|dev|so|net|org|xyz|tech|tools|sh|me)\b(?:\/[^\s<>()]*)?/i;
 
 // "I built", "I'm building", "my own", "(I made it)": the founder says the product is theirs.
-const DISCLOSURE = /\b(?:i(?:'|’)?m (?:the )?(?:founder|maker|building)|i (?:built|made|make|run|am building|founded|created)|we (?:built|made|are building|run)|my (?:own )?(?:tool|product|app|startup|saas|company)|full disclosure|disclosure:|i work on)\b/i;
+// "disclosure:" sits outside the closing \b: after ":" comes a space, which is no word boundary (review 2026-11-25).
+const DISCLOSURE = /\b(?:(?:i(?:'|’)?m (?:the )?(?:founder|maker|building)|i (?:built|made|make|run|am building|founded|created)|we (?:built|made|are building|run)|my (?:own )?(?:tool|product|app|startup|saas|company)|full disclosure|i work on)\b|disclosure:)/i;
 
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -84,7 +85,8 @@ function phrase(p: string): RegExp {
 export function avoidPhrases(lines: readonly string[]): string[] {
   const out = new Set<string>();
   for (const line of lines) {
-    const quoted = [...line.matchAll(/["“”']([^"“”']{2,60})["“”']/g)].map((m) => m[1]!.trim());
+    // Double quotes only: an apostrophe ("Don't post 'buy now'") is not a quote mark here.
+    const quoted = [...line.matchAll(/["“”]([^"“”]{2,60})["“”]/g)].map((m) => m[1]!.trim());
     if (quoted.length) for (const q of quoted) out.add(q);
     else if (/^[\p{L}\p{N}' -]{2,30}$/u.test(line.trim()) && line.trim().split(/\s+/).length <= 3 && !/\b(?:links?|advice|posts?)\b/i.test(line)) out.add(line.trim());
   }

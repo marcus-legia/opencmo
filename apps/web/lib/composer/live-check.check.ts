@@ -29,7 +29,7 @@ const sub = (over: Partial<SubredditContext> = {}): SubredditContext => ({
 const ctx = (platform: ComposerContext["platform"], s: SubredditContext | null = null): ComposerContext => ({
   platform,
   subreddit: s,
-  account: { username: null, karma: null, accountCreatedAt: null, postsInSub: 0, lastPostInSubAt: null },
+  account: { username: null, karma: null, accountCreatedAt: null, postsInSub: null, lastPostInSubAt: null },
   readiness: { level: "unknown", reasons: [] },
 });
 const run = (over: Partial<LiveCheckInput>) => liveCheck({ platform: "reddit", title: "", body: "", context: ctx("reddit", sub()), products: ["Ferreto"], ...over });
@@ -129,4 +129,10 @@ assert.ok(run({ title: "HOW DO YOU FIND USERS", body: "Body." }).some((i) => i.r
   assert.ok(liveCheck(input).length <= 40);
 }
 
+// Review 2026-11-25: "Disclosure:" counts as saying it is yours; an apostrophe is not a quote mark in the guide.
+{
+  const out = run({ title: "Late invoices", body: "Disclosure: Ferreto is mine. Ferreto finds threads." });
+  assert.ok(!out.some((i) => /yours/i.test(i.why)), JSON.stringify(out));
+  assert.ok(!avoidPhrases(["Don't post 'buy now' links"]).includes("t post"));
+}
 console.log("live-check.check: ok");

@@ -33,9 +33,11 @@ const USERNAME = /^[A-Za-z0-9_-]{3,20}$/;
 // The check's price until the data part adds `compose_check` to `JOB_PRICES` (plan: `cmo_job_price('compose_check') = 1`).
 const CHECK_CREDITS = JOB_PRICES.compose_check ?? 1;
 // `cmo_runs.input` holds at most 4,096 bytes (its CHECK); the rest of the input (platform, sub, keys) fits in the margin.
-const CHECK_INPUT_MAX = 3_900;
+const CHECK_INPUT_MAX = 4_000;
+/** The route takes up to 3,000 characters of post (`POST /cmo/runs`, compose_check). */
+const CHECK_BODY_MAX = 3_000;
 
-const EMPTY_ACCOUNT: AccountContext = { username: null, karma: null, accountCreatedAt: null, postsInSub: 0, lastPostInSubAt: null };
+const EMPTY_ACCOUNT: AccountContext = { username: null, karma: null, accountCreatedAt: null, postsInSub: null, lastPostInSubAt: null };
 const localContext = (platform: ComposePlatform, account: AccountContext = EMPTY_ACCOUNT): ComposerContext => ({
   platform,
   subreddit: null,
@@ -155,7 +157,8 @@ function accountLine(a: AccountContext, sub: string): string {
     const months = Math.max(0, Math.floor((Date.now() - new Date(a.accountCreatedAt).getTime()) / (30.44 * 86_400_000)));
     parts.push(months >= 12 ? `${Math.floor(months / 12)} ${months >= 24 ? "years" : "year"}` : `${months} ${months === 1 ? "month" : "months"}`);
   }
-  parts.push(`${a.postsInSub} ${a.postsInSub === 1 ? "post" : "posts"} in r/${sub} this year`);
+  // Null: the search could not tell (no username, a free account, or a page of posts elsewhere).
+  if (a.postsInSub !== null) parts.push(`${a.postsInSub} ${a.postsInSub === 1 ? "post" : "posts"} in r/${sub} this year`);
   return parts.join(" · ");
 }
 
@@ -326,11 +329,15 @@ export function Composer() {
   const [run, setRun] = useState<Run | null>(null);
   const [planFor, setPlanFor] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [copyFailed, setCopyFailed] = useState(false);
   // Set with the start values in one batch: the draft effect waits for it, so it never loads or saves under the
   // defaults from before the address was read (which would swap out the text a draft card passed in).
   const [booted, setBooted] = useState(false);
   // The platform and sub the shown draft belongs to: a change of either swaps in that one's saved draft.
   const lastKey = useRef(draftKey("reddit", ""));
+  const asked = useRef(0);
+  // The draft a check was started for: its results show only on that draft.
+  const checkedKey = useRef<string | null>(null);
 
   // The page's start: `?platform=x&sub=SaaS&text=…` (a draft card's "Open in Composer", Sales' "Write it yourself").
   // The text is read once and taken out of the address, so a reload does not paste it over what the founder wrote.
@@ -377,10 +384,15 @@ export function Composer() {
   useEffect(() => {
     if (!booted) return;
     if (lastKey.current !== key) {
+      // Save what is in the editor under the key it was written for, then load the new key's draft. A new key with no
+      // draft keeps the text (review 2026-11-25: typing a sub cleared a post written before it).
+      saveDraft(lastKey.current, title, body);
       lastKey.current = key;
       const saved = loadDraft(key);
-      setTitle(saved?.title ?? "");
-      setBody(saved?.body ?? "");
+      if (saved && (saved.title || saved.body)) {
+        setTitle(saved.title);
+        setBody(saved.body);
+      }
       setAiIssues([]);
       setAiSummary(null);
       return;
@@ -389,14 +401,12 @@ export function Composer() {
     return () => clearTimeout(t);
   }, [booted, key, title, body]);
 
-  // The sub is read a moment after the founder stops typing, not on every key.
-  useEffect(() => {
-    const t = setTimeout(() => {
-      const s = cleanSub(subInput);
-      setSub(s === "" || SUB_NAME.test(s) ? s : sub);
-    }, 600);
-    return () => clearTimeout(t);
-  }, [subInput, sub]);
+  // The sub is read when the founder leaves the field or presses Enter, not while typing: each new sub may cost a
+  // provider read (review 2026-11-25).
+  function commitSub() {
+    const s = cleanSub(subInput);
+    if (s === "" || SUB_NAME.test(s)) setSub(s);
+  }
 
   const loadContext = useCallback(async () => {
     if (platform !== "reddit") {
@@ -416,15 +426,19 @@ export function Composer() {
     }
     setLoading(true);
     setCtxError(null);
+    // Only the newest request lands: an older answer for another sub never replaces it.
+    const ask = ++asked.current;
     try {
       const ctx = await api<ComposerContext>(`/composer/context?${new URLSearchParams({ platform, subreddit: sub })}`);
+      if (ask !== asked.current) return;
       setContext(ctx);
       setUserInput((u) => u || ctx.account.username || "");
     } catch (err) {
+      if (ask !== asked.current) return;
       setContext((was) => localContext("reddit", was.account));
       setCtxError(err instanceof ApiError && err.status === 404 ? `r/${sub} was not found.` : err instanceof Error ? err.message : "Reddit did not answer. Try again in a minute.");
     } finally {
-      setLoading(false);
+      if (ask === asked.current) setLoading(false);
     }
   }, [platform, sub, sample]);
   useEffect(() => {
@@ -444,7 +458,9 @@ export function Composer() {
       return;
     }
     try {
-      await api<AccountContext>("/composer/account", jsonBody({ username: u || null }, "PUT"));
+      // Karma and account month go with it: the save writes all three (review 2026-11-25).
+      const a = context.account;
+      await api<AccountContext>("/composer/account", jsonBody({ username: u, karma: a.karma, accountCreatedAt: a.accountCreatedAt ? a.accountCreatedAt.slice(0, 7) : null }, "PUT"));
       setUserNote("Saved.");
       void loadContext();
     } catch (err) {
@@ -471,6 +487,7 @@ export function Composer() {
     const next = data as Run;
     setRun(next);
     if (next.status === "done") {
+      if (checkedKey.current !== lastKey.current) return;
       const out = checkOutput(next.output);
       if (!out) {
         setCheckError("The check did not come back readable. Try it again.");
@@ -485,7 +502,7 @@ export function Composer() {
 
   const input = { platform, ...(platform === "reddit" ? { subreddit: sub, title } : {}), body };
   const inputBytes = new TextEncoder().encode(JSON.stringify(input)).length;
-  const canCheck = body.trim().length > 0 && (platform !== "reddit" || (sub !== "" && context.subreddit !== null)) && inputBytes <= CHECK_INPUT_MAX;
+  const canCheck = body.trim().length > 0 && (platform !== "reddit" || (sub !== "" && context.subreddit !== null)) && inputBytes <= CHECK_INPUT_MAX && body.trim().length <= CHECK_BODY_MAX;
 
   async function startCheck() {
     setCheckStep("busy");
@@ -499,6 +516,7 @@ export function Composer() {
       return;
     }
     try {
+      checkedKey.current = lastKey.current;
       const started = await api<{ id: string; status: string }>("/cmo/runs", jsonBody({ kind: "compose_check", input }));
       setRun({ id: started.id, status: started.status, error: null, output: null });
       setCheckStep("idle");
@@ -517,8 +535,9 @@ export function Composer() {
   }
   function apply(i: ComposeIssue) {
     if (!i.suggestion || !i.quote) return;
-    if (i.field === "title") setTitle((t) => t.replace(i.quote, i.suggestion!).slice(0, REDDIT_TITLE_MAX));
-    else setBody((b) => b.replace(i.quote, i.suggestion!));
+    // A function, so "$" in a suggestion is text, not a replacement pattern.
+    if (i.field === "title") setTitle((t) => t.replace(i.quote, () => i.suggestion!).slice(0, REDDIT_TITLE_MAX));
+    else setBody((b) => b.replace(i.quote, () => i.suggestion!));
     // Applied is decided: a suggestion that keeps the sentence in it must not leave the issue standing.
     ignore(i);
   }
@@ -529,14 +548,16 @@ export function Composer() {
   async function copyAndOpen() {
     const target = openTarget(platform, sub, title, body);
     const text = platform === "reddit" ? `${title}\n\n${body}` : body;
-    // Open first, in the click, or the browser blocks the new tab; the copy follows.
+    // The copy starts first, while this page has focus, and the tab opens in the same click (a late open is blocked).
+    setCopyFailed(false);
+    const copying = navigator.clipboard?.writeText(text) ?? Promise.reject(new Error("no clipboard"));
     window.open(target.url, "_blank", "noopener,noreferrer");
     try {
-      await navigator.clipboard.writeText(text);
+      await copying;
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
     } catch {
-      // The page opened; the founder can still select and copy the text by hand.
+      setCopyFailed(true);
     }
   }
 
@@ -578,7 +599,7 @@ export function Composer() {
             <>
               <label className="cmp-inline">
                 <span>r/</span>
-                <input type="text" value={subInput} onChange={(e) => setSubInput(e.target.value)} placeholder="SaaS" aria-label="Subreddit" maxLength={24} data-testid="composer-sub" />
+                <input type="text" value={subInput} onChange={(e) => setSubInput(e.target.value)} onBlur={commitSub} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commitSub(); } }} placeholder="SaaS" aria-label="Subreddit" maxLength={24} data-testid="composer-sub" />
               </label>
               <label className="cmp-inline">
                 <span>u/</span>
@@ -640,7 +661,12 @@ export function Composer() {
             {copied ? "Copied · page opened" : target.label}
           </button>
         </div>
-        {inputBytes > CHECK_INPUT_MAX ? <p className="meta">The AI check reads posts up to about 3,800 characters. The code checks above still run.</p> : null}
+        {inputBytes > CHECK_INPUT_MAX || body.trim().length > CHECK_BODY_MAX ? <p className="meta">The AI check reads posts up to 3,000 characters. The code checks above still run.</p> : null}
+        {copyFailed ? (
+          <p className="meta" role="alert" data-testid="composer-copy-failed">
+            The text was not copied. Select it above, copy it, then paste it on the page that opened.
+          </p>
+        ) : null}
         {checkError ? (
           <p className="meta" role="alert" style={{ color: "var(--warn)" }}>
             {checkError}
