@@ -40,7 +40,9 @@ export function parseRules(raw: string): SubRule[] {
   const rules: SubRule[] = [];
   for (const block of blocks) {
     const m = /^(\d{1,2})[.)]?\s+([\s\S]*)$/.exec(block);
-    if (!m) {
+    // A new rule only for a higher number: "2 links per month max" inside rule 2 or 3 stays in that rule.
+    const last = rules.length ? rules[rules.length - 1]!.n : null;
+    if (!m || (last !== null && Number(m[1]) <= last)) {
       // Text before the first number, or a rule split over two paragraphs: it belongs to the rule before.
       if (rules.length) rules[rules.length - 1]!.text = `${rules[rules.length - 1]!.text}\n${block}`.trim();
       else rules.push({ n: 1, title: block.slice(0, 120), text: "" });
@@ -104,12 +106,16 @@ export async function cachedSubreddit(ctx: Pick<RulesContext, "store" | "now">, 
 export async function readSubreddit(ctx: RulesContext & { store: RulesContext["store"] }, raw: string): Promise<SubredditContext> {
   const name = subName(raw);
   if (!name) throw new RangeError("Use a subreddit name like SaaS.");
-  const read = (await readCommunityRules(ctx, [name]))[name];
+  const read = (await readCommunityRules(ctx, [name], { needText: true }))[name];
   const row = await ctx.store.subredditRule(name);
   let guide = row?.guide ?? null;
   if (!guide && row?.rules_text) {
-    guide = await makeGuide(ctx, name, row.rules_text, row.submit_text ?? "");
-    await ctx.store.saveSubredditRule({ ...row, guide });
+    // A guide that fails to come back leaves it empty this time: the rules still show (review 2026-11-25).
+    guide = await makeGuide(ctx, name, row.rules_text, row.submit_text ?? "").catch((error: unknown) => {
+      console.error(`[composer] guide for r/${name} not made`, error);
+      return null;
+    });
+    if (guide) await ctx.store.saveSubredditRule({ ...row, guide });
   }
   const verdict = read?.verdict ?? row?.verdict ?? "not_verified";
   return {

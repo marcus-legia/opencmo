@@ -31,4 +31,9 @@ const fresh = readiness({ ...sub, minKarma: null, minAccountAgeDays: null }, { .
 assert.equal(fresh.level, "caution");
 assert.ok(fresh.reasons.some((r) => r.includes("Under 50 karma")) && fresh.reasons.some((r) => r.includes("not posted in r/SaaS")));
 assert.equal(readiness({ ...sub, verdict: "skip" }, ok, now).level, "not_ready");
+// Review 2026-11-25: a month counts from its last day. Made 2026-11-20, stored as November: on 2026-11-25 it is not
+// 24 days old for a sub that asks 14.
+assert.equal(readiness({ ...sub, minKarma: null, minAccountAgeDays: 14 }, { ...ok, accountCreatedAt: "2026-11-01T00:00:00Z" }, now).level, "not_ready");
+// An unknown post count gives no "not posted yet" line.
+assert.ok(!readiness({ ...sub, minKarma: null }, { ...ok, postsInSub: null }, now).reasons.some((r) => r.includes("not posted")));
 console.log("composer account: ok");

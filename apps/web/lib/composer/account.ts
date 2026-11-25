@@ -14,12 +14,15 @@ export function redditUser(raw: string | null | undefined): string | null {
 }
 
 /** The founder's posts in one sub over the last year, newest first. Only a valid username is searched. */
-export async function postsIn(username: string, sub: string): Promise<{ postsInSub: number; lastPostInSubAt: string | null }> {
+export async function postsIn(username: string, sub: string): Promise<{ postsInSub: number | null; lastPostInSubAt: string | null }> {
   const user = redditUser(username);
-  if (!user) return { postsInSub: 0, lastPostInSubAt: null };
+  if (!user) return { postsInSub: null, lastPostInSubAt: null };
   const posts = await redditSearch(`author:${user}`, undefined, { sort: "new", timeframe: "year" });
-  const mine = posts.filter((p) => p.author.replace(/^u\//, "").toLowerCase() === user.toLowerCase() && p.community.replace(/^r\//, "").toLowerCase() === sub.toLowerCase());
+  const own = posts.filter((p) => p.author.replace(/^u\//, "").toLowerCase() === user.toLowerCase());
+  const mine = own.filter((p) => p.community.replace(/^r\//, "").toLowerCase() === sub.toLowerCase());
   const last = mine.map((p) => p.postedAt).filter((d): d is string => Boolean(d)).sort().at(-1) ?? null;
+  // The search gives one page of the newest posts: none here among a full page elsewhere says nothing about this sub.
+  if (!mine.length && own.length >= 25) return { postsInSub: null, lastPostInSubAt: null };
   return { postsInSub: mine.length, lastPostInSubAt: last };
 }
 
@@ -36,7 +39,10 @@ export function readiness(sub: SubredditContext | null, account: AccountContext,
   const reasons: string[] = [];
   const where = sub ? `r/${sub.name}` : "this community";
   if (!account.username) return { level: "unknown", reasons: ["Add your Reddit username to check your account before you post."] };
-  const ageDays = account.accountCreatedAt ? Math.floor((now.getTime() - Date.parse(account.accountCreatedAt)) / DAY) : null;
+  // The founder gives a month: count from its last day, so a sub's minimum is never met too early (review 2026-11-25).
+  const created = account.accountCreatedAt ? new Date(account.accountCreatedAt) : null;
+  const monthEnd = created ? Date.UTC(created.getUTCFullYear(), created.getUTCMonth() + 1, 0) : null;
+  const ageDays = monthEnd !== null ? Math.max(0, Math.floor((now.getTime() - monthEnd) / DAY)) : null;
   let notReady = false;
   if (sub?.verdict === "skip") {
     notReady = true;

@@ -106,9 +106,12 @@ export async function composeCheck(ctx: JobContext): Promise<JobOutput> {
   (r) => (r.issues.length ? `${r.issues.length} ${r.issues.length === 1 ? "line" : "lines"} flagged` : "Nothing flagged"));
 
   const issues = keepIssues(out.issues, { title, body });
+  // The verdict follows the flags that point at the post: a "fix" whose flags were all dropped is "ok".
+  const dropped = out.issues.length - issues.length;
+  const verdict = issues.some((i) => i.severity === "block") ? "fix" : issues.length ? out.verdict : "ok";
   const result: ComposeCheckOutput = {
-    verdict: issues.some((i) => i.severity === "block") ? "fix" : out.verdict,
-    summary: out.summary.slice(0, 300),
+    verdict,
+    summary: (dropped && !issues.length ? "Nothing here would get the post removed." : out.summary).slice(0, 300),
     issues,
   };
   return result as unknown as JobOutput;

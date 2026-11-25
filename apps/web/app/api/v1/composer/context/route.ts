@@ -3,6 +3,7 @@ import { z } from "zod";
 import { ApiError } from "@/lib/api/errors";
 import { withApi } from "@/lib/api/handler";
 import { supabaseStore } from "@/lib/cmo/jobs/store";
+import { LlmError } from "@/lib/cmo/jobs/llm";
 import { think } from "@/lib/cmo/jobs/think";
 import { SocialReadError } from "@/lib/cmo/social/scrapecreators";
 import { postsIn, readiness } from "@/lib/composer/account";
@@ -29,7 +30,7 @@ export const GET = withApi({ rateLimit: { bucket: "composer", limit: 120, window
     username: profile.data?.reddit_username ?? null,
     karma: profile.data?.reddit_karma ?? null,
     accountCreatedAt: profile.data?.reddit_created_at ? `${profile.data.reddit_created_at}T00:00:00Z` : null,
-    postsInSub: 0,
+    postsInSub: null,
     lastPostInSubAt: null,
   };
   let sub: SubredditContext | null = null;
@@ -52,10 +53,11 @@ export const GET = withApi({ rateLimit: { bucket: "composer", limit: 120, window
     } catch (error) {
       if (error instanceof RangeError) throw new ApiError(400, error.message);
       if (error instanceof SocialReadError) throw new ApiError(502, "Reddit did not answer. Try again in a minute.");
+      if (error instanceof LlmError) throw new ApiError(503, "We could not read this community's rules. Try again in a minute.");
       throw error;
     }
     // The founder's posts in the sub: a search that fails only leaves the count at 0.
-    if (searchPosts && account.username) Object.assign(account, await postsIn(account.username, sub.name).catch(() => ({ postsInSub: 0, lastPostInSubAt: null })));
+    if (searchPosts && account.username) Object.assign(account, await postsIn(account.username, sub.name).catch(() => ({ postsInSub: null, lastPostInSubAt: null })));
   }
   const context: ComposerContext = { platform, subreddit: sub, account, readiness: platform === "reddit" ? readiness(sub, account) : { level: "ready", reasons: [] } };
   return context;

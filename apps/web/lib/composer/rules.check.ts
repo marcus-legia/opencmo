@@ -34,4 +34,8 @@ assert.equal(subName("a"), null);
 const lined = parseRules("5 Rules for Links in Comments/Discussion\nSometimes you think the best source is a link.\n\n9 No Unscheduled AMAs\nWe do not allow unscheduled AMAs.");
 assert.deepEqual(lined.map((r) => [r.n, r.title]), [[5, "Rules for Links in Comments/Discussion"], [9, "No Unscheduled AMAs"]]);
 assert.equal(lined[1]!.text, "We do not allow unscheduled AMAs.");
+// Review 2026-11-25: a number out of order inside a rule's body stays in that rule.
+const inner = parseRules("1 Be kind\nNo insults.\n\n2 Promotion\nAllowed:\n2 links per month max\n\n3 No AMAs\nAsk first.");
+assert.deepEqual(inner.map((r) => [r.n, r.title]), [[1, "Be kind"], [2, "Promotion"], [3, "No AMAs"]]);
+assert.ok(inner[1]!.text.includes("2 links per month max"));
 console.log("composer rules: ok");

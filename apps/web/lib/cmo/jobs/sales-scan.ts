@@ -656,16 +656,19 @@ export async function rescoreRead(
 /** What reading rules needs: the job's, or the Composer's own (no run, no steps). */
 export type RulesContext = { store: Pick<JobContext["store"], "subredditRule" | "saveSubredditRule">; think: JobContext["think"]; now: Date };
 
-export async function readCommunityRules(ctx: RulesContext, names: string[]): Promise<Record<string, RuleRead>> {
+export async function readCommunityRules(ctx: RulesContext, names: string[], opts: { needText?: boolean } = {}): Promise<Record<string, RuleRead>> {
   const out = new Map<string, RuleRead>();
   const unread: { name: string; rules: string; full: string; submitText: string }[] = [];
   // Independent reads: four communities at a time, kept in order so the prompt is the same on a retry.
   const read = async (name: string) => {
     const cached = await ctx.store.subredditRule(name);
-    if (cached && ctx.now.getTime() - new Date(cached.read_at).getTime() < RULES_FRESH_MS) return { name, cached };
+    // The Composer needs the full text: a row cached before it kept it (20270206010000) is read again.
+    const fresh = cached && ctx.now.getTime() - new Date(cached.read_at).getTime() < RULES_FRESH_MS && (!opts.needText || cached.rules_text);
+    if (cached && fresh) return { name, cached };
     try {
       const details = await subredditDetails(name);
-      return { name, rules: details.rules || details.description, full: details.rules, submitText: details.submitText };
+      // A sub that publishes only a description is classified from it, and the Composer shows it as its rules.
+      return { name, rules: details.rules || details.description, full: details.rules || details.description, submitText: details.submitText };
     } catch (error) {
       if (!(error instanceof SocialReadError)) throw error;
       return { name, failed: true as const };

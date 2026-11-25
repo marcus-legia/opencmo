@@ -9,7 +9,15 @@ const Body = z.object({
   username: z.string().max(30),
   karma: z.number().int().min(0).max(10_000_000).nullable().optional(),
   /** "2025-03" or "2025-03-01": the month the Reddit account was made. */
-  accountCreatedAt: z.string().regex(/^\d{4}-\d{2}(-\d{2})?$/).nullable().optional(),
+  accountCreatedAt: z
+    .string()
+    .regex(/^\d{4}-\d{2}(-\d{2})?$/)
+    .refine((v) => {
+      const d = v.length === 7 ? `${v}-01` : v;
+      return new Date(`${d}T00:00:00Z`).toISOString().slice(0, 10) === d;
+    }, "Use a real month, like 2025-03.")
+    .nullable()
+    .optional(),
 });
 
 /**
@@ -28,7 +36,7 @@ export const PUT = withApi({ body: Body, rateLimit: { bucket: "presets", limit: 
     username: row?.reddit_username ?? null,
     karma: row?.reddit_karma ?? null,
     accountCreatedAt: row?.reddit_created_at ? `${row.reddit_created_at}T00:00:00Z` : null,
-    postsInSub: 0,
+    postsInSub: null,
     lastPostInSubAt: null,
   };
   return account;

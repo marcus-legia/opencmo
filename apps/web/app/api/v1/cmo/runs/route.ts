@@ -18,7 +18,8 @@ const body = z.object({
       platform: z.enum(["reddit", "x", "threads", "linkedin"]),
       subreddit: z.string().trim().max(40).optional(),
       title: z.string().max(300).optional(),
-      body: z.string().trim().min(1).max(10000),
+      // `cmo_enqueue` keeps a run's input under 4096 bytes: about 3,000 characters of post (review 2026-11-25).
+      body: z.string().trim().min(1).max(3000, "Check up to 3,000 characters at a time."),
     })
     .optional(),
 });
@@ -30,5 +31,6 @@ const body = z.object({
 export const POST = withApi({ body, rateLimit: { bucket: "cmo-runs", limit: 60, windowSeconds: 3600 } }, async ({ supabase, body }) => {
   if ((body.kind === "compose_check") !== Boolean(body.input)) throw new ApiError(400, body.input ? "Only a post check takes a post." : "Write the post first, then check it.");
   const input: Record<string, unknown> = body.kind === "compose_check" ? { ...body.input } : body.idea ? { idea: body.idea } : {};
+  if (Buffer.byteLength(JSON.stringify(input)) > 4000) throw new ApiError(400, "This post is too long to check at once. Check it in two parts.");
   return startCmoRun(supabase, body.kind, input);
 });
