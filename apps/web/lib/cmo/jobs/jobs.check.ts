@@ -388,17 +388,17 @@ async function main() {
   await drainCmoQueue(memEx.store, { searchHn: async () => [] });
   assert.equal(memEx.opps.filter((o) => (o.platform ?? "reddit") === "reddit").length, 0, "every Reddit thread was in an excluded subreddit");
 
-  // Không thread mới nào: lượt vẫn xong và được hoàn credit.
+  // No new thread: the scan still finishes and is refunded.
   const mem4 = memoryStore(docs);
   // Every URL is seen: `has` says yes to all, and nothing to list.
   mem4.store.seenUrls = async () => new (class extends Set<string> { override has() { return true; } })();
   const empty = mem4.enqueue("sales_scan");
   await drainCmoQueue(mem4.store);
-  assert.equal(empty.status, "done", `lượt rỗng vẫn xong (${empty.error})`);
+  assert.equal(empty.status, "done", `an empty scan still finishes (${empty.error})`);
   // Free scan A1: nothing found still says what it searched, so the screen can show the "no one asked" answer.
   assert.deepEqual(
     empty.output,
-    { cards: 0, skipped: 0, dropped: 0, refund: true, platforms: ["reddit", "hn", "facebook", "threads"], failed: [], free: false, queries: ["late payments"], scanned: 0, verdict: "none" },
+    { cards: 0, skipped: 0, dropped: 0, refund: true, platforms: ["reddit", "hn", "facebook", "threads"], failed: [], free: false, queries: ["late payments"], scanned: 0, verdict: "none", rejected: [] },
     "an empty scan refunds and keeps its searches",
   );
   // Free scan A5: nothing waiting for a reply is done, and refunds.
@@ -494,7 +494,7 @@ async function main() {
   // The same Threads post under threads.net with a tracking param is the one already seen: nothing new is scored.
   const dup = await scanWith(["threads"], {}, { social: async () => [social("threads", 7, "https://threads.net/@someone/post/C7?xmt=abc")] }, ["https://www.threads.com/@someone/post/C7"]);
   assert.equal(dup.run.status, "done", `dup (${dup.run.error})`);
-  assert.deepEqual(dup.run.output, { cards: 0, skipped: 0, dropped: 0, refund: true, platforms: ["threads"], failed: [], free: false, queries: ["late invoice payments"], scanned: 0, verdict: "none" });
+  assert.deepEqual(dup.run.output, { cards: 0, skipped: 0, dropped: 0, refund: true, platforms: ["threads"], failed: [], free: false, queries: ["late invoice payments"], scanned: 0, verdict: "none", rejected: [] });
   assert.ok(!dup.run.steps.some((s) => s.tool === "score_thread"), "nothing was scored");
   // B3 review: a URL the database would refuse (a group's home page, a Threads link with a trailing slash, a post on
   // another platform's host) is dropped before scoring, so one bad row never loses the run's other cards.
@@ -551,6 +551,46 @@ async function main() {
   assert.ok(runR.steps.some((s) => s.tool === "read_post") && runR.steps.some((s) => s.tool === "rescore_read"), runR.steps.map((s) => s.tool).join());
   assert.equal(memR.people.get(bare(50, "").url)?.level, "dm_ready", `the founder found in the post is DM ready (${JSON.stringify(memR.people.get(bare(50, "").url)?.reach)})`);
   assert.equal(memR.people.get(bare(51, "").url)?.level ?? "reply_first", "reply_first", "the freelancer is not");
+  // 2026-11-25: the same searches kept scoring the same weak threads. A thread an earlier scan passed over is skipped,
+  // and the query writer sees the last searches.
+  const memRecent = memoryStore(docs);
+  memRecent.salesSettings.platforms = ["reddit"];
+  const earlier = memRecent.enqueue("sales_scan");
+  Object.assign(earlier, { status: "done", output: { queries: ["reddit find customers"], rejected: [injected(70).url] } });
+  const queryPrompts: string[] = [];
+  const runRecent = memRecent.enqueue("sales_scan");
+  await drainCmoQueue(memRecent.store, {
+    searchReddit: async () => [injected(70)],
+    searchHn: async () => [],
+    searchConversations: async () => [],
+    think: async (call) => {
+      if (call.label === "make_queries") queryPrompts.push(call.prompt);
+      return (call as { fake: () => unknown }).fake() as never;
+    },
+  });
+  assert.equal(runRecent.status, "done", `recent scan (${runRecent.error})`);
+  assert.equal((runRecent.output as { scanned: number }).scanned, 0, "the thread passed over last time is not scored again");
+  assert.ok(queryPrompts[0]?.includes("<recent_searches>") && queryPrompts[0].includes("reddit find customers"), "the last searches reach the query writer");
+  // Review 2026-11-25: threads that pass but miss the five-card cut are not passed over; searches from a scan where a
+  // platform failed or a brief steered it may be used again.
+  const memCut = memoryStore(docs);
+  memCut.salesSettings.platforms = ["reddit"];
+  const runCut = memCut.enqueue("sales_scan");
+  await drainCmoQueue(memCut.store, {
+    searchReddit: async () => [70, 71, 72, 73, 74, 75, 76].map((n) => ({ ...injected(n), author: `u/cut${n}`, postedAt: new Date(Date.now() - 3_600_000).toISOString() })),
+    searchHn: async () => [],
+    searchConversations: async () => [],
+  });
+  assert.equal((runCut.output as { cards: number }).cards, 5, `five cards (${runCut.error})`);
+  assert.deepEqual((runCut.output as { rejected: string[] }).rejected, [], "the two good threads past the cut are not passed over");
+  const { recentFrom } = await import("./recent-scans");
+  const recentRead = recentFrom([
+    { output: { queries: ["a"], rejected: ["u1"], failed: [] } },
+    { output: { queries: ["b"], rejected: ["u2"], failed: ["reddit"] } },
+    { output: { queries: ["c"] }, input: { brief: "pricing pages" } },
+    { output: null },
+  ]);
+  assert.deepEqual(recentRead, { queries: ["a"], rejected: ["u1", "u2"] });
   // Owner test 2026-11-23: the one product mention goes to the post asking for tools, not to the higher score.
   const memMention = memoryStore(docs);
   memMention.salesSettings.platforms = ["reddit"];

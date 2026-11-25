@@ -12,6 +12,7 @@ import type { AccountMetricRow } from "./metrics-source";
 import { chosenChannels, defaultPostingPlan, type PostingPlan } from "../posting-plan";
 import { postProfile } from "../platforms";
 import { SALES_PLATFORMS } from "../social/conversations";
+import { recentFrom } from "./recent-scans";
 
 export type RunState = QueuedRun & { status: string; steps: Step[]; error: string | null; output: unknown; notBefore?: number };
 
@@ -192,6 +193,8 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
       return item;
     },
     seenUrls: async () => new Set(opps.map((o) => o.url)),
+    recentScans: async (userId) =>
+      recentFrom(runs.filter((r) => r.kind === "sales_scan" && r.status === "done" && (!r.user_id || r.user_id === userId)).slice(-5).reverse()),
     seenAuthors: async () => new Set(opps.map((o) => personKey(o.platform ?? "reddit", o.author)).filter((k): k is string => k !== null)),
     subredditRule: async (name) => rules.get(name.toLowerCase()) ?? null,
     async saveSubredditRule(rule) {
