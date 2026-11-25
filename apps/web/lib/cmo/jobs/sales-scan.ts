@@ -297,7 +297,7 @@ For each thread:
 - sellsService: true when the author sells to the founder's ideal customers (the Strategy says who they are) instead of being one of them: an agency, consultant or vendor pitching those customers. When the ideal customer is someone like the author (a product for freelancers, and the author is a freelancer), it is false.
 - invites: their exact words inviting people to message or email them ("DM me", "email me"), or empty.
 - pain (0-25): how clearly the person describes the pain. Quote their exact words.
-- fit (0-25): how well the product fits this person and situation, judged from the product documents and the Strategy's ideal customer. 0 to 5 when the author is not that kind of customer (for example, someone who sells to them).
+- fit (0-25): how well the product fits this person and situation, judged from the product documents and the Strategy's ideal customer. Score the problem they describe; most authors never say who they are, and that is no reason to score low. 0 to 5 only when the thread shows they are clearly not that kind of customer, or sell to them.
 - evidence (0-15): signs they want a solution now (asking for tools, a system, recommendations). Quote their exact words.
 - exclude: true for health, medical, personal finance or legal advice, off-topic threads, or vendors promoting their own product.
 Quotes must be copied exactly from the thread. If there is nothing to quote, leave it empty and score low.
