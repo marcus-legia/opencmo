@@ -296,7 +296,7 @@ export function supabaseStore(admin: BaseClient): CmoStore {
     async subredditRule(subreddit) {
       const { data, error } = await admin
         .from("subreddit_rules")
-        .select("subreddit, verdict, summary, read_at, min_karma, min_account_age_days, megathread, no_dms")
+        .select("subreddit, verdict, summary, read_at, min_karma, min_account_age_days, megathread, no_dms, rules_text, submit_text, guide")
         .eq("subreddit", subreddit.toLowerCase())
         .maybeSingle();
       if (error) throw new Error(`subreddit_rules: ${error.message}`);
@@ -314,6 +314,10 @@ export function supabaseStore(admin: BaseClient): CmoStore {
           min_account_age_days: rule.min_account_age_days ?? null,
           megathread: rule.megathread ?? false,
           no_dms: rule.no_dms ?? false,
+          // A save that brings no text keeps what is there (a scan never clears the Composer's guide).
+          ...(rule.rules_text !== undefined ? { rules_text: rule.rules_text?.slice(0, 6000) ?? null } : {}),
+          ...(rule.submit_text !== undefined ? { submit_text: rule.submit_text?.slice(0, 2000) ?? null } : {}),
+          ...(rule.guide !== undefined ? { guide: rule.guide } : {}),
           read_at: new Date().toISOString(),
         });
       if (error) throw new Error(`subreddit_rules: ${error.message}`);

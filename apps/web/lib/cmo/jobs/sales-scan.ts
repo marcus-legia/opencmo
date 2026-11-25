@@ -653,16 +653,22 @@ export async function rescoreRead(
   }, (r) => (r.length ? `${r.length} worth joining (score ${PASS_SCORE}+)` : "None scored high enough"));
 }
 
-export async function readCommunityRules(ctx: JobContext, names: string[]): Promise<Record<string, RuleRead>> {
+/** What reading rules needs: the job's, or the Composer's own (no run, no steps). */
+export type RulesContext = { store: Pick<JobContext["store"], "subredditRule" | "saveSubredditRule">; think: JobContext["think"]; now: Date };
+
+export async function readCommunityRules(ctx: RulesContext, names: string[], opts: { needText?: boolean } = {}): Promise<Record<string, RuleRead>> {
   const out = new Map<string, RuleRead>();
-  const unread: { name: string; rules: string }[] = [];
+  const unread: { name: string; rules: string; full: string; submitText: string }[] = [];
   // Independent reads: four communities at a time, kept in order so the prompt is the same on a retry.
   const read = async (name: string) => {
     const cached = await ctx.store.subredditRule(name);
-    if (cached && ctx.now.getTime() - new Date(cached.read_at).getTime() < RULES_FRESH_MS) return { name, cached };
+    // The Composer needs the full text: a row cached before it kept it (20270206010000) is read again.
+    const fresh = cached && ctx.now.getTime() - new Date(cached.read_at).getTime() < RULES_FRESH_MS && (!opts.needText || cached.rules_text);
+    if (cached && fresh) return { name, cached };
     try {
       const details = await subredditDetails(name);
-      return { name, rules: details.rules || details.description };
+      // A sub that publishes only a description is classified from it, and the Composer shows it as its rules.
+      return { name, rules: details.rules || details.description, full: details.rules || details.description, submitText: details.submitText };
     } catch (error) {
       if (!(error instanceof SocialReadError)) throw error;
       return { name, failed: true as const };
@@ -685,7 +691,7 @@ export async function readCommunityRules(ctx: JobContext, names: string[]): Prom
     else if ("failed" in r) out.set(r.name, { verdict: "not_verified", summary: `r/${r.name}: rules not read, help only` });
     // An empty rules page is not a permission either.
     else if ("rules" in r && !(r.rules ?? "").trim()) out.set(r.name, { verdict: "not_verified", summary: `r/${r.name}: no rules published, help only` });
-    else if ("rules" in r) unread.push({ name: r.name, rules: r.rules ?? "" });
+    else if ("rules" in r) unread.push({ name: r.name, rules: r.rules ?? "", full: r.full ?? "", submitText: r.submitText ?? "" });
   }
   if (unread.length) {
     const read = (
@@ -713,7 +719,8 @@ export async function readCommunityRules(ctx: JobContext, names: string[]): Prom
       const minKarma = count(r?.minKarma, 1_000_000);
       const minAccountAgeDays = count(r?.minAccountAgeDays, 3650);
       // The cache is shared by every founder: only Ferreto's own model writes it.
-      await ctx.store.saveSubredditRule({ subreddit: u.name, verdict, summary, min_karma: minKarma, min_account_age_days: minAccountAgeDays, megathread, no_dms: r?.noDms === true });
+      // The full text too, for the Composer; a new read of the rules drops the guide made from the old ones.
+      await ctx.store.saveSubredditRule({ subreddit: u.name, verdict, summary, min_karma: minKarma, min_account_age_days: minAccountAgeDays, megathread, no_dms: r?.noDms === true, rules_text: u.full || null, submit_text: u.submitText || null, guide: null });
       const noDms = r?.noDms === true;
       out.set(u.name, { verdict, summary, minKarma, minAccountAgeDays, megathread, noDms });
     }
