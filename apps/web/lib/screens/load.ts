@@ -1427,26 +1427,25 @@ function toLastScan(output: unknown, at: string): SalesScan | null {
 
 /**
  * The Sales ↔ Post index (owner, 2026-11-25), read under RLS: Scan #n, person n.k, Post #m and which posts each person
- * fed. Each read is the newest page with an exact count, so the rows on screen keep their numbers however many there
- * are, and only the columns the numbers need. Any read that fails or throws gives an empty index: rows show without
+ * fed. Each read is the newest page (the newest is #1), with only the columns the numbers need. Any read that fails or throws gives an empty index: rows show without
  * numbers rather than failing the screen.
  */
 const EMPTY_INDEX = { scans: new Map<string, number>(), people: new Map<string, string>(), posts: new Map<string, number>(), usedIn: new Map<string, { no: number; id: string }[]>() };
 async function indexOf(supabase: LoadContext["supabase"]): Promise<typeof EMPTY_INDEX> {
   try {
     const [scanRes, postRes] = await Promise.all([
-      supabase.from("cmo_runs").select("id", { count: "exact" }).eq("kind", "sales_scan").eq("status", "done").order("finished_at", { ascending: false, nullsFirst: false }).limit(100),
-      supabase.from("content_items").select("id, created_at, sources:body->sources", { count: "exact" }).eq("department", "post").order("created_at", { ascending: false }).limit(1000),
+      supabase.from("cmo_runs").select("id").eq("kind", "sales_scan").eq("status", "done").order("finished_at", { ascending: false, nullsFirst: false }).limit(100),
+      supabase.from("content_items").select("id, created_at, sources:body->sources").eq("department", "post").order("created_at", { ascending: false }).limit(1000),
     ]);
     if (scanRes.error || postRes.error) return EMPTY_INDEX;
     const scanRows = (scanRes.data ?? []) as { id: string }[];
-    const scans = numbersFromNewest(scanRows, scanRes.count ?? scanRows.length);
+    const scans = numbersFromNewest(scanRows);
     const peopleRes = scanRows.length
       ? await supabase.from("opportunities").select("id, run_id, score, created_at").in("run_id", scanRows.map((r) => r.id)).limit(2000)
       : { data: [], error: null };
     const people = personNumbers(peopleRes.error ? [] : ((peopleRes.data ?? []) as PersonRow[]), scans);
     const postRows = (postRes.data ?? []) as PostRow[];
-    const posts = numbersFromNewest(postRows, postRes.count ?? postRows.length);
+    const posts = numbersFromNewest(postRows);
     return { scans, people, posts, usedIn: usedIn(postRows, posts) };
   } catch (error) {
     console.error("[screens] index not read", error);

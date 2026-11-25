@@ -41,12 +41,12 @@ assert.match(dayLabel(drafts[1]!) ?? "", /^Thu \d{1,2} [A-Z][a-z]{2}$/, "last we
   const base = { kind: "post", platform: "x", dayText: null, title: "t", versions: 1, note: null, approvalId: null } as const;
   const d = (id: string, column: Draft["column"], no: number, at: string | null, day: string | null = null) => ({ ...base, id, column, no, at, day }) as Draft;
   const sections = postSections([
-    d("w1", "waiting", 3, null, "2026-11-26"), d("w2", "waiting", 5, null, "2026-11-25"),
+    d("w1", "waiting", 5, null, "2026-11-26"), d("w2", "waiting", 3, null, "2026-11-25"),
     d("s1", "scheduled", 2, "2026-11-28T09:00:00Z"), d("s2", "scheduled", 1, "2026-11-27T09:00:00Z"),
     d("p1", "posted", 0, "2026-11-20T09:00:00Z"), d("p2", "posted", 0, "2026-11-21T09:00:00Z"),
     d("l1", "planned", 7, null, "2026-11-29"), d("l2", "drafting", 6, null, "2026-11-28"),
   ]);
-  assert.deepEqual(sections.new.map((x) => x.id), ["w2", "w1"], "the newest draft first");
+  assert.deepEqual(sections.new.map((x) => x.id), ["w2", "w1"], "the newest draft (#1 is the newest) first");
   assert.deepEqual(sections.approved.map((x) => x.id), ["s2", "s1"], "approved in the order they go out");
   assert.deepEqual(sections.posted.map((x) => x.id), ["p2", "p1"]);
   assert.deepEqual(sections.planned.map((x) => x.id), ["l2", "l1"]);
