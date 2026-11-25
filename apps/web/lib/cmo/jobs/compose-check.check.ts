@@ -27,6 +27,9 @@ async function main() {
   );
   assert.deepEqual(kept.map((i) => i.rule), ["Rule 3", "Length"], "whitespace and case do not matter; invented quotes and wrong fields are dropped");
   assert.ok(kept.every((i) => i.source === "ai"));
+  // A rewrite never carries a link (security review 2026-11-25).
+  const linked = keepIssues([{ quote: "I built", field: "body", rule: "Rule 3", severity: "warn", why: "w", suggestion: "See paylane.io for more" }], post);
+  assert.equal(linked[0]!.suggestion, null);
 
   // The job end to end on the fake model: the sub's rules are read (the freelance fixture plants an instruction),
   // the link and the product name are flagged, nothing is written.

@@ -57,7 +57,8 @@ export function keepIssues(issues: z.infer<typeof ComposeCheckSchema>["issues"],
       rule: i.rule.slice(0, 60),
       severity: i.severity,
       why: i.why.slice(0, 200),
-      suggestion: i.suggestion ? i.suggestion.slice(0, 300) : null,
+      // A rewrite never carries a link: the founder pastes it into their own post (security review 2026-11-25).
+      suggestion: i.suggestion && !/https?:\/\/|www\.|\b[a-z0-9-]+\.(com|io|co|net|org|app|dev)\b/i.test(i.suggestion) ? i.suggestion.slice(0, 300) : null,
     }));
 }
 
@@ -88,7 +89,7 @@ export async function composeCheck(ctx: JobContext): Promise<JobOutput> {
   const profile = platform === "reddit" ? null : profileOf(platform);
 
   const where = rules
-    ? `<rules community="r/${escapeAttribute(rules.name)}">${escapeForTag(cleanUntrusted(rules.rules.map((r) => `Rule ${r.n}: ${r.title}. ${r.text}`).join("\n"))) || "(no rules published)"}</rules>\n<guidance>${escapeForTag(cleanUntrusted(rules.submitText))}</guidance>\nWhat the rules allow: ${rules.summary || rules.verdict}`
+    ? `<rules community="r/${escapeAttribute(rules.name)}">${escapeForTag(cleanUntrusted(rules.rules.map((r) => `Rule ${r.n}: ${r.title}. ${r.text}`).join("\n"))) || "(no rules published)"}</rules>\n<guidance>${escapeForTag(cleanUntrusted(rules.submitText))}</guidance>\n<allowed verdict="${rules.verdict}">${escapeForTag(cleanUntrusted(rules.summary))}</allowed>`
     : `<platform>${profile ? `${profile.label}: up to ${profile.limit} characters. ${profile.tone ?? ""}` : platform}</platform>`;
   const out = await ctx.step("check_post", "Checking every sentence", async () =>
     ctx.think({

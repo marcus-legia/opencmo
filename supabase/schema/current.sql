@@ -13355,7 +13355,10 @@ begin
       -- The CMO chat's thumbs (20270103010000).
       or (p_bucket = 'feedback-turn' and p_limit = 60 and p_window_seconds = 3600)
       -- The Composer's context (20270206010000): each call may read a sub's rules from Reddit.
-      or (p_bucket = 'composer' and p_limit = 120 and p_window_seconds = 3600);
+      or (p_bucket = 'composer' and p_limit = 120 and p_window_seconds = 3600)
+      -- Reads the Composer pays a provider for (a sub not in the week's cache, the founder's post search): a paid
+      -- account only, 30 a day (security review 2026-11-25).
+      or (p_bucket = 'composer-read' and p_limit = 30 and p_window_seconds = 86400);
   end if;
 
   if not v_allowed then

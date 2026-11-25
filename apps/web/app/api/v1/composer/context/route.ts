@@ -6,7 +6,7 @@ import { supabaseStore } from "@/lib/cmo/jobs/store";
 import { think } from "@/lib/cmo/jobs/think";
 import { SocialReadError } from "@/lib/cmo/social/scrapecreators";
 import { postsIn, readiness } from "@/lib/composer/account";
-import { readSubreddit } from "@/lib/composer/rules";
+import { cachedSubreddit, readSubreddit, subName } from "@/lib/composer/rules";
 import { COMPOSE_PLATFORMS, type AccountContext, type ComposerContext, type SubredditContext } from "@/lib/composer/types";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -33,16 +33,29 @@ export const GET = withApi({ rateLimit: { bucket: "composer", limit: 120, window
     lastPostInSubAt: null,
   };
   let sub: SubredditContext | null = null;
+  let searchPosts = false;
   if (platform === "reddit" && subreddit) {
+    if (!subName(subreddit)) throw new ApiError(400, "Use a subreddit name like SaaS.");
+    const ctx = { store: supabaseStore(createAdminClient()), think, now: new Date() };
+    // A sub not in the week's cache, and the founder's post search, cost a provider (and the model for the guide): a
+    // paid account only, 30 a day (security review 2026-11-25). A cached sub is free for everyone.
+    const cached = await cachedSubreddit(ctx, subreddit);
+    const paid = !(await supabase.rpc("cmo_require_paid", { p_user: user.id })).error;
+    if (!cached && !paid) throw new ApiError(402, "Pick a plan to read a new community's rules.");
+    searchPosts = paid && Boolean(account.username);
+    if (paid && (!cached || searchPosts)) {
+      const { data: allowed, error: limited } = await supabase.rpc("rate_limit_hit", { p_bucket: "composer-read", p_limit: 30, p_window_seconds: 86400 });
+      if (limited || allowed === false) throw new ApiError(429, "You checked 30 communities today. Try again tomorrow.");
+    }
     try {
-      sub = await readSubreddit({ store: supabaseStore(createAdminClient()), think, now: new Date() }, subreddit);
+      sub = await readSubreddit(ctx, subreddit);
     } catch (error) {
       if (error instanceof RangeError) throw new ApiError(400, error.message);
       if (error instanceof SocialReadError) throw new ApiError(502, "Reddit did not answer. Try again in a minute.");
       throw error;
     }
     // The founder's posts in the sub: a search that fails only leaves the count at 0.
-    if (account.username) Object.assign(account, await postsIn(account.username, sub.name).catch(() => ({ postsInSub: 0, lastPostInSubAt: null })));
+    if (searchPosts && account.username) Object.assign(account, await postsIn(account.username, sub.name).catch(() => ({ postsInSub: 0, lastPostInSubAt: null })));
   }
   const context: ComposerContext = { platform, subreddit: sub, account, readiness: platform === "reddit" ? readiness(sub, account) : { level: "ready", reasons: [] } };
   return context;

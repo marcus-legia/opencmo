@@ -5,7 +5,7 @@
  */
 import { z } from "zod";
 
-import { readCommunityRules, type RulesContext } from "../cmo/jobs/sales-scan";
+import { RULES_FRESH_MS, readCommunityRules, type RulesContext } from "../cmo/jobs/sales-scan";
 import { cleanUntrusted, escapeAttribute, escapeForTag } from "../cmo/untrusted";
 
 import type { SubRule, SubredditContext } from "./types";
@@ -93,6 +93,14 @@ export function subName(raw: string): string | null {
  * The sub for the Composer: rules read (or from the week's cache), then the guide (made once per read of the rules).
  * Throws `SocialReadError` when Reddit cannot be read and nothing is cached.
  */
+/** Whether the sub's rules and guide are in the week's cache: reading them costs nothing (no provider, no model). */
+export async function cachedSubreddit(ctx: Pick<RulesContext, "store" | "now">, raw: string): Promise<boolean> {
+  const name = subName(raw);
+  if (!name) return false;
+  const row = await ctx.store.subredditRule(name);
+  return Boolean(row && row.guide && ctx.now.getTime() - new Date(row.read_at).getTime() < RULES_FRESH_MS);
+}
+
 export async function readSubreddit(ctx: RulesContext & { store: RulesContext["store"] }, raw: string): Promise<SubredditContext> {
   const name = subName(raw);
   if (!name) throw new RangeError("Use a subreddit name like SaaS.");
