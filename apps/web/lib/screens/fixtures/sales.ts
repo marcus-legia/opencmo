@@ -5,9 +5,10 @@ export const salesFixture: SalesScreen = {
   free: false,
   freeScansDone: 0,
   lastScan: { cards: 6, platforms: ["reddit", "hn", "facebook", "threads"], failed: [], free: false, queries: ["edit product demo video", "screen recording editor for founders"], scanned: 48, verdict: "found", at: at("2026-10-29", "06:00") },
+  scans: [{ no: 1, at: at("2026-10-29", "06:00"), cards: 6, verdict: "found" }],
   mentions: { used: 0, window: 10 },
   stuck: { text: "Your last two scans found no conversation worth joining. Try a different brief, or fewer excluded subreddits.", creditsToFinish: 5, found: 0 },
-  threads: [
+  threads: ([
     {
       id: "t-1",
       score: 78,
@@ -40,9 +41,9 @@ export const salesFixture: SalesScreen = {
     { id: "t-5", platform: "facebook", score: 69, community: "SaaS Founders Network", postedAt: at("2026-10-28", "15:20"), comments: 23, title: "How are you all making demo videos without a video person?", url: "https://www.facebook.com/groups/saasfounders/posts/1234567890/", rule: { kind: "help_only", text: "Facebook group: rules not read, help only" }, parts: [], quotes: [], draft: null, draftChecks: null, drafted: false, status: "open", approvalId: null },
     { id: "t-6", platform: "threads", score: 64, community: "Threads", postedAt: at("2026-10-28", "08:05"), comments: 7, title: "Recording product demos is eating my whole week", url: "https://www.threads.com/@samplefounder/post/C9sample123", rule: { kind: "help_only", text: "Threads: help only, no product mention" }, parts: [], quotes: [], draft: null, draftChecks: null, drafted: false, status: "open", approvalId: null },
     { id: "t-4", platform: "reddit", score: 61, community: "r/marketing", postedAt: at("2026-10-26", "10:00"), comments: null, title: "Do AI captions hurt reach?", url: "https://www.reddit.com/r/marketing/comments/sample4/", rule: { kind: "skipped", text: "Skipped: subreddit bans tool mentions" }, parts: [], quotes: [], draft: null, draftChecks: null, drafted: true, status: "open", approvalId: null },
-  ],
+  ] as SalesScreen["threads"]).map((t, i) => ({ ...t, scanNo: 1, no: `1.${i + 1}`, ...(i === 0 ? { usedIn: [{ no: 2, id: "00000000-0000-4000-8000-0000000000d2" }] } : {}) })),
   week: { replied: 1, dismissed: 3 },
   settings: { excludedSubreddits: ["memes"], pairs: [["video", "editor"]], platforms: ["reddit", "hn", "facebook", "threads"] },
 };
 
-export const salesEmpty: SalesScreen = { free: false, freeScansDone: 0, lastScan: null, mentions: { used: 0, window: 10 }, stuck: null, threads: [], week: { replied: 0, dismissed: 0 }, settings: { excludedSubreddits: [], pairs: [], platforms: ["reddit", "hn", "facebook", "threads"] } };
+export const salesEmpty: SalesScreen = { free: false, freeScansDone: 0, lastScan: null, scans: [], mentions: { used: 0, window: 10 }, stuck: null, threads: [], week: { replied: 0, dismissed: 0 }, settings: { excludedSubreddits: [], pairs: [], platforms: ["reddit", "hn", "facebook", "threads"] } };

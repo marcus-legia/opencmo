@@ -33,6 +33,7 @@ import type { DashboardScreen } from "./dashboard";
 import { SKILL_READERS, type LibraryScreen } from "./library";
 import type { RailStatus } from "./rail";
 import type { ResearchScreen } from "./research";
+import { numbersFromNewest, personNumbers, usedIn, type PersonRow, type PostRow } from "./numbering";
 import type { SalesScan, SalesScreen } from "./sales";
 import { SALES_PLATFORMS, type SalesPlatform } from "../cmo/social/conversations";
 import { LibraryEntrySchema } from "../cmo/library";
@@ -1067,6 +1068,7 @@ async function sourceLinks(supabase: LoadContext["supabase"], ids: string[]): Pr
 }
 
 async function writer({ supabase }: LoadContext): Promise<Partial<WriterScreen>> {
+  const index = indexOf(supabase);
   return parts<WriterScreen>("writer", {
     // Posts on their own platform, captions per platform (P3 A2: video words for one edit), and the briefs Writer
     // wrote for Studio, over the last two weeks.
@@ -1117,9 +1119,10 @@ async function writer({ supabase }: LoadContext): Promise<Partial<WriterScreen>>
       const dayText = (day: string) => WEEKDAY[new Date(`${day}T00:00:00Z`).getUTCDay()]!;
       const batchOf = new Map((must(shorts, "shorts") as { short_clip_id: string; batch_id: string }[]).map((s) => [s.short_clip_id, s.batch_id]));
       const postRows = must(posts, "content_items") as ItemRow[];
-      const [connected, links] = await Promise.all([
+      const [connected, links, { people, posts: postNo }] = await Promise.all([
         connectedSet(supabase),
         sourceLinks(supabase, postRows.flatMap((r) => storedSources(r.body as Record<string, unknown>).map((s) => s.opportunityId))),
+        index,
       ]);
       // A core post goes to every platform of its slot (`body.targets`): it goes out on its own only when all are connected.
       const targetsOf = new Map(postRows.map((r) => {
@@ -1131,6 +1134,7 @@ async function writer({ supabase }: LoadContext): Promise<Partial<WriterScreen>>
         const edited = r.final_text !== null && r.final_text !== r.body.text;
         return {
           id: r.id,
+          ...(postNo.has(r.id) ? { no: postNo.get(r.id)! } : {}),
           kind: "post" as const,
           platform: screenPlatform(r.platform, "x"),
           at: iso(r.published_at ?? (r.status === "approved" ? (goesOut.get(r.id) ?? null) : null)),
@@ -1143,7 +1147,7 @@ async function writer({ supabase }: LoadContext): Promise<Partial<WriterScreen>>
           ...cardOf(r.status, cards.get(r.id)),
           ref: { kind: "content_item" as const, id: r.id },
           text: (r.final_text ?? text).slice(0, 5000),
-          sources: storedSources(r.body as Record<string, unknown>).map((src) => ({ ...src, url: links.get(src.opportunityId) ?? null })),
+          sources: storedSources(r.body as Record<string, unknown>).map((src) => ({ ...src, url: links.get(src.opportunityId) ?? null, ref: people.get(src.opportunityId) ?? null })),
         };
       });
       type VideoSlot = { platform: string; status: string; publish_at: string; published_at: string | null; approval_id: string | null; error: { message?: string } | null; deliverable: { ref_kind: string; ref_id: string } };
@@ -1421,7 +1425,37 @@ function toLastScan(output: unknown, at: string): SalesScan | null {
   };
 }
 
+/**
+ * The Sales ↔ Post index (owner, 2026-11-25), read under RLS: Scan #n, person n.k, Post #m and which posts each person
+ * fed. Each read is the newest page with an exact count, so the rows on screen keep their numbers however many there
+ * are, and only the columns the numbers need. Any read that fails or throws gives an empty index: rows show without
+ * numbers rather than failing the screen.
+ */
+const EMPTY_INDEX = { scans: new Map<string, number>(), people: new Map<string, string>(), posts: new Map<string, number>(), usedIn: new Map<string, { no: number; id: string }[]>() };
+async function indexOf(supabase: LoadContext["supabase"]): Promise<typeof EMPTY_INDEX> {
+  try {
+    const [scanRes, postRes] = await Promise.all([
+      supabase.from("cmo_runs").select("id", { count: "exact" }).eq("kind", "sales_scan").eq("status", "done").order("finished_at", { ascending: false, nullsFirst: false }).limit(100),
+      supabase.from("content_items").select("id, created_at, sources:body->sources", { count: "exact" }).eq("department", "post").order("created_at", { ascending: false }).limit(1000),
+    ]);
+    if (scanRes.error || postRes.error) return EMPTY_INDEX;
+    const scanRows = (scanRes.data ?? []) as { id: string }[];
+    const scans = numbersFromNewest(scanRows, scanRes.count ?? scanRows.length);
+    const peopleRes = scanRows.length
+      ? await supabase.from("opportunities").select("id, run_id, score, created_at").in("run_id", scanRows.map((r) => r.id)).limit(2000)
+      : { data: [], error: null };
+    const people = personNumbers(peopleRes.error ? [] : ((peopleRes.data ?? []) as PersonRow[]), scans);
+    const postRows = (postRes.data ?? []) as PostRow[];
+    const posts = numbersFromNewest(postRows, postRes.count ?? postRows.length);
+    return { scans, people, posts, usedIn: usedIn(postRows, posts) };
+  } catch (error) {
+    console.error("[screens] index not read", error);
+    return EMPTY_INDEX;
+  }
+}
+
 async function sales({ supabase, userId }: LoadContext): Promise<Partial<SalesScreen>> {
+  const index = indexOf(supabase);
   // SQL `cmo_paid`: a paid plan or credits left. Read once; the threads wait on it so an unpaid account's rows are read
   // without the reply column, and a failed read fails the threads too rather than sending text that was not paid for.
   const paid = (async () => {
@@ -1443,7 +1477,8 @@ async function sales({ supabase, userId }: LoadContext): Promise<Partial<SalesSc
     },
     threads: async () => {
       const free = !(await paid);
-      const base = "id, platform, url, community, title, author, snippet, posted_at, comments, score, score_parts, status, rule, rule_why, min_karma, min_account_age_days, person_status, status_at, reply_url, replied_at, reach_level, reach";
+      const base = "id, run_id, platform, url, community, title, author, snippet, posted_at, comments, score, score_parts, status, rule, rule_why, min_karma, min_account_age_days, person_status, status_at, reply_url, replied_at, reach_level, reach";
+      const { scans, people, usedIn: fed } = await index;
       // The DM and nudge drafts are written work, like the reply: an unpaid account's rows are read without them.
       const columns = free ? base : `${base}, reply, dm_draft, nudge_draft`;
       // Free: whether a reply exists is all the screen needs, and the reply itself stays in the database.
@@ -1459,7 +1494,7 @@ async function sales({ supabase, userId }: LoadContext): Promise<Partial<SalesSc
       type Part = { label?: string; score?: number; max?: number; evidence?: string };
       const seen = new Set<string>();
       const rows = [...(must(newest, "opportunities") as unknown as { id: string }[]), ...(must(followed, "opportunities") as unknown as { id: string }[])].filter((r) => !seen.has(r.id) && seen.add(r.id));
-      return (rows as unknown as { id: string; platform: string | null; url: string; community: string; title: string; author: string | null; snippet: string | null; posted_at: string | null; comments: number; score: number; score_parts: Part[] | null; reply?: string | null; status: "in_review" | "replied" | "dismissed"; rule: string | null; rule_why: string | null; min_karma: number | null; min_account_age_days: number | null; person_status: string; status_at: string | null; reply_url: string | null; replied_at: string | null; reach_level: string; reach: unknown; dm_draft?: string | null; nudge_draft?: string | null }[])
+      return (rows as unknown as { id: string; run_id: string | null; platform: string | null; url: string; community: string; title: string; author: string | null; snippet: string | null; posted_at: string | null; comments: number; score: number; score_parts: Part[] | null; reply?: string | null; status: "in_review" | "replied" | "dismissed"; rule: string | null; rule_why: string | null; min_karma: number | null; min_account_age_days: number | null; person_status: string; status_at: string | null; reply_url: string | null; replied_at: string | null; reach_level: string; reach: unknown; dm_draft?: string | null; nudge_draft?: string | null }[])
         .map((r) => {
           const kind = salesRuleKind(r.rule);
           // A free account never holds reply text (free-scan plan): `reply` was not selected for it.
@@ -1480,6 +1515,9 @@ async function sales({ supabase, userId }: LoadContext): Promise<Partial<SalesSc
             body: (r.snippet ?? "").slice(0, 1500),
             author: (r.author ?? "").slice(0, 100),
             url: r.url,
+            ...(people.has(r.id) ? { no: people.get(r.id)! } : {}),
+            ...(r.run_id && scans.has(r.run_id) ? { scanNo: scans.get(r.run_id)! } : {}),
+            ...(fed.has(r.id) ? { usedIn: fed.get(r.id)!.slice(0, 10) } : {}),
             // P5 R1: the rule the draft was written under. Threads from before it are help first, no product mention.
             rule: {
               kind,
@@ -1510,6 +1548,18 @@ async function sales({ supabase, userId }: LoadContext): Promise<Partial<SalesSc
           };
         })
         .sort((a, b) => Number(b.status === "open") - Number(a.status === "open"));
+    },
+    scans: async () => {
+      const [{ scans }, r] = await Promise.all([
+        index,
+        supabase.from("cmo_runs").select("id, output, finished_at, created_at").eq("kind", "sales_scan").eq("status", "done").order("finished_at", { ascending: false, nullsFirst: false }).limit(50),
+      ]);
+      if (r.error) throw new Error(`cmo_runs: ${r.error.message}`);
+      return ((r.data ?? []) as { id: string; output: unknown; finished_at: string | null; created_at: string }[]).flatMap((row) => {
+        const no = scans.get(row.id);
+        const o = toLastScan(row.output, row.finished_at ?? row.created_at);
+        return no ? [{ no, at: new Date(row.finished_at ?? row.created_at).toISOString(), cards: o?.cards ?? 0, verdict: o?.verdict ?? ("none" as const) }] : [];
+      });
     },
     week: async () => {
       const monday = `${mondayOf()}T00:00:00Z`;

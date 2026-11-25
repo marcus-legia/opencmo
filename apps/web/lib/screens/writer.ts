@@ -22,10 +22,14 @@ export const DraftSourceSchema = z.object({
   community: z.string().max(120),
   /** The thread's address, so the founder can read it again (owner, 2026-11-24); null when it could not be read. */
   url: z.url({ protocol: /^https?$/ }).max(2000).nullable().optional(),
+  /** Where it sits in the Sales index ("3.1", Scan #3): the link back to the person (owner, 2026-11-25). */
+  ref: z.string().max(12).nullable().optional(),
 });
 
 export const DraftSchema = z.object({
   id: z.string(),
+  /** Post #n, oldest first (owner, 2026-11-25); posts only. */
+  no: z.number().int().positive().optional(),
   kind: z.enum(WRITER_KINDS),
   platform: PlatformSchema,
   /** When it goes out (or went out); null while drafting without a slot. */

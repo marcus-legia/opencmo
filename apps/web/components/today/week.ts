@@ -71,3 +71,27 @@ export function dayLabel(d: Draft): string | null {
   if (!d.day || dayStart(d.day) >= thisMonday()) return d.dayText;
   return new Date(dayStart(d.day)).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
 }
+
+export const POST_SECTIONS = [
+  { id: "new", label: "New drafts", empty: "No new drafts. The next one comes with the plan's next day." },
+  { id: "approved", label: "Approved", empty: "Nothing approved waits to go out." },
+  { id: "posted", label: "Posted", empty: "Nothing posted in the last two weeks." },
+  { id: "planned", label: "Planned", empty: "Nothing planned yet." },
+] as const;
+export type PostSectionId = (typeof POST_SECTIONS)[number]["id"];
+
+const when = (d: Draft) => d.at ?? (d.day ? `${d.day}T00:00:00Z` : "");
+
+/**
+ * Writer's index (owner, 2026-11-25): a section per stage, "New drafts" newest first (a draft just written is on top),
+ * "Approved" in the order they go out, "Posted" newest first, "Planned" by day.
+ */
+export function postSections(drafts: Draft[]): Record<PostSectionId, Draft[]> {
+  const pick = (cols: Draft["column"][]) => drafts.filter((d) => cols.includes(d.column));
+  return {
+    new: pick(["waiting"]).sort((a, b) => (b.no ?? 0) - (a.no ?? 0) || when(b).localeCompare(when(a))),
+    approved: pick(["scheduled"]).sort((a, b) => when(a).localeCompare(when(b))),
+    posted: pick(["posted"]).sort((a, b) => when(b).localeCompare(when(a))),
+    planned: pick(["planned", "drafting"]).sort((a, b) => when(a).localeCompare(when(b))),
+  };
+}

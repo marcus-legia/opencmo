@@ -5,7 +5,7 @@
  */
 import assert from "node:assert/strict";
 
-import { oldDays, ruleHeadline } from "./sales-card";
+import { oldDays, ruleHeadline, scanSections } from "./sales-card";
 
 const help = { rule: { kind: "help_only" as const, text: "" }, platform: "reddit" as const, person: undefined, postedAt: null };
 assert.equal(ruleHeadline(help), "Help only · don't promote · DM them later");
@@ -26,4 +26,24 @@ assert.equal(oldDays("2026-11-11T12:00:00Z", now), null, "13 days is not old");
 assert.equal(oldDays("2026-10-28T12:00:00Z", now), 27);
 assert.equal(oldDays(null, now), null);
 assert.equal(oldDays("not a date", now), null);
+// The index's sections (owner, 2026-11-25): newest scan first, people in number order, an empty scan between listed
+// ones kept, an empty scan older than every listed one dropped, unnumbered people last.
+const scans = [
+  { no: 1, at: "2026-11-21T00:00:00Z", cards: 0, verdict: "none" as const },
+  { no: 2, at: "2026-11-23T00:00:00Z", cards: 2, verdict: "found" as const },
+  { no: 3, at: "2026-11-24T00:00:00Z", cards: 0, verdict: "none" as const },
+  { no: 4, at: "2026-11-25T00:00:00Z", cards: 1, verdict: "found" as const },
+];
+const sections = scanSections(
+  [{ id: "a", scanNo: 2, no: "2.2" }, { id: "b", scanNo: 2, no: "2.1" }, { id: "c", scanNo: 4, no: "4.1" }, { id: "d" }],
+  scans,
+);
+assert.deepEqual(sections.map((s) => [s.key, s.threads.map((t) => t.id)]), [["scan-4", ["c"]], ["scan-3", []], ["scan-2", ["b", "a"]], ["earlier", ["d"]]]);
+assert.deepEqual(scanSections([], scans), [], "no people: no sections (the empty-state copy shows)");
+// Review 2026-11-25: open people first within a scan; a scan that found people not loaded here is left out.
+const ordered = scanSections(
+  [{ id: "x", scanNo: 2, no: "2.1", status: "replied" }, { id: "y", scanNo: 2, no: "2.2", status: "open" }, { id: "z", scanNo: 4, no: "4.1", status: "open" }],
+  [...scans.slice(0, 2), { no: 3, at: "2026-11-24T00:00:00Z", cards: 3, verdict: "found" as const }, scans[3]!],
+);
+assert.deepEqual(ordered.map((s) => [s.key, s.threads.map((t) => t.id)]), [["scan-4", ["z"]], ["scan-2", ["y", "x"]]]);
 console.log("sales-card: ok");

@@ -2,7 +2,7 @@
 
 import { OWN_ENOUGH, ownShare } from "@/lib/cmo/idea";
 import { STRONG_MATCH, matchLabel } from "@/lib/cmo/match";
-import { oldDays, ruleHeadline } from "@/lib/cmo/sales-card";
+import { oldDays, ruleHeadline, scanSections } from "@/lib/cmo/sales-card";
 import { bare, isTheirWords } from "@/lib/cmo/quote";
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -557,7 +557,7 @@ function ThreadRow({ t, free, open, onToggle, onBack, onPlan, onDecide, onSent }
   }
 
   return (
-    <div className={onBack ? "th th-person" : "th"} data-open={open} data-thread={t.id} role={onBack ? undefined : "listitem"}>
+    <div className={onBack ? "th th-person" : "th"} data-open={open} data-thread={t.id} id={onBack ? undefined : `thread-${t.id}`} role={onBack ? undefined : "listitem"}>
       {onBack ? (
         <>
           <div className="th-phonehead">
@@ -577,7 +577,14 @@ function ThreadRow({ t, free, open, onToggle, onBack, onPlan, onDecide, onSent }
       <button type="button" className="row" onClick={onToggle} aria-expanded={open} hidden={Boolean(onBack)}>
         {hasLogo(t.platform) ? <PlatformBadge platform={t.platform} size={30} label={PLATFORM_LABEL[t.platform]} dim={done} /> : null}
         <span style={{ flex: "1 1 auto", minWidth: "0" }}>
-          <span style={{ display: "block", fontSize: "14.5px", fontWeight: "600", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: done ? "var(--muted)" : undefined }}>{t.title}</span>
+          <span style={{ display: "block", fontSize: "14.5px", fontWeight: "600", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: done ? "var(--muted)" : undefined }}>
+            {t.no ? (
+              <span className="idx-no" data-testid="sales-no">
+                {t.no}
+              </span>
+            ) : null}
+            {t.title}
+          </span>
           <span className="meta icon-meta">
             {t.community !== PLATFORM_LABEL[t.platform] ? <span>{t.community}</span> : null}
             {t.postedAt ? (
@@ -605,6 +612,7 @@ function ThreadRow({ t, free, open, onToggle, onBack, onPlan, onDecide, onSent }
                 {t.status === "replied" ? "Replied" : "Dismissed"}
               </span>
             ) : null}
+            {t.usedIn?.length ? <span style={{ fontWeight: "600" }}>↳ Post #{t.usedIn.map((p) => p.no).join(", #")}</span> : null}
           </span>
           {lead && !open && !done ? (
             <span className="quote" style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", marginTop: "6px", fontSize: "13.5px" }}>
@@ -621,6 +629,16 @@ function ThreadRow({ t, free, open, onToggle, onBack, onPlan, onDecide, onSent }
       </button>
       {open ? (
         <div className="th-body">
+          {t.usedIn?.length ? (
+            <div className="idx-links" data-testid="sales-used-in">
+              <span className="meta">Used in</span>
+              {t.usedIn.map((p) => (
+                <a key={p.id} className="idx-link" href={`/app/writer#post-${p.id}`}>
+                  Post #{p.no} →
+                </a>
+              ))}
+            </div>
+          ) : null}
           <TheirPost t={t} />
           {oldDays(t.postedAt) !== null ? (
             <p className="meta" style={{ margin: "0" }} data-testid="sales-old-thread">
@@ -740,6 +758,23 @@ export function AgentSales() {
   const [threads, setThreads] = useState<Thread[] | null>(null);
   const [week, setWeek] = useState<SalesScreen["week"] | null>(null);
   const [open, setOpen] = useState<string | null>(null);
+  // A link from a post ("From Scan #3 · 3.1", `#thread-<id>`) opens that person once the list is in (2026-11-25).
+  const linked = useRef(false);
+  const [linkGone, setLinkGone] = useState(false);
+  useEffect(() => {
+    if (linked.current || !threads) return;
+    const id = window.location.hash.match(/^#thread-([0-9a-f-]{36})$/i)?.[1];
+    if (!id) return;
+    linked.current = true;
+    // The list holds the newest people: an older one linked from a post says so instead of doing nothing.
+    if (!threads.some((t) => t.id === id)) {
+      setLinkGone(true);
+      return;
+    }
+    setTab("threads");
+    setOpen(id);
+    requestAnimationFrame(() => document.getElementById(`thread-${id}`)?.scrollIntoView({ block: "start" }));
+  }, [threads]);
   const [error, setError] = useState<string | null>(null);
   const [runs, setRuns] = useState<{ id: string; at: string; text: string }[]>([]);
   const data = state.status === "ready" ? state.data : null;
@@ -1029,11 +1064,32 @@ export function AgentSales() {
             {live && undrafted > 0 ? <WriteReplies count={undrafted} busy={scanActive(scan) && scan.kind === "sales_reply_drafts"} onPlan={setPlanFor} onStarted={startedScan} /> : null}
             {list.length === 0 && data.lastScan?.verdict === "none" ? <NoOneAsked scan={data.lastScan} onEdit={openSettings} freeLeft={freeLeft} /> : null}
             {list.length === 0 && data.lastScan?.verdict !== "none" ? <div className="meta">No threads yet. Sales scans the communities your customers use and scores what it finds.</div> : null}
-            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }} role={list.length ? "list" : undefined} aria-label={list.length ? "Threads" : undefined}>
-              {list.map((t) => (
-                <ThreadRow key={t.id} t={t} free={free} open={open === t.id} onToggle={() => setOpen(open === t.id ? null : t.id)} onPlan={setPlanFor} onDecide={decide} onSent={(x, via) => decide(x, "replied", undefined, undefined, false, via)} />
-              ))}
-            </div>
+            {linkGone ? (
+              <p className="meta" role="status" data-testid="sales-link-gone">
+                The person that post was written from is older than this list, so it is not shown here.
+              </p>
+            ) : null}
+            {/* The index (owner, 2026-11-25): a section per scan, Scan #n, its people numbered n.k. */}
+            {scanSections(list, data.scans ?? []).map((section) => (
+              <section key={section.key} className="idx-section" aria-label={section.scan ? `Scan ${section.scan.no}` : "Earlier"} data-testid="sales-scan-section">
+                <h2 className="idx-head">
+                  <span>{section.scan ? `Scan #${section.scan.no}` : "Earlier"}</span>
+                  <span className="meta">
+                    {section.scan?.at ? `${runTime(section.scan.at)} · ` : ""}
+                    {section.threads.length
+                      ? `${section.threads.length} ${section.threads.length === 1 ? "person" : "people"}`
+                      : "no one worth a reply, credits given back"}
+                  </span>
+                </h2>
+                {section.threads.length ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }} role="list" aria-label={section.scan ? `Threads, Scan ${section.scan.no}` : "Threads, earlier"}>
+                    {section.threads.map((t) => (
+                      <ThreadRow key={t.id} t={t} free={free} open={open === t.id} onToggle={() => setOpen(open === t.id ? null : t.id)} onPlan={setPlanFor} onDecide={decide} onSent={(x, via) => decide(x, "replied", undefined, undefined, false, via)} />
+                    ))}
+                  </div>
+                ) : null}
+              </section>
+            ))}
           </>
         ) : null}
 
