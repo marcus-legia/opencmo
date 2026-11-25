@@ -3,14 +3,11 @@
  */
 import assert from "node:assert/strict";
 
-import { numbersFromNewest, personNumbers, postNumbers, scanNumbers, sourceIds, usedIn } from "./numbering";
+import { numbersFromNewest, personNumbers, sourceIds, usedIn } from "./numbering";
 
-const scans = scanNumbers([
-  { id: "s2", created_at: "2026-11-24T10:00:00Z" },
-  { id: "s1", created_at: "2026-11-23T10:00:00Z" },
-  { id: "s3", created_at: "2026-11-25T10:00:00Z" },
-]);
-assert.deepEqual([...scans], [["s1", 1], ["s2", 2], ["s3", 3]], "Scan #1 is the oldest");
+// The reads come newest first: the newest scan is #1 (owner, 2026-11-25).
+const scans = numbersFromNewest([{ id: "s3" }, { id: "s2" }, { id: "s1" }]);
+assert.deepEqual([...scans], [["s3", 1], ["s2", 2], ["s1", 3]], "Scan #1 is the newest");
 
 const people = personNumbers(
   [
@@ -22,9 +19,9 @@ const people = personNumbers(
   ],
   scans,
 );
-assert.equal(people.get("b"), "3.1", "best score first within a scan");
-assert.equal(people.get("a"), "3.2");
-assert.equal(people.get("c"), "1.1");
+assert.equal(people.get("b"), "1.1", "best score first within a scan");
+assert.equal(people.get("a"), "1.2");
+assert.equal(people.get("c"), "3.1");
 assert.ok(!people.has("d") && !people.has("e"), "no scan, no number");
 
 const posts = [
@@ -32,12 +29,11 @@ const posts = [
   { id: "p1", created_at: "2026-11-24T08:00:00Z", sources: [{ opportunityId: "b" }, { opportunityId: "c" }] },
   { id: "p3", created_at: "2026-11-26T08:00:00Z", sources: "not a list" },
 ];
-const numbers = postNumbers(posts);
-assert.deepEqual([...numbers], [["p1", 1], ["p2", 2], ["p3", 3]], "Post #1 is the oldest");
+const numbers = numbersFromNewest([posts[2]!, posts[0]!, posts[1]!]);
+assert.deepEqual([...numbers], [["p3", 1], ["p2", 2], ["p1", 3]], "Post #1 is the newest");
 const used = usedIn(posts, numbers);
-assert.deepEqual(used.get("b"), [{ no: 2, id: "p2" }, { no: 1, id: "p1" }], "newest post first, once per post");
-assert.deepEqual(used.get("c"), [{ no: 1, id: "p1" }]);
+assert.deepEqual(used.get("b"), [{ no: 2, id: "p2" }, { no: 3, id: "p1" }], "newest post first, once per post");
+assert.deepEqual(used.get("c"), [{ no: 3, id: "p1" }]);
 assert.deepEqual(sourceIds([{ opportunityId: 4 }, null, { opportunityId: "x" }]), ["x"]);
-assert.deepEqual([...numbersFromNewest([{ id: "n" }, { id: "m" }], 2100)], [["n", 2100], ["m", 2099]], "a page of the newest rows keeps their real numbers");
-assert.deepEqual([...numbersFromNewest([{ id: "n" }], 0)], [["n", 1]], "a missing count still numbers the page");
+assert.deepEqual([...numbersFromNewest([{ id: "n" }, { id: "m" }])], [["n", 1], ["m", 2]], "the newest is #1 (owner, 2026-11-25)");
 console.log("numbering: ok");

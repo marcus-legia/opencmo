@@ -55,18 +55,19 @@ export function scanSections<T extends { scanNo?: number; no?: string; status?: 
     if (t.scanNo) byScan.set(t.scanNo, [...(byScan.get(t.scanNo) ?? []), t]);
     else loose.push(t);
   }
-  const oldestListed = Math.min(...[...byScan.keys()], Number.MAX_SAFE_INTEGER);
+  const oldestListed = Math.max(...[...byScan.keys()], 0);
   const sections: ScanSection<T>[] = [];
   const known = new Set<number>();
-  for (const scan of [...scans].sort((a, b) => b.no - a.no)) {
+  // Scan #1 is the newest: sections in number order put it on top.
+  for (const scan of [...scans].sort((a, b) => a.no - b.no)) {
     known.add(scan.no);
     const list = (byScan.get(scan.no) ?? []).sort(order);
     // An empty section only for a scan that found no one: one whose people are just not loaded is left out.
-    const emptyRun = scan.verdict === "none" && oldestListed !== Number.MAX_SAFE_INTEGER && scan.no > oldestListed;
+    const emptyRun = scan.verdict === "none" && oldestListed > 0 && scan.no < oldestListed;
     if (list.length || emptyRun) sections.push({ key: `scan-${scan.no}`, scan, threads: list });
   }
   // A scan the list has people from but the scans read did not return (it is older than the ones kept).
-  for (const [no, list] of [...byScan].sort((a, b) => b[0] - a[0])) {
+  for (const [no, list] of [...byScan].sort((a, b) => a[0] - b[0])) {
     if (!known.has(no)) sections.push({ key: `scan-${no}`, scan: { no, at: "", cards: list.length, verdict: "found" }, threads: list.sort(order) });
   }
   if (loose.length) sections.push({ key: "earlier", scan: null, threads: loose });
