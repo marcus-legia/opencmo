@@ -77,6 +77,9 @@ function screenFor(segment: string | null): Screen {
     // Post's list view: the drafts and posts, with a List / Week switch.
     case "writer":
       return { page: "main", view: "agentwriter", top: { kind: "views", current: "post" }, chat: "column" };
+    // The Composer: the founder writes a post, Ferreto checks it (2026-11-25). Part of Post, in Post's frame.
+    case "compose":
+      return { page: "main", view: "agentwriter", top: { kind: "views", current: "post" }, chat: "column" };
     case "studio":
     case "projects":
     case "jobs":

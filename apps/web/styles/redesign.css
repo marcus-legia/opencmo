@@ -219,3 +219,48 @@ dialog.v2-dialog.up-sheet { width: min(520px, calc(100vw - 24px)); max-height: c
 .their-post-more { align-self: flex-start; padding: 0; border: 0; background: none; color: var(--sec-find); font-size: 13px; font-weight: 600; cursor: pointer; }
 .their-post-open { font-size: 14px; font-weight: 600; color: var(--sec-find); text-decoration: none; }
 .their-post-open:hover { text-decoration: underline; }
+
+/* The Composer (2026-11-25): the founder writes; the "Before you write" card, the editor with flagged lines underlined,
+   the checks beside it. The underline is a backdrop drawn behind a transparent textarea with the same font and wrap. */
+.cmp { display: flex; flex-wrap: wrap; gap: 24px; max-width: 1320px; margin: 0 auto; padding: 22px 24px 40px; }
+.cmp-main { flex: 999 1 600px; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+.cmp-side { flex: 1 1 300px; max-width: 380px; display: flex; flex-direction: column; gap: 14px; }
+.cmp-intro { margin: 4px 0 0; }
+.cmp-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.cmp-platforms { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.cmp-inline { display: inline-flex; align-items: center; gap: 2px; height: 38px; padding: 0 10px; border: 1.5px solid var(--line-2); border-radius: 11px; background: var(--panel); font-size: 14px; color: var(--muted); }
+.cmp-inline input { width: 140px; border: 0; outline: 0; background: transparent; color: var(--text); font: inherit; }
+.cmp-inline:focus-within { border-color: var(--sec, var(--accent)); }
+.cmp-h2 { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: 14px; font-weight: 650; }
+.cmp-before { display: flex; flex-direction: column; gap: 8px; }
+.cmp-before p { margin: 0; }
+.cmp-line { font-size: 13.5px; line-height: 1.5; }
+.cmp-reasons { margin: 0; padding: 8px 12px 8px 28px; border-radius: 10px; background: var(--warn-wash, #f8eedc); font-size: 13.5px; }
+.cmp-rules summary { cursor: pointer; font-size: 13.5px; }
+.cmp-rules li::marker { font-weight: 700; }
+.cmp-rules ol { margin: 6px 0 0; padding-left: 26px; list-style: decimal; display: flex; flex-direction: column; gap: 4px; font-size: 13.5px; }
+.cmp-guide { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; font-size: 13.5px; }
+.cmp-guide ul, .cmp-reasons { list-style: disc; }
+.cmp-guide ul { margin: 4px 0 0; padding-left: 18px; }
+.cmp-field { display: flex; flex-direction: column; gap: 4px; }
+.cmp-label { font-size: 13px; font-weight: 600; color: var(--muted); }
+.cmp-editor { position: relative; border: 1.5px solid var(--line-2); border-radius: 12px; background: var(--panel); }
+.cmp-editor:focus-within { border-color: var(--sec, var(--accent)); }
+.cmp-backdrop, .cmp-input { margin: 0; padding: 12px 14px; font-family: inherit; font-size: 15px; font-weight: 400; line-height: 1.6; letter-spacing: normal; white-space: pre-wrap; overflow-wrap: break-word; word-break: normal; tab-size: 4; }
+.cmp-backdrop { position: absolute; inset: 0; overflow: hidden; color: transparent; pointer-events: none; }
+.cmp-input { position: relative; display: block; width: 100%; min-height: 0; border: 0; outline: 0; resize: vertical; background: transparent; color: var(--text); caret-color: var(--text); }
+.cmp-editor[data-single] .cmp-input { resize: none; overflow: hidden; font-weight: 600; field-sizing: content; }
+.cmp-editor[data-single] .cmp-backdrop { font-weight: 600; }
+.cmp-mark { color: transparent; background: transparent; text-decoration: underline wavy var(--warn, #a86a12); text-decoration-skip-ink: none; text-underline-offset: 4px; }
+.cmp-mark[data-block] { text-decoration-color: #c2410c; background: rgb(194 65 12 / .08); border-radius: 3px; }
+.cmp-count { text-align: right; }
+.cmp-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
+.cmp-confirm { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; max-width: 560px; }
+.cmp-issues { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.cmp-issue { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border-radius: 10px; border-left: 3px solid var(--warn, #a86a12); background: var(--raised, #f1efeb); font-size: 13.5px; }
+.cmp-issue[data-severity="block"] { border-left-color: #c2410c; }
+.cmp-issue-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.cmp-quote { display: block; color: var(--text); font-style: italic; overflow-wrap: anywhere; }
+.cmp-suggest span { color: var(--text); }
+.cmp-issue-actions { display: flex; gap: 6px; margin-top: 2px; }
+@media (max-width: 640px) { .cmp { padding: 16px 16px 32px; } .cmp-inline input { width: 110px; } }

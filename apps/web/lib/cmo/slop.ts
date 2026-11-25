@@ -53,6 +53,11 @@ export function slopPatterns(text: string): SlopPattern[] {
   return NAMES.filter((name) => GATE[name].some((re) => re.test(text)));
 }
 
+/** What to do instead of a pattern, as one line (the Composer shows it under the founder's sentence). */
+export function slopFix(pattern: SlopPattern): string {
+  return FIX[pattern];
+}
+
 /** The patterns the founder's own writing uses: those are their voice and pass the gate for them. */
 export function founderPatterns(texts: readonly string[]): Set<SlopPattern> {
   const found = new Set<SlopPattern>();

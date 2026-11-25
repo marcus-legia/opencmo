@@ -5,6 +5,7 @@ import { STRONG_MATCH, matchLabel } from "@/lib/cmo/match";
 import { oldDays, ruleHeadline, scanSections } from "@/lib/cmo/sales-card";
 import { bare, isTheirWords } from "@/lib/cmo/quote";
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { Logs } from "@/app/api/v1/logs/route";
@@ -746,6 +747,22 @@ function ThreadRow({ t, free, open, onToggle, onBack, onPlan, onDecide, onSent }
  * no post button here, ever (CLAUDE.md, "Assist, never act"): Copy and open thread puts the draft on the clipboard and
  * opens the thread.
  */
+/**
+ * The subreddit most of a scan's Reddit threads are in: its "Write a post yourself" opens the Composer there
+ * (2026-11-25). Null when the scan found no one on Reddit.
+ */
+function composeSub(threads: readonly { platform: string; community: string }[]): string | null {
+  const counts = new Map<string, number>();
+  for (const t of threads) {
+    if (t.platform !== "reddit") continue;
+    const sub = t.community.trim().replace(/^\/?r\//i, "");
+    if (/^[A-Za-z0-9_]{2,21}$/.test(sub)) counts.set(sub, (counts.get(sub) ?? 0) + 1);
+  }
+  let best: string | null = null;
+  for (const [sub, n] of counts) if (best === null || n > counts.get(best)!) best = sub;
+  return best;
+}
+
 export function AgentSales() {
   const [state, reload] = useScreen("sales");
   const ws = useWorkspace();
@@ -1074,6 +1091,11 @@ export function AgentSales() {
               <section key={section.key} className="idx-section" aria-label={section.scan ? `Scan ${section.scan.no}` : "Earlier"} data-testid="sales-scan-section">
                 <h2 className="idx-head">
                   <span>{section.scan ? `Scan #${section.scan.no}` : "Earlier"}</span>
+                  {composeSub(section.threads) ? (
+                    <Link className="idx-link" href={`/app/compose?${new URLSearchParams({ platform: "reddit", sub: composeSub(section.threads)! })}`} data-testid="sales-write-yourself" style={{ marginLeft: "auto", order: 2 }}>
+                      Write a post yourself in r/{composeSub(section.threads)}
+                    </Link>
+                  ) : null}
                   <span className="meta">
                     {section.scan?.at ? `${runTime(section.scan.at)} · ` : ""}
                     {section.threads.length
