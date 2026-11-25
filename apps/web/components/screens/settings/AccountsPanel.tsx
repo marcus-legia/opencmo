@@ -10,6 +10,8 @@ import { useEffect, useState } from "react";
 
 import { ApiError, api, jsonBody } from "@/components/clipping/api";
 import { Button } from "@/components/ui";
+
+import { RedditAccountRow } from "./RedditAccountPanel";
 import { PLATFORM_LABEL, PLATFORMS, type Platform } from "@/lib/screens/common";
 import type { SettingsScreen } from "@/lib/screens/settings";
 
@@ -167,6 +169,11 @@ export function AccountsPanel({ accounts: given, live }: { accounts: Account[]; 
           })}
         </div>
       )}
+      {/* Reddit is a row like the others (owner, 2026-11-25), though Ferreto never signs in to it: the username only.
+          Outside the list's conditions: it reads and saves its own data, whatever the OAuth accounts show. */}
+      <div className="scr-accounts">
+        <RedditAccountRow />
+      </div>
       {confirming ? (
         <p className="v2-panel-body scr-small scr-muted">Disconnecting removes Ferreto's access to the account. Nothing is posted to it after that.</p>
       ) : null}

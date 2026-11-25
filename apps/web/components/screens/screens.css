@@ -336,7 +336,24 @@
 .scr-drawer-foot { margin-top: auto; }
 
 /* ---------------------------------------------------------------- Settings */
-.scr-accounts { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); }
+/* Sales scans: a radio row per choice, its name and its week (owner, 2026-11-25). */
+.scr-cadence { display: flex; flex-direction: column; gap: 6px; }
+.scr-cadence-row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 12px; border: 1px solid var(--v2-line); border-radius: 10px; background: transparent; color: var(--v2-ink); font: inherit; text-align: left; cursor: pointer; }
+.scr-cadence-row[aria-pressed="true"] { border-color: var(--sec-find, var(--v2-ink)); background: color-mix(in srgb, var(--sec-find, #6b7cff) 10%, transparent); }
+.scr-cadence-row:disabled { cursor: default; opacity: 0.7; }
+.scr-cadence-dot { flex: none; width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--v2-mute, #8a847b); }
+.scr-cadence-row[aria-pressed="true"] .scr-cadence-dot { border-color: var(--sec-find, var(--v2-ink)); box-shadow: inset 0 0 0 3px var(--v2-card), inset 0 0 0 8px var(--sec-find, var(--v2-ink)); }
+.scr-cadence-name { flex: 1 1 auto; font-size: 14px; font-weight: 600; }
+.scr-cadence-week { display: inline-flex; gap: 4px; flex: none; }
+.scr-cadence-week .day-btn { width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; }
+@media (max-width: 560px) { .scr-cadence-row { flex-wrap: wrap; } .scr-cadence-week { width: 100%; padding-left: 28px; } }
+/* One row per platform, actions on the right (owner, 2026-11-25: a two-column grid read as a jumble). */
+.scr-accounts { display: flex; flex-direction: column; }
+.scr-reddit-form { display: flex; align-items: center; gap: 8px; flex: none; }
+.scr-reddit-input { display: inline-flex; align-items: center; height: 32px; padding: 0 10px; border: 1px solid var(--v2-line); border-radius: 8px; background: var(--v2-card); color: var(--v2-mute, #8a847b); font-size: 13.5px; }
+.scr-reddit-input input { width: 150px; border: 0; outline: 0; background: transparent; color: var(--v2-ink); font: inherit; padding-left: 2px; }
+.scr-reddit-input:focus-within { border-color: var(--v2-ink); }
+@media (max-width: 560px) { .scr-account-reddit { flex-direction: column; align-items: stretch; } .scr-reddit-form { justify-content: space-between; } .scr-reddit-input { flex: 1; } .scr-reddit-input input { width: 100%; } }
 .scr-account { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 20px; min-height: 58px; border-bottom: 1px solid var(--v2-line); }
 .scr-account.is-stuck { background: var(--v2-stuck-soft); }
 .scr-account-who { display: flex; align-items: center; gap: 10px; min-width: 0; overflow-wrap: anywhere; }

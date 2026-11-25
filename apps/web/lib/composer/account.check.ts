@@ -22,7 +22,12 @@ const ok: AccountContext = { username: "me", karma: 500, accountCreatedAt: "2025
 assert.equal(readiness(sub, ok, now).level, "ready");
 assert.equal(readiness(sub, { ...ok, username: null }, now).level, "unknown", "no username");
 const unknown = readiness(sub, { ...ok, karma: null }, now);
-assert.equal(unknown.level, "unknown", "never ready with karma unknown (Review Focus 4)");
+assert.equal(unknown.level, "unknown", "a sub's stated minimum with karma unknown stays unknown");
+// Username only (owner, 2026-11-25): no stated minimum and posts in the sub is ready; none in the sub is caution.
+assert.equal(readiness({ ...sub, minKarma: null, minAccountAgeDays: null }, { ...ok, karma: null, accountCreatedAt: null }, now).level, "ready", "posted in the sub before");
+assert.equal(readiness({ ...sub, minKarma: null, minAccountAgeDays: null }, { ...ok, karma: null, accountCreatedAt: null, postsInSub: null }, now).level, "caution", "never ready on nothing checked");
+assert.ok(readiness({ ...sub, minAccountAgeDays: 30 }, { ...ok, karma: 800, accountCreatedAt: null }, now).reasons[0]!.includes("asks for an account 30 days old;"), "names only the missing minimum");
+assert.equal(readiness({ ...sub, minKarma: null, minAccountAgeDays: null }, { ...ok, karma: null, accountCreatedAt: null, postsInSub: 0 }, now).level, "caution");
 const low = readiness(sub, { ...ok, karma: 40 }, now);
 assert.equal(low.level, "not_ready");
 assert.ok(low.reasons[0]!.includes("100 karma; you have 40"));

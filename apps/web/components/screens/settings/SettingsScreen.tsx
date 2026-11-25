@@ -19,7 +19,6 @@ import { isSample, useScreen } from "../useScreen";
 import { ACCOUNTS_PANEL_ID, AccountsPanel } from "./AccountsPanel";
 import { DeleteAccount } from "./DeleteAccount";
 import { NotifyPanel } from "./NotifyPanel";
-import { RedditAccountPanel } from "./RedditAccountPanel";
 import { SalesScansPanel } from "./SalesScansPanel";
 import { TrackingPanel } from "./TrackingPanel";
 
@@ -191,7 +190,6 @@ function SettingsBody({ data, live, editor }: { data: Data; live: Record<keyof D
     <>
       <AccountsPanel accounts={data.accounts} live={live.accounts} />
       <SalesScansPanel />
-      <RedditAccountPanel />
       <TrackingPanel />
 
       <div className="scr-settings-grid">

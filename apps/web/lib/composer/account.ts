@@ -32,8 +32,8 @@ export const LOW_KARMA = 50;
 export const NEW_ACCOUNT_DAYS = 30;
 
 /**
- * Ready, caution, not ready or unknown, with the reasons. Never "ready" while karma or account age is unknown: the
- * founder would read it as "safe to post".
+ * Ready, caution, not ready or unknown, with the reasons. With karma or age unknown, "ready" only when the sub states
+ * no minimum and nothing else gives caution; a stated minimum leaves it unknown.
  */
 export function readiness(sub: SubredditContext | null, account: AccountContext, now = new Date()): Readiness {
   const reasons: string[] = [];
@@ -74,9 +74,21 @@ export function readiness(sub: SubredditContext | null, account: AccountContext,
     caution = true;
     reasons.push(`${where} keeps self-promotion to its pinned thread.`);
   }
+  // Only the username is asked (owner, 2026-11-25); karma and age come from the founder's browser when Reddit shares
+  // them. Without one of them: a minimum the sub states for it stays unknown; else "ready" only for someone who has
+  // posted in the sub before, saying what was not checked; anyone else gets caution (review 2026-11-25).
   if (account.karma == null || account.accountCreatedAt == null) {
-    reasons.push("Add your karma and account age (on your Reddit profile) to check the rest.");
-    return { level: "unknown", reasons };
+    const missing = [
+      sub?.minKarma != null && account.karma == null ? `${sub.minKarma} karma` : "",
+      sub?.minAccountAgeDays != null && account.accountCreatedAt == null ? `an account ${sub.minAccountAgeDays} days old` : "",
+    ].filter(Boolean);
+    const notChecked = "Reddit did not share your karma and account age, so those were not checked.";
+    if (missing.length) {
+      reasons.push(`${where} asks for ${missing.join(" and ")}; Reddit did not share yours, so check your profile.`);
+      return { level: caution ? "caution" : "unknown", reasons };
+    }
+    if (!caution && sub && account.postsInSub) return { level: "ready", reasons: [`You have posted in ${where} before.`, notChecked] };
+    return { level: "caution", reasons: [...reasons, `New or low-karma accounts are often filtered on Reddit. ${notChecked}`] };
   }
   return caution ? { level: "caution", reasons } : { level: "ready", reasons: [`Your account meets what ${where} asks.`] };
 }
