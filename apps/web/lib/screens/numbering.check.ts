@@ -3,7 +3,7 @@
  */
 import assert from "node:assert/strict";
 
-import { personNumbers, postNumbers, scanNumbers, sourceIds, usedIn } from "./numbering";
+import { numbersFromNewest, personNumbers, postNumbers, scanNumbers, sourceIds, usedIn } from "./numbering";
 
 const scans = scanNumbers([
   { id: "s2", created_at: "2026-11-24T10:00:00Z" },
@@ -38,4 +38,6 @@ const used = usedIn(posts, numbers);
 assert.deepEqual(used.get("b"), [{ no: 2, id: "p2" }, { no: 1, id: "p1" }], "newest post first, once per post");
 assert.deepEqual(used.get("c"), [{ no: 1, id: "p1" }]);
 assert.deepEqual(sourceIds([{ opportunityId: 4 }, null, { opportunityId: "x" }]), ["x"]);
+assert.deepEqual([...numbersFromNewest([{ id: "n" }, { id: "m" }], 2100)], [["n", 2100], ["m", 2099]], "a page of the newest rows keeps their real numbers");
+assert.deepEqual([...numbersFromNewest([{ id: "n" }], 0)], [["n", 1]], "a missing count still numbers the page");
 console.log("numbering: ok");

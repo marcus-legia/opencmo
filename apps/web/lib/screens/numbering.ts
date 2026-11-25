@@ -1,7 +1,8 @@
 /**
  * The index that ties Sales and Post together (owner, 2026-11-25: "it shows no thread between them; numbered like
  * Post"): every finished scan is Scan #n (oldest first), each person it found is n.k by score, and every post is Post
- * #m (oldest first). A post written from a Sales person names "Scan #n · n.k", and that person names "Post #m". Pure.
+ * #m (oldest first). A post written from a Sales person names "Scan #n · n.k", and that person names "Post #m". Scans
+ * are numbered by when they finished, so one still running when a later one ends does not renumber it. Pure.
  */
 
 export type ScanRow = { id: string; created_at: string };
@@ -11,6 +12,15 @@ export type PostRow = { id: string; created_at: string; sources?: unknown };
 // A row without a time (a read that left the column out) sorts first rather than failing the screen.
 const byTime = <T extends { id: string; created_at: string }>(a: T, b: T) =>
   String(a.created_at ?? "").localeCompare(String(b.created_at ?? "")) || String(a.id).localeCompare(String(b.id));
+
+/**
+ * Numbers from a newest-first page of rows and the total count: the newest is #total, so a page that stops short of
+ * the oldest rows still numbers the ones on screen (review 2026-11-25).
+ */
+export function numbersFromNewest(rows: { id: string }[], total: number): Map<string, number> {
+  const top = Math.max(total, rows.length);
+  return new Map(rows.map((r, i) => [r.id, top - i]));
+}
 
 /** Scan #1 is the oldest finished scan. */
 export function scanNumbers(scans: ScanRow[]): Map<string, number> {

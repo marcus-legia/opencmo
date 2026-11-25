@@ -760,11 +760,17 @@ export function AgentSales() {
   const [open, setOpen] = useState<string | null>(null);
   // A link from a post ("From Scan #3 · 3.1", `#thread-<id>`) opens that person once the list is in (2026-11-25).
   const linked = useRef(false);
+  const [linkGone, setLinkGone] = useState(false);
   useEffect(() => {
-    if (linked.current || !threads?.length) return;
+    if (linked.current || !threads) return;
     const id = window.location.hash.match(/^#thread-([0-9a-f-]{36})$/i)?.[1];
-    if (!id || !threads.some((t) => t.id === id)) return;
+    if (!id) return;
     linked.current = true;
+    // The list holds the newest people: an older one linked from a post says so instead of doing nothing.
+    if (!threads.some((t) => t.id === id)) {
+      setLinkGone(true);
+      return;
+    }
     setTab("threads");
     setOpen(id);
     requestAnimationFrame(() => document.getElementById(`thread-${id}`)?.scrollIntoView({ block: "start" }));
@@ -1058,6 +1064,11 @@ export function AgentSales() {
             {live && undrafted > 0 ? <WriteReplies count={undrafted} busy={scanActive(scan) && scan.kind === "sales_reply_drafts"} onPlan={setPlanFor} onStarted={startedScan} /> : null}
             {list.length === 0 && data.lastScan?.verdict === "none" ? <NoOneAsked scan={data.lastScan} onEdit={openSettings} freeLeft={freeLeft} /> : null}
             {list.length === 0 && data.lastScan?.verdict !== "none" ? <div className="meta">No threads yet. Sales scans the communities your customers use and scores what it finds.</div> : null}
+            {linkGone ? (
+              <p className="meta" role="status" data-testid="sales-link-gone">
+                The person that post was written from is older than this list, so it is not shown here.
+              </p>
+            ) : null}
             {/* The index (owner, 2026-11-25): a section per scan, Scan #n, its people numbered n.k. */}
             {scanSections(list, data.scans ?? []).map((section) => (
               <section key={section.key} className="idx-section" aria-label={section.scan ? `Scan ${section.scan.no}` : "Earlier"} data-testid="sales-scan-section">
@@ -1071,7 +1082,7 @@ export function AgentSales() {
                   </span>
                 </h2>
                 {section.threads.length ? (
-                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }} role="list" aria-label={section.scan ? `Scan ${section.scan.no} people` : "Earlier people"}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }} role="list" aria-label={section.scan ? `Threads, Scan ${section.scan.no}` : "Threads, earlier"}>
                     {section.threads.map((t) => (
                       <ThreadRow key={t.id} t={t} free={free} open={open === t.id} onToggle={() => setOpen(open === t.id ? null : t.id)} onPlan={setPlanFor} onDecide={decide} onSent={(x, via) => decide(x, "replied", undefined, undefined, false, via)} />
                     ))}

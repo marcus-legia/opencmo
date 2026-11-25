@@ -19,7 +19,7 @@ import { PlatformBadge } from "./platform-logos";
 import { whereSaid } from "./LibraryView";
 import { PostViewSwitch } from "./TopBar";
 import { useDecide } from "./useDecide";
-import { POST_SECTIONS, dayLabel, draftsThisWeek, postSections } from "./week";
+import { POST_SECTIONS, dayLabel, draftsLeftOver, draftsThisWeek, postSections } from "./week";
 
 type Draft = WriterScreen["drafts"][number];
 type Tab = "posts" | "voice";
@@ -104,13 +104,20 @@ export function AgentWriter() {
   const [open, setOpen] = useState<string | null>(null);
   // A link from Sales ("Used in Post #14", `#post-<id>`) opens that post once the list is in (2026-11-25).
   const linked = useRef(false);
-  const loadedIds = state.status === "ready" ? state.data.drafts.map((d) => d.id).join() : "";
+  const [linkGone, setLinkGone] = useState(false);
+  const loadedIds = state.status === "ready" ? state.data.drafts.map((d) => d.id).join() : null;
   useEffect(() => {
-    if (linked.current || !loadedIds) return;
+    if (linked.current || loadedIds === null) return;
     const id = window.location.hash.match(/^#post-([0-9a-f-]{36})$/i)?.[1];
-    if (!id || !loadedIds.split(",").includes(id)) return;
+    if (!id) return;
     linked.current = true;
     setTab("posts");
+    // Writer lists the last two weeks: an older post linked from Sales says so instead of doing nothing.
+    if (!loadedIds.split(",").includes(id)) {
+      setLinkGone(true);
+      return;
+    }
+    setPlatform(null);
     setOpen(id);
     requestAnimationFrame(() => document.getElementById(`post-${id}`)?.scrollIntoView({ block: "start" }));
   }, [loadedIds]);
@@ -141,6 +148,8 @@ export function AgentWriter() {
   const byPlatform = (list: Draft[]) => (active ? list.filter((d) => d.platform === active) : list);
   // The index (owner, 2026-11-25): New drafts, Approved, Posted, Planned, each post numbered.
   const sections = postSections(byPlatform(drafts));
+  // Last week's drafts nobody decided sit in New drafts, marked, so the founder approves or skips them.
+  const lastWeek = new Set(draftsLeftOver(drafts).map((d) => d.id));
   const firstOpen = open ?? waiting.find((d) => d.approvalId)?.id ?? waiting[0]?.id ?? null;
   // The side card: this week's first seven, in the order they go out.
   const week = thisWeek.slice(0, 7);
@@ -188,6 +197,11 @@ export function AgentWriter() {
               <span className="kind">{kindOf(d)} · </span>
               {d.title}
             </span>
+            {lastWeek.has(d.id) && d.column === "waiting" ? (
+              <span className="meta" data-testid="writer-left-over">
+                From last week: approve or skip it
+              </span>
+            ) : null}
             {d.sources?.length ? (
               <span className="meta" data-testid="writer-based-on" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                 {basedOn(d.sources)}
@@ -332,6 +346,11 @@ export function AgentWriter() {
                 </div>
               ) : null}
             </div>
+            {linkGone ? (
+              <p className="meta" role="status" data-testid="writer-link-gone">
+                That post is older than two weeks, so it is not listed here.
+              </p>
+            ) : null}
             {drafts.length === 0 ? <div className="meta">Nothing here yet. The week&apos;s posts are planned every Sunday from what people asked in Sales.</div> : null}
             {drafts.length
               ? POST_SECTIONS.map(({ id, label, empty }) => (

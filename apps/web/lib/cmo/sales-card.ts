@@ -42,10 +42,13 @@ const suffix = (no: string | undefined) => Number(no?.split(".")[1] ?? Number.MA
 
 /**
  * The Sales list as the index's sections (owner, 2026-11-25): one per scan, newest first, its people in their number
- * order (3.1, 3.2…). A scan that found no one shows as an empty section while it is newer than the oldest one listed,
- * so a run of empty scans reads as such. People from before numbered scans close the list under "Earlier".
+ * order (open ones first, then 3.1, 3.2…). A scan that found no one shows as an empty section while it is newer than the
+ * oldest one listed, so a run of empty scans reads as such. People from before numbered scans close the list under
+ * "Earlier".
  */
-export function scanSections<T extends { scanNo?: number; no?: string }>(threads: T[], scans: Scan[]): ScanSection<T>[] {
+export function scanSections<T extends { scanNo?: number; no?: string; status?: string }>(threads: T[], scans: Scan[]): ScanSection<T>[] {
+  // Open people first (the ones that still need a reply), then by number.
+  const order = (a: T, b: T) => Number(b.status === "open") - Number(a.status === "open") || suffix(a.no) - suffix(b.no);
   const byScan = new Map<number, T[]>();
   const loose: T[] = [];
   for (const t of threads) {
@@ -57,12 +60,14 @@ export function scanSections<T extends { scanNo?: number; no?: string }>(threads
   const known = new Set<number>();
   for (const scan of [...scans].sort((a, b) => b.no - a.no)) {
     known.add(scan.no);
-    const list = (byScan.get(scan.no) ?? []).sort((a, b) => suffix(a.no) - suffix(b.no));
-    if (list.length || (oldestListed !== Number.MAX_SAFE_INTEGER && scan.no > oldestListed)) sections.push({ key: `scan-${scan.no}`, scan, threads: list });
+    const list = (byScan.get(scan.no) ?? []).sort(order);
+    // An empty section only for a scan that found no one: one whose people are just not loaded is left out.
+    const emptyRun = scan.verdict === "none" && oldestListed !== Number.MAX_SAFE_INTEGER && scan.no > oldestListed;
+    if (list.length || emptyRun) sections.push({ key: `scan-${scan.no}`, scan, threads: list });
   }
   // A scan the list has people from but the scans read did not return (it is older than the ones kept).
   for (const [no, list] of [...byScan].sort((a, b) => b[0] - a[0])) {
-    if (!known.has(no)) sections.push({ key: `scan-${no}`, scan: { no, at: "", cards: list.length, verdict: "found" }, threads: list.sort((a, b) => suffix(a.no) - suffix(b.no)) });
+    if (!known.has(no)) sections.push({ key: `scan-${no}`, scan: { no, at: "", cards: list.length, verdict: "found" }, threads: list.sort(order) });
   }
   if (loose.length) sections.push({ key: "earlier", scan: null, threads: loose });
   return sections;

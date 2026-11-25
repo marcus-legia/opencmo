@@ -40,4 +40,10 @@ const sections = scanSections(
 );
 assert.deepEqual(sections.map((s) => [s.key, s.threads.map((t) => t.id)]), [["scan-4", ["c"]], ["scan-3", []], ["scan-2", ["b", "a"]], ["earlier", ["d"]]]);
 assert.deepEqual(scanSections([], scans), [], "no people: no sections (the empty-state copy shows)");
+// Review 2026-11-25: open people first within a scan; a scan that found people not loaded here is left out.
+const ordered = scanSections(
+  [{ id: "x", scanNo: 2, no: "2.1", status: "replied" }, { id: "y", scanNo: 2, no: "2.2", status: "open" }, { id: "z", scanNo: 4, no: "4.1", status: "open" }],
+  [...scans.slice(0, 2), { no: 3, at: "2026-11-24T00:00:00Z", cards: 3, verdict: "found" as const }, scans[3]!],
+);
+assert.deepEqual(ordered.map((s) => [s.key, s.threads.map((t) => t.id)]), [["scan-4", ["z"]], ["scan-2", ["y", "x"]]]);
 console.log("sales-card: ok");

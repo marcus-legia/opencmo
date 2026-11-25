@@ -33,7 +33,7 @@ import type { DashboardScreen } from "./dashboard";
 import { SKILL_READERS, type LibraryScreen } from "./library";
 import type { RailStatus } from "./rail";
 import type { ResearchScreen } from "./research";
-import { personNumbers, postNumbers, scanNumbers, usedIn, type PersonRow, type PostRow, type ScanRow } from "./numbering";
+import { numbersFromNewest, personNumbers, usedIn, type PersonRow, type PostRow } from "./numbering";
 import type { SalesScan, SalesScreen } from "./sales";
 import { SALES_PLATFORMS, type SalesPlatform } from "../cmo/social/conversations";
 import { LibraryEntrySchema } from "../cmo/library";
@@ -1427,20 +1427,31 @@ function toLastScan(output: unknown, at: string): SalesScan | null {
 
 /**
  * The Sales ↔ Post index (owner, 2026-11-25), read under RLS: Scan #n, person n.k, Post #m and which posts each person
- * fed. A read that fails gives an empty index: the screens show their rows without numbers rather than failing.
+ * fed. Each read is the newest page with an exact count, so the rows on screen keep their numbers however many there
+ * are, and only the columns the numbers need. Any read that fails or throws gives an empty index: rows show without
+ * numbers rather than failing the screen.
  */
-async function indexOf(supabase: LoadContext["supabase"]) {
-  const [scanRes, peopleRes, postRes] = await Promise.all([
-    supabase.from("cmo_runs").select("id, created_at, finished_at, output").eq("kind", "sales_scan").eq("status", "done").order("created_at").limit(500),
-    supabase.from("opportunities").select("id, run_id, score, created_at").order("created_at").limit(2000),
-    supabase.from("content_items").select("id, created_at, sources:body->sources").eq("department", "post").order("created_at").limit(2000),
-  ]);
-  const scanRows = scanRes.error ? [] : ((scanRes.data ?? []) as (ScanRow & { finished_at: string | null; output: unknown })[]);
-  const scans = scanNumbers(scanRows);
-  const people = personNumbers(peopleRes.error ? [] : ((peopleRes.data ?? []) as PersonRow[]), scans);
-  const postRows = postRes.error ? [] : ((postRes.data ?? []) as PostRow[]);
-  const posts = postNumbers(postRows);
-  return { scanRows, scans, people, posts, usedIn: usedIn(postRows, posts) };
+const EMPTY_INDEX = { scans: new Map<string, number>(), people: new Map<string, string>(), posts: new Map<string, number>(), usedIn: new Map<string, { no: number; id: string }[]>() };
+async function indexOf(supabase: LoadContext["supabase"]): Promise<typeof EMPTY_INDEX> {
+  try {
+    const [scanRes, postRes] = await Promise.all([
+      supabase.from("cmo_runs").select("id", { count: "exact" }).eq("kind", "sales_scan").eq("status", "done").order("finished_at", { ascending: false, nullsFirst: false }).limit(100),
+      supabase.from("content_items").select("id, created_at, sources:body->sources", { count: "exact" }).eq("department", "post").order("created_at", { ascending: false }).limit(1000),
+    ]);
+    if (scanRes.error || postRes.error) return EMPTY_INDEX;
+    const scanRows = (scanRes.data ?? []) as { id: string }[];
+    const scans = numbersFromNewest(scanRows, scanRes.count ?? scanRows.length);
+    const peopleRes = scanRows.length
+      ? await supabase.from("opportunities").select("id, run_id, score, created_at").in("run_id", scanRows.map((r) => r.id)).limit(2000)
+      : { data: [], error: null };
+    const people = personNumbers(peopleRes.error ? [] : ((peopleRes.data ?? []) as PersonRow[]), scans);
+    const postRows = (postRes.data ?? []) as PostRow[];
+    const posts = numbersFromNewest(postRows, postRes.count ?? postRows.length);
+    return { scans, people, posts, usedIn: usedIn(postRows, posts) };
+  } catch (error) {
+    console.error("[screens] index not read", error);
+    return EMPTY_INDEX;
+  }
 }
 
 async function sales({ supabase, userId }: LoadContext): Promise<Partial<SalesScreen>> {
@@ -1539,14 +1550,16 @@ async function sales({ supabase, userId }: LoadContext): Promise<Partial<SalesSc
         .sort((a, b) => Number(b.status === "open") - Number(a.status === "open"));
     },
     scans: async () => {
-      const { scanRows, scans } = await index;
-      return scanRows
-        .map((r) => {
-          const o = toLastScan(r.output, r.finished_at ?? r.created_at);
-          return { no: scans.get(r.id)!, at: new Date(r.finished_at ?? r.created_at).toISOString(), cards: o?.cards ?? 0, verdict: o?.verdict ?? ("none" as const) };
-        })
-        .reverse()
-        .slice(0, 50);
+      const [{ scans }, r] = await Promise.all([
+        index,
+        supabase.from("cmo_runs").select("id, output, finished_at, created_at").eq("kind", "sales_scan").eq("status", "done").order("finished_at", { ascending: false, nullsFirst: false }).limit(50),
+      ]);
+      if (r.error) throw new Error(`cmo_runs: ${r.error.message}`);
+      return ((r.data ?? []) as { id: string; output: unknown; finished_at: string | null; created_at: string }[]).flatMap((row) => {
+        const no = scans.get(row.id);
+        const o = toLastScan(row.output, row.finished_at ?? row.created_at);
+        return no ? [{ no, at: new Date(row.finished_at ?? row.created_at).toISOString(), cards: o?.cards ?? 0, verdict: o?.verdict ?? ("none" as const) }] : [];
+      });
     },
     week: async () => {
       const monday = `${mondayOf()}T00:00:00Z`;
