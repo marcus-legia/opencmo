@@ -1067,9 +1067,11 @@ async function sourceLinks(supabase: LoadContext["supabase"], ids: string[]): Pr
   return new Map(((data ?? []) as { id: string; url: string | null }[]).flatMap((o) => (o.url && /^https?:\/\//i.test(o.url) && o.url.length <= 2000 ? [[o.id, o.url] as const] : [])));
 }
 
-async function writer({ supabase }: LoadContext): Promise<Partial<WriterScreen>> {
+async function writer({ supabase, userId }: LoadContext): Promise<Partial<WriterScreen>> {
   const index = indexOf(supabase);
+  const prof = profile(supabase, userId);
   return parts<WriterScreen>("writer", {
+    timezone: async () => (await prof).timezone,
     // Posts on their own platform, captions per platform (P3 A2: video words for one edit), and the briefs Writer
     // wrote for Studio, over the last two weeks.
     drafts: async () => {
@@ -1094,16 +1096,20 @@ async function writer({ supabase }: LoadContext): Promise<Partial<WriterScreen>>
         liveByRef(supabase, "editor_project"),
         liveByRef(supabase, "short_batch"),
         supabase.from("shorts").select("short_clip_id, batch_id").not("short_clip_id", "is", null).gte("created_at", `${since}T00:00:00Z`).limit(200),
-        // The time an approved post goes out: its slot's, not only the day the plan gave it.
-        supabase.from("schedule_slots").select("publish_at, deliverable:deliverables(ref_kind, ref_id)").in("status", ["waiting", "due", "publishing", "reminded"]).gte("publish_at", `${since}T00:00:00Z`).order("publish_at").limit(200),
+        // The time an approved post goes out: its slot's, not only the day the plan gave it. The slot's id comes with it,
+        // so the row's "Scheduled" button can move that time (`change_time`) without a trip to the Calendar.
+        supabase.from("schedule_slots").select("id, publish_at, deliverable:deliverables(ref_kind, ref_id)").in("status", ["waiting", "due", "publishing", "reminded"]).gte("publish_at", `${since}T00:00:00Z`).order("publish_at").limit(200),
         // A video goes out one card per platform (owner, 2026-11-13): each caption's row follows its platform's slot.
         supabase.from("schedule_slots").select("platform, status, publish_at, published_at, approval_id, error, created_at, deliverable:deliverables!inner(ref_kind, ref_id)").eq("deliverable.ref_kind", "clip").neq("status", "cancelled").gte("created_at", `${since}T00:00:00Z`).order("created_at").limit(200),
         supabase.from("approvals").select("id").eq("ref_kind", "schedule_slot").eq("status", "waiting").limit(200),
       ]);
       // A read that fails here only loses the exact time; the row keeps its day.
       const goesOut = new Map<string, string>();
-      for (const slot of ((slotTimes.data ?? []) as unknown as { publish_at: string; deliverable: { ref_kind: string; ref_id: string } | null }[])) {
-        if (slot.deliverable?.ref_kind === "content_item" && !goesOut.has(slot.deliverable.ref_id)) goesOut.set(slot.deliverable.ref_id, slot.publish_at);
+      const slotOf = new Map<string, string>();
+      for (const slot of ((slotTimes.data ?? []) as unknown as { id: string; publish_at: string; deliverable: { ref_kind: string; ref_id: string } | null }[])) {
+        if (slot.deliverable?.ref_kind !== "content_item" || goesOut.has(slot.deliverable.ref_id)) continue;
+        goesOut.set(slot.deliverable.ref_id, slot.publish_at);
+        slotOf.set(slot.deliverable.ref_id, slot.id);
       }
       const column = { planned: "planned", drafting: "drafting", in_review: "waiting", approved: "scheduled", published: "posted" } as const;
       // A draft in review whose card is not in the queue: held past the day's budget, or gone (cancelled, never raised
@@ -1145,6 +1151,7 @@ async function writer({ supabase }: LoadContext): Promise<Partial<WriterScreen>>
           versions: Math.min(3, Math.max(1, 1 + (Array.isArray(r.body.alternates) ? r.body.alternates.length : 0))),
           note: r.status === "published" || r.status === "approved" ? (edited ? "You edited it before approving" : "Approved as drafted") : null,
           ...cardOf(r.status, cards.get(r.id)),
+          slotId: r.status === "approved" ? (slotOf.get(r.id) ?? null) : null,
           ref: { kind: "content_item" as const, id: r.id },
           text: (r.final_text ?? text).slice(0, 5000),
           sources: storedSources(r.body as Record<string, unknown>).map((src) => ({ ...src, url: links.get(src.opportunityId) ?? null, ref: people.get(src.opportunityId) ?? null })),

@@ -58,12 +58,16 @@ export const DraftSchema = z.object({
   connected: z.boolean().optional(),
   /** Platforms of a core post with no connected account while others have one: the founder posts it there by hand. */
   postYourself: z.array(z.string().max(20)).max(4).optional(),
+  /** The schedule slot an approved post goes out on: what the row's "Scheduled" button changes the time of. */
+  slotId: z.string().nullable().optional(),
 });
 
 export const VoiceLineSchema = z.object({ text: z.string().max(200), source: z.string().max(120) });
 
 export const WriterScreenSchema = z.object({
   drafts: z.array(DraftSchema),
+  /** The founder's timezone (`profiles.timezone`): every time the list shows and its time picker reads is in it. */
+  timezone: z.string().max(64),
   voice: z.object({ lines: z.array(VoiceLineSchema), wordsCut: z.array(z.string().max(40)) }),
 });
 export type WriterScreen = z.infer<typeof WriterScreenSchema>;
