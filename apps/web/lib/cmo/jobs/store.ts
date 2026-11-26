@@ -9,7 +9,7 @@ import type { CmoStore, NudgeDue, DraftRating, CompetitorInsight, ConnectedAccou
 import { SCAN_CADENCES, isoDay, toVerdict } from "./types";
 import { enqueueDueDrafts } from "../schedule";
 import { recentFrom } from "./recent-scans";
-import { chosenChannels, planOrDefault } from "../posting-plan";
+import { chosenChannels, connectedOnly, planOrDefault } from "../posting-plan";
 import { personKey } from "../reach";
 import { SALES_PLATFORMS, parsePlatforms, type SalesPlatform } from "../social/conversations";
 
@@ -184,10 +184,16 @@ export function supabaseStore(admin: BaseClient): CmoStore {
       if (accounts.error) throw new Error(`social_accounts: ${accounts.error.message}`);
       // The chosen channels only fill the default: a read that fails means none, never a failed week plan.
       if (postPlan.error) console.error("[cmo] post plan not read for the posting plan", postPlan.error.message);
-      return planOrDefault(
-        (profile.data as { posting_plan: unknown } | null)?.posting_plan,
-        ((accounts.data ?? []) as { platform: string }[]).map((a) => a.platform),
-        chosenChannels(postPlan.error ? undefined : (postPlan.data as { body: unknown } | null)?.body),
+      const live = ((accounts.data ?? []) as { platform: string }[]).map((a) => a.platform);
+      // The running plan, not the saved one: a platform with no connected account writes nothing (owner,
+      // 2026-11-26). Their counts stay saved, so connecting it again brings its posts back.
+      return connectedOnly(
+        planOrDefault(
+          (profile.data as { posting_plan: unknown } | null)?.posting_plan,
+          live,
+          chosenChannels(postPlan.error ? undefined : (postPlan.data as { body: unknown } | null)?.body),
+        ),
+        live,
       );
     },
     async queueDueDrafts(run) {

@@ -93,13 +93,17 @@ select is(public.rate_limit_hit('schedule', 120, 3600), true, 'the slot route''s
 reset role;
 
 select is((select status from public.schedule_slots where id = 'e2204000-0000-4000-8000-00000000000d'), 'published', 'd is published');
-select is((select status || ':' || mode || ':' || coalesce(account_id::text, '-') from public.schedule_slots where id = 'e2204000-0000-4000-8000-00000000000b'),
-  'proposed:intent:-', 'b asks again as copy and open');
-select is((select count(*)::int from public.approvals where ref_kind = 'schedule_slot' and ref_id = 'e2204000-0000-4000-8000-00000000000b' and status = 'waiting'), 1,
-  'with a new card');
-select is((select content_hash = public.approval_hash(public.approval_snapshot('schedule_slot', 'e2204000-0000-4000-8000-00000000000b'))
-  from public.approvals where ref_kind = 'schedule_slot' and ref_id = 'e2204000-0000-4000-8000-00000000000b' and status = 'waiting'), true,
-  'that matches the slot as it is now (so it can be decided)');
+-- 20270206050000: disconnecting X drops the posts waiting on it. It used to turn them into copy-and-open proposals,
+-- but since 20270206040000 a post is scheduled only where an account is connected, so such a slot would sit on the
+-- calendar and could only settle `failed` with `no_account`.
+select is((select status || ':' || coalesce(account_id::text, '-') from public.schedule_slots where id = 'e2204000-0000-4000-8000-00000000000b'),
+  'cancelled:-', 'b is dropped when its account goes');
+select is((select count(*)::int from public.approvals where ref_kind = 'schedule_slot' and ref_id = 'e2204000-0000-4000-8000-00000000000b' and status in ('waiting', 'held')), 0,
+  'with no card left asking');
+select is((select count(*)::int from public.schedule_slots
+  where deliverable_id = (select deliverable_id from public.schedule_slots where id = 'e2204000-0000-4000-8000-00000000000b')
+    and status in ('proposed', 'waiting')), 0,
+  'and no new time is asked for it');
 
 select * from finish();
 rollback;

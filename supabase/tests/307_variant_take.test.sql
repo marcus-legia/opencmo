@@ -9,11 +9,14 @@ select plan(4);
 
 insert into auth.users (id, email) values ('e3070000-0000-4000-8000-00000000000a', 'take@test.local');
 update public.profiles set plan = 'starter', timezone = 'UTC' where id = 'e3070000-0000-4000-8000-00000000000a';
+-- A post is scheduled only for a connected platform (20270206040000).
+select public.zernio_profile_save('e3070000-0000-4000-8000-00000000000a', 'prof-take');
+select public.social_account_save('e3070000-0000-4000-8000-00000000000a', 'x', '@founder', null, 'acc-take-x');
 insert into public.work_orders (id, user_id, week, kind, title, brief, department, status) values
   ('e3071000-0000-4000-8000-00000000000a', 'e3070000-0000-4000-8000-00000000000a', date_trunc('week', current_date)::date,
    'post_draft', 'Posts', '{}', 'writer', 'done');
 
--- An approved post whose card carried a time on X (copy and open: no account); `p_variant` adds X's rewrite.
+-- An approved post whose card carried a time on X, from the connected account; `p_variant` adds X's rewrite.
 create function pg_temp.slot(p_item uuid, p_hour int, p_variant boolean) returns public.schedule_slots language plpgsql as $$
 declare
   v_slot public.schedule_slots;
@@ -22,7 +25,8 @@ begin
   insert into public.content_items (id, user_id, department, platform, day, idea, status, body)
   values (p_item, 'e3070000-0000-4000-8000-00000000000a', 'post', 'X', current_date, 'A post', 'approved',
     jsonb_build_object('text', v_text, 'targets', jsonb_build_array('x'), 'proposed', jsonb_build_object(
-      'platform', 'x', 'mode', 'intent', 'account_id', null, 'handle', null,
+      'platform', 'x', 'mode', 'publish', 'handle', '@founder',
+      'account_id', (select id from public.social_accounts where user_id = 'e3070000-0000-4000-8000-00000000000a' and platform = 'x'),
       'at', to_char(date_trunc('day', now()) + make_interval(days => 3, hours => p_hour), 'YYYY-MM-DD"T"HH24:MI:SS"Z"'))));
   if p_variant then
     insert into public.post_variants (user_id, item_id, platform, text, source_hash)

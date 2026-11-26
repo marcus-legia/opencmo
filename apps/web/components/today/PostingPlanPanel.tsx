@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
+import { isPlanRequired, PlanSheet } from "@/components/billing/PlanSheet";
 import { ApiError, api, jsonBody } from "@/components/clipping/api";
-import { TEXT_PLATFORMS, dayTargets, type PostingPlan } from "@/lib/cmo/posting-plan";
+import { TEXT_PLATFORMS, connectedOnly, dayTargets, type PostingPlan } from "@/lib/cmo/posting-plan";
 import { CONNECTABLE_PLATFORMS } from "@/lib/departments/publish/types";
 import type { ScheduleScreen } from "@/lib/screens/schedule";
 
@@ -41,6 +42,71 @@ export function PostingPlanPanel({ initial, accounts, live, onSaved }: { initial
   }, [initialKey]);
 
   const connected = (id: string) => accounts.some((a) => a.platform === id && a.status === "connected");
+  const accountId = (id: string) => accounts.find((a) => a.platform === id && a.status === "connected")?.id ?? null;
+  const [busy, setBusy] = useState<string | null>(null);
+  // Disconnecting cancels the posts waiting on that account, so it asks first.
+  const [confirmOff, setConfirmOff] = useState<{ id: string; name: string; platform: string } | null>(null);
+  // A sign-in is running in another tab: read the screen again when the founder comes back, so the row stops saying
+  // "Not connected" without them reloading it.
+  const [pendingConnect, setPendingConnect] = useState(false);
+  // Connecting needs a plan (Zernio bills each account by the day): a free founder gets the plan sheet, not an error.
+  const [planSheet, setPlanSheet] = useState(false);
+  useEffect(() => {
+    if (!pendingConnect) return;
+    const back = () => {
+      setPendingConnect(false);
+      onSaved?.();
+    };
+    window.addEventListener("focus", back);
+    return () => window.removeEventListener("focus", back);
+  }, [pendingConnect, onSaved]);
+
+  /**
+   * Connect opens the platform's own sign-in in a new tab and Zernio brings the founder back to this page
+   * (`from: "post"`). The row's state comes from the account that is actually connected, never from this click: a
+   * sign-in the founder cancels must leave the row exactly as it was.
+   */
+  async function connect(platform: string, name: string) {
+    if (!live) return setError("Sample plan: nothing is connected from this page.");
+    if (busy) return;
+    // The tab is opened inside the click. One opened after the request answers is a pop-up the browser blocks, and
+    // `noopener` cannot be passed here: it makes `window.open` return null, leaving no tab to send anywhere. Clearing
+    // `opener` on the new tab gives the same protection.
+    const tab = window.open("about:blank", "_blank");
+    setBusy(platform);
+    setError(null);
+    try {
+      const { url } = await api<{ url: string }>("/accounts/connect", jsonBody({ platform, from: "post" }));
+      if (!tab || tab.closed) {
+        setError(`Your browser blocked the ${name} tab. Allow pop-ups for this site, then try again.`);
+        return;
+      }
+      tab.opener = null;
+      tab.location.replace(url);
+      // This page still says "Not connected" until it is read again; it is, as soon as the founder comes back to it.
+      setPendingConnect(true);
+    } catch (err) {
+      tab?.close();
+      if (isPlanRequired(err)) setPlanSheet(true);
+      else setError(err instanceof ApiError ? err.message : `Could not open ${name} to connect.`);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function disconnect(target: { id: string; name: string; platform: string }) {
+    setBusy(target.platform);
+    setError(null);
+    try {
+      await api(`/accounts/${encodeURIComponent(target.id)}`, { method: "DELETE" });
+      setConfirmOff(null);
+      onSaved?.();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : `Could not disconnect ${target.name}.`);
+    } finally {
+      setBusy(null);
+    }
+  }
 
   async function save(next: PostingPlan) {
     setPlan(next);
@@ -68,8 +134,14 @@ export function PostingPlanPanel({ initial, accounts, live, onSaved }: { initial
   const set = (kind: "text" | "video", id: string, n: number) =>
     void save({ ...plan, [kind]: { ...plan[kind], [id]: n } } as PostingPlan);
 
-  const posts = dayTargets(plan).length;
-  const on = TEXT_PLATFORMS.filter((id) => plan.text[id] > 0).map((id) => TEXT_LABEL[id]);
+  // What the plan really writes: a platform with no connected account writes nothing (`connectedOnly`), so the line
+  // below counts only those. Saying "2 posts a day" while one of them is never written is a promise the product does
+  // not keep.
+  const running = connectedOnly(plan, TEXT_PLATFORMS.filter((id) => connected(id)));
+  const posts = dayTargets(running).length;
+  const on = TEXT_PLATFORMS.filter((id) => running.text[id] > 0).map((id) => TEXT_LABEL[id]);
+  // Turned on in the plan, but there is no account to post to: the founder's counts are kept, nothing is written.
+  const waiting = TEXT_PLATFORMS.filter((id) => plan.text[id] > 0 && !connected(id)).map((id) => TEXT_LABEL[id]);
 
   return (
     <section aria-label="Posting plan" id="posting-plan" data-testid="posting-plan" className="pp">
@@ -103,12 +175,29 @@ export function PostingPlanPanel({ initial, accounts, live, onSaved }: { initial
             </span>
             <div>
               <h3 id="pp-posts">Posts</h3>
-              <p>Written for you every morning. One post goes to every platform you turn on.</p>
+              <p>Written for you every morning, for the platforms you connect here. One post goes to each of them.</p>
             </div>
           </div>
           {/* Facebook Pages are not connectable since 2026-11-22: its row stays only for a plan that still has it on. */}
           {TEXT_PLATFORMS.filter((id) => (CONNECTABLE_PLATFORMS as readonly string[]).includes(id) || plan.text[id] > 0).map((id) => (
-            <Row key={id} platform={id} name={TEXT_LABEL[id]} per="day" value={plan.text[id]} max={TEXT_MAX} connected={connected(id)} byHand onChange={(n) => set("text", id, n)} />
+            <Row
+              key={id}
+              platform={id}
+              name={TEXT_LABEL[id]}
+              per="day"
+              value={plan.text[id]}
+              max={TEXT_MAX}
+              connected={connected(id)}
+              busy={busy === id}
+              onConnect={
+                (CONNECTABLE_PLATFORMS as readonly string[]).includes(id) && !connected(id) ? () => void connect(id, TEXT_LABEL[id]) : undefined
+              }
+              onDisconnect={(() => {
+                const account = accountId(id);
+                return account ? () => setConfirmOff({ id: account, name: TEXT_LABEL[id], platform: id }) : undefined;
+              })()}
+              onChange={(n) => set("text", id, n)}
+            />
           ))}
         </div>
       </div>
@@ -121,15 +210,38 @@ export function PostingPlanPanel({ initial, accounts, live, onSaved }: { initial
           <path d="M3 10h18" />
         </svg>
         <p>
-          <b data-testid="posting-plan-line">{planLine(plan)}</b>{" "}
-          {posts > 0 ? <span>{posts === 1 ? "It goes" : "They go"} to {listOf(on)}.</span> : <span>Turn on a platform above to get a post every day.</span>}
+          <b data-testid="posting-plan-line">{planLine(running)}</b>{" "}
+          {posts > 0 ? <span>{posts === 1 ? "It goes" : "They go"} to {listOf(on)}.</span> : <span>Connect a platform above to get a post every day.</span>}{" "}
+          {waiting.length ? (
+            <span data-testid="posting-plan-waiting">
+              {listOf(waiting)} {waiting.length === 1 ? "is" : "are"} on in your plan with no account connected, so nothing is written for{" "}
+              {waiting.length === 1 ? "it" : "them"}. Connect {waiting.length === 1 ? "it" : "them"} above to start.
+            </span>
+          ) : null}
         </p>
       </div>
+      {confirmOff ? (
+        <div role="alertdialog" aria-label={`Disconnect ${confirmOff.name}`} className="pp-confirm">
+          <p>
+            Disconnect {confirmOff.name}? The posts already waiting to go out on it are cancelled, and nothing is
+            written for it until you connect it again.
+          </p>
+          <div className="pp-confirm-acts">
+            <button type="button" disabled={busy === confirmOff.platform} onClick={() => void disconnect(confirmOff)}>
+              {busy === confirmOff.platform ? "Disconnecting…" : `Disconnect ${confirmOff.name}`}
+            </button>
+            <button type="button" className="ghost" disabled={busy === confirmOff.platform} onClick={() => setConfirmOff(null)}>
+              Keep it
+            </button>
+          </div>
+        </div>
+      ) : null}
       {error ? (
         <p role="alert" className="pp-error">
           {error}
         </p>
       ) : null}
+      <PlanSheet open={planSheet} onClose={() => setPlanSheet(false)} action="connect an account" />
     </section>
   );
 }
@@ -144,7 +256,9 @@ function Row({
   value,
   max,
   connected,
-  byHand = false,
+  busy = false,
+  onConnect,
+  onDisconnect,
   onChange,
 }: {
   platform: LogoPlatform;
@@ -153,8 +267,12 @@ function Row({
   value: number;
   max: number;
   connected: boolean;
-  /** A text platform without an account still gets its post, to copy and post by hand. */
-  byHand?: boolean;
+  /** Busy while this platform's connect or disconnect is in flight. */
+  busy?: boolean;
+  /** Opens the platform's sign-in; absent on a row that cannot be connected (a Facebook Page since 2026-11-22). */
+  onConnect?: () => void;
+  /** Asks before removing the connection; absent while nothing is connected. */
+  onDisconnect?: () => void;
   onChange: (n: number) => void;
 }) {
   const unit = per === "day" ? "posts a day" : "videos a week";
@@ -166,12 +284,25 @@ function Row({
         <span className="pp-name">{name}</span>
         {connected ? (
           <span className="pp-state is-on">
-            <i aria-hidden="true"></i>Connected
+            <i aria-hidden="true"></i>Connected{" "}
+            {onDisconnect ? (
+              <button type="button" className="pp-link" disabled={busy} onClick={onDisconnect}>
+                Disconnect
+              </button>
+            ) : null}
           </span>
         ) : (
           <span className="pp-state">
-            {off ? "Not connected." : byHand ? "Not connected: you get the post to copy and paste." : "Not connected."}{" "}
-            <Link href="/app/settings#settings-connected-accounts">Connect</Link>
+            {/* Nothing is written for a platform with no account (`connectedOnly`), so the row says that, not that
+                the post arrives to copy by hand. */}
+            Not connected, so nothing is written for it.{" "}
+            {onConnect ? (
+              <button type="button" className="pp-link" disabled={busy} onClick={onConnect}>
+                {busy ? "Opening…" : "Connect"}
+              </button>
+            ) : (
+              <Link href="/app/settings#settings-connected-accounts">Settings</Link>
+            )}
           </span>
         )}
       </div>

@@ -60,8 +60,10 @@ select ok((select abs(extract(epoch from (b.publish_at - a.publish_at))) >= 3 * 
   'a second X post keeps three hours from the first');
 
 select public.schedule_propose('e2163000-0000-4000-8000-00000000000c');
-select is((select mode || ' ' || coalesce(account_id::text, 'none') from public.schedule_slots where deliverable_id = 'e2163000-0000-4000-8000-00000000000c'),
-  'intent none', 'no Threads account: copy and open');
+-- 20270206040000: a post is scheduled only where an account is connected. With no Threads account it gets no slot at
+-- all; an intent slot could only fail at its time and then ask for a new time, filling the calendar with copies.
+select is((select count(*)::int from public.schedule_slots where deliverable_id = 'e2163000-0000-4000-8000-00000000000c'), 0,
+  'no Threads account: no slot at all');
 
 -- A short and its long video are not on one platform the same day.
 insert into public.jobs (id, user_id, source_url, duration_seconds, status) values

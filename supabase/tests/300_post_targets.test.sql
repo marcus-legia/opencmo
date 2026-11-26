@@ -1,6 +1,6 @@
 -- 20270120020000: one core post a slot, scheduled on every platform the planner picked. A target with a connected
--- account publishes, one without is copy and open; an old item without targets keeps its one platform; a draft keeps
--- the planner's targets.
+-- account publishes; one without gets no slot at all since 20270206040000 (it used to be copy and open, a slot that
+-- could only fail); an old item without targets keeps its one platform; a draft keeps the planner's targets.
 create extension if not exists pgtap with schema extensions;
 
 begin;
@@ -48,26 +48,26 @@ create function pg_temp.slots(p_item uuid) returns text language sql as $$
 $$;
 
 select is(pg_temp.approve('e3000000-0000-4000-8000-00000000000a', 'e3001000-0000-4000-8000-00000000000a',
-  'e3002000-0000-4000-8000-000000000001', 'X', '{"text":"One core post.","targets":["x","linkedin"]}'), 2,
-  'a post with two targets gets two slots');
-select is(pg_temp.slots('e3002000-0000-4000-8000-000000000001'), 'linkedin intent, x publish',
-  'X goes out from the connected account, LinkedIn is copy and open');
+  'e3002000-0000-4000-8000-000000000001', 'X', '{"text":"One core post.","targets":["x","linkedin"]}'), 1,
+  'a post with two targets gets a slot only for the connected one');
+select is(pg_temp.slots('e3002000-0000-4000-8000-000000000001'), 'x publish',
+  'X goes out from the connected account, LinkedIn without one gets nothing');
 select is((select count(*)::int from public.approvals a join public.schedule_slots s on s.id = a.ref_id
   join public.deliverables d on d.id = s.deliverable_id
-  where a.ref_kind = 'schedule_slot' and d.ref_id = 'e3002000-0000-4000-8000-000000000001'), 2, 'each target has its schedule card');
+  where a.ref_kind = 'schedule_slot' and d.ref_id = 'e3002000-0000-4000-8000-000000000001'), 1, 'the scheduled target has its schedule card');
 
 -- Review Focus 5: an item made before the posting plan has no targets and keeps its one platform.
 select is(public.post_targets('e3002000-0000-4000-8000-000000000001'), array['x', 'linkedin'], 'targets in the planner''s order');
 select is(pg_temp.approve('e3000000-0000-4000-8000-00000000000a', 'e3001000-0000-4000-8000-00000000000a',
-  'e3002000-0000-4000-8000-000000000002', 'Threads', '{"text":"An old post."}'), 1, 'an old item gets one slot');
-select is(pg_temp.slots('e3002000-0000-4000-8000-000000000002'), 'threads intent', 'on its own platform');
+  'e3002000-0000-4000-8000-000000000002', 'X', '{"text":"An old post."}'), 1, 'an old item gets one slot');
+select is(pg_temp.slots('e3002000-0000-4000-8000-000000000002'), 'x publish', 'on its own platform');
 
--- Review Focus 1: no account at all, every target is copy and open; nothing errors.
+-- Review Focus 1: no account at all, nothing is scheduled; nothing errors.
 select is(pg_temp.approve('e3000000-0000-4000-8000-00000000000b', 'e3001000-0000-4000-8000-00000000000b',
-  'e3002000-0000-4000-8000-000000000003', 'X', '{"text":"Three platforms.","targets":["x","threads","linkedin"]}'), 3,
-  'three targets, three slots');
-select is(pg_temp.slots('e3002000-0000-4000-8000-000000000003'), 'linkedin intent, threads intent, x intent',
-  'without an account every slot is copy and open');
+  'e3002000-0000-4000-8000-000000000003', 'X', '{"text":"Three platforms.","targets":["x","threads","linkedin"]}'), 0,
+  'three targets, no slots');
+select is(pg_temp.slots('e3002000-0000-4000-8000-000000000003'), null,
+  'without an account nothing is scheduled');
 
 -- The draft replaces the body but keeps the planner's targets and slot.
 insert into public.content_items (id, user_id, department, platform, day, idea, status, body)

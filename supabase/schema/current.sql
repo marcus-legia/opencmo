@@ -2114,6 +2114,9 @@ declare
   v_prev public.approvals;
   v_status text := 'waiting';
   v_held_until timestamptz;
+  -- A schedule card is tied to a time, so it always reaches the founder whatever the day's card budget says. A
+  -- failure card is one of them even though it has no deadline of its own.
+  v_timed boolean := false;
 begin
   if v_snapshot is null then
     return;
@@ -2128,17 +2131,18 @@ begin
   update public.approvals set status = 'cancelled', decided_at = now()
   where ref_kind = p_ref_kind and ref_id = p_ref_id and status in ('waiting', 'held');
   v_kind := v_snapshot->>'kind';
-  -- A failure card (it carries the last error) stays open while the slot's window lasts, so Retry can still post
-  -- at the approved time; any other schedule card expires at its time.
+  -- A failure card (it carries the last error) waits until the founder decides it: Retry then asks for a new time.
+  -- Any other schedule card expires at its time.
   if v_kind = 'schedule' then
-    select case when s.error is not null then s.window_ends_at else s.publish_at end into v_expires
+    v_timed := true;
+    select case when s.error is null then s.publish_at end into v_expires
     from public.schedule_slots s where s.id = p_ref_id;
   end if;
   if v_prev.id is not null then
     -- A replacement keeps its place: not counted again, still held if the old one was.
-    v_status := case when v_prev.status = 'held' and v_expires is null then 'held' else 'waiting' end;
+    v_status := case when v_prev.status = 'held' and not v_timed then 'held' else 'waiting' end;
     v_held_until := case when v_status = 'held' then v_prev.held_until end;
-  elsif not public.card_budget_take(p_user, v_expires is not null) then
+  elsif not public.card_budget_take(p_user, v_timed) then
     v_status := 'held';
     v_held_until := public.card_budget_next_day(p_user);
   end if;
@@ -9675,6 +9679,22 @@ CREATE FUNCTION public.job_hold_credits() RETURNS integer
 
 
 --
+-- Name: lapsed_social_accounts(integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.lapsed_social_accounts(p_limit integer DEFAULT 100) RETURNS TABLE(id uuid, user_id uuid, zernio_account_id text)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select a.id, a.user_id, a.zernio_account_id
+  from public.social_accounts a
+  where not public.cmo_paid(a.user_id)
+  order by a.connected_at nulls first, a.id
+  limit greatest(1, least(coalesce(p_limit, 100), 500));
+$$;
+
+
+--
 -- Name: library_delete_entry(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -15964,11 +15984,20 @@ begin
   foreach v_platform in array coalesce(v_platforms, '{}') loop
     continue when exists (select 1 from public.schedule_slots where deliverable_id = v_d.id and platform = v_platform
       and status in ('proposed', 'waiting', 'due', 'reminded', 'publishing', 'published'));
-    -- A failure still in its window waits on its Retry card; an unconfirmed one may have gone out. Neither gets a twin.
-    continue when exists (select 1 from public.schedule_slots where deliverable_id = v_d.id and platform = v_platform
-      and status = 'failed' and (window_ends_at > now() or error->>'code' = 'unconfirmed'));
+    -- A failure waits on its Retry card: while that card is undecided (`waiting`, or `held` by the card budget) the
+    -- founder owns it, so no twin is made. One still inside its window, or that may have gone out (`unconfirmed`),
+    -- gets none either.
+    continue when exists (select 1 from public.schedule_slots s where s.deliverable_id = v_d.id and s.platform = v_platform
+      and s.status = 'failed' and (s.window_ends_at > now() or s.error->>'code' = 'unconfirmed'
+        or exists (select 1 from public.approvals a
+          where a.ref_kind = 'schedule_slot' and a.ref_id = s.id and a.status in ('waiting', 'held'))));
     continue when (select count(*) from public.schedule_slots where deliverable_id = v_d.id and platform = v_platform)
       >= (v_rules->>'maxProposals')::integer;
+    v_account := null;
+    select id into v_account from public.social_accounts
+    where user_id = v_d.user_id and platform = v_platform and status = 'connected';
+    -- A post with no account to post to is not scheduled at all: it could only fail at its time and ask again.
+    continue when v_d.kind = 'post' and v_account is null;
     -- The post card carried its time (cmo-review-3 1.2) for its first platform: approving the post approved it, so no
     -- schedule card asks. The other targets get a card each.
     v_taken := 'none';
@@ -15981,9 +16010,6 @@ begin
     end if;
     v_at := public.schedule_pick_time(v_d.user_id, v_platform, v_d.id);
     continue when v_at is null;
-    v_account := null;
-    select id into v_account from public.social_accounts
-    where user_id = v_d.user_id and platform = v_platform and status = 'connected';
     -- TikTok's posting guidelines: the founder picks the audience and turns on each interaction and disclosure;
     -- nothing starts on.
     insert into public.schedule_slots (user_id, deliverable_id, platform, account_id, mode, publish_at, jitter_seconds,
@@ -16704,6 +16730,51 @@ $_$;
 
 
 --
+-- Name: social_account_drop(uuid, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.social_account_drop(p_user uuid, p_id uuid) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_slots uuid[];
+  v_dropped uuid[];
+  v_slot uuid;
+begin
+  if not exists (select 1 from public.social_accounts where id = p_id and user_id = p_user) then
+    raise exception 'Account not found.' using errcode = 'P0002';
+  end if;
+  -- A post has nowhere to go without the account: its slot and its card are dropped.
+  with gone as (
+    update public.schedule_slots s
+    set status = 'cancelled', account_id = null, lease_until = null, updated_at = now()
+    from public.deliverables d
+    where d.id = s.deliverable_id and d.kind = 'post'
+      and s.account_id = p_id and s.user_id = p_user and s.status in ('proposed', 'waiting')
+    returning s.id
+  )
+  select coalesce(array_agg(id), '{}') into v_dropped from gone;
+  -- A video or a photo post is the founder's own file: it still asks, to be posted by hand.
+  with moved as (
+    update public.schedule_slots
+    set account_id = null, mode = 'intent', status = 'proposed', updated_at = now()
+    where account_id = p_id and user_id = p_user and status in ('proposed', 'waiting')
+    returning id
+  )
+  select coalesce(array_agg(id), '{}') into v_slots from moved;
+  delete from public.social_accounts where id = p_id and user_id = p_user;
+  foreach v_slot in array v_dropped loop
+    perform public.approval_close('schedule_slot', v_slot, 'cancelled');
+  end loop;
+  foreach v_slot in array v_slots loop
+    perform public.approval_raise(p_user, 'schedule_slot', v_slot);
+  end loop;
+end;
+$$;
+
+
+--
 -- Name: social_account_mark(text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -16742,26 +16813,8 @@ CREATE FUNCTION public.social_account_remove(p_id uuid) RETURNS void
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
-declare
-  v_user uuid := public.require_user();
-  v_slots uuid[];
-  v_slot uuid;
 begin
-  if not exists (select 1 from public.social_accounts where id = p_id and user_id = v_user) then
-    raise exception 'Account not found.' using errcode = 'P0002';
-  end if;
-  -- Its slots not yet posting ask again without it: copy and open where the platform allows, else "connect it".
-  with moved as (
-    update public.schedule_slots
-    set account_id = null, mode = 'intent', status = 'proposed', updated_at = now()
-    where account_id = p_id and user_id = v_user and status in ('proposed', 'waiting')
-    returning id
-  )
-  select coalesce(array_agg(id), '{}') into v_slots from moved;
-  delete from public.social_accounts where id = p_id and user_id = v_user;
-  foreach v_slot in array v_slots loop
-    perform public.approval_raise(v_user, 'schedule_slot', v_slot);
-  end loop;
+  perform public.social_account_drop(public.require_user(), p_id);
 end;
 $$;
 
@@ -16803,6 +16856,12 @@ declare
 begin
   if not exists (select 1 from public.zernio_profiles where user_id = p_user) then
     raise exception 'Connect starts with a Zernio profile.' using errcode = 'P0001';
+  end if;
+  if not public.cmo_paid(p_user) and not exists (
+    select 1 from public.social_accounts
+    where user_id = p_user and platform = p_platform and zernio_account_id = p_zernio_account_id and status = 'connected'
+  ) then
+    perform public.cmo_plan_required();
   end if;
   insert into public.social_accounts (user_id, platform, handle, avatar_url, zernio_account_id)
   values (p_user, p_platform, left(trim(p_handle), 100), nullif(trim(coalesce(p_avatar_url, '')), ''), p_zernio_account_id)

@@ -135,7 +135,7 @@ test("one Feed card for three platforms; approving it gives the three schedule c
   await expect
     .poll(schedule)
     .toEqual([
-      "linkedin intent waiting",
+      "linkedin publish waiting",
       "threads publish waiting",
       "x publish approved",
     ]);

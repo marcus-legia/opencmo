@@ -14,7 +14,8 @@ select ok(not has_function_privilege('authenticated', 'public.nonneg(bigint)', '
 insert into auth.users (id, email) values
   ('e2330000-0000-4000-8000-00000000000a', 'p6met@test.local'),
   ('e2330000-0000-4000-8000-00000000000b', 'p6met-other@test.local');
-update public.profiles set timezone = 'UTC' where id in ('e2330000-0000-4000-8000-00000000000a', 'e2330000-0000-4000-8000-00000000000b');
+-- Connecting needs a plan (20270206060000).
+update public.profiles set timezone = 'UTC', plan = 'starter' where id in ('e2330000-0000-4000-8000-00000000000a', 'e2330000-0000-4000-8000-00000000000b');
 select public.zernio_profile_save('e2330000-0000-4000-8000-00000000000a', 'prof-met');
 select public.social_account_save('e2330000-0000-4000-8000-00000000000a', 'x', '@founder', null, 'acc-met-x');
 select public.zernio_profile_save('e2330000-0000-4000-8000-00000000000b', 'prof-met-b');

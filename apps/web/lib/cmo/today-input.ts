@@ -78,9 +78,11 @@ export async function loadTodayInput(
       .in("status", ["approved", "edited", "skipped"]).gte("decided_at", startOfToday).limit(500),
     db.from("approvals").select("id", { count: "exact", head: true }).eq("user_id", userId).in("status", ["approved", "edited", "skipped"]),
     db.from("marketing_documents").select("id", { count: "exact", head: true }).eq("user_id", userId).eq("kind", "strategy"),
-    // A failed post still inside its window, with its Retry card waiting.
+    // Today's failed posts, with their Retry card waiting. Bounded by the day, not by the slot's 15-minute window:
+    // the card waits until the founder decides it (20270206030000), and a failure they cannot see is one they cannot
+    // retry. `buildToday` drops any whose card is no longer waiting.
     db.from("schedule_slots").select("id, platform, publish_at, approval_id").eq("user_id", userId).eq("status", "failed")
-      .gt("window_ends_at", now.toISOString()).not("approval_id", "is", null).limit(20),
+      .gte("publish_at", startOfToday).not("approval_id", "is", null).limit(20),
     opts.asService
       ? db.rpc("published_items", { p_user: userId, p_since: since })
       : db.rpc("my_published_items", { p_since: since }),

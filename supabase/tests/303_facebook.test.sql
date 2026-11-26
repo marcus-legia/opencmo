@@ -1,5 +1,6 @@
 -- 20270120030000: Facebook is a Page the founder connects, a text platform of the posting plan and a target of the
--- fan-out. Autopilot for Facebook stays off. Without a connected Page the slot is copy and open.
+-- fan-out. Autopilot for Facebook stays off. Without a connected Page nothing is scheduled for it (20270206040000;
+-- it used to be a copy-and-open slot).
 create extension if not exists pgtap with schema extensions;
 
 begin;
@@ -54,10 +55,10 @@ $$;
 
 select is(pg_temp.slots('e3030000-0000-4000-8000-00000000000a', 'e3031000-0000-4000-8000-00000000000a',
   'e3032000-0000-4000-8000-000000000001', '{"text":"For the Page.","targets":["x","facebook"]}'),
-  'facebook publish, x intent', 'the connected Page publishes, X without an account is copy and open');
+  'facebook publish', 'the connected Page publishes, X without an account gets no slot');
 select is(pg_temp.slots('e3030000-0000-4000-8000-00000000000b', 'e3031000-0000-4000-8000-00000000000b',
   'e3032000-0000-4000-8000-000000000002', '{"text":"For my profile.","targets":["facebook"]}'),
-  'facebook intent', 'a personal profile (no Page connected) gets copy and open');
+  null, 'a personal profile (no Page connected) gets no slot');
 
 -- "I posted it" on a Facebook post takes a Facebook link only.
 update public.content_items set platform = 'Facebook', body = body - 'targets' where id = 'e3032000-0000-4000-8000-000000000002';

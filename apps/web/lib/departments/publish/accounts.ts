@@ -53,14 +53,14 @@ export async function finishConnect(deps: AccountsDeps, query: URLSearchParams):
   const platform = query.get("platform") as PublishPlatform | null;
   const label = platform && platform in PLATFORM_LABEL ? PLATFORM_LABEL[platform] : "The account";
   if (!platform || !(platform in PLATFORM_LABEL) || platform === ("reddit" as string)) {
-    return { kind: "refused", message: "That connect link is not valid. Start again from Settings." };
+    return { kind: "refused", message: "That connect link is not valid. Start again from the Connect button." };
   }
   if (query.get("error")) return { kind: "refused", message: `${label} was not connected. Try again, and allow access when asked.` };
   const accountId = query.get("accountId");
   const profile = await deps.store.profileId(deps.userId);
-  if (!accountId || !profile) return { kind: "refused", message: `${label} was not connected. Start again from Settings.` };
+  if (!accountId || !profile) return { kind: "refused", message: `${label} was not connected. Start again from the Connect button.` };
   const account = (await deps.adapter.accounts(profile)).find((a) => a.zernioAccountId === accountId && a.platform === platform);
-  if (!account) return { kind: "refused", message: `${label} was not connected. Start again from Settings.` };
+  if (!account) return { kind: "refused", message: `${label} was not connected. Start again from the Connect button.` };
   await deps.store.saveAccount(deps.userId, account);
   return { kind: "connected", platform, handle: account.handle };
 }
