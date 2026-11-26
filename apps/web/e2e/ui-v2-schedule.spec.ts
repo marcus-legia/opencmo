@@ -207,33 +207,28 @@ test("a failed post shows why and Retry posts it again", async ({ page }) => {
   await expect.poll(async () => (await db.from("schedule_slots").select("status").eq("id", slot.id).single()).data?.status).toBe("waiting");
 });
 
-test("no LinkedIn account: the card at its time copies and opens LinkedIn, and I posted it publishes the post", async ({ page }) => {
+// 20270206040000: a post is scheduled only for a platform with a connected account. Until then an unconnected
+// platform got an `intent` slot to copy and post by hand; that slot could only settle `failed` with `no_account`, and
+// the failure asked for a new time, so one platform chosen at onboarding and never connected filled the calendar with
+// copies of a post that was never going to go out.
+test("no LinkedIn account: an approved post is scheduled nowhere, and the plan says to connect it", async ({ page }) => {
   const db = admin();
   const user = await founder(db);
   const text = "Why we built the editor before anything else.";
-  const { itemId, slot } = await approvedPost(db, user, "LinkedIn", text);
-  expect(slot).toMatchObject({ platform: "linkedin", mode: "intent" });
+  const { itemId, card } = await waitingPost(db, user, "LinkedIn", text, false);
+
+  const me = createClient(state().url, state().anon, { auth: { persistSession: false } });
+  expect((await me.auth.signInWithPassword({ email: user.email, password: user.password })).error).toBeNull();
+  const decided = await me.rpc("approval_decide", { p_id: card!.id, p_action: "approve", p_payload: { content_hash: card!.content_hash, via: "app" } });
+  expect(decided.error).toBeNull();
+  await expect.poll(async () => (await db.from("content_items").select("status").eq("id", itemId).single()).data?.status).toBe("approved");
+
+  // The words are approved and kept; there is simply nowhere to send them.
+  const deliverable = (await db.from("deliverables").select("id").eq("ref_kind", "content_item").eq("ref_id", itemId).single()).data!.id;
+  expect((await db.from("schedule_slots").select("id").eq("deliverable_id", deliverable)).data).toEqual([]);
+
+  // And the founder is told where to fix it, on the page that connects accounts.
   await signIn(page, user);
-  await (await openCard(page, slot.approval_id!)).getByRole("button", { name: "Approve time" }).click();
-  await expect.poll(async () => (await db.from("schedule_slots").select("status").eq("id", slot.id).single()).data?.status).toBe("waiting");
-
-  // What the sweep does when its time comes (schedule_claim_due's intent branch).
-  expect((await db.rpc("publish_status", { p_slot: slot.id, p_status: "intent" })).error).toBeNull();
-  const cardId = (await db.from("schedule_slots").select("approval_id").eq("id", slot.id).single()).data!.approval_id!;
-
-  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
-  await page.context().route(/https:\/\/www\.linkedin\.com\/.*/, (route) => route.fulfill({ status: 200, contentType: "text/html", body: "<title>Composer</title>" }));
-  const card = await openCard(page, cardId);
-  await expect(card).toContainText("No account connected: copy and open.");
-  const popup = page.waitForEvent("popup");
-  await card.getByRole("button", { name: "Copy and open LinkedIn" }).click();
-  const tab = await popup;
-  await expect.poll(() => tab.url()).toContain("linkedin.com/feed/?shareActive=true");
-  await tab.close();
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(text);
-
-  await card.getByRole("button", { name: "I posted it" }).click();
-  await expect(page.getByText("Marked as posted. Nothing else goes out for it.")).toBeVisible();
-  await expect.poll(async () => (await db.from("schedule_slots").select("status").eq("id", slot.id).single()).data?.status).toBe("published");
-  await expect.poll(async () => (await db.from("content_items").select("status").eq("id", itemId).single()).data?.status).toBe("published");
+  await page.goto("/app/schedule#posting-plan");
+  await expect(page.getByTestId("posting-plan")).toContainText("Not connected, so nothing is written for it.");
 });

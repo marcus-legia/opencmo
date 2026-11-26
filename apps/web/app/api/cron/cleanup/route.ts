@@ -48,13 +48,16 @@ async function run(request: NextRequest) {
   const { data: startedAt, error: startError } = await supabase.rpc("cleanup_started_at");
   if (startError) return NextResponse.json({ error: "Cleanup failed." }, { status: 500 });
 
+  // Posting accounts of founders whose plan lapsed (20270206070000): Zernio bills each one by the day. Before the
+  // purge below, which deletes the user: `social_accounts.user_id` cascades, so a founder who asked to delete their
+  // account and has no plan would lose the row before anything disconnected it at Zernio, and it would bill there
+  // with nothing left here to find it by. Before the file sweep too, which can use up the time budget; a failure here
+  // is logged and the next daily run tries again.
+  await disconnectLapsedAccounts(supabase);
+
   // Tài khoản chưa từng trả tiền quá 30 ngày (migration 20261108090000): RPC đưa file của họ vào
   // hàng đợi, ở đây xoá user — cascade xoá hàng DB; vòng dưới xoá file ngay lượt này.
   const accounts = await purgeUnpaidAccounts(supabase);
-
-  // Posting accounts of founders whose plan lapsed (20270206070000): Zernio bills each one by the day. Before the file
-  // sweep, which can use up the time budget; a failure here is logged and the next daily run tries again.
-  await disconnectLapsedAccounts(supabase);
 
   // An annual plan's monthly credits. Before the file sweep, which can use up the time budget. A failure here must not
   // stop the cleanup: the next daily run catches up, and the key per month keeps it from granting twice.
