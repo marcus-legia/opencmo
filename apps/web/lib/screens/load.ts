@@ -73,7 +73,28 @@ function must<T>(r: { data: T | null; error: { message: string } | null }, what:
 
 type Profile = { weekly_credit_budget: number; timezone: string; digest_hour: number | null; cmo_paused_at: string | null; plan: string };
 
-async function profile(supabase: SupabaseClient, userId: string): Promise<Profile> {
+/**
+ * The profile row, read once per Supabase client and founder. Seven readers want it and `loadScreens` runs them
+ * together, so a single screen request used to make seven identical `profiles` queries. The client is made per
+ * request, so the entry lives exactly as long as the request does; a read that fails is dropped again, so a
+ * long-lived client (the crons' admin one) does not keep a transient failure.
+ */
+const profileOnce = new WeakMap<SupabaseClient, Map<string, Promise<Profile>>>();
+
+function profile(supabase: SupabaseClient, userId: string): Promise<Profile> {
+  let byUser = profileOnce.get(supabase);
+  if (!byUser) profileOnce.set(supabase, (byUser = new Map()));
+  const started = byUser.get(userId);
+  if (started) return started;
+  const run = readProfile(supabase, userId).catch((error: unknown) => {
+    byUser.delete(userId);
+    throw error;
+  });
+  byUser.set(userId, run);
+  return run;
+}
+
+async function readProfile(supabase: SupabaseClient, userId: string): Promise<Profile> {
   const r = await supabase.from("profiles").select("weekly_credit_budget, timezone, digest_hour, cmo_paused_at, plan").eq("id", userId).maybeSingle();
   if (r.error || !r.data) throw new Error(`profiles: ${r.error?.message ?? "missing"}`);
   return r.data as Profile;
@@ -1683,9 +1704,12 @@ async function analytics({ supabase, userId, params }: LoadContext): Promise<Par
   const parsed = RangeSchema.safeParse(Number(params.get("range") ?? 30));
   const range = parsed.success ? parsed.data : 30;
   const now = new Date();
-  const m = await measured(supabase, range, now);
+  // The two reads do not need each other: one round trip, not two.
   // `brainReads` is live and empty: no model reads these numbers yet, and a sample line would read as a real finding.
-  const timezone = await profile(supabase, userId).then((p) => p.timezone, () => "UTC");
+  const [m, timezone] = await Promise.all([
+    measured(supabase, range, now),
+    profile(supabase, userId).then((p) => p.timezone, () => "UTC"),
+  ]);
   return buildAnalytics({ range, now, accounts: m.accounts, days: m.days, posts: m.posts, publishedInRange: m.published, timezone });
 }
 
