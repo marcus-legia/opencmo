@@ -97,6 +97,8 @@ const tables: Record<string, Row[]> = {
     { id: "sl-miss", platform: "tiktok", status: "missed", publish_at: `${today}T09:00:00Z`, error: null, approval_id: null, account: null, deliverable: { kind: "short", ref_kind: "clip", ref_id: "clip-short" } },
     { id: "sl-gone", platform: "x", status: "cancelled", publish_at: `${today}T10:00:00Z`, error: null, approval_id: null, account: null, deliverable: { kind: "post", ref_kind: "content_item", ref_id: "p-th" } },
     { id: "sl-far", platform: "x", status: "waiting", publish_at: "2099-01-01T09:00:00Z", error: null, approval_id: null, account: null, deliverable: null },
+    // An approved post's own slot, in another week: Writer reads it for the time and the slot its row can move.
+    { id: "sl-post", platform: "linkedin", status: "waiting", publish_at: "2099-01-03T09:00:00Z", error: null, approval_id: null, account: null, deliverable: { kind: "post", ref_kind: "content_item", ref_id: "p-li" } },
   ],
   clips: [{ id: "clip-short", hook: "Cut by words" }],
 };
@@ -129,6 +131,11 @@ async function main(): Promise<void> {
   );
   assert.deepEqual([drafts.get("p-held")!.heldUntil, drafts.get("p-held")!.ref, drafts.get("p-held")!.text], ["2099-01-02T00:00:00.000Z", { kind: "content_item", id: "p-held" }, "Held post."]);
   assert.equal(drafts.get("p-li")!.note, "You edited it before approving");
+  assert.ok(writer.live.timezone, "Writer's timezone is live");
+  assert.equal(writer.data.timezone, "Asia/Ho_Chi_Minh", "times are the founder's, and its picker reads them in that zone");
+  // An approved post carries the slot its time sits on: that is what its row's "Scheduled" button moves (`change_time`).
+  assert.deepEqual([drafts.get("p-li")!.at, drafts.get("p-li")!.slotId], ["2099-01-03T09:00:00.000Z", "sl-post"], "an approved post's time and slot");
+  assert.equal(drafts.get("p-x")!.slotId ?? null, null, "a post still in review has no slot to move");
   assert.deepEqual([drafts.get("c-tt")!.kind, drafts.get("c-tt")!.platform, drafts.get("c-tt")!.approvalId], ["caption", "tiktok", "card-batch"], "a short's caption opens its batch card");
   assert.deepEqual([drafts.get("c-yt")!.platform, drafts.get("c-yt")!.title, drafts.get("c-yt")!.approvalId, drafts.get("c-yt")!.note], ["youtube", "Cut a demo by words", "card-video", "You edited it on the card"]);
   assert.deepEqual(writer.data.voice.lines.map((l) => l.text.slice(0, 20)), ["End on the point its", "Edited on LinkedIn b", "Approved as written ", "Skipped a draft on X", "No links, no hashtag"],

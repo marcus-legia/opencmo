@@ -13,6 +13,7 @@ import { PLATFORM_LABEL as SOURCE_LABEL } from "@/lib/cmo/social/conversations";
 import type { ApprovalCard as Card } from "@/lib/screens/approval-card";
 import { PLATFORM_LABEL } from "@/lib/screens/common";
 import type { WriterScreen } from "@/lib/screens/writer";
+import { formatWhen, fromLocalInput, localMonday, toLocalInput } from "@/lib/time-zone";
 
 import { KIND_ICON, PLATFORM_ICON } from "./cards";
 import { PlatformBadge } from "./platform-logos";
@@ -130,6 +131,9 @@ export function AgentWriter() {
     setOpen(id);
     requestAnimationFrame(() => document.getElementById(`post-${id}`)?.scrollIntoView({ block: "start" }));
   }, [loadedIds]);
+  // An approved post's time opens under its row, from the "Scheduled" button on the row itself (owner, 2026-11-26).
+  const [timing, setTiming] = useState<string | null>(null);
+  const [saving, setSaving] = useState<string | null>(null);
   const [ask, setAsk] = useState("");
   const [askKind, setAskKind] = useState<(typeof ASK_KINDS)[number]["id"]>("post");
   // The platforms this week's drafts are for: a chip each (as the Calendar's), when there is more than one.
@@ -142,6 +146,8 @@ export function AgentWriter() {
     reloadCards();
   });
 
+  const timezone = data?.timezone ?? "UTC";
+  const liveDrafts = state.status === "ready" && state.live.drafts;
   const drafts = data?.drafts ?? [];
   const waiting = drafts.filter((d) => d.column === "waiting");
   // Held past the day's ten new cards: the founder's turn tomorrow unless they show it now.
@@ -180,6 +186,27 @@ export function AgentWriter() {
     }
   }
 
+  /** Moves an approved post to another time (`change_time`): the slot asks again on a new card, as the Calendar does. */
+  async function move(d: Draft, publishAt: string) {
+    if (!d.slotId || saving) return;
+    if (!liveDrafts) {
+      toast("Sample posts: nothing was moved.");
+      return;
+    }
+    setSaving(d.id);
+    try {
+      await api(`/schedule/slots/${encodeURIComponent(d.slotId)}`, jsonBody({ action: "change_time", publishAt }));
+      toast("New time saved. A new card asks you to approve it.");
+      setTiming(null);
+      reload();
+      reloadCards();
+    } catch (error) {
+      toast(error instanceof ApiError ? error.message : "Could not move it. Please try again.");
+    } finally {
+      setSaving(null);
+    }
+  }
+
   function write() {
     focusChat();
     fillChat(`${askPrompt.prompt}${ask.trim() ? `: ${ask.trim()}` : "."}`);
@@ -192,43 +219,65 @@ export function AgentWriter() {
     const opens = Boolean(card) || d.column === "waiting";
     const badge = badgeOf(d);
     const isOpen = opens && firstOpen === d.id;
+    // An approved post's state is also the way to its time: the badge is a button, and opens the row's schedule panel.
+    const schedules = d.column === "scheduled" && Boolean(d.at);
+    const timingOpen = timing === d.id;
     return (
-      <div key={d.id} className="th" data-open={isOpen} data-testid="writer-row" data-platform={d.platform} id={`post-${d.id}`}>
-        <button type="button" className="row" onClick={opens ? () => setOpen(isOpen ? "" : d.id) : undefined} aria-expanded={opens ? isOpen : undefined} style={opens ? undefined : { cursor: "default" }}>
-          <span className="st">{iconOf(d)}</span>
-          <span style={{ flex: "1 1 auto", minWidth: "0", display: "flex", flexDirection: "column" }}>
-            <span className="ttl">
-              {d.no ? (
-                <span className="idx-no" data-testid="writer-no">
-                  #{d.no}
+      <div key={d.id} className="th" data-open={isOpen || timingOpen} data-testid="writer-row" data-platform={d.platform} id={`post-${d.id}`}>
+        <div className="thead">
+          <button type="button" className="row" onClick={opens ? () => setOpen(isOpen ? "" : d.id) : undefined} aria-expanded={opens ? isOpen : undefined} style={opens ? undefined : { cursor: "default" }}>
+            <span className="st">{iconOf(d)}</span>
+            <span style={{ flex: "1 1 auto", minWidth: "0", display: "flex", flexDirection: "column" }}>
+              <span className="ttl">
+                {d.no ? (
+                  <span className="idx-no" data-testid="writer-no">
+                    #{d.no}
+                  </span>
+                ) : null}
+                <span className="kind">{kindOf(d)} · </span>
+                {d.title}
+              </span>
+              {lastWeek.has(d.id) && d.column === "waiting" ? (
+                <span className="meta" data-testid="writer-left-over">
+                  From last week: approve or skip it
                 </span>
               ) : null}
-              <span className="kind">{kindOf(d)} · </span>
-              {d.title}
+              {d.sources?.length ? (
+                <span className="meta" data-testid="writer-based-on" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {basedOn(d.sources)}
+                  {d.sources.some((s) => s.ref) ? ` · From ${d.sources.flatMap((s) => (s.ref ? [`Scan #${s.ref.split(".")[0]} · ${s.ref}`] : [])).join(", ")}` : ""}
+                </span>
+              ) : null}
             </span>
-            {lastWeek.has(d.id) && d.column === "waiting" ? (
-              <span className="meta" data-testid="writer-left-over">
-                From last week: approve or skip it
+          </button>
+          <div className="rowend">
+            {schedules ? (
+              <button type="button" className={`${badge[1]} badge-btn`} aria-expanded={timingOpen} onClick={() => setTiming(timingOpen ? null : d.id)} data-testid="writer-schedule">
+                <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
+                  <rect width="18" height="18" x="3" y="4" rx="2" />
+                  <path d="M16 2v4" />
+                  <path d="M8 2v4" />
+                  <path d="M3 10h18" />
+                </svg>
+                {badge[0]}
+              </button>
+            ) : (
+              <span className={badge[1]}>{badge[0]}</span>
+            )}
+            {d.column === "scheduled" && d.postYourself?.length ? (
+              <span className="meta" data-testid="writer-post-yourself">
+                post it yourself on {d.postYourself.map((p) => PLATFORM_LABEL[p as keyof typeof PLATFORM_LABEL] ?? p).join(" and ")}
               </span>
             ) : null}
-            {d.sources?.length ? (
-              <span className="meta" data-testid="writer-based-on" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                {basedOn(d.sources)}
-                {d.sources.some((s) => s.ref) ? ` · From ${d.sources.flatMap((s) => (s.ref ? [`Scan #${s.ref.split(".")[0]} · ${s.ref}`] : [])).join(", ")}` : ""}
-              </span>
-            ) : null}
-          </span>
-          <span className={badge[1]}>{badge[0]}</span>
-          {d.column === "scheduled" && d.postYourself?.length ? (
-            <span className="meta" data-testid="writer-post-yourself">
-              post it yourself on {d.postYourself.map((p) => PLATFORM_LABEL[p as keyof typeof PLATFORM_LABEL] ?? p).join(" and ")}
+            <span className="meta" style={{ minWidth: "64px", textAlign: "right", whiteSpace: "nowrap" }}>
+              {/* A waiting draft's card says when it would go out ("Mon 09:00"): the row shows that, not the planned day. */}
+              {!d.at && card?.body.kind === "post" && card.body.proposed?.at ? when({ ...d, at: card.body.proposed.at }) : when(d)}
             </span>
-          ) : null}
-          <span className="meta" style={{ minWidth: "64px", textAlign: "right", whiteSpace: "nowrap" }}>
-            {/* A waiting draft's card says when it would go out ("Mon 09:00"): the row shows that, not the planned day. */}
-            {!d.at && card?.body.kind === "post" && card.body.proposed?.at ? when({ ...d, at: card.body.proposed.at }) : when(d)}
-          </span>
-        </button>
+          </div>
+        </div>
+        {timingOpen ? (
+          <SchedulePanel draft={d} timezone={timezone} saving={saving === d.id} onMove={(at) => void move(d, at)} onClose={() => setTiming(null)} />
+        ) : null}
         {isOpen && card ? (
           <div className="detail td-cardhost">
             <ApprovalCard card={card} sample={sample} onDecide={onDecide} open />
@@ -461,6 +510,60 @@ export function AgentWriter() {
           ) : null}
         </section>
       </aside>
+    </div>
+  );
+}
+
+/**
+ * An approved post's time, under its row: when it goes out in the founder's zone, a picker that moves it
+ * (`change_time`, which asks again on a new card, as the Calendar does), and the week it sits in.
+ */
+function SchedulePanel({ draft, timezone, saving, onMove, onClose }: { draft: Draft; timezone: string; saving: boolean; onMove: (at: string) => void; onClose: () => void }) {
+  const initial = toLocalInput(draft.at!, timezone);
+  const [value, setValue] = useState(initial);
+  const at = fromLocalInput(value, timezone);
+  const platform = PLATFORM_LABEL[draft.platform];
+  return (
+    <div className="detail" data-testid="writer-schedule-panel">
+      <div className="meta">
+        Goes out {formatWhen(draft.at!, timezone)} · {platform} · {timezone}
+      </div>
+      {draft.connected === false ? (
+        <p className="meta" style={{ margin: "0" }} data-testid="writer-not-connected">
+          No {platform} account is connected, so this does not go out on its own. Post it yourself at this time, or connect {platform} and it goes out by itself.
+        </p>
+      ) : null}
+      {draft.slotId ? (
+        <>
+          <label className="meta" htmlFor={`writer-at-${draft.id}`}>
+            New time ({timezone})
+          </label>
+          <input
+            id={`writer-at-${draft.id}`}
+            type="datetime-local"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            data-testid="writer-time-input"
+            style={{ height: "32px", padding: "0 8px", border: "1px solid var(--line-2)", borderRadius: "7px", background: "var(--bg)", color: "var(--text)", font: "inherit", width: "fit-content" }}
+          />
+          <div className="meta">Ferreto asks you to approve the new time before it goes out.</div>
+        </>
+      ) : (
+        <div className="meta">Its time is set in the calendar.</div>
+      )}
+      <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+        {draft.slotId ? (
+          <button type="button" className="primary" disabled={saving || !at || value === initial} onClick={() => at && onMove(at)} data-testid="writer-save-time">
+            {saving ? "Saving…" : "Save the time"}
+          </button>
+        ) : null}
+        <Link className="ghost" style={{ textDecoration: "none" }} href={`/app/schedule?from=${localMonday(Date.parse(draft.at!), timezone)}`} data-testid="writer-in-calendar">
+          See it in the calendar
+        </Link>
+        <button type="button" className="skip" onClick={onClose}>
+          Close
+        </button>
+      </div>
     </div>
   );
 }

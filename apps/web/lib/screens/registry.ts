@@ -80,7 +80,7 @@ export const SCREENS = {
     release: ["lastRunAt", "insights", "results", "competitors"],
   }),
   // Drafts per platform (posts, captions, briefs for Studio) and the voice Writer reads (P3 A3).
-  writer: entry({ schema: WriterScreenSchema, fixture: writerFixture, empty: writerEmpty, live: ["drafts", "voice"], release: ["drafts", "voice"] }),
+  writer: entry({ schema: WriterScreenSchema, fixture: writerFixture, empty: writerEmpty, live: ["drafts", "timezone", "voice"], release: ["drafts", "timezone", "voice"] }),
   // Uploads come from /api/v1/projects on the page; `items` holds only generated work (none before S1).
   studio: entry({ schema: StudioScreenSchema, fixture: studioFixture, empty: studioEmpty, live: ["items", "team", "editStates"], release: ["items"] }),
   // P5 R1: the mention counter, the stuck banner and the founder's Sales settings read real rows.

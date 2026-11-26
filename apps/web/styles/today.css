@@ -347,6 +347,11 @@ html[data-theme="dark"] .k.pg-agentwriter{--bg:#121110;--panel:#181715;--raised:
 .pg-agentwriter .th{border:1px solid var(--line);border-radius:10px;background:var(--panel);overflow:hidden}
 .pg-agentwriter .th[data-open="true"]{border-color:var(--line-2)}
 .pg-agentwriter .row{display:flex;align-items:center;gap:10px;width:100%;min-height:48px;padding:8px 12px 8px 10px;border:0;background:transparent;text-align:left}
+/* The row's state is a button of its own (its time opens under the row), so it sits beside the row, not inside it:
+   a button cannot hold another button. */
+.pg-agentwriter .thead{display:flex;align-items:center}
+.pg-agentwriter .thead > .row{flex:1 1 auto;min-width:0;padding-right:4px}
+.pg-agentwriter .rowend{display:flex;align-items:center;gap:10px;flex-shrink:0;padding-right:12px}
 .pg-agentwriter .ttl{flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:14.5px;font-weight:500}
 .pg-agentwriter .kind{color:var(--muted);font-weight:400}
 .pg-agentwriter .badge{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:6px;font-size:12.5px;font-weight:500}
@@ -354,6 +359,10 @@ html[data-theme="dark"] .k.pg-agentwriter{--bg:#121110;--panel:#181715;--raised:
 .pg-agentwriter .b-ok{background:var(--ok-wash);color:var(--ok)}
 .pg-agentwriter .b-new{background:var(--accent-wash);color:var(--accent)}
 .pg-agentwriter .b-plan{background:var(--raised);color:var(--muted);border:1px solid var(--line)}
+.pg-agentwriter .badge-btn{border:0;cursor:pointer}
+.pg-agentwriter .badge-btn svg{width:12px;height:12px}
+.pg-agentwriter .badge-btn:hover{filter:brightness(1.06);box-shadow:inset 0 0 0 1px currentColor}
+.pg-agentwriter .badge-btn[aria-expanded="true"]{box-shadow:inset 0 0 0 1px currentColor}
 .pg-agentwriter .detail{border-top:1px solid var(--line);padding:14px 14px 14px 48px;display:flex;flex-direction:column;gap:12px}
 .pg-agentwriter .post{margin:0;padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--bg);font-size:15.5px;line-height:1.55;white-space:pre-line}
 .pg-agentwriter .beats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
