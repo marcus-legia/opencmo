@@ -201,6 +201,12 @@ dialog.v2-dialog.up-sheet { width: min(520px, calc(100vw - 24px)); max-height: c
 .td-upgrade .td-pill-more { font-weight: 500; }
 .td-upgrade svg { width: 14px; height: 14px; }
 
+/* Dismiss reasons on a Sales card: one chip each (owner, 2026-11-25). */
+.dismiss-why { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.dismiss-chip { height: 30px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--muted); font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; }
+.dismiss-chip:hover { color: var(--text); border-color: var(--line-2, var(--line)); }
+.dismiss-chip[aria-pressed="true"] { color: var(--text); border-color: var(--text); background: var(--raised, transparent); font-weight: 600; }
+
 /* The Sales <-> Post index (owner, 2026-11-25): numbered scans and posts, a section per scan or stage. */
 .idx-section { display: flex; flex-direction: column; gap: 8px; margin: 18px 0 4px; }
 .idx-head { display: flex; align-items: baseline; gap: 10px; margin: 0; padding-bottom: 6px; border-bottom: 1px solid var(--line); font-size: 14px; font-weight: 700; }
