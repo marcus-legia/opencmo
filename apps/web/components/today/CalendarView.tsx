@@ -16,6 +16,7 @@ import type { ApprovalCard as Card } from "@/lib/screens/approval-card";
 import type { ScheduleScreen } from "@/lib/screens/schedule";
 
 import { PostingPlanPanel } from "./PostingPlanPanel";
+import { SamplePosts } from "./SamplePosts";
 import { useDecide } from "./useDecide";
 
 type Slot = ScheduleScreen["slots"][number];
@@ -160,6 +161,8 @@ export function CalendarView() {
       <main style={{ flex: "1 1 640px", minWidth: "0", padding: "16px 20px 32px" }}>
         <AllowanceBanner state={usageState} />
         <FreeLockedCard state={usageState} where="post" />
+        {/* A free account cannot connect, so nothing is written for it: fixed samples show what Post makes instead. */}
+        {live && usageState?.plan === "free" && data && !data.accounts.some((a) => a.status === "connected") ? <SamplePosts /> : null}
         <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", marginBottom: "14px" }}>
           <button type="button" className="ib" aria-label={range === "month" ? "Previous month" : "Previous week"} onClick={() => step(-1)}>
             <svg className="i" viewBox="0 0 24 24" aria-hidden="true">

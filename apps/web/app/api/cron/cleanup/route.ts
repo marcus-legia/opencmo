@@ -3,6 +3,8 @@ import { CRON_MONITORS, withCronMonitor } from "@/lib/ops/cron-monitor";
 
 import { BUCKETS, SOURCES_BUCKET, type Bucket } from "@/lib/storage";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { publishAdapter } from "@/lib/departments/publish/adapter";
+import { disconnectLapsed } from "@/lib/departments/publish/lapsed";
 import {
   sweepOrphanPages,
   type CleanupQueueEntry,
@@ -49,6 +51,10 @@ async function run(request: NextRequest) {
   // Tài khoản chưa từng trả tiền quá 30 ngày (migration 20261108090000): RPC đưa file của họ vào
   // hàng đợi, ở đây xoá user — cascade xoá hàng DB; vòng dưới xoá file ngay lượt này.
   const accounts = await purgeUnpaidAccounts(supabase);
+
+  // Posting accounts of founders whose plan lapsed (20270206070000): Zernio bills each one by the day. Before the file
+  // sweep, which can use up the time budget; a failure here is logged and the next daily run tries again.
+  await disconnectLapsedAccounts(supabase);
 
   // An annual plan's monthly credits. Before the file sweep, which can use up the time budget. A failure here must not
   // stop the cleanup: the next daily run catches up, and the key per month keeps it from granting twice.
@@ -143,6 +149,35 @@ async function run(request: NextRequest) {
 
 /** Mỗi lượt tối đa ngần này tài khoản: deleteUser là một request Auth cho mỗi người. */
 const ACCOUNT_BATCH = 50;
+
+async function disconnectLapsedAccounts(supabase: ReturnType<typeof createAdminClient>): Promise<void> {
+  let adapter;
+  try {
+    adapter = publishAdapter();
+  } catch {
+    return; // Posting is not set up here (no Zernio key): nothing was ever connected at Zernio.
+  }
+  try {
+    const { dropped, failed } = await disconnectLapsed(adapter, {
+      async lapsed(limit) {
+        const { data, error } = await supabase.rpc("lapsed_social_accounts", { p_limit: limit });
+        if (error) throw new Error(`lapsed_social_accounts: ${error.code}`);
+        return ((data ?? []) as { id: string; user_id: string; zernio_account_id: string }[]).map((r) => ({
+          id: r.id,
+          userId: r.user_id,
+          zernioAccountId: r.zernio_account_id,
+        }));
+      },
+      async drop(userId, id) {
+        const { error } = await supabase.rpc("social_account_drop", { p_user: userId, p_id: id });
+        if (error) throw new Error(`social_account_drop: ${error.code}`);
+      },
+    });
+    if (dropped || failed) console.info(`[cleanup] lapsed posting accounts: ${dropped} disconnected, ${failed} failed`);
+  } catch (error) {
+    console.error("[cleanup] lapsed posting accounts not read", error instanceof Error ? error.message : error);
+  }
+}
 
 async function purgeUnpaidAccounts(supabase: ReturnType<typeof createAdminClient>): Promise<number> {
   const { data, error } = await supabase.rpc("purge_unpaid_accounts", { p_limit: ACCOUNT_BATCH });
