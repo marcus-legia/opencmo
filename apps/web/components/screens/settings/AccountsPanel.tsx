@@ -8,6 +8,7 @@
 
 import { useEffect, useState } from "react";
 
+import { isPlanRequired, PlanSheet } from "@/components/billing/PlanSheet";
 import { ApiError, api, jsonBody } from "@/components/clipping/api";
 import { Button } from "@/components/ui";
 
@@ -44,6 +45,7 @@ export function AccountsPanel({ accounts: given, live }: { accounts: Account[]; 
   const [busy, setBusy] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<string | null>(null);
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
+  const [planSheet, setPlanSheet] = useState(false);
 
   useEffect(() => setAccounts(given), [given]);
   useEffect(() => {
@@ -84,7 +86,9 @@ export function AccountsPanel({ accounts: given, live }: { accounts: Account[]; 
       // Zernio's own page: it asks the platform, then sends the founder back here.
       window.location.assign(url);
     } catch (error) {
-      setNote({ ok: false, text: error instanceof ApiError ? error.message : "Could not open the connect page. Please try again." });
+      // Connecting needs a plan (Zernio bills each account by the day): the plan sheet, not an error line.
+      if (isPlanRequired(error)) setPlanSheet(true);
+      else setNote({ ok: false, text: error instanceof ApiError ? error.message : "Could not open the connect page. Please try again." });
       setBusy(null);
     }
   }
@@ -177,6 +181,7 @@ export function AccountsPanel({ accounts: given, live }: { accounts: Account[]; 
       {confirming ? (
         <p className="v2-panel-body scr-small scr-muted">Disconnecting removes Ferreto's access to the account. Nothing is posted to it after that.</p>
       ) : null}
+      <PlanSheet open={planSheet} onClose={() => setPlanSheet(false)} action="connect an account" />
     </Panel>
   );
 }

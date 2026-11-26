@@ -5,7 +5,7 @@
  */
 import assert from "node:assert/strict";
 
-import { PostingPlanSchema, TEXT_PLATFORMS, VIDEO_PLATFORMS, chosenChannels, dayTargets, defaultPostingPlan, planOrDefault, type PostingPlan } from "./posting-plan";
+import { PostingPlanSchema, TEXT_PLATFORMS, VIDEO_PLATFORMS, chosenChannels, connectedOnly, dayTargets, defaultPostingPlan, planOrDefault, type PostingPlan } from "./posting-plan";
 
 const failures: string[] = [];
 function check(label: string, run: () => void): void {
@@ -70,6 +70,27 @@ check("the schema rejects out-of-range counts", () => {
   assert.equal(PostingPlanSchema.safeParse({ ...base, text: { ...base.text, x: 4 } }).success, false);
   assert.equal(PostingPlanSchema.safeParse({ ...base, video: { ...base.video, tiktok: 8 } }).success, false);
   assert.equal(PostingPlanSchema.safeParse({ ...base, text: { ...base.text, x: 1.5 } }).success, false);
+});
+
+check("connectedOnly: a platform with no account writes nothing, and the saved counts are kept", () => {
+  const plan: PostingPlan = { text: { x: 2, threads: 1, linkedin: 3, facebook: 0 }, video: zeroVideo };
+  const running = connectedOnly(plan, ["x"]);
+  assert.deepEqual(running.text, { x: 2, threads: 0, linkedin: 0, facebook: 0 });
+  // The founder's own plan is untouched: connecting Threads again brings its post back without retyping the number.
+  assert.deepEqual(plan.text, { x: 2, threads: 1, linkedin: 3, facebook: 0 });
+  // Video is not part of this rule.
+  assert.deepEqual(running.video, plan.video);
+  assert.deepEqual(connectedOnly(plan, []).text, { x: 0, threads: 0, linkedin: 0, facebook: 0 });
+  assert.deepEqual(connectedOnly(plan, ["x", "threads", "linkedin"]).text, plan.text);
+  // An account connected on a platform the plan has off stays off: connecting is not turning it on.
+  assert.equal(connectedOnly({ ...plan, text: { ...plan.text, x: 0 } }, ["x"]).text.x, 0);
+});
+
+check("connectedOnly: the day's targets drop the platforms that cannot receive them", () => {
+  const plan: PostingPlan = { text: { x: 1, threads: 1, linkedin: 0, facebook: 0 }, video: zeroVideo };
+  assert.deepEqual(dayTargets(plan), [["x", "threads"]]);
+  assert.deepEqual(dayTargets(connectedOnly(plan, ["x"])), [["x"]]);
+  assert.deepEqual(dayTargets(connectedOnly(plan, [])), []);
 });
 
 if (failures.length) {

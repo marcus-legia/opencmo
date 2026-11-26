@@ -91,7 +91,7 @@ export type TodayFollowUp = {
   approvalId?: string | null;
 };
 
-/** A slot of today that failed and has a waiting Retry card (still inside its window). */
+/** A slot of today that failed and still has its Retry card waiting on the founder. */
 export type TodayFailedSlot = { id: string; platform: TodayPlatform; title: string; at: string; approvalId: string };
 
 export type TodayInput = {
@@ -215,7 +215,7 @@ const byAge = (a: TodayCard, b: TodayCard) => a.raisedAt.localeCompare(b.raisedA
  * The day's list. People first (wave 3, item 4), then posts (plan §3, 1.1):
  *   0a. hot leads: a reply card that is a Strong match or on a thread under a day old, best first (at most 3);
  *   0b. follow-ups: someone answered the founder back, or a nudge waits (at most 2);
- *   1. a failed post still inside its window;
+ *   1. a failed post whose Retry card still waits;
  *   2. Critical silence (7+ days);
  *   3. a card that expires today;
  *   4. setup that blocks tomorrow's post (only with publishing configured);

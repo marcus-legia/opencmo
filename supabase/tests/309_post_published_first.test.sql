@@ -102,7 +102,10 @@ select is((select count(*)::int from public.approvals a join public.schedule_slo
   'and no card waits');
 select is(public.schedule_propose('e3093000-0000-4000-8000-000000000002'), 0, 'a post posted by hand is not scheduled again');
 
--- One platform marked posted (copy and open) is the post published; the others keep their slots.
+-- One platform marked posted (copy and open) is the post published; the others keep their slots. A post is scheduled
+-- only for a connected platform (20270206040000), so the Page is connected and its slot turned to copy and open the
+-- way a publish that cannot go out is.
+select public.social_account_save('e3090000-0000-4000-8000-00000000000a', 'facebook', 'Founder Page', null, 'acc-first-fb');
 insert into public.content_items (id, user_id, department, platform, day, idea, status, body) values
   ('e3092000-0000-4000-8000-000000000004', 'e3090000-0000-4000-8000-00000000000a', 'post', 'X', current_date + 3, 'Mixed', 'approved',
    '{"text":"Facebook by hand, X by itself.","targets":["x","facebook"]}');

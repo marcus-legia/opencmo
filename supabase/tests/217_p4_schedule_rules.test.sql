@@ -9,6 +9,9 @@ select plan(7);
 
 insert into auth.users (id, email) values ('e2170000-0000-4000-8000-00000000000a', 'p4a3@test.local');
 update public.profiles set timezone = 'Asia/Ho_Chi_Minh' where id = 'e2170000-0000-4000-8000-00000000000a';
+-- 20270206040000: a post is scheduled only where an account is connected.
+insert into public.social_accounts (id, user_id, platform, handle, zernio_account_id) values
+  ('e2171100-0000-4000-8000-00000000000a', 'e2170000-0000-4000-8000-00000000000a', 'linkedin', 'founder', 'z-li-217');
 insert into public.work_orders (id, user_id, week, kind, title, brief, department, status)
 values ('e2171000-0000-4000-8000-00000000000a', 'e2170000-0000-4000-8000-00000000000a', date_trunc('week', current_date)::date,
   'post_draft', 'Posts', '{}', 'writer', 'waiting_founder');

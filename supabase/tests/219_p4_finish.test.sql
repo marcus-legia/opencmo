@@ -66,7 +66,9 @@ select is((select published_at is not null from public.schedule_slots where id =
 select is((select status from public.content_items where id = 'e2192000-0000-4000-8000-00000000000a'), 'published', 'and the post is published');
 select is((select status from public.schedule_slots where id = 'e2194000-0000-4000-8000-00000000000b'), 'waiting', 'the other slot is untouched');
 
--- A post stored the way Writer stores it (the calendar's label), approved: Schedule proposes it on its platform.
+-- A post stored the way Writer stores it (the calendar's label), approved: Schedule proposes it on its platform. A
+-- post is scheduled only for a connected platform (20270206040000), so Threads is connected first.
+select public.social_account_save('e2190000-0000-4000-8000-00000000000a', 'threads', '@founder', null, 'acc-fin-th');
 insert into public.content_items (id, user_id, department, platform, day, idea, status, body) values
   ('e2192000-0000-4000-8000-00000000000c', 'e2190000-0000-4000-8000-00000000000a', 'post', 'Threads', current_date, 'Post c', 'in_review', '{"text":"Post c."}');
 -- A card without a time (cmo-review-3 1.2 gives new cards one, 276 tests it): its time comes on a schedule card.
@@ -76,7 +78,7 @@ insert into public.deliverables (id, user_id, order_id, kind, ref_kind, ref_id, 
 update public.content_items set status = 'approved' where id = 'e2192000-0000-4000-8000-00000000000c';
 update public.deliverables set status = 'decided' where id = 'e2193000-0000-4000-8000-00000000000c';
 select is((select platform || ':' || mode || ':' || status from public.schedule_slots where deliverable_id = 'e2193000-0000-4000-8000-00000000000c'),
-  'threads:intent:proposed', 'a "Threads" post gets a Threads slot (copy and open: no Threads account)');
+  'threads:publish:proposed', 'a "Threads" post gets a Threads slot');
 
 select * from finish();
 rollback;

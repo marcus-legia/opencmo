@@ -49,7 +49,9 @@ export async function seedCoreDraft(): Promise<{ user: E2EUser; itemId: string; 
   must(await db.from("marketing_documents").insert({ user_id: user.id, kind: "product", version: 1, created_by: "user",
     body: { name: "Ferreto", one_liner: "A customer-finding tool for founders." } }), "a document");
   must(await db.rpc("zernio_profile_save", { p_user: user.id, p_profile: `prof-${user.id}` }), "the Zernio profile");
-  for (const platform of ["x", "threads"]) {
+  // All three of the post's targets are connected: since 20270206040000 a post is scheduled only where an account
+  // is connected, so an unconnected target would simply get no slot and the three-platform case would not be tested.
+  for (const platform of ["x", "threads", "linkedin"]) {
     must(await db.rpc("social_account_save", { p_user: user.id, p_platform: platform, p_handle: "@founder", p_avatar_url: null, p_zernio_account_id: `acc-${platform}-${user.id}` }), platform);
   }
   const week = new Date();

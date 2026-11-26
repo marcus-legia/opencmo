@@ -23,6 +23,8 @@ select ok((select bool_and(relrowsecurity) from pg_class where oid in ('public.z
 insert into auth.users (id, email) values
   ('e2150000-0000-4000-8000-00000000000a', 'p4a0@test.local'),
   ('e2150000-0000-4000-8000-00000000000b', 'p4a0-other@test.local');
+-- Connecting needs a plan (20270206060000, tested in 361).
+update public.profiles set plan = 'starter' where id in ('e2150000-0000-4000-8000-00000000000a', 'e2150000-0000-4000-8000-00000000000b');
 
 -- Accounts.
 select throws_ok($$ select public.social_account_save('e2150000-0000-4000-8000-00000000000a', 'x', 'founder', null, 'acc-x') $$,

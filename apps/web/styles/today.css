@@ -604,6 +604,19 @@ html[data-theme="dark"] .k.pg-settings{--bg:#121110;--panel:#181715;--raised:#20
 .pg-calendar .pp-state{font-size:12.5px;line-height:1.35;color:var(--subtle)}
 .pg-calendar .pp-state.is-on{display:inline-flex;align-items:center;gap:5px;color:var(--ok)}
 .pg-calendar .pp-state.is-on i{width:6px;height:6px;border-radius:50%;background:var(--ok)}
+/* Connect and Disconnect sit in the row's state line: a button, drawn as the link it replaces. */
+.pg-calendar .pp-link{padding:0;border:0;background:transparent;font:inherit;color:inherit;text-decoration:underline;text-underline-offset:2px;cursor:pointer}
+.pg-calendar .pp-link:hover:not(:disabled){color:var(--text)}
+.pg-calendar .pp-link:disabled{opacity:.55;cursor:default}
+.pg-calendar .pp-link:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:3px}
+.pg-calendar .pp-confirm{margin-top:12px;padding:12px;border-radius:10px;border:1px solid var(--line);background:var(--panel)}
+.pg-calendar .pp-confirm p{margin:0 0 10px;font-size:13px;line-height:1.45;color:var(--text)}
+.pg-calendar .pp-confirm-acts{display:flex;gap:8px;flex-wrap:wrap}
+.pg-calendar .pp-confirm-acts button{padding:7px 12px;border-radius:8px;border:1px solid var(--line);background:var(--danger-wash,var(--hover));color:var(--text);font:inherit;font-weight:600;cursor:pointer}
+.pg-calendar .pp-confirm-acts button.ghost{background:transparent;font-weight:500;color:var(--muted)}
+.pg-calendar .pp-confirm-acts button:hover:not(:disabled){background:var(--hover)}
+.pg-calendar .pp-confirm-acts button:disabled{opacity:.55;cursor:default}
+.pg-calendar .pp-confirm-acts button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .pg-calendar .pp-step{display:inline-flex;align-items:center;gap:2px;padding:2px;border-radius:9px;border:1px solid var(--line);background:var(--panel);flex:0 0 auto}
 .pg-calendar .pp-step button{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:7px;border:0;background:transparent;color:var(--muted);cursor:pointer}
 .pg-calendar .pp-step button:hover:not(:disabled){background:var(--hover);color:var(--text)}

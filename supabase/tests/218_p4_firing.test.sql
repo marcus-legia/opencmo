@@ -117,8 +117,9 @@ select is((select status from public.schedule_slots where id = 'e2184000-0000-40
 create temp table fcard as select * from public.approvals
   where ref_kind = 'schedule_slot' and ref_id = 'e2184000-0000-4000-8000-00000000000f' and status = 'waiting';
 select is((select snapshot->>'last_error' from fcard), 'X asked us to slow down.', 'a card says why');
-select is((select expires_at from fcard), (select window_ends_at from public.schedule_slots where id = 'e2184000-0000-4000-8000-00000000000f'),
-  'and stays open while the window lasts');
+-- 20270206030000: it used to expire with the slot's 15-minute window, which hid the decision long before the founder
+-- could make it. A Retry card now waits until they decide it.
+select is((select expires_at from fcard), null, 'and waits until the founder decides it');
 grant select on fcard to authenticated;
 set local role authenticated;
 set local request.jwt.claims = '{"sub":"e2180000-0000-4000-8000-00000000000a"}';

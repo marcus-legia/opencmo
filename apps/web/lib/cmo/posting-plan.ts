@@ -59,6 +59,25 @@ export function planOrDefault(saved: unknown, connected: readonly string[], chos
   return parsed.success ? parsed.data : defaultPostingPlan(connected, chosen);
 }
 
+/**
+ * The plan as it can actually run: a text platform with no connected account writes nothing, whatever the saved plan
+ * or the onboarding channels say (owner, 2026-11-26).
+ *
+ * Nothing is written for an account that cannot receive it. A post written for an unconnected platform could only
+ * fail at its time, and a failure then asked for a new time, so one unconnected platform filled the calendar with
+ * copies of a post that was never going to go out.
+ *
+ * This is the running plan, not the saved one: the founder's counts stay as they set them, so connecting a platform
+ * again brings its posts back without them typing the number a second time. Video platforms are untouched.
+ */
+export function connectedOnly(plan: PostingPlan, connected: readonly string[]): PostingPlan {
+  const live = new Set(connected);
+  return {
+    ...plan,
+    text: Object.fromEntries(TEXT_PLATFORMS.map((p) => [p, live.has(p) ? plan.text[p] : 0])) as PostingPlan["text"],
+  };
+}
+
 /** The Post plan's `channels` as strings; anything else in the document reads as no choice. */
 export function chosenChannels(postPlan: unknown): string[] {
   const channels = (postPlan as { channels?: unknown } | null | undefined)?.channels;

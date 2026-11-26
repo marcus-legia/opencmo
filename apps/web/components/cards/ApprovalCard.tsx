@@ -194,13 +194,21 @@ export function ApprovalCard({
     }
   }
 
-  async function copyAndOpenText(platform: string, text: string) {
+  /**
+   * `parts` is how many posts the words go out in. A composer takes one post, so a chain opens with its first part
+   * only: the toast has to say so, or the founder posts a third of what they approved and believes it all went.
+   */
+  async function copyAndOpenText(platform: string, text: string, parts = 1) {
     const target = isPublishPlatform(platform) ? intentFor(platform, text) : null;
     if (!target) return;
     const copied = target.copy ? (navigator.clipboard ? navigator.clipboard.writeText(text).then(() => true, () => false) : Promise.resolve(false)) : Promise.resolve(true);
     const tab = window.open(target.url, "_blank", "noopener,noreferrer");
     if (!(await copied)) toast("Copy did not work here. Select the post and copy it yourself.");
-    else toast(tab === null && !target.copy ? "Your browser blocked the new tab. Open the platform yourself and post it from your account." : "Post it from your account, then tell us here.");
+    else if (tab === null && !target.copy) toast("Your browser blocked the new tab. Open the platform yourself and post it from your account.");
+    // The parts are listed with their own Copy buttons on the schedule card; the post card shows the words whole, so
+    // this says what happens without naming a button that is not on every card.
+    else if (parts > 1) toast(`Post 1 of ${parts}: your words are longer than one ${PLATFORM_LABEL[platform as keyof typeof PLATFORM_LABEL] ?? platform} post. Send this, then the rest as replies.`);
+    else toast("Post it from your account, then tell us here.");
   }
 
   /**
@@ -210,9 +218,11 @@ export function ApprovalCard({
    */
   async function copyAndOpen(body: Extract<Card["body"], { kind: "schedule" }>) {
     if (sample) return toast("Sample card: nothing was copied or opened.");
-    // A chain opens with its first part in the composer; the card's Copy buttons give the rest.
+    // A chain opens with its first part in the composer; the card's Copy buttons give the rest. The same chain the
+    // card shows (`bodies.tsx`), so the toast's count matches the parts under it.
     const text = body.preview.text ?? "";
-    return copyAndOpenText(body.where.platform, chainFor(body.where.platform, text)?.[0] ?? text);
+    const chain = chainFor(body.where.platform, text, body.options.as_thread === true);
+    return copyAndOpenText(body.where.platform, chain?.[0] ?? text, chain?.length ?? 1);
   }
 
   async function copyPart(post: string, index: number) {
@@ -288,12 +298,24 @@ export function ApprovalCard({
         if (card.body.platforms.some((p) => p.thread)) return [primary("Approve thread"), ...(postChangeTime ? [postChangeTime] : []), ...declineAction];
         if (postYourself && postPlatform && isPublishPlatform(postPlatform)) {
           const target = intentFor(postPlatform, postText());
+          // Words longer than the platform takes go out as a chain (Threads, 500). The composer gets the first part,
+          // never the whole post: pasted whole it is cut, and the founder posts a fraction believing it all went.
+          const postChain = () => chainFor(postPlatform, postText());
           // Approve leads (owner, 2026-11-11: it was a quiet link after four buttons, and nobody found it). Posting it
           // right now by hand stays one click away, as the second and third buttons.
           return [
             { label: proposed ? "Approve for this time" : "Approve and schedule", variant: "primary", run: approve },
             // X and Threads open their composer with the words in it; LinkedIn's label already says it copies.
-            ...(target ? [{ label: target.label, variant: "secondary" as const, run: () => void copyAndOpenText(postPlatform, postText()) }] : []),
+            ...(target
+              ? [{
+                  label: target.label,
+                  variant: "secondary" as const,
+                  run: () => {
+                    const chain = postChain();
+                    return void copyAndOpenText(postPlatform, chain?.[0] ?? postText(), chain?.length ?? 1);
+                  },
+                }]
+              : []),
             {
               label: "I posted it",
               variant: "secondary" as const,

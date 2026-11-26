@@ -18,6 +18,8 @@ where id in ('e3120000-0000-4000-8000-00000000000a', 'e3120000-0000-4000-8000-00
 select public.zernio_profile_save('e3120000-0000-4000-8000-00000000000a', 'prof-flow');
 select public.social_account_save('e3120000-0000-4000-8000-00000000000a', 'x', '@founder', null, 'acc-flow-x');
 select public.social_account_save('e3120000-0000-4000-8000-00000000000a', 'threads', '@founder', null, 'acc-flow-th');
+-- A post is scheduled only for a connected platform (20270206040000): LinkedIn is connected too.
+select public.social_account_save('e3120000-0000-4000-8000-00000000000a', 'linkedin', 'Founder', null, 'acc-flow-li');
 
 -- The week plan as the runner writes it (`toPlanItems`, checked in jobs.check.ts): today's slot already for the three
 -- platforms, tomorrow's from before the founder changed the plan.
@@ -104,8 +106,8 @@ select is(pg_temp.decide((select id from public.approvals where user_id = 'e3120
 select is((select status from public.content_items where id = pg_temp.item('e3120000-0000-4000-8000-00000000000a', 'Today')),
   'approved', 'the post is approved');
 select is(pg_temp.slots(pg_temp.item('e3120000-0000-4000-8000-00000000000a', 'Today')),
-  'linkedin intent proposed, threads publish proposed, x publish waiting',
-  'three slots: X and Threads from their accounts, LinkedIn copy and open; X already waits for its time');
+  'linkedin publish proposed, threads publish proposed, x publish waiting',
+  'three slots, each from its account; X already waits for its time');
 select is((select publish_at from pg_temp.slot(pg_temp.item('e3120000-0000-4000-8000-00000000000a', 'Today'), 'x')),
   (select (snapshot->'proposed'->>'at')::timestamptz from public.approvals where user_id = 'e3120000-0000-4000-8000-00000000000a' and kind = 'post'),
   'X goes out at the time the post card showed');
@@ -121,7 +123,7 @@ select is(pg_temp.decide((select id from public.approvals where ref_kind = 'sche
 select is(pg_temp.decide((select id from public.approvals where ref_kind = 'schedule_slot' and status = 'waiting'
   and ref_id = (pg_temp.slot(pg_temp.item('e3120000-0000-4000-8000-00000000000a', 'Today'), 'linkedin')).id), 'approve'), 'approved', 'LinkedIn is approved');
 select is(pg_temp.slots(pg_temp.item('e3120000-0000-4000-8000-00000000000a', 'Today')),
-  'linkedin intent waiting, threads publish waiting, x publish waiting', 'every platform waits for its time');
+  'linkedin publish waiting, threads publish waiting, x publish waiting', 'every platform waits for its time');
 select is(pg_temp.waiting_cards(pg_temp.item('e3120000-0000-4000-8000-00000000000a', 'Today')), '', 'no card is left to decide');
 
 -- 4. Out on every platform. X posts first (Zernio's webhook).
@@ -138,20 +140,15 @@ select is((select status || ' ' || coalesce(external_url, '-') from public.conte
 select is((public.publish_status((pg_temp.slot(pg_temp.item('e3120000-0000-4000-8000-00000000000a', 'Today'), 'threads')).id,
   'published', 'ext-flow-th', 'https://www.threads.net/@founder/post/312')).status, 'published', 'Threads posts after X');
 
--- LinkedIn is copy and open: at its time the founder gets the reminder (as the reminder cron sets it), posts it
--- themselves and says so.
-update public.schedule_slots set status = 'reminded'
-where id = (pg_temp.slot(pg_temp.item('e3120000-0000-4000-8000-00000000000a', 'Today'), 'linkedin')).id;
-set local role authenticated;
-select lives_ok(format($$ select public.schedule_mark_posted(%L) $$,
-  (pg_temp.slot(pg_temp.item('e3120000-0000-4000-8000-00000000000a', 'Today'), 'linkedin')).id), 'the founder marks LinkedIn posted');
-reset role;
+select is((public.publish_status((pg_temp.slot(pg_temp.item('e3120000-0000-4000-8000-00000000000a', 'Today'), 'linkedin')).id,
+  'published', 'ext-flow-li', 'https://www.linkedin.com/feed/update/312')).status, 'published', 'LinkedIn posts last');
 select is(pg_temp.slots(pg_temp.item('e3120000-0000-4000-8000-00000000000a', 'Today')),
-  'linkedin intent published, threads publish published, x publish published', 'all three platforms are published');
+  'linkedin publish published, threads publish published, x publish published', 'all three platforms are published');
 select is((select status from public.content_items where id = pg_temp.item('e3120000-0000-4000-8000-00000000000a', 'Today')),
   'published', 'the post is published');
 
--- 5. Founder B, no account at all: the same flow gives three copy-and-open slots and nothing errors.
+-- 5. Founder B, no account at all: the same flow schedules nothing (it used to make three copy-and-open slots that
+-- could only fail) and nothing errors.
 select is(public.cmo_plan_week('e3120000-0000-4000-8000-00000000000b', 'e3121000-0000-4000-8000-00000000000b', jsonb_build_array(
   jsonb_build_object('department', 'post', 'platform', 'X', 'targets', jsonb_build_array('x', 'threads', 'linkedin'), 'slot', 0,
     'day', current_date, 'idea', 'Today', 'reason', 'r'))), 1, 'founder B''s week plan');
@@ -161,7 +158,7 @@ set local request.jwt.claims = '{"sub":"e3120000-0000-4000-8000-00000000000b","r
 select is(pg_temp.decide((select id from public.approvals where user_id = 'e3120000-0000-4000-8000-00000000000b' and kind = 'post'), 'approve'),
   'approved', 'founder B approves the card');
 select is(pg_temp.slots(pg_temp.item('e3120000-0000-4000-8000-00000000000b', 'Today')),
-  'linkedin intent proposed, threads intent proposed, x intent waiting', 'three copy-and-open slots, X on the card''s time');
+  null, 'no slot without a connected account');
 
 select * from finish();
 rollback;
