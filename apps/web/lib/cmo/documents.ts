@@ -59,6 +59,15 @@ export const POST_CHANNELS = ["x", "linkedin", "threads"] as const;
 export type PostChannel = (typeof POST_CHANNELS)[number];
 
 export const PostPlanSchema = z.object({
+  /**
+   * The founder's content plan (owner, 2026-11-27): free text, like a CLAUDE.md for their posts. The week planner and
+   * the writer follow it. Optional, so older documents and the onboarding's structured output still parse; cut at
+   * 6,000 characters by `clampDocument`.
+   */
+  content_plan: z
+    .string()
+    .optional()
+    .describe("The founder's content plan in their own words: what to write, the mix each day, topics, what never to write"),
   topics: list.describe("Three to six topics to post about, from what customers say (the Library), in their words"),
   channels: z.array(z.enum(POST_CHANNELS)).describe("Where the founder posts: x, linkedin and/or threads"),
   rhythm: z.string().describe("A realistic weekly rhythm for a solo founder"),
@@ -159,6 +168,7 @@ export const DOCUMENTS: Record<DocumentKind, { title: string; summary: string; f
     title: "Post plan",
     summary: "What to post about, where, and how often.",
     fields: [
+      { key: "content_plan", label: "Content plan", type: "long" },
       { key: "topics", label: "Topics", type: "list" },
       {
         key: "channels",
@@ -200,6 +210,8 @@ export const DOCUMENTS: Record<DocumentKind, { title: string; summary: string; f
 const LIMITS = { text: 200, long: 1500, list: 12, item: 300 };
 /** A writing sample is longer than a list item: up to 600 characters each (owner, 2026-11-19). */
 const ITEM_LIMITS: Record<string, number> = { voice_samples: 600 };
+/** The content plan is a whole page of the founder's own rules, not a field (owner, 2026-11-27). */
+const TEXT_LIMITS: Record<string, number> = { content_plan: 6000 };
 /** Values a list keeps only when they look right: a colour as #rrggbb, a logo on https. */
 const ITEM_RULES: Record<string, (v: string) => boolean> = { colors: (v) => /^#[0-9a-fA-F]{6}$/.test(v) };
 const TEXT_RULES: Record<string, (v: string) => boolean> = { logo_url: (v) => v === "" || /^https:\/\/\S+$/.test(v) };
@@ -233,7 +245,7 @@ function clampFields(fields: Field[], body: Record<string, unknown>): Record<str
         .filter((item) => item && (!rule || rule(item)))
         .slice(0, field.max ?? LIMITS.list);
     } else {
-      const text = typeof value === "string" ? value.trim().slice(0, LIMITS[field.type]) : "";
+      const text = typeof value === "string" ? value.trim().slice(0, TEXT_LIMITS[field.key] ?? LIMITS[field.type]) : "";
       out[field.key] = TEXT_RULES[field.key] && !TEXT_RULES[field.key]!(text) ? "" : text;
     }
   }

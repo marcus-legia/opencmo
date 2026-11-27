@@ -175,7 +175,35 @@ export type ItemRow = {
  * label. `slot`: that slot's index within its day, so saving a new plan retargets each post by it (`save_posting_plan`).
  */
 /** `sources`: posts only, the Library conversations it is written from (B3); `cmo_plan_week` keeps the valid ones. */
-export type PlanItem = { department: "post" | "sales" | "video"; platform: string; day: string; idea: string; reason: string; image?: boolean; targets?: string[]; slot?: number; sources?: PostSource[]; planned_from?: "brief" | "onboarding"; angle?: PostAngle };
+/**
+ * `news`: how the post uses an X News story (owner, 2026-11-27). `planned_from: "day_fill"`: made by the morning fill
+ * for a slot the week plan did not cover; its idea is written by the draft.
+ */
+export type PlanItem = { department: "post" | "sales" | "video"; platform: string; day: string; idea: string; reason: string; image?: boolean; targets?: string[]; slot?: number; sources?: PostSource[]; planned_from?: "brief" | "onboarding" | "day_fill"; angle?: PostAngle; news?: NewsMode };
+
+/**
+ * How a planned post uses an X News story (owner, 2026-11-27): `required` rides one or is not written, `hook` opens
+ * from one when it fits, `none` never does. Absent on items planned before it: read as `hook`. A post with no Library
+ * source must ride a story (decision 7, option B).
+ */
+export const NEWS_MODES = ["required", "hook", "none"] as const;
+export type NewsMode = (typeof NEWS_MODES)[number];
+
+/** The X News story a draft rode, stored on the draft's body as `news` and shown on the card. */
+export type PostNews = {
+  /** The story's headline; at most 120 characters. */
+  name: string;
+  /** At most 400 characters, from the story. */
+  summary: string;
+  /** `https://x.com/i/status/<first cluster post id>`; "" when the story has no post. */
+  url: string;
+  /** `x_news_stories.id`. */
+  rowId: string;
+  /** `x_news_stories.topic_key`: the same news told by several stories shares it. */
+  topicKey: string;
+  /** At most 200 characters: the picker's reason, shown to the founder. */
+  why: string;
+};
 
 /**
  * What a post does (owner, 2026-11-24): `share` tells what people asked this week and what helps; `cta` ends with a soft

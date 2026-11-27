@@ -115,8 +115,10 @@ export type PostNews = {
 
 ```ts
 // apps/web/lib/cmo/documents.ts: the Post plan document gains one field
-// PostPlanSchema: content_plan: z.string().max(6000).optional()
+// PostPlanSchema: content_plan: z.string().optional()
 //   .describe("The founder's content plan in their own words: what to write, the mix each day, topics, what never to write")
+// No .max() in the schema: documents.ts keeps lengths out of schemas (Claude's structured output ignores them, and a
+// long answer would fail the whole parse). clampDocument cuts content_plan at 6,000 (TEXT_LIMITS).
 // DOCUMENTS.post_plan.fields gains { key: "content_plan", label: "Content plan", type: "long" }, first in the list.
 ```
 
