@@ -196,7 +196,7 @@ document field `post_plan.content_plan`.
     (`components/cmo/DocumentFields.tsx`, outside Part A's list, for this one field).
   - *Found in review:* reading the website again rewrites every document, so it would have replaced a content plan
     the founder wrote. `keepFounderContentPlan` (`onboard.ts`) keeps one they changed, as `keepFounderBrand` does.
-- [ ] **A5. The week planner follows the content plan.** In `plan-week.ts`:
+- [x] **A5. The week planner follows the content plan.** In `plan-week.ts`:
   - The content plan goes into the prompt as `<content_plan approved_by="founder">…</content_plan>`, right after the
     documents.
   - New first rule: "Follow <content_plan>: it says what to write and the mix each day. Where it says nothing, use the
@@ -216,6 +216,13 @@ document field `post_plan.content_plan`.
     - Rule in the prompt: "A post with no <sources> must ride the day's news: mark it required."
   - `fakePlan` marks slot 0 of each day `required`, the others `hook`. With an empty fake Library, all `required`.
   - Update `plan-week` checks.
+  - *As built:* a Library week sends an idea with no source to the next theme, as before, unless the model marked it
+    `required`: then it keeps its idea and rides the news. A brief from the chat and the first week (`planned_from`
+    `brief` / `onboarding`) keep the model's mark and need neither, as they did before. The content plan is left out
+    of `<documents>` so the prompt carries it once. `cmo_plan_week` stores `news` (A2's migration), and the eval's
+    `no-library` case now expects a full week of `required` posts.
+  - *Found in review:* with an empty Library, a post the model marks `none` (the content plan keeps it off the news)
+    is not planned at all instead of being forced to `required`.
 - [ ] **A6. Fill today's empty slots.**
   - Migration: an RPC `cmo_fill_day_slots(p_user uuid, p_day date, p_items jsonb)`, service role only. For each slot
     of `dayTargets(plan)` that has no post item that day (any status), insert a `planned` item with `idea = ''`,
@@ -301,11 +308,13 @@ document field `post_plan.content_plan`.
 - [ ] **B6. The draft** in `draft-post.ts`:
   1. **`plan_idea` step** when `planned_from === 'day_fill'` and the idea is empty. One Sonnet call writes the idea
      and `news` mode from `content_plan`, the strategy, the Library and today's other items. It stays within the same
-     run, and the founder is not charged again. If it picks no Library source, the mode is `required` (decision 7).
+     run, and the founder is not charged again. If it picks no Library source, the mode is `required` (decision 7),
+     unless the content plan keeps that post off the news: then there is nothing to write it from, and step 3 refunds.
   2. **`pick_news` step** for `news` `required` or `hook`. The step label says "Picking today's news". Its result
      line says "News: <name>" or "No news fits this post today".
   3. **No pick, and the post has nothing else to rest on:** when the item is `required`, or when it has no Library
-     source (an item planned before this work may be `hook` with no source), return `{ refund: true, reason: "No
+     source and no `planned_from` `brief` / `onboarding` (an item planned before this work may be `hook` with no
+     source; a brief's or the first week's posts were always written without one), return `{ refund: true, reason: "No
      news story fits this post today, so nothing was written and your credit is back." }` and mark the item skipped
      through the existing RPC. A `hook` item with sources and no pick is written plainly from its sources.
   4. **The writer prompt gains:**

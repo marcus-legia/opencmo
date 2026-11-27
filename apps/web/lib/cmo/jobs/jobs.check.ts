@@ -75,6 +75,27 @@ async function main() {
   const briefed = toPlanItems({ items: [post(0, "Our launch")] }, plan({ x: 1 }), { today, docs, library: [], fromBrief: true, plannedFrom: "brief" });
   const briefPosts = briefed.filter((p) => p.department === "post");
   assert.ok(briefPosts.length > 0 && briefPosts.every((p) => p.planned_from === "brief" && !p.sources), "a brief's posts are marked");
+  assert.ok(briefPosts.every((p) => p.news === "hook"), "a brief's posts need no news story (decision 7 keeps them)");
+  // Decision 7: a Library week keeps the model's news marks; an idea with no source the plan sends to the news keeps
+  // its idea and rides it; an idea with no source otherwise takes a theme with its sources.
+  {
+    const library = [{ id: "t1", name: "Late payments", count: 1, entries: [{ opportunityId: "o1", platform: "reddit", community: "freelance", postedAt: null, summary: "Chasing a client for 60 days", quotes: [] }] }] as never;
+    const marked = toPlanItems({ items: [
+      { ...post(0, "Today's AI news, from how we chase invoices", 0), news: "required" as const },
+      { ...post(1, "A plain idea", 0), news: "none" as const },
+      { ...post(2, "Cites c1", 0), sources: ["c1"], news: "hook" as const },
+    ] }, plan({ x: 1 }), { today, docs, library });
+    assert.deepEqual(marked.slice(0, 3).map((p) => [p.news, p.sources?.length ?? 0, p.idea.startsWith("What people say")]),
+      [["required", 0, false], ["none", 1, true], ["hook", 1, false]]);
+    const fakeWeek = toPlanItems(fakePlan(docs, plan({ x: 2 }), undefined, library), plan({ x: 2 }), { today, docs, library });
+    assert.deepEqual(fakeWeek.slice(0, 2).map((p) => p.news), ["required", "hook"], "the fake plan: slot 0 rides the news");
+    const bareWeek = toPlanItems(fakePlan(docs, plan({ x: 2 })), plan({ x: 2 }), { today, docs, library: [] }).filter((p) => p.department === "post");
+    assert.ok(bareWeek.length === 14 && bareWeek.every((p) => p.news === "required" && !p.sources), "an empty Library: every post required");
+    const someDays = toPlanItems({ items: [{ ...post(0, "No news today", 0), news: "none" as const }, { ...post(1, "News day", 0), news: "hook" as const }] },
+      plan({ x: 1 }), { today, docs, library: [] }).filter((p) => p.department === "post");
+    assert.deepEqual(someDays.slice(0, 2).map((p) => [p.day.slice(8), p.news]), [["06", "required"], ["07", "required"]],
+      "an empty Library: a post the content plan keeps off the news is not written; the others ride it");
+  }
   const two = toPlanItems({ items: [] }, plan({ x: 2, threads: 1 }), { today, docs });
   assert.equal(two.length, 14);
   assert.deepEqual(two.slice(0, 2).map((p) => [p.platform, p.targets]), [["X", ["x", "threads"]], ["X", ["x"]]]);
@@ -123,13 +144,23 @@ async function main() {
     await drainCmoQueue(branded.store, { think: async (call) => (asks.push(call.prompt), call.fake!()) });
     assert.ok(asks.some((p) => p.includes("<founder_writing>") && p.includes("then I call") && p.includes("<intro_line>I make Paylane.")), "the post prompt carries the founder's writing");
   }
-  // Wave 3 B3: with no Library the week has no posts, and says so; the founder's own brief still plans them.
+  // Decision 7, option B (owner, 2026-11-27): with no Library every post rides the day's news (required); a content
+  // plan that says no news plans none, and says so in one line. The founder's own brief still plans them.
     const empty = memoryStore(docs);
     const bare = empty.enqueue("plan_week", { source: "schedule" });
     await drainCmoQueue(empty.store);
     assert.equal(bare.status, "done", `an empty Library is not an error (${bare.error})`);
-    assert.equal(empty.items.filter((i) => i.department === "post").length, 0, "no post without the Library");
-    assert.ok(bare.steps.some((s) => s.tool === "library"), "the plan says why in one line");
+    const riding = empty.items.filter((i) => i.department === "post");
+    assert.ok(riding.length > 0 && riding.every((i) => i.body.news === "required" && !i.body.sources), "with no Library every post rides the news");
+    assert.ok(!bare.steps.some((s) => s.tool === "library"), "and there is nothing to explain");
+    const quiet = memoryStore(docs);
+    const noNews = quiet.enqueue("plan_week", { source: "schedule" });
+    await drainCmoQueue(quiet.store, { think: async (call) => {
+      const answer = call.fake!() as { items: { department: string; news?: string }[] };
+      return { items: answer.items.map((i) => (i.department === "post" ? { ...i, news: "none" } : i)) } as never;
+    } });
+    assert.equal(quiet.items.filter((i) => i.department === "post").length, 0, "no Library and a plan that says no news: no post");
+    assert.ok(noNews.steps.some((s) => s.tool === "library"), "the plan says why in one line");
     // Onboarding: the first week plans posts even with an empty Library (a new founder sees first drafts).
     const first = memoryStore(docs);
     const onboarding = first.enqueue("plan_week", { source: "onboarding" });
