@@ -37,7 +37,7 @@ assert.deepEqual(agentCandidates("planner", { GEMINI_API_KEY: "g" } as unknown a
 
 // The tiers the owner set: Sonnet writes and plans, Haiku does the small tasks.
 for (const id of ["cmo", "onboarding", "planner", "x_writer", "sales", "research", "motion", "director"] as const) assert.equal(resolveAgent(id, base).model, "claude-sonnet-5-5", `${id} on Sonnet`);
-for (const id of ["checker", "captions", "writer", "moderation", "shorts"] as const) assert.equal(resolveAgent(id, base).model, "claude-haiku-5-5", `${id} on Haiku`);
+for (const id of ["checker", "captions", "writer", "moderation", "shorts", "news_picker"] as const) assert.equal(resolveAgent(id, base).model, "claude-haiku-5-5", `${id} on Haiku`);
 
 // No key: empty (the caller reports it in English).
 assert.equal(resolveAgent("cmo", {} as unknown as NodeJS.ProcessEnv).apiKey, "");

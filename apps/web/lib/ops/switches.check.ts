@@ -6,7 +6,7 @@ import { cmoSwitches } from "./switches";
 const byId = (env: Record<string, string | undefined>) => Object.fromEntries(cmoSwitches(env).map((s) => [s.id, s]));
 
 const none = byId({});
-for (const id of ["ui_v2", "email", "push", "publish", "zernio_webhook", "social_reader", "cron", "mcp", "sentry"]) {
+for (const id of ["ui_v2", "email", "push", "publish", "zernio_webhook", "social_reader", "cron", "mcp", "sentry", "x_news"]) {
   assert.equal(none[id]?.on, false, `${id} is off with an empty env`);
 }
 assert.equal(none.paused?.on, true, "the brain runs unless the global kill switch is set");
@@ -39,5 +39,11 @@ assert.equal(byId({ NEXT_PUBLIC_SENTRY_DSN: "https://0123456789abcdef0123456789a
 
 const text = JSON.stringify(cmoSwitches({ ZERNIO_API_KEY: "zk-secret", OPENCMO_PUBLISH_LIVE: "1", RESEND_API_KEY: "re-secret", OPENCMO_EMAIL_LIVE: "1" }));
 assert.ok(!text.includes("zk-secret") && !text.includes("re-secret"), "no secret value reaches the page");
+
+const news = byId({ X_BEARER_TOKEN: "x-secret-token", X_NEWS_MAX_CALLS: "5" }).x_news;
+assert.equal(news?.on, true, "X News is on with the app's bearer token");
+assert.match(news?.detail ?? "", /at most 5 calls/);
+assert.match(byId({ X_BEARER_TOKEN: "t", X_NEWS_MAX_CALLS: "999" }).x_news?.detail ?? "", /at most 50 calls/, "the page shows the cap the snapshot uses");
+assert.ok(!JSON.stringify(cmoSwitches({ X_BEARER_TOKEN: "x-secret-token" })).includes("x-secret-token"), "the X token never reaches the page");
 
 console.log("switches: ok");

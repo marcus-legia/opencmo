@@ -298,7 +298,7 @@ document field `post_plan.content_plan`.
   - *As built:* `searchNews` returns `{stories, called, status}` so the snapshot counts the calls it sent (a failed
     request still counts). Text is cut by code point, as Postgres counts it: a UTF-16 cut can leave half an emoji, which
     Postgres refuses (review). Without a key and outside the fake, nothing is sent. Check: `lib/x/client.check.ts`.
-- [ ] **B3. Snapshot** in `lib/cmo/news/snapshot.ts`, one run for all founders:
+- [x] **B3. Snapshot** in `lib/cmo/news/snapshot.ts`, one run for all founders:
   1. News for a fixed list of broad queries in code: `AI`, `startups`, `SaaS`, `developer tools`, `tech`. These only
      gather stories that are breaking; they are not the founder's topics.
   2. **Dedupe by `story_id`** before anything else: the same story comes back under several queries.
@@ -311,6 +311,13 @@ document field `post_plan.content_plan`.
   **Cost guard:** an env `X_NEWS_MAX_CALLS` (default 10) caps the calls of a run. The run logs its call count and its
   estimate in dollars at an env `X_NEWS_PRICE` until X publishes a price. An ops switch (`lib/ops/switches.ts`,
   "X News") reads `X_BEARER_TOKEN`.
+
+  *As built:* the env limits live in `lib/cmo/news/config.ts`, so the Costs page shows the cap the snapshot really uses
+  (review). `X_NEWS_PRICE` is dollars per story returned, $0.005 by default (a post read's price) until X publishes
+  one. A run where every request failed (a revoked token is 401 on all of them) throws, so the cron's monitor reports
+  it instead of storing nothing in silence. The fake filter sorts only fake stories, never real ones. The filter runs
+  on `news_picker` (the one new agent, tier `check`). The Haiku call is not in the logged estimate: the provider
+  ledger is per founder, and the snapshot has none. Check: `lib/cmo/news/snapshot.check.ts`.
 - [ ] **B4. Cron.**
   - `GET /api/cron/x-news`, behind `cronAuthorized`, runs the snapshot.
   - Modal: `x_news()` on `modal.Cron("20 */3 * * *")` calls it through `cmo_dispatch.call_cron`, like
