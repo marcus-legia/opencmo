@@ -10,7 +10,7 @@ import assert from "node:assert/strict";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { isoDay } from "./jobs/types";
-import { enqueueDueDrafts, enqueueDueLoops, loopHour, loopKey } from "./schedule";
+import { BACKLOG_MAX, backlogRoom, daySlots, draftWave, enqueueDueDrafts, enqueueDueLoops, loopHour, loopKey } from "./schedule";
 
 type Row = Record<string, unknown>;
 const MAX_ROWS = 1000;
@@ -22,7 +22,7 @@ const read = (row: Row, column: string): unknown => {
   return key ? (row[head!] as Row | null)?.[key] : row[column];
 };
 
-function fakeAdmin(tables: Record<string, Row[]>, paid: Set<string>) {
+function fakeAdmin(tables: Record<string, Row[]>, paid: Set<string>, fill?: (args: Record<string, unknown>) => Row[]) {
   const calls = { in: 0 };
   const from = (table: string) => {
     const tests: ((row: Row) => boolean)[] = [];
@@ -42,15 +42,16 @@ function fakeAdmin(tables: Record<string, Row[]>, paid: Set<string>) {
         return query;
       },
       range: (start: number, end: number) => ((window = [start, end]), query),
-      then: (resolve: (value: { data: Row[]; error: null }) => unknown) => {
+      then: (resolve: (value: { data: Row[]; count: number; error: null }) => unknown) => {
         const rows = (tables[table] ?? []).filter((row) => tests.every((test) => test(row)));
-        return Promise.resolve({ data: rows.slice(window[0], Math.min(window[1] + 1, window[0] + MAX_ROWS)), error: null }).then(resolve);
+        return Promise.resolve({ data: rows.slice(window[0], Math.min(window[1] + 1, window[0] + MAX_ROWS)), count: rows.length, error: null }).then(resolve);
       },
     };
     return query;
   };
   const rpc = async (name: string, args: Record<string, unknown>) => {
     if (name === "cmo_paid_users") return { data: (args.p_users as string[]).filter((id) => paid.has(id)), error: null };
+    if (name === "cmo_fill_day_slots") return { data: fill ? fill(args) : [], error: null };
     assert.equal(name, "enqueue_cmo_run_for");
     const run = { id: `run-${tables.cmo_runs!.length}`, user_id: args.p_user, kind: args.p_kind, input: args.p_input, status: "queued", created_at: new Date().toISOString() };
     tables.cmo_runs!.push(run);
@@ -134,8 +135,77 @@ async function main() {
   const day: Record<string, Row[]> = { work_orders: [], cmo_runs: [] };
   const { admin: one } = fakeAdmin(day, new Set());
   const xs = ["a", "b", "c", "d"].map((id) => ({ id, platform: "X" }));
-  assert.equal(await enqueueDueDrafts(one, "u", xs), 3, "three X items on a day are three runs, the fourth waits");
-  assert.deepEqual(day.cmo_runs!.map((run) => (run.input as Row).item_id), ["a", "b", "c"], "the oldest first");
+  assert.equal(await enqueueDueDrafts(one, "u", [...xs, { id: "e", platform: "X" }, { id: "f", platform: "X" }]), 5, "five X items on a day are five runs, the sixth waits");
+  assert.deepEqual(day.cmo_runs!.map((run) => (run.input as Row).item_id), ["a", "b", "c", "d", "e"], "the oldest first");
+
+  // A7 (2026-11-27): X takes five a day; the oldest day first, then the day's slots in order.
+  const five: Record<string, Row[]> = { work_orders: [], cmo_runs: [], content_items: [] };
+  const { admin: fiveAdmin } = fakeAdmin(five, new Set());
+  const slotted = [4, 2, 0, 3, 1, 5].map((slot) => ({ id: `s${slot}`, platform: "X", day: today, slot }));
+  assert.equal(await enqueueDueDrafts(fiveAdmin, "u", [{ id: "old", platform: "X", day: isoDay(-1), slot: 2 }, ...slotted]), 5);
+  assert.deepEqual(five.cmo_runs!.map((run) => (run.input as Row).item_id), ["old", "s0", "s1", "s2", "s3"], "yesterday first, then by slot");
+
+  // Two waves: the first half of the day's slots from the morning, the rest six hours on, never past 23:00 UTC.
+  assert.deepEqual([0, 1, 2, 3, 4].map((slot) => draftWave(slot, 5, 0, 0)), [true, true, true, false, false], "5 slots: 3 in the morning");
+  assert.deepEqual([3, 4].map((slot) => draftWave(slot, 5, 6, 0)), [true, true], "the rest six hours on");
+  assert.equal(draftWave(1, 2, 18, 14), false, "California's second post waits for 20:00 UTC");
+  assert.equal(draftWave(1, 2, 23, 20), true, "a late morning's second wave is at 23:00 UTC at the latest");
+  assert.equal(draftWave(undefined, 5, 0, 0), true, "an item with no slot is in the first wave");
+  assert.equal(draftWave(0, 1, 0, 0), true);
+  const waves: Record<string, Row[]> = { work_orders: [], cmo_runs: [], content_items: [] };
+  const { admin: waveAdmin } = fakeAdmin(waves, new Set());
+  const daySet = [0, 1, 2, 3].map((slot) => ({ id: `w${slot}`, platform: "X", day: today, slot }));
+  assert.equal(await enqueueDueDrafts(waveAdmin, "u", daySet, { wave: { n: 4, hour: 2, loopHour: 0, today } }), 2, "morning: two of four");
+  const done = new Set(waves.cmo_runs!.map((run) => loopKey("u", "daily-post-draft", (run.input as Row).item_id as string)));
+  assert.equal(await enqueueDueDrafts(waveAdmin, "u", daySet, { done, wave: { n: 4, hour: 6, loopHour: 0, today } }), 2, "six hours on: the other two");
+  const overdue: Record<string, Row[]> = { work_orders: [], cmo_runs: [], content_items: [] };
+  assert.equal(await enqueueDueDrafts(fakeAdmin(overdue, new Set()).admin, "u", [{ id: "y3", platform: "X", day: isoDay(-1), slot: 3 }],
+    { wave: { n: 4, hour: 0, loopHour: 0, today } }), 1, "yesterday's late slot is drafted in the first wave");
+  const fiveDone = new Set(["p1", "p2", "p3", "p4", "p5"].map((id) => loopKey("u", "daily-post-draft", id)));
+  assert.equal(await enqueueDueDrafts(waveAdmin, "u", [{ id: "late", platform: "X", day: today, slot: 0 }], { done: fiveDone }), 0,
+    "five drafts queued earlier today: the day's cap is spent, whatever is still planned");
+
+  // The backlog guard (decision 6): ten drafts in review stop new drafts; nine leave room for one.
+  assert.deepEqual([backlogRoom(0), backlogRoom(9), backlogRoom(BACKLOG_MAX), backlogRoom(14), backlogRoom(-1)], [10, 1, 0, 0, 10]);
+  const review = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `r${i}`, user_id: "u", department: "post", status: "in_review" }));
+  for (const [waiting, want] of [[10, 0], [9, 1]] as const) {
+    const full: Record<string, Row[]> = { work_orders: [], cmo_runs: [], content_items: review(waiting) };
+    const { admin: fullAdmin } = fakeAdmin(full, new Set());
+    assert.equal(await enqueueDueDrafts(fullAdmin, "u", xs), want, `${waiting} drafts waiting: ${want} new`);
+  }
+
+  // A6: today's slots as the week plan reads them; a platform with no account has none.
+  assert.deepEqual(daySlots({ text: { x: 3, threads: 1, linkedin: 0, facebook: 0 }, video: {} }, ["x", "threads"], []),
+    [{ slot: 0, targets: ["x", "threads"] }, { slot: 1, targets: ["x"] }, { slot: 2, targets: ["x"] }]);
+  assert.deepEqual(daySlots({ text: { x: 3, threads: 1, linkedin: 0, facebook: 0 }, video: {} }, ["threads"], []), [{ slot: 0, targets: ["threads"] }]);
+  // The schedule fills today's empty slots (not on Monday) and drafts what it made in the same call.
+  const tuesday = new Date("2026-12-01T03:00:00Z");
+  const filled: Record<string, Row[]> = {
+    marketing_documents_latest: [{ user_id: "f", kind: "product", body: {} }],
+    content_items: [{ id: "planned-0", user_id: "f", department: "post", status: "planned", idea: "A post", day: "2026-12-01", platform: "X", slot: 0 }],
+    profiles: [{ id: "f", timezone: "Asia/Ho_Chi_Minh", posting_plan: { text: { x: 2, threads: 0, linkedin: 0, facebook: 0 }, video: {} } }],
+    social_accounts: [{ id: "a", user_id: "f", platform: "x", status: "connected" }],
+    work_orders: [], cmo_draft_outcomes: [], cmo_runs: [],
+  };
+  const fills: Record<string, unknown>[] = [];
+  // As the RPC: the made item is a planned row, and a second call makes nothing.
+  const { admin: fillAdmin } = fakeAdmin(filled, new Set(["f"]), (args) => {
+    fills.push(args);
+    if (filled.content_items!.some((i) => i.id === "made-1")) return [];
+    filled.content_items!.push({ id: "made-1", user_id: "f", department: "post", status: "planned", idea: "Today's post", day: "2026-12-01", platform: "X", slot: 1 });
+    return [{ id: "made-1", slot: 1 }];
+  });
+  await enqueueDueLoops(fillAdmin, tuesday);
+  assert.deepEqual(fills.map((a) => [a.p_day, a.p_items]), [["2026-12-01", [{ slot: 0, targets: ["x"] }, { slot: 1, targets: ["x"] }]]]);
+  const drafted = () => filled.cmo_runs!.filter((r) => r.kind === "post_draft").map((r) => (r.input as Row).item_id);
+  assert.deepEqual(drafted(), ["planned-0"], "03:00 UTC: Vietnam's first wave (from 00:00) drafts slot 0; the filled slot 1 waits");
+  for (const run of filled.cmo_runs!) run.created_at = tuesday.toISOString();
+  await enqueueDueLoops(fillAdmin, new Date("2026-12-01T07:00:00Z"));
+  assert.deepEqual(drafted(), ["planned-0", "made-1"], "from 06:00 UTC the second wave drafts the filled slot");
+  const monday: Record<string, Row[]> = { ...filled, cmo_runs: [] };
+  fills.length = 0;
+  await enqueueDueLoops(fakeAdmin(monday, new Set(["f"]), (args) => (fills.push(args), [])).admin, new Date("2026-11-30T03:00:00Z"));
+  assert.equal(fills.length, 0, "Monday's week plan fills its own slots");
 
   // A day in flight when the loop was renamed is not drafted twice: yesterday's name still counts for today.
   const renamed: Record<string, Row[]> = {

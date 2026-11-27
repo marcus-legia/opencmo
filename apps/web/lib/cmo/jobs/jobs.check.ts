@@ -26,13 +26,20 @@ import { openingLine } from "./competitor-research";
 import { PASS_SCORE, quoteIn, reachScore, scoreThread, threadBlock, timingScore } from "./sales-scan";
 import { parseRedditSearch, type RedditThread } from "../social/reddit";
 import { memoryStore } from "./memory-store";
-import { isoDay, type Documents, type ItemRow, type MemoryEvent } from "./types";
+import { isoDay, type Documents, type ItemRow, type MemoryEvent, type PostNews } from "./types";
+import { NEWS_UNREADABLE, NO_NEWS, type NewsCandidate } from "../news/pick";
 
 /** A memory store whose Library holds one conversation (wave 3 B3): the week plan writes posts only from it. */
 function withLibrary(m: ReturnType<typeof memoryStore>): ReturnType<typeof memoryStore> {
   const url = "https://www.reddit.com/r/freelance/comments/lib1/late/";
   m.opps.push({ url, community: "freelance", title: "Clients pay late", author: "mo", snippet: "", posted_at: new Date().toISOString(), comments: 3, score: 80, score_parts: [], reply: "Try reminders." });
   m.library.set(url, { url, summary: "A designer with ten clients has three invoices over 60 days late.", theme: "Chasing late invoices", quotes: [{ kind: "pain", text: "I hate chasing" }] });
+  return m;
+}
+
+/** A fresh X News story about the fixture's field (Part B6): the fake plan's slot 0 rides the news each day (A5). */
+function withNews(m: ReturnType<typeof memoryStore>): ReturnType<typeof memoryStore> {
+  m.news.push({ rowId: "fixture-news", storyId: "1994000000000000101", name: "Freelancers report longer payment delays", summary: "Freelancers on X say clients now take longer to pay invoices.", hook: "", topicKey: "freelancer-payment-delays", postIds: [], takenAt: new Date().toISOString(), storyUpdatedAt: null, relevant: true });
   return m;
 }
 
@@ -75,6 +82,27 @@ async function main() {
   const briefed = toPlanItems({ items: [post(0, "Our launch")] }, plan({ x: 1 }), { today, docs, library: [], fromBrief: true, plannedFrom: "brief" });
   const briefPosts = briefed.filter((p) => p.department === "post");
   assert.ok(briefPosts.length > 0 && briefPosts.every((p) => p.planned_from === "brief" && !p.sources), "a brief's posts are marked");
+  assert.ok(briefPosts.every((p) => p.news === "hook"), "a brief's posts need no news story (decision 7 keeps them)");
+  // Decision 7: a Library week keeps the model's news marks; an idea with no source the plan sends to the news keeps
+  // its idea and rides it; an idea with no source otherwise takes a theme with its sources.
+  {
+    const library = [{ id: "t1", name: "Late payments", count: 1, entries: [{ opportunityId: "o1", platform: "reddit", community: "freelance", postedAt: null, summary: "Chasing a client for 60 days", quotes: [] }] }] as never;
+    const marked = toPlanItems({ items: [
+      { ...post(0, "Today's AI news, from how we chase invoices", 0), news: "required" as const },
+      { ...post(1, "A plain idea", 0), news: "none" as const },
+      { ...post(2, "Cites c1", 0), sources: ["c1"], news: "hook" as const },
+    ] }, plan({ x: 1 }), { today, docs, library });
+    assert.deepEqual(marked.slice(0, 3).map((p) => [p.news, p.sources?.length ?? 0, p.idea.startsWith("What people say")]),
+      [["required", 0, false], ["none", 1, true], ["hook", 1, false]]);
+    const fakeWeek = toPlanItems(fakePlan(docs, plan({ x: 2 }), undefined, library), plan({ x: 2 }), { today, docs, library });
+    assert.deepEqual(fakeWeek.slice(0, 2).map((p) => p.news), ["required", "hook"], "the fake plan: slot 0 rides the news");
+    const bareWeek = toPlanItems(fakePlan(docs, plan({ x: 2 })), plan({ x: 2 }), { today, docs, library: [] }).filter((p) => p.department === "post");
+    assert.ok(bareWeek.length === 14 && bareWeek.every((p) => p.news === "required" && !p.sources), "an empty Library: every post required");
+    const someDays = toPlanItems({ items: [{ ...post(0, "No news today", 0), news: "none" as const }, { ...post(1, "News day", 0), news: "hook" as const }] },
+      plan({ x: 1 }), { today, docs, library: [] }).filter((p) => p.department === "post");
+    assert.deepEqual(someDays.slice(0, 2).map((p) => [p.day.slice(8), p.news]), [["06", "required"], ["07", "required"]],
+      "an empty Library: a post the content plan keeps off the news is not written; the others ride it");
+  }
   const two = toPlanItems({ items: [] }, plan({ x: 2, threads: 1 }), { today, docs });
   assert.equal(two.length, 14);
   assert.deepEqual(two.slice(0, 2).map((p) => [p.platform, p.targets]), [["X", ["x", "threads"]], ["X", ["x"]]]);
@@ -123,13 +151,23 @@ async function main() {
     await drainCmoQueue(branded.store, { think: async (call) => (asks.push(call.prompt), call.fake!()) });
     assert.ok(asks.some((p) => p.includes("<founder_writing>") && p.includes("then I call") && p.includes("<intro_line>I make Paylane.")), "the post prompt carries the founder's writing");
   }
-  // Wave 3 B3: with no Library the week has no posts, and says so; the founder's own brief still plans them.
+  // Decision 7, option B (owner, 2026-11-27): with no Library every post rides the day's news (required); a content
+  // plan that says no news plans none, and says so in one line. The founder's own brief still plans them.
     const empty = memoryStore(docs);
     const bare = empty.enqueue("plan_week", { source: "schedule" });
     await drainCmoQueue(empty.store);
     assert.equal(bare.status, "done", `an empty Library is not an error (${bare.error})`);
-    assert.equal(empty.items.filter((i) => i.department === "post").length, 0, "no post without the Library");
-    assert.ok(bare.steps.some((s) => s.tool === "library"), "the plan says why in one line");
+    const riding = empty.items.filter((i) => i.department === "post");
+    assert.ok(riding.length > 0 && riding.every((i) => i.body.news === "required" && !i.body.sources), "with no Library every post rides the news");
+    assert.ok(!bare.steps.some((s) => s.tool === "library"), "and there is nothing to explain");
+    const quiet = memoryStore(docs);
+    const noNews = quiet.enqueue("plan_week", { source: "schedule" });
+    await drainCmoQueue(quiet.store, { think: async (call) => {
+      const answer = call.fake!() as { items: { department: string; news?: string }[] };
+      return { items: answer.items.map((i) => (i.department === "post" ? { ...i, news: "none" } : i)) } as never;
+    } });
+    assert.equal(quiet.items.filter((i) => i.department === "post").length, 0, "no Library and a plan that says no news: no post");
+    assert.ok(noNews.steps.some((s) => s.tool === "library"), "the plan says why in one line");
     // Onboarding: the first week plans posts even with an empty Library (a new founder sees first drafts).
     const first = memoryStore(docs);
     const onboarding = first.enqueue("plan_week", { source: "onboarding" });
@@ -178,18 +216,21 @@ async function main() {
   assert.equal(pickDueItem(named, "2026-10-05", named[1]!.id)?.day, "2026-10-04", "the item the schedule named wins");
   assert.equal(pickDueItem(named, "2026-10-05", "gone"), null, "a named item no longer planned is not swapped for another");
 
-  // W1 rồi W2 chạy hết hàng đợi với LLM giả.
+  // W1 then W2 drain the queue with the fake model.
   const mem = withLibrary(memoryStore(docs));
   const w1 = mem.enqueue("plan_week");
   const w2 = mem.enqueue("post_draft");
-  assert.equal(await drainCmoQueue(mem.store), 2, "chạy hai lượt");
-  assert.equal(w1.status, "done", `W1 xong (${w1.error})`);
-  assert.ok(w1.steps.every((s) => s.status === "done"), "mọi bước W1 xong");
+  // Today's slot 0 rides the news in the fake plan (A5), so the snapshot has one fresh story about the founder's field.
+  mem.news.push({ rowId: "w2-news", storyId: "1994000000000000102", name: "Freelancers report longer payment delays", summary: "Freelancers on X say clients now take longer to pay invoices.", hook: "", topicKey: "freelancer-payment-delays", postIds: [], takenAt: new Date().toISOString(), storyUpdatedAt: null, relevant: true });
+  assert.equal(await drainCmoQueue(mem.store), 2, "two runs");
+  assert.equal(w1.status, "done", `W1 is done (${w1.error})`);
+  assert.ok(w1.steps.every((s) => s.status === "done"), "every W1 step is done");
   assert.deepEqual(w1.steps.map((s) => s.tool), ["read_doc", "get_results", "plan_items", "write_calendar"]);
-  assert.ok(mem.items.filter((i) => i.status === "planned").length >= 5, "lịch có ít nhất 5 mục");
+  assert.ok(mem.items.filter((i) => i.status === "planned").length >= 5, "the calendar has at least five items");
 
-  assert.equal(w2.status, "done", `W2 xong (${w2.error})`);
-  assert.deepEqual(w2.steps.map((s) => s.tool), ["next_due_item", "read_doc", "draft_post", "check_post", "create_card"]);
+  assert.equal(w2.status, "done", `W2 is done (${w2.error})`);
+  // Part B6: a post looks for today's news before it is written.
+  assert.deepEqual(w2.steps.map((s) => s.tool), ["next_due_item", "read_doc", "pick_news", "draft_post", "check_post", "create_card"]);
   const card = mem.items.find((i) => i.status === "in_review");
   assert.ok(card, "a card waits for review");
   assert.ok(typeof card!.body.text === "string" && (card!.body.text as string).length <= 280, "the post is at most 280 characters");
@@ -198,6 +239,120 @@ async function main() {
   // reaches the post.
   assert.equal((card!.body.sources as { opportunityId: string }[] | undefined)?.length, 1, "the draft keeps its source");
   for (const leak of ["mo", "Clients pay late", "reddit.com"]) assert.ok(!new RegExp(`\\b${leak.replace(".", "\\.")}\\b`, "i").test(card!.body.text as string), `no "${leak}" in the post`);
+  assert.equal((card!.body.news as PostNews | undefined)?.rowId, "w2-news", "the card keeps the story it rode, with its sources");
+
+  // Part B6 (plan 2026-11-27): today's X News. A required post rides a fresh story or is not written.
+  {
+    const now = new Date().toISOString();
+    const story = (over: Partial<NewsCandidate & { relevant: boolean }> = {}) => ({
+      rowId: "n1", storyId: "1994000000000000001", name: "Anthropic ships a longer-running Claude", summary: "Anthropic released a model on November 26 that runs coding tasks for 7 hours.",
+      hook: "", topicKey: "anthropic-claude-release", postIds: ["123"], takenAt: now, storyUpdatedAt: now, relevant: true, ...over,
+    });
+    const newsItem = (id: string, body: Record<string, unknown>, idea = "Today's AI news, from how we chase invoices") =>
+      ({ id, run_id: null, department: "post", platform: "X", day: isoDay(), idea, reason: "", status: "planned", priority: "medium", body,
+        final_text: null, external_url: null, decided_at: null, published_at: null, created_at: now }) as ItemRow;
+    const draftOne = async (m: ReturnType<typeof memoryStore>, id: string, asks: string[] = []) => {
+      const run = m.enqueue("post_draft", { source: "schedule", item_id: id });
+      await drainCmoQueue(m.store, { think: async (call) => (asks.push(call.prompt), call.fake!()) });
+      return run;
+    };
+
+    // A fresh snapshot with no story that fits: no draft, the credit back, and the item skipped so it does not take
+    // tomorrow's draft.
+    const none = memoryStore(docs);
+    none.news.push(story({ rowId: "sport-only", storyId: "1994000000000000099", name: "Chiefs win", topicKey: "", relevant: false }));
+    none.items.push(newsItem("req-none", { slot: 0, targets: ["x"], news: "required" }));
+    const r1 = await draftOne(none, "req-none");
+    assert.equal(r1.status, "done", `no story is not an error (${r1.error})`);
+    assert.equal((r1.output as { refund?: boolean }).refund, true, "the credit comes back");
+    assert.equal(none.items.find((i) => i.id === "req-none")!.status, "skipped");
+    assert.equal(none.items.find((i) => i.id === "req-none")!.body.skip_reason, "no_news");
+    assert.ok(r1.steps.some((s) => s.tool === "news"), "the run says why in one line");
+
+    // A fresh story: the post rides it, the card keeps it, and the writer and the checker read it as data.
+    const fresh = memoryStore(docs);
+    fresh.news.push(story(), story({ rowId: "sport", storyId: "1994000000000000005", name: "Chiefs win", topicKey: "", relevant: false }));
+    fresh.items.push(newsItem("req-news", { slot: 0, targets: ["x"], news: "required" }));
+    const asks: string[] = [];
+    const r2 = await draftOne(fresh, "req-news", asks);
+    assert.equal(r2.status, "done", `the news post is written (${r2.error})`);
+    const rode = fresh.items.find((i) => i.id === "req-news")!;
+    assert.equal(rode.status, "in_review");
+    const news = rode.body.news as PostNews;
+    assert.deepEqual([news.rowId, news.topicKey, news.storyId, news.url], ["n1", "anthropic-claude-release", "1994000000000000001", "https://x.com/i/status/123"]);
+    assert.ok(news.at && Date.now() - Date.parse(news.at) < 60_000, "the card records when it rode the story");
+    assert.ok(r2.steps.find((s) => s.tool === "pick_news")?.label.includes("Anthropic"), "the step names the news");
+    assert.ok(asks.some((p) => p.includes("<news ") && p.includes("runs coding tasks for 7 hours")), "the writer reads the story");
+    assert.ok(asks.filter((p) => p.includes("<stories>")).every((p) => !p.includes("Chiefs win")), "an off-topic story is never offered");
+
+    // No snapshot in six hours: the news could not be read. Nothing written, and a post due today is left for tomorrow.
+    const stale = memoryStore(docs);
+    stale.news.push(story({ takenAt: new Date(Date.now() - 7 * 3_600_000).toISOString() }));
+    stale.items.push(newsItem("req-stale", { slot: 0, targets: ["x"], news: "required" }));
+    assert.equal(((await draftOne(stale, "req-stale")).output as { reason?: string }).reason, NEWS_UNREADABLE);
+    assert.equal(stale.items.find((i) => i.id === "req-stale")!.status, "planned");
+
+    // News a recent post already rode is not offered again.
+    const twice = memoryStore(docs);
+    twice.news.push(story());
+    twice.items.push({ ...newsItem("rode", { news: { topicKey: "anthropic-claude-release", storyId: "1994000000000000001", at: new Date().toISOString() } }), status: "in_review" });
+    twice.items.push(newsItem("req-twice", { slot: 1, targets: ["x"], news: "required" }));
+    assert.equal(((await draftOne(twice, "req-twice")).output as { refund?: boolean }).refund, true, "the only story was ridden today");
+
+    // A story another draft of the same wave reserved is not taken: two posts never ride the same news on one day.
+    const wave = memoryStore(docs);
+    wave.news.push(story());
+    // The draft beside it is still running and holds the story.
+    const besideRun = wave.enqueue("post_draft", { source: "schedule", item_id: "beside" });
+    besideRun.status = "running";
+    wave.items.push(newsItem("beside", { slot: 0, targets: ["x"], news: "required", news_topic: "anthropic-claude-release", news_topic_run: besideRun.id }));
+    wave.items.push(newsItem("req-wave", { slot: 1, targets: ["x"], news: "required" }));
+    const rw = await draftOne(wave, "req-wave");
+    assert.equal((rw.output as { reason?: string }).reason, NO_NEWS, "the only story was reserved by the draft beside it");
+    // Once that draft ends (failed, here), its hold ends with it: the story is free again.
+    besideRun.status = "failed";
+    wave.items.push(newsItem("req-after", { slot: 2, targets: ["x"], news: "required" }));
+    assert.equal(((await draftOne(wave, "req-after")).output as { refund?: boolean } | null)?.refund, undefined, "a failed draft holds nothing");
+
+    // A pick that fails (the store cannot read the news) is not "no story fits": the post stays planned for later.
+    const broken = memoryStore(docs);
+    broken.items.push(newsItem("req-broken", { slot: 0, targets: ["x"], news: "required" }));
+    broken.store.newsStories = async () => { throw new Error("x_news_stories: connection reset"); };
+    const rb = await draftOne(broken, "req-broken");
+    assert.equal((rb.output as { refund?: boolean; reason?: string }).reason, NEWS_UNREADABLE);
+    assert.equal(broken.items.find((i) => i.id === "req-broken")!.status, "planned", "not skipped for a failed read");
+
+    // A post that keeps off the news never looks for one; without a source it is not written.
+    const off = memoryStore(docs);
+    off.news.push(story());
+    off.items.push(newsItem("off", { slot: 0, targets: ["x"], news: "none" }, "How I chase invoices"));
+    const r5 = await draftOne(off, "off");
+    assert.ok(!r5.steps.some((s) => s.tool === "pick_news"));
+    assert.equal((r5.output as { refund?: boolean }).refund, true, "no source and no news: nothing to rest on");
+    assert.equal(off.items.find((i) => i.id === "off")!.status, "planned", "a no-news post is not skipped as no-news");
+
+    // The morning fill's item: its idea is planned from the content plan inside the same run.
+    const fill = withLibrary(memoryStore({ ...docs, post_plan: { ...(docs.post_plan ?? {}), content_plan: "Each day: one post on chasing invoices." } }));
+    fill.news.push(story());
+    fill.items.push(newsItem("fill", { slot: 2, targets: ["x"], news: "hook", planned_from: "day_fill" }, "Today's post, from your content plan"));
+    const fillAsks: string[] = [];
+    const r6 = await draftOne(fill, "fill", fillAsks);
+    assert.equal(r6.status, "done", `the filled slot is written (${r6.error})`);
+    assert.deepEqual(r6.steps.slice(0, 4).map((s) => s.tool), ["next_due_item", "read_doc", "plan_idea", "pick_news"]);
+    assert.ok(fillAsks.some((p) => p.includes("<content_plan") && p.includes("one post on chasing invoices")), "the plan reads the content plan");
+    assert.ok(fillAsks.some((p) => p.includes("Today's calendar item: \"What we learned this week about finding customers\"")), "the writer gets the planned idea, not the stand-in");
+    assert.equal(fill.items.find((i) => i.id === "fill")!.status, "in_review");
+    assert.equal(fill.items.find((i) => i.id === "fill")!.idea, "What we learned this week about finding customers", "the card keeps the planned idea");
+
+    // A fill the content plan keeps off the news, with no source: nothing to write, and skipped so it does not linger.
+    const quietFill = memoryStore(docs);
+    quietFill.items.push(newsItem("quiet-fill", { slot: 2, targets: ["x"], news: "hook", planned_from: "day_fill" }, "Today's post, from your content plan"));
+    const r7 = quietFill.enqueue("post_draft", { source: "schedule", item_id: "quiet-fill" });
+    await drainCmoQueue(quietFill.store, { think: async (call) => (call.label === "plan_idea" ? { idea: "A note on pricing", news: "none", sources: [] } : call.fake!()) as never });
+    assert.equal((r7.output as { refund?: boolean }).refund, true);
+    assert.equal(quietFill.items.find((i) => i.id === "quiet-fill")!.status, "skipped");
+    assert.equal(quietFill.items.find((i) => i.id === "quiet-fill")!.body.skip_reason, "no_source");
+  }
   // Owner, 2026-11-24: the chat writes a post from a Sales conversation by its id. The founder's own becomes the
   // draft's source; an id that is not theirs writes the brief with none.
   {
@@ -721,7 +876,7 @@ async function main() {
   assert.deepEqual(dueLoops({ ...base, weekday: 1 }).map((r) => r.kind), ["plan_week", "sales_scan"]);
   assert.deepEqual(dueLoops({ ...base, weekday: 1, duePost: { idea: "left from last week" } }).map((r) => r.kind), ["plan_week", "post_draft", "sales_scan"]);
   {
-    const monday = withLibrary(memoryStore(docs));
+    const monday = withNews(withLibrary(memoryStore(docs)));
     const plan = monday.enqueue("plan_week", { source: "schedule", loop: "weekly-plan" });
     await drainCmoQueue(monday.store);
     assert.equal(plan.status, "done", `the scheduled plan is done (${plan.error})`);
@@ -742,7 +897,7 @@ async function main() {
   // Daily core drafts, the main flow (core-drafts follow-ups Task 1): a slot for three platforms is one item and one
   // draft. Three drafts would cost the founder three times and put three cards on the Feed for the same post.
   {
-    const three = withLibrary(memoryStore(docs));
+    const three = withNews(withLibrary(memoryStore(docs)));
     three.posting.plan = plan({ x: 1, threads: 1, linkedin: 1 });
     const week = three.enqueue("plan_week", { source: "schedule", loop: "weekly-plan" });
     await drainCmoQueue(three.store);

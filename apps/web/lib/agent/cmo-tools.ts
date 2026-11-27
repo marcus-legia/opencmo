@@ -174,6 +174,7 @@ export const CMO_TOOL_SPECS: ToolSpec[] = [
     description: [
       "Rewrite fields of one of the founder's marketing documents when they ask you to update, fix or fill it in.",
       "Read the document with read_doc first. fields_json is a JSON object of only the fields to replace, with the same names and shapes read_doc returned (strings, lists of strings, and for pillars or competitors the full list).",
+      "The Post plan's content_plan is the founder's own rules for their posts (what to write, the mix each day, what never to write), up to 6,000 characters: rewrite it whole, keeping their lines.",
       "Each save is a new version; the old one stays in history. Use only facts from the founder, the documents or a website you read; never guess pricing or features.",
     ].join(" "),
     schema: {

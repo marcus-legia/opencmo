@@ -36,6 +36,7 @@ insert into intended values
   ('worker_draft_initializations'),
   ('worker_operations'),
   ('write_budget_ledger'),
+  ('x_news_stories'),  -- Part B1 (2026-11-27): X News snapshots, the snapshot cron and the CMO runner only
   ('zernio_receipts');
 
 create temp table actual on commit drop as

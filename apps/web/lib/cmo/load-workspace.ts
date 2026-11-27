@@ -8,6 +8,7 @@ import { llmReady } from "./jobs/llm";
 import { mondayOf } from "./jobs/summarize-memory";
 import { isoDay, type CmoJobKind, type CompetitorInsight, type ItemRow, type ScorePart, type Step } from "./jobs/types";
 import { socialReaderReady } from "./social/reddit";
+import { BACKLOG_MAX } from "./schedule";
 import { loadCmoState } from "./state";
 import { suggestFixes } from "./suggest";
 import { AGENTS, type CalendarItem, type GoalView, type InboxCard, type InsightView, type Metrics, type JobId, type LogEntry, type PostCard, type SalesCard, type Workspace } from "./workspace";
@@ -104,7 +105,7 @@ function toCalendar(item: ItemRow): CalendarItem {
 }
 
 /** Dòng trạng thái thanh trên: nói thật việc đang ở đâu. */
-function statusLine(runs: CmoRunRow[], awaiting: number): Workspace["status"] {
+function statusLine(runs: CmoRunRow[], awaiting: number, postsWaiting = 0): Workspace["status"] {
   const active = runs.find((r) => r.status === "running" || r.status === "queued");
   if (active) {
     const what = { plan_week: "planning your week", post_draft: "drafting a post for X", sales_scan: "scanning Reddit for conversations", onboard: "building your plan", competitor_research: "studying your competitors on X", pull_metrics: "reading the numbers on your posts", summarize_memory: "writing this week's lessons", review_week: "reviewing your week", write_video_brief: "writing a video brief", write_caption: "writing captions for your video", write_slides: "writing slide text", publish_post: "posting what you approved", niche_video_research: "studying short videos in your niche", distill_ratings: "learning from your ratings", repurpose_post: "rewriting a post for one platform", photo_caption: "writing the caption of your photos", sales_reply_drafts: "writing replies for your Sales cards", compose_check: "checking the post you wrote" }[active.kind];
@@ -112,6 +113,8 @@ function statusLine(runs: CmoRunRow[], awaiting: number): Workspace["status"] {
   }
   const latest = runs[0];
   if (latest?.status === "failed") return { text: `Last task failed: ${latest.error ?? "unknown error"}`, tone: "error" };
+  // The backlog guard (decision 6, 2026-11-27): the schedule drafts nothing new until these are reviewed.
+  if (postsWaiting >= BACKLOG_MAX) return { text: `${postsWaiting} drafts are waiting for you. Review them to get new ones.`, tone: "ok" };
   if (awaiting) return { text: `${awaiting} ${awaiting === 1 ? "item is" : "items are"} waiting for you in Approvals.`, tone: "ok" };
   return { text: "Your documents are ready. Ask Ferreto, or plan the week.", tone: "ok" };
 }
@@ -174,7 +177,7 @@ export async function loadWorkspace(supabase: SupabaseClient): Promise<Workspace
     demo,
     site,
     project: { name: productName || site || "Your product", category: category ?? (demo ? "SaaS" : null) },
-    status: statusLine(runs, awaiting),
+    status: statusLine(runs, awaiting, items.filter((i) => i.department === "post" && i.status === "in_review").length),
     suggestions: suggestFixes(documents),
     documents,
     agents: AGENTS.map((agent) => ({

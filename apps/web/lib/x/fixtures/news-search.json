@@ -1,0 +1,65 @@
+{
+  "data": [
+    {
+      "id": "1994000000000000001",
+      "name": "Anthropic Releases Claude Model With Longer Agent Runs",
+      "summary": "Anthropic released a new Claude model on November 26 that it says can run coding and research tasks for several hours without help. Developers on X shared first tests, with mixed views on price and speed.",
+      "hook": "Anthropic's newest Claude can work on a task for hours on its own, and developers are already comparing it with their current tools.",
+      "category": "News",
+      "keywords": null,
+      "updated_at": "2026-11-27T08:10:00.000Z",
+      "cluster_posts_results": [{ "post_id": "1994000000000100001" }, { "post_id": "1994000000000100002" }, { "post_id": "1994000000000100003" }]
+    },
+    {
+      "id": "1994000000000000002",
+      "name": "Indie Founders Debate Black Friday Discounts for SaaS",
+      "summary": "Solo SaaS founders on X are split on whether Black Friday discounts bring lasting customers. Some report a spike in annual plans, others say most discount buyers cancel within three months.",
+      "hook": "Black Friday deals fill the inbox, but founders disagree on whether discount buyers ever stay.",
+      "category": "Other",
+      "keywords": null,
+      "updated_at": "2026-11-27T07:40:00.000Z",
+      "cluster_posts_results": [{ "post_id": "1994000000000200001" }, { "post_id": "1994000000000200002" }]
+    },
+    {
+      "id": "1994000000000000003",
+      "name": "AI Researcher Predicts Wave of Job Losses by 2030",
+      "summary": "A well-known AI researcher said on a podcast that AI agents could replace a large share of office work by 2030. The clip spread widely on X and drew pushback from economists.",
+      "hook": "One podcast clip about AI and office jobs set off a day of arguments on X.",
+      "category": "News",
+      "keywords": null,
+      "updated_at": "2026-11-27T06:55:00.000Z",
+      "cluster_posts_results": [{ "post_id": "1994000000000300001" }]
+    },
+    {
+      "id": "1994000000000000004",
+      "name": "Researcher Warns AI Agents Will Replace Office Jobs",
+      "summary": "Clips of an AI researcher warning that agents will take over office work spread on X, with economists disputing the timeline.",
+      "hook": "The same warning about AI and office work is now everywhere on X.",
+      "category": "News",
+      "keywords": null,
+      "updated_at": "2026-11-27T06:30:00.000Z",
+      "cluster_posts_results": []
+    },
+    {
+      "id": "1994000000000000005",
+      "name": "Chiefs Beat Cowboys in Thanksgiving Game",
+      "summary": "The Kansas City Chiefs beat the Dallas Cowboys on Thanksgiving, with fans on X focusing on a late interception.",
+      "hook": "A late interception decided the Thanksgiving game.",
+      "category": "Sports",
+      "keywords": null,
+      "updated_at": "2026-11-27T05:00:00.000Z",
+      "cluster_posts_results": [{ "post_id": "1994000000000500001" }]
+    },
+    {
+      "id": "1994000000000000006",
+      "name": "GitHub Ships Faster Code Review for Pull Requests",
+      "summary": "GitHub announced a faster code review mode for pull requests on November 25. Developers on X posted side by side timings, and some asked whether it works on large monorepos.",
+      "hook": "GitHub says its new review mode cuts the wait on pull requests, and developers are timing it.",
+      "category": "News",
+      "keywords": null,
+      "updated_at": "2026-11-27T04:20:00.000Z",
+      "cluster_posts_results": [{ "post_id": "1994000000000600001" }, { "post_id": "1994000000000600002" }]
+    }
+  ],
+  "meta": { "result_count": 6 }
+}

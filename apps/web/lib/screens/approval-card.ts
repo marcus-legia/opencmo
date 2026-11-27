@@ -89,6 +89,17 @@ const PostBody = z.object({
   /** The founder's own photos on the post (owner, 2026-11-13), `photos` bucket objects in order; part of the hash. */
   photos: z.array(z.string().max(500)).max(4).optional(),
   /**
+   * The X News story the post opens from (Part B7, 2026-11-27): its headline, a link to one of its posts on X ("" when
+   * none) and why it fits. Part of the hash: approving the post approves the story too. Absent on a post without one.
+   */
+  news: z
+    .object({
+      name: z.string().min(1).max(120),
+      url: z.union([z.literal(""), z.string().regex(/^https:\/\/x\.com\/i\/status\/[0-9]{1,19}$/)]),
+      why: z.string().max(200),
+    })
+    .optional(),
+  /**
    * Every platform the core post goes to, added when the card loads. `variant`: the platform's own rewrite, current
    * with the core text, which its slot posts instead (a schedule card shows it before it goes out).
    */

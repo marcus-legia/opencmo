@@ -678,6 +678,21 @@ def cmo_schedule() -> None:
     log.info("AI CMO schedule: %s", cmo_dispatch.call_cron(*web, "/api/cron/cmo"))
 
 
+# Every three hours at :20: the X News snapshot every founder's drafts pick a story from (plan 2026-11-27, Part B4).
+# The route does the work with Vercel's X key; this only calls it. A failed call raises and is retried once a minute
+# later (a second round of X calls); after that, drafts read the previous snapshot for up to six hours.
+@app.function(secrets=[secret], schedule=modal.Cron("20 */3 * * *"), timeout=210, retries=modal.Retries(max_retries=1, initial_delay=60.0))
+def x_news() -> None:
+    """Take the X News snapshot (`/api/cron/x-news`)."""
+    from opencmo.worker import cmo_dispatch
+
+    web = cmo_dispatch.web_config(dict(os.environ))
+    if web is None:
+        log.error("OPENCMO_WEB_URL or CRON_SECRET missing: the X News snapshot did not run")
+        return
+    log.info("X News: %s", cmo_dispatch.call_cron(*web, "/api/cron/x-news", timeout=190.0))
+
+
 @app.function(secrets=[secret], schedule=modal.Cron("2 * * * *"), timeout=240)
 def cmo_digest() -> None:
     """Hourly: release cards held past a day's budget, send each founder's digest at their local hour, email the

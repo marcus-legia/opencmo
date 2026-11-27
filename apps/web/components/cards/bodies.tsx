@@ -111,6 +111,20 @@ export function PostBody({
           </span>
         ) : null}
         {body.why ? <span>Why: {body.why}</span> : null}
+        {body.news ? (
+          <span className="v2-card-news" data-testid="post-news">
+            News: {body.news.name}
+            {body.news.why ? `${/[.!?]$/.test(body.news.name) ? "" : "."} Why it fits: ${body.news.why}` : null}
+            {body.news.url ? (
+              <>
+                {" · "}
+                <a className="v2-card-link" href={body.news.url} target="_blank" rel="noopener noreferrer">
+                  See it on X
+                </a>
+              </>
+            ) : null}
+          </span>
+        ) : null}
         {fold ? <span>The first {fold} characters show before “more” on a phone.</span> : null}
       </div>
       {body.targets && body.targets.length ? <PostTargets targets={body.targets} onRewrite={editing ? undefined : onRewrite} rewriting={rewriting} /> : null}

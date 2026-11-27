@@ -26,7 +26,8 @@ select 'e2340000-0000-4000-8000-00000000000a', id, '', case when published_at::t
 from public.content_items where user_id = 'e2340000-0000-4000-8000-00000000000a';
 
 select is(public.best_slots_refresh('e2340000-0000-4000-8000-00000000000a'), 0, 'nine posts are not enough');
-select is(public.schedule_candidate_times('e2340000-0000-4000-8000-00000000000a', 'x'), array['09:00'], 'the defaults until then');
+select is(public.schedule_candidate_times('e2340000-0000-4000-8000-00000000000a', 'x'), array['09:00', '12:00', '15:00', '18:00', '21:00'],
+  'the defaults until then (five on X since 20270207010000)');
 
 -- The tenth X post, at 09:00 local; an older reading of a post does not count, its newest does.
 insert into public.content_items (id, user_id, department, platform, day, idea, status, body, published_at) values
@@ -41,8 +42,8 @@ select is((select array_agg(hour order by median_views_per_hour desc) from publi
   where user_id = 'e2340000-0000-4000-8000-00000000000a' and platform = 'x'), array[14, 9]::smallint[], 'local hours, best first');
 select is((select count(*)::int from public.best_slots where user_id = 'e2340000-0000-4000-8000-00000000000a' and platform = 'threads'), 0,
   'Threads keeps the defaults');
-select is(public.schedule_candidate_times('e2340000-0000-4000-8000-00000000000a', 'x'), array['14:00'],
-  'X tries its best hour, as many as the defaults offer');
+select is(public.schedule_candidate_times('e2340000-0000-4000-8000-00000000000a', 'x'), array['14:00', '09:00', '12:00', '15:00', '18:00'],
+  'X tries its best hours, then the defaults, as many as the defaults offer');
 select is(public.schedule_candidate_times('e2340000-0000-4000-8000-00000000000a', 'threads'), array['09:00', '12:00'], 'Threads its defaults');
 
 -- The picker lands on 14:00 local, and moves a day on when a post already sits within the gap.
@@ -57,8 +58,10 @@ insert into public.deliverables (id, user_id, order_id, kind, ref_kind, ref_id, 
   ('e2343000-0000-4000-8000-00000000000a', 'e2340000-0000-4000-8000-00000000000a', 'e2341000-0000-4000-8000-00000000000a', 'post', 'content_item', 'e2342000-0000-4000-8000-0000000000aa', 'ready');
 insert into public.schedule_slots (user_id, deliverable_id, platform, mode, publish_at, window_ends_at, status)
 select 'e2340000-0000-4000-8000-00000000000a', 'e2343000-0000-4000-8000-00000000000a', 'x', 'intent', at + interval '1 hour', at + interval '75 minutes', 'waiting' from picked;
-select is(public.schedule_pick_time('e2340000-0000-4000-8000-00000000000a', 'x', null), (select at + interval '1 day' from picked),
-  'the gap still holds: the next day at the best hour');
+-- With five X times (20270207010000) the next pick may be another hour of the same day: what must hold is the gap.
+select ok((select abs(extract(epoch from public.schedule_pick_time('e2340000-0000-4000-8000-00000000000a', 'x', null) - (at + interval '1 hour')))
+             >= 3 * 3600 from picked),
+  'the gap still holds: three hours from the post already there');
 
 -- Review fix 8: views per hour since posting, not lifetime views. Threads (TikTok until wave 4b) counts the
 -- same way. Two old posts at 08:00 local with more views in all, two recent ones at 20:00 with

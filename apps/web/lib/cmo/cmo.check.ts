@@ -7,7 +7,8 @@
 import assert from "node:assert/strict";
 
 import { clampDocument, DOCUMENT_KINDS, OnboardingSchema, wasCut } from "./documents";
-import { draftDocuments } from "./generate";
+import { draftDocuments, firstContentPlan } from "./generate";
+import { keepFounderContentPlan } from "./onboard";
 import { postProfile } from "./platforms";
 import { extractPage, normalizeSite, privateAddress, readSite, SiteError } from "./site";
 import { suggestFixes } from "./suggest";
@@ -64,6 +65,19 @@ async function main(): Promise<void> {
   OnboardingSchema.parse(drafts);
   for (const kind of DOCUMENT_KINDS) assert.ok(drafts[kind], `thiếu ${kind}`);
   assert.equal(drafts.product.name, "Acme & Co");
+  // A4: the onboarding writes a first content plan from the topics, with an empty "Never" list and no daily count.
+  const firstPlan = drafts.post_plan.content_plan ?? "";
+  assert.ok(firstPlan.startsWith("Each day: ") && firstPlan.includes(`- ${drafts.post_plan.topics[0]}`) && firstPlan.endsWith("Never:"), firstPlan);
+  assert.ok(!/\b\d+ posts? a day\b/i.test(firstPlan), "the count stays on the posting plan");
+  // Reading the website again keeps a content plan the founder changed, and rewrites one still as onboarding wrote it.
+  const mine = "Each day: one post about invoices. Never: pricing.";
+  assert.equal(keepFounderContentPlan(drafts, { ...drafts.post_plan, content_plan: mine }).post_plan.content_plan, mine);
+  const untouched = { topics: ["Old topic"], rhythm: "", content_plan: firstContentPlan({ topics: ["Old topic"], rhythm: "" }) };
+  assert.equal(keepFounderContentPlan(drafts, untouched).post_plan.content_plan, firstPlan, "an untouched first plan follows the new topics");
+  assert.equal(keepFounderContentPlan(drafts, null).post_plan.content_plan, firstPlan);
+  // As saved: a long rhythm is cut, and the saved first plan still reads as untouched (it is built after the cut).
+  assert.equal(keepFounderContentPlan(drafts, drafts.post_plan).post_plan.content_plan, firstPlan, "the saved first plan is the onboarding's");
+  assert.equal(firstPlan, firstContentPlan(drafts.post_plan), "built from the fields as saved");
 
   // The e2e's site (`paylane.test`): its title is "paylane: invoicing that chases late payments". The fake week plan
   // turns the product name into the first post idea, and the fake post repeats the idea; a name that kept the tagline
@@ -107,6 +121,14 @@ async function main(): Promise<void> {
   assert.equal((brand.voice_samples as string[]).length, 5);
   assert.deepEqual((brand.look as { colors: string[] }).colors, ["#ef4a1a"]);
   assert.equal((brand.look as { logo_url: string }).logo_url, "", "a logo not on https is dropped");
+  // The content plan (owner, 2026-11-27): kept, first in the Post plan, cut at 6,000 characters, "" when absent.
+  const plan = "Each day: one post on today's AI news, two on how we build.\n" + "x".repeat(3000);
+  assert.equal(clampDocument("post_plan", { content_plan: plan }).content_plan, plan, "a 3,000-character plan is kept whole");
+  const longPlan = clampDocument("post_plan", { content_plan: "y".repeat(7000) }).content_plan as string;
+  assert.equal(longPlan.length, 6000);
+  assert.equal(wasCut("y".repeat(7000), longPlan), true, "a plan over 6,000 characters is a cut the chat reports");
+  assert.equal(clampDocument("post_plan", {}).content_plan, "");
+  assert.equal(Object.keys(clampDocument("post_plan", {}))[0], "content_plan", "the content plan is the first field");
 }
 
 main().catch((error) => {

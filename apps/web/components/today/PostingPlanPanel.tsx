@@ -5,14 +5,14 @@ import { useEffect, useRef, useState } from "react";
 
 import { isPlanRequired, PlanSheet } from "@/components/billing/PlanSheet";
 import { ApiError, api, jsonBody } from "@/components/clipping/api";
-import { TEXT_PLATFORMS, connectedOnly, dayTargets, type PostingPlan } from "@/lib/cmo/posting-plan";
+import { parsePlanUsage } from "@/lib/billing/usage";
+import { TEXT_MAX, TEXT_PLATFORMS, connectedOnly, dayTargets, monthlyCredits, type PostingPlan } from "@/lib/cmo/posting-plan";
 import { CONNECTABLE_PLATFORMS } from "@/lib/departments/publish/types";
 import type { ScheduleScreen } from "@/lib/screens/schedule";
 
 import { PlatformLogo, type LogoPlatform } from "./platform-logos";
 
 const TEXT_LABEL: Record<(typeof TEXT_PLATFORMS)[number], string> = { x: "X", threads: "Threads", linkedin: "LinkedIn", facebook: "Facebook Page" };
-const TEXT_MAX = 3;
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
@@ -40,6 +40,22 @@ export function PostingPlanPanel({ initial, accounts, live, onSaved }: { initial
       setPlan(saved.current);
     }
   }, [initialKey]);
+
+  // The plan's monthly allowance, for the credit estimate (A3). Only a live plan reads it; a sample plan shows none.
+  const [allowance, setAllowance] = useState<number | null>(null);
+  useEffect(() => {
+    if (!live) return;
+    let alive = true;
+    api<{ usage?: unknown }>("/account")
+      .then((account) => {
+        const usage = parsePlanUsage(account.usage);
+        if (alive) setAllowance(usage.plan === "pro" && usage.allowance > 0 ? usage.allowance : null);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [live]);
 
   const connected = (id: string) => accounts.some((a) => a.platform === id && a.status === "connected");
   const accountId = (id: string) => accounts.find((a) => a.platform === id && a.status === "connected")?.id ?? null;
@@ -139,6 +155,7 @@ export function PostingPlanPanel({ initial, accounts, live, onSaved }: { initial
   // not keep.
   const running = connectedOnly(plan, TEXT_PLATFORMS.filter((id) => connected(id)));
   const posts = dayTargets(running).length;
+  const credits = monthlyCredits(running);
   const on = TEXT_PLATFORMS.filter((id) => running.text[id] > 0).map((id) => TEXT_LABEL[id]);
   // Turned on in the plan, but there is no account to post to: the founder's counts are kept, nothing is written.
   const waiting = TEXT_PLATFORMS.filter((id) => plan.text[id] > 0 && !connected(id)).map((id) => TEXT_LABEL[id]);
@@ -186,7 +203,7 @@ export function PostingPlanPanel({ initial, accounts, live, onSaved }: { initial
               name={TEXT_LABEL[id]}
               per="day"
               value={plan.text[id]}
-              max={TEXT_MAX}
+              max={TEXT_MAX[id]}
               connected={connected(id)}
               busy={busy === id}
               onConnect={
@@ -218,6 +235,21 @@ export function PostingPlanPanel({ initial, accounts, live, onSaved }: { initial
               {waiting.length === 1 ? "it" : "them"}. Connect {waiting.length === 1 ? "it" : "them"} above to start.
             </span>
           ) : null}
+        </p>
+      </div>
+      <div className="pp-credits" data-testid="posting-plan-credits">
+        {credits > 0 ? (
+          <p>
+            Posts use about {credits} credits a month.{allowance !== null ? ` Your plan includes ${allowance}.` : null}
+            {allowance !== null && credits > allowance ? (
+              <span className="pp-over" data-testid="posting-plan-over">
+                {" "}That is more than your plan includes, so some drafts would wait until it resets.
+              </span>
+            ) : null}
+          </p>
+        ) : null}
+        <p>
+          What to write: <Link href="/app?doc=post_plan&edit=1">edit your content plan</Link>
         </p>
       </div>
       {confirmOff ? (

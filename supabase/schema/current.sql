@@ -2361,7 +2361,7 @@ $$;
 CREATE FUNCTION public.approval_snapshot_base(p_ref_kind text, p_ref_id uuid) RETURNS jsonb
     LANGUAGE plpgsql STABLE SECURITY DEFINER
     SET search_path TO 'public'
-    AS $$
+    AS $_$
 declare
   v jsonb;
   v_captions jsonb;
@@ -2374,6 +2374,14 @@ begin
         'rationale', coalesce(body->>'rationale', reason))
         -- The founder's own photos are part of what they approve; a post without any keeps its old hash.
         || case when cardinality(photos) > 0 then jsonb_build_object('photos', to_jsonb(photos)) else '{}'::jsonb end
+        -- The X News story the draft opens from (Part B7): shown on the card and part of what the founder approves. A
+        -- post without one keeps its old hash.
+        || case when jsonb_typeof(body->'news') = 'object' and coalesce(body->'news'->>'name', '') <> '' then
+             jsonb_build_object('news', jsonb_build_object(
+               'name', left(body->'news'->>'name', 120),
+               'url', case when coalesce(body->'news'->>'url', '') ~ '^https://x\.com/i/status/[0-9]{1,19}$' then body->'news'->>'url' else '' end,
+               'why', left(coalesce(body->'news'->>'why', ''), 200)))
+           else '{}'::jsonb end
       into v from public.content_items where id = p_ref_id;
     when 'opportunity' then
       select jsonb_build_object('kind', 'reply', 'url', url, 'community', community, 'title', title,
@@ -2463,7 +2471,7 @@ begin
   end if;
   return v;
 end;
-$$;
+$_$;
 
 
 --
@@ -4084,6 +4092,37 @@ $$;
 
 
 --
+-- Name: cmo_day_fill_idea(uuid, uuid, uuid, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_day_fill_idea(p_user uuid, p_run uuid, p_item uuid, p_idea text) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_id uuid;
+  v_idea text := left(btrim(coalesce(p_idea, '')), 300);
+begin
+  if v_idea = '' then
+    return false;
+  end if;
+  if not exists (
+    select 1 from public.cmo_runs r
+    where r.id = p_run and r.user_id = p_user and r.kind = 'post_draft' and r.status = 'running'
+      and (r.input->>'item_id' = p_item::text or r.input->>'item_id' is null)
+  ) then
+    return false;
+  end if;
+  update public.content_items
+  set idea = v_idea, updated_at = now()
+  where id = p_item and user_id = p_user and department = 'post' and status = 'planned' and body->>'planned_from' = 'day_fill'
+  returning id into v_id;
+  return v_id is not null;
+end;
+$$;
+
+
+--
 -- Name: cmo_corrections; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -4739,6 +4778,50 @@ $$;
 
 
 --
+-- Name: cmo_fill_day_slots(uuid, date, jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_fill_day_slots(p_user uuid, p_day date, p_items jsonb) RETURNS SETOF jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_item jsonb;
+  v_slot integer;
+  v_targets jsonb;
+  v_id uuid;
+begin
+  if p_user is null or p_day is null or p_items is null or jsonb_typeof(p_items) <> 'array' or jsonb_array_length(p_items) > 5 then
+    raise exception 'These slots are not valid.' using errcode = '22023';
+  end if;
+  perform pg_advisory_xact_lock(hashtextextended('cmo_fill_day_slots:' || p_user::text || ':' || p_day::text, 0));
+  for v_item in select * from jsonb_array_elements(p_items) loop
+    if jsonb_typeof(v_item->'slot') <> 'number' or (v_item->>'slot')::numeric not in (0, 1, 2, 3, 4) then
+      continue;
+    end if;
+    v_slot := (v_item->>'slot')::int;
+    v_targets := public.posting_plan_targets(v_item->'targets');
+    if v_targets is null then
+      continue;
+    end if;
+    if exists (select 1 from public.content_items
+               where user_id = p_user and department = 'post' and day = p_day
+                 and jsonb_typeof(body->'slot') = 'number' and (body->>'slot')::int = v_slot) then
+      continue;
+    end if;
+    insert into public.content_items (user_id, department, platform, day, idea, reason, body)
+    values (p_user, 'post', left(coalesce(public.platform_profile(v_targets->>0)->>'label', 'X'), 20), p_day,
+      'Today''s post, from your content plan', 'A slot your posting plan has and the week plan did not fill.',
+      jsonb_build_object('slot', v_slot, 'targets', v_targets, 'news', 'hook', 'planned_from', 'day_fill'))
+    returning id into v_id;
+    return next jsonb_build_object('id', v_id, 'slot', v_slot);
+  end loop;
+  return;
+end;
+$$;
+
+
+--
 -- Name: cmo_first_draft_after_plan(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -5153,6 +5236,86 @@ $$;
 
 
 --
+-- Name: cmo_news_reserve(uuid, uuid, uuid, text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_news_reserve(p_user uuid, p_run uuid, p_item uuid, p_topic text, p_story text) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $_$
+declare
+  v_id uuid;
+  v_taken record;
+begin
+  if p_topic is null or p_topic !~ '^[a-z0-9-]{1,60}$' or p_story is null or p_story !~ '^[0-9]{1,19}$' then
+    raise exception 'Invalid news key.' using errcode = '22023';
+  end if;
+  if not exists (
+    select 1 from public.cmo_runs r
+    where r.id = p_run and r.user_id = p_user and r.kind = 'post_draft' and r.status = 'running'
+      and (r.input->>'item_id' = p_item::text or r.input->>'item_id' is null)
+  ) then
+    return false;
+  end if;
+  perform public.lock_credit_owner(p_user);
+  select * into v_taken from public.news_taken_by(p_user, p_item);
+  if p_topic = any (v_taken.keys) or p_story = any (v_taken.stories) then
+    return false;
+  end if;
+  update public.content_items
+  set body = coalesce(body, '{}'::jsonb) || jsonb_build_object('news_topic', p_topic, 'news_story', p_story, 'news_topic_run', p_run,
+             'news_topic_at', to_char(now() at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')),
+      updated_at = now()
+  where id = p_item and user_id = p_user and department = 'post' and status in ('planned', 'drafting')
+  returning id into v_id;
+  return v_id is not null;
+end;
+$_$;
+
+
+--
+-- Name: cmo_news_skip_item(uuid, uuid, uuid, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_news_skip_item(p_user uuid, p_run uuid, p_item uuid, p_reason text DEFAULT 'no_news'::text) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_id uuid;
+begin
+  if p_reason is null or p_reason not in ('no_news', 'no_source', 'news_unreadable') then
+    raise exception 'Unknown skip reason.' using errcode = '22023';
+  end if;
+  if not exists (
+    select 1 from public.cmo_runs r
+    where r.id = p_run and r.user_id = p_user and r.kind = 'post_draft' and r.status = 'running'
+      -- A run that names no item drafts the founder's oldest due post, which is theirs (checked below).
+      and (r.input->>'item_id' = p_item::text or r.input->>'item_id' is null)
+  ) then
+    return false;
+  end if;
+  update public.content_items
+  set status = 'skipped', decided_at = now(), updated_at = now(),
+      body = coalesce(body, '{}'::jsonb) || jsonb_build_object('skip_reason', p_reason)
+  where id = p_item and user_id = p_user and department = 'post' and status = 'planned'
+  returning id into v_id;
+  return v_id is not null;
+end;
+$$;
+
+
+--
+-- Name: cmo_news_taken(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_news_taken(p_user uuid) RETURNS jsonb
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$ select jsonb_build_object('keys', to_jsonb(t.keys), 'stories', to_jsonb(t.stories)) from public.news_taken_by(p_user) t; $$;
+
+
+--
 -- Name: cmo_nudges_due(uuid, integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -5348,7 +5511,7 @@ declare
   v_targets jsonb;
   v_sources jsonb;
 begin
-  if p_items is null or jsonb_typeof(p_items) <> 'array' or jsonb_array_length(p_items) > 60 then
+  if p_items is null or jsonb_typeof(p_items) <> 'array' or jsonb_array_length(p_items) > 80 then
     raise exception 'This plan is not valid.' using errcode = '22023';
   end if;
   delete from public.content_items where user_id = p_user and status = 'planned' and day >= current_date;
@@ -5366,13 +5529,16 @@ begin
       coalesce(v_item->>'department' = 'post' and jsonb_typeof(v_item->'image') = 'boolean' and (v_item->>'image')::boolean, false),
       (case
         when v_targets is null then '{}'::jsonb
-        when jsonb_typeof(v_item->'slot') = 'number' and (v_item->>'slot')::numeric in (0, 1, 2)
+        when jsonb_typeof(v_item->'slot') = 'number' and (v_item->>'slot')::numeric in (0, 1, 2, 3, 4)
           then jsonb_build_object('targets', v_targets, 'slot', (v_item->>'slot')::int)
         else jsonb_build_object('targets', v_targets)
       end) || jsonb_strip_nulls(jsonb_build_object(
         'sources', v_sources,
         -- The planner's angle (owner, 2026-11-24): about four posts in five share, one asks to try the product.
         'angle', case when v_item->>'department' = 'post' and v_item->>'angle' in ('share', 'cta') then v_item->>'angle' end,
+        -- How the post uses an X News story (owner, 2026-11-27): required, hook or none; anything else is dropped and
+        -- the draft reads it as hook.
+        'news', case when v_item->>'department' = 'post' and v_item->>'news' in ('required', 'hook', 'none') then v_item->>'news' end,
         -- A post planned with no Library sources from the founder's brief or the first week (onboarding): the draft
         -- writes it without sources instead of refusing it for an empty Library.
         'planned_from', case when v_item->>'department' = 'post' and v_sources is null
@@ -10384,6 +10550,56 @@ $$;
 
 
 --
+-- Name: news_taken_by(uuid, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.news_taken_by(p_user uuid, p_except uuid DEFAULT NULL::uuid) RETURNS TABLE(keys text[], stories text[])
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  with taken as (
+    select c.body->'news'->>'topicKey' as k, c.body->'news'->>'storyId' as s from public.content_items c
+    where c.user_id = p_user and c.department = 'post' and c.id is distinct from p_except
+      and c.status in ('in_review', 'approved', 'published') and jsonb_typeof(c.body->'news') = 'object'
+      -- The draft's time; a story stored without one counts from the row's last change.
+      and coalesce(public.news_time(c.body->'news'->>'at'), c.updated_at) > now() - interval '3 days'
+    union all
+    select c.body->>'news_topic', c.body->>'news_story' from public.content_items c
+    where c.user_id = p_user and c.department = 'post' and c.id is distinct from p_except
+      and c.status in ('planned', 'drafting') and coalesce(c.body->>'news_topic', '') <> ''
+      -- A running draft holds on a live lease, or for 15 minutes from its reserve: the lease is renewed per step, and
+      -- one long writer call must not let a draft beside it take the same story.
+      and exists (select 1 from public.cmo_runs h
+                  where h.id::text = c.body->>'news_topic_run' and h.status = 'running'
+                    and (h.lease_until is null or h.lease_until > now()
+                         or public.news_time(c.body->>'news_topic_at') > now() - interval '15 minutes'))
+  )
+  select coalesce(array_agg(distinct k) filter (where coalesce(k, '') <> ''), '{}'),
+         coalesce(array_agg(distinct s) filter (where coalesce(s, '') <> ''), '{}')
+  from taken;
+$$;
+
+
+--
+-- Name: news_time(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.news_time(p_text text) RETURNS timestamp with time zone
+    LANGUAGE plpgsql IMMUTABLE
+    SET search_path TO ''
+    AS $_$
+begin
+  if p_text is null or p_text !~ '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$' then
+    return null;
+  end if;
+  return p_text::timestamptz;
+exception when others then
+  return null;
+end;
+$_$;
+
+
+--
 -- Name: nonneg(bigint); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -11305,8 +11521,10 @@ begin
     return null;
   end if;
   select * into v_item from public.content_items where id = p_ref_id and user_id = p_user and department = 'post';
-  -- A brief the founder wrote in the chat is theirs to read before it goes out.
-  if not found or v_item.status <> 'in_review' or v_item.body->>'source' = 'cmo_chat' then
+  -- A brief the founder wrote in the chat is theirs to read before it goes out. So is a post that opens from X News
+  -- (Part B7): the story's summary is written by a model and can be wrong.
+  if not found or v_item.status <> 'in_review' or v_item.body->>'source' = 'cmo_chat'
+     or (jsonb_typeof(v_item.body->'news') = 'object' and coalesce(v_item.body->'news'->>'name', '') <> '') then
     return null;
   end if;
   if not exists (select 1 from public.social_accounts a
@@ -11345,7 +11563,9 @@ CREATE FUNCTION public.post_autopilot_still_on(p_card public.approvals) RETURNS 
                   and p_card.snapshot->'proposed'->>'platform' = any (p.autopilot_platforms))
     and exists (select 1 from public.content_items c
                 where c.id = p_card.ref_id and c.user_id = p_card.user_id and c.status = 'in_review'
-                  and c.body->>'source' is distinct from 'cmo_chat')
+                  and c.body->>'source' is distinct from 'cmo_chat'
+                  -- The same test as the card's: a story with a headline (`approval_snapshot_base`).
+                  and not (jsonb_typeof(c.body->'news') = 'object' and coalesce(c.body->'news'->>'name', '') <> ''))
     and exists (select 1 from public.social_accounts a
                 where a.user_id = p_card.user_id and a.status = 'connected'
                   and a.platform = p_card.snapshot->'proposed'->>'platform'
@@ -15154,10 +15374,11 @@ begin
   if (select array_agg(k order by k) from jsonb_object_keys(p_plan->'text') k) is distinct from array['facebook', 'linkedin', 'threads', 'x'] then
     raise exception 'Posts a day are set for X, Threads, LinkedIn and Facebook.' using errcode = '22023';
   end if;
+  -- X takes up to 5 posts a day, the others up to 3 (owner, 2026-11-27; posting-plan.ts `TEXT_MAX`).
   for v_key, v_val in select * from jsonb_each(p_plan->'text') loop
     if jsonb_typeof(v_val) <> 'number' or (v_val #>> '{}')::numeric <> trunc((v_val #>> '{}')::numeric)
-       or (v_val #>> '{}')::numeric not between 0 and 3 then
-      raise exception 'Posts a day must be between 0 and 3.' using errcode = '22023';
+       or (v_val #>> '{}')::numeric not between 0 and (case when v_key = 'x' then 5 else 3 end) then
+      raise exception 'X takes 0 to 5 posts a day; the others 0 to 3.' using errcode = '22023';
     end if;
   end loop;
 
@@ -16088,7 +16309,7 @@ $$;
 CREATE FUNCTION public.schedule_rules() RETURNS jsonb
     LANGUAGE sql IMMUTABLE
     SET search_path TO 'public'
-    AS $$ select '{"minGapHours": 3, "windowMinutes": 15, "leadMinutes": 30, "horizonDays": 14, "maxProposals": 3, "jitterSeconds": 240, "platforms": {"x": {"times": ["09:00"], "dailyCap": 5}, "threads": {"times": ["09:00", "12:00"], "dailyCap": 2}, "linkedin": {"times": ["16:00"], "dailyCap": 1}, "facebook": {"times": ["09:00", "13:00"], "dailyCap": 2}, "tiktok": {"times": ["09:00", "13:00"], "dailyCap": 2}, "instagram": {"times": ["09:00"], "dailyCap": 1}, "youtube": {"times": ["16:00", "19:00"], "dailyCap": 2}}}'::jsonb $$;
+    AS $$ select '{"minGapHours": 3, "windowMinutes": 15, "leadMinutes": 30, "horizonDays": 14, "maxProposals": 3, "jitterSeconds": 240, "platforms": {"x": {"times": ["09:00", "12:00", "15:00", "18:00", "21:00"], "dailyCap": 5}, "threads": {"times": ["09:00", "12:00"], "dailyCap": 2}, "linkedin": {"times": ["16:00"], "dailyCap": 1}, "facebook": {"times": ["09:00", "13:00"], "dailyCap": 2}, "tiktok": {"times": ["09:00", "13:00"], "dailyCap": 2}, "instagram": {"times": ["09:00"], "dailyCap": 1}, "youtube": {"times": ["16:00", "19:00"], "dailyCap": 2}}}'::jsonb $$;
 
 
 --
@@ -19028,6 +19249,27 @@ $$;
 
 
 --
+-- Name: x_news_purge(integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.x_news_purge(p_days integer DEFAULT 14) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_rows integer;
+begin
+  if p_days is null or p_days < 1 then
+    raise exception 'Keep at least one day of news.' using errcode = '22023';
+  end if;
+  delete from public.x_news_stories where taken_at < now() - make_interval(days => p_days);
+  get diagnostics v_rows = row_count;
+  return v_rows;
+end;
+$$;
+
+
+--
 -- Name: zernio_profile_save(uuid, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -20294,6 +20536,33 @@ ALTER TABLE public.write_budget_ledger ALTER COLUMN id ADD GENERATED ALWAYS AS I
 
 
 --
+-- Name: x_news_stories; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.x_news_stories (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    taken_at timestamp with time zone NOT NULL,
+    story_id text NOT NULL,
+    name text NOT NULL,
+    summary text DEFAULT ''::text NOT NULL,
+    hook text DEFAULT ''::text NOT NULL,
+    category text DEFAULT ''::text NOT NULL,
+    post_ids text[] DEFAULT '{}'::text[] NOT NULL,
+    story_updated_at timestamp with time zone,
+    relevant boolean DEFAULT false NOT NULL,
+    topic_key text DEFAULT ''::text NOT NULL,
+    CONSTRAINT x_news_stories_category_check CHECK ((char_length(category) <= 60)),
+    CONSTRAINT x_news_stories_check CHECK (((NOT relevant) OR (topic_key <> ''::text))),
+    CONSTRAINT x_news_stories_hook_check CHECK ((char_length(hook) <= 400)),
+    CONSTRAINT x_news_stories_name_check CHECK (((char_length(name) >= 1) AND (char_length(name) <= 120))),
+    CONSTRAINT x_news_stories_post_ids_check CHECK ((cardinality(post_ids) <= 10)),
+    CONSTRAINT x_news_stories_story_id_check CHECK ((story_id ~ '^[0-9]{1,19}$'::text)),
+    CONSTRAINT x_news_stories_summary_check CHECK ((char_length(summary) <= 1000)),
+    CONSTRAINT x_news_stories_topic_key_check CHECK ((topic_key ~ '^[a-z0-9-]{0,60}$'::text))
+);
+
+
+--
 -- Name: zernio_profiles; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -21265,6 +21534,22 @@ ALTER TABLE ONLY public.worker_operations
 
 ALTER TABLE ONLY public.write_budget_ledger
     ADD CONSTRAINT write_budget_ledger_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: x_news_stories x_news_stories_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.x_news_stories
+    ADD CONSTRAINT x_news_stories_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: x_news_stories x_news_stories_taken_at_story_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.x_news_stories
+    ADD CONSTRAINT x_news_stories_taken_at_story_id_key UNIQUE (taken_at, story_id);
 
 
 --
@@ -24715,6 +25000,12 @@ ALTER TABLE public.worker_operations ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.write_budget_ledger ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: x_news_stories; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.x_news_stories ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: zernio_profiles; Type: ROW SECURITY; Schema: public; Owner: -

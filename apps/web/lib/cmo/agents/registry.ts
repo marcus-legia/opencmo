@@ -11,12 +11,12 @@ import "server-only";
  *
  * `<ID>` in capitals: CMO, ONBOARDING, PLANNER, X_WRITER, THREADS_WRITER, LINKEDIN_WRITER, FACEBOOK_WRITER,
  * YOUTUBE_WRITER, SALES, RESEARCH, CHECKER, CAPTIONS, WRITER, MOTION,
- * DIRECTOR, MODERATION, SHORTS.
+ * DIRECTOR, MODERATION, SHORTS, NEWS_PICKER.
  * Two tiers: drafting agents (copy, scripts, plans) use Sonnet, small tasks (checks, translation, picks) use Haiku.
  * The checker runs in a separate context, so it is not persuaded by the draft it grades.
  */
 
-export type AgentId = "cmo" | "onboarding" | "planner" | "x_writer" | "threads_writer" | "linkedin_writer" | "facebook_writer" | "youtube_writer" | "sales" | "research" | "checker" | "captions" | "writer" | "motion" | "director" | "moderation" | "shorts";
+export type AgentId = "cmo" | "onboarding" | "planner" | "x_writer" | "threads_writer" | "linkedin_writer" | "facebook_writer" | "youtube_writer" | "sales" | "research" | "checker" | "captions" | "writer" | "motion" | "director" | "moderation" | "shorts" | "news_picker";
 export type ProviderKind = "anthropic";
 
 export type AgentSpec = {
@@ -46,6 +46,7 @@ export const AGENT_SPECS: Record<AgentId, AgentSpec> = {
   director: { id: "director", label: "Director", role: "Writes the script and shot list of an AI video from a prompt.", tier: "draft" },
   moderation: { id: "moderation", label: "Moderation", role: "Checks prompts for AI media against the product rules.", tier: "check" },
   shorts: { id: "shorts", label: "Clip editor", role: "Picks the three best short clips of a finished video, hook first.", tier: "check" },
+  news_picker: { id: "news_picker", label: "News picker", role: "Sorts the X News snapshot and picks the story a post opens from.", tier: "check" },
 };
 
 export const AGENT_IDS = Object.keys(AGENT_SPECS) as AgentId[];

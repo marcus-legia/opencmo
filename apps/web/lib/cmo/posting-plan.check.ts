@@ -5,7 +5,7 @@
  */
 import assert from "node:assert/strict";
 
-import { PostingPlanSchema, TEXT_PLATFORMS, VIDEO_PLATFORMS, chosenChannels, connectedOnly, dayTargets, defaultPostingPlan, planOrDefault, type PostingPlan } from "./posting-plan";
+import { PostingPlanSchema, TEXT_PLATFORMS, VIDEO_PLATFORMS, chosenChannels, connectedOnly, dayTargets, defaultPostingPlan, monthlyCredits, planOrDefault, type PostingPlan } from "./posting-plan";
 
 const failures: string[] = [];
 function check(label: string, run: () => void): void {
@@ -64,10 +64,21 @@ check("chosenChannels keeps strings only", () => {
   assert.deepEqual(chosenChannels(undefined), []);
 });
 
+check("monthlyCredits: the most posts a day, 30 days, plus four week plans", () => {
+  const plan = (text: PostingPlan["text"]): PostingPlan => ({ text, video: zeroVideo });
+  assert.equal(monthlyCredits(plan({ x: 5, threads: 2, linkedin: 0, facebook: 0 })), 5 * 30 + 4, "one core post serves every platform of its slot");
+  assert.equal(monthlyCredits(plan({ x: 1, threads: 1, linkedin: 1, facebook: 0 })), 30 + 4);
+  assert.equal(monthlyCredits(plan({ x: 0, threads: 0, linkedin: 0, facebook: 0 })), 0, "no posts, no week plans counted");
+});
+
 check("the schema rejects out-of-range counts", () => {
   const base = defaultPostingPlan([]);
   assert.equal(PostingPlanSchema.safeParse(base).success, true);
-  assert.equal(PostingPlanSchema.safeParse({ ...base, text: { ...base.text, x: 4 } }).success, false);
+  // X takes 5 a day, the others 3 (owner, 2026-11-27).
+  assert.equal(PostingPlanSchema.safeParse({ ...base, text: { ...base.text, x: 5 } }).success, true);
+  assert.equal(PostingPlanSchema.safeParse({ ...base, text: { ...base.text, x: 6 } }).success, false);
+  assert.equal(PostingPlanSchema.safeParse({ ...base, text: { ...base.text, threads: 4 } }).success, false);
+  assert.equal(PostingPlanSchema.safeParse({ ...base, text: { ...base.text, linkedin: 3 } }).success, true);
   assert.equal(PostingPlanSchema.safeParse({ ...base, video: { ...base.video, tiktok: 8 } }).success, false);
   assert.equal(PostingPlanSchema.safeParse({ ...base, text: { ...base.text, x: 1.5 } }).success, false);
 });

@@ -44,7 +44,9 @@ select is(public.schedule_propose('e2163000-0000-4000-8000-00000000000d'), 0, 'a
 
 create temp view s1 as select * from public.schedule_slots where deliverable_id = 'e2163000-0000-4000-8000-00000000000a';
 select is((select status || '/' || mode from s1), 'proposed/publish', 'proposed, from the connected account');
-select is((select to_char(publish_at at time zone 'UTC', 'HH24:MI') from s1), '09:00', 'at X''s default slot in the founder''s time');
+-- X has five default times (20270207010000): the first free one after the lead time, whatever hour the test runs.
+select ok((select to_char(publish_at at time zone 'UTC', 'HH24:MI') from s1) = any(array['09:00', '12:00', '15:00', '18:00', '21:00']),
+  'at X''s default slot in the founder''s time');
 select ok((select publish_at >= now() + interval '30 minutes' from s1), 'never sooner than the lead time');
 select ok((select jitter_seconds between -240 and 240 and window_ends_at = publish_at + interval '15 minutes' from s1),
   'with natural jitter and a fifteen-minute window');

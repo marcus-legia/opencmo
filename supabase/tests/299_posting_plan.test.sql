@@ -24,8 +24,8 @@ set local role authenticated;
 set local request.jwt.claims = '{"sub":"e2990000-0000-4000-8000-00000000000a"}';
 
 select lives_ok($$ select public.save_posting_plan('{"text":{"x":2,"threads":1,"linkedin":0,"facebook":0},"video":{"tiktok":3,"instagram":0,"youtube":7}}'::jsonb) $$, 'a valid plan is saved');
-select throws_ok($$ select public.save_posting_plan('{"text":{"x":4,"threads":1,"linkedin":0,"facebook":0},"video":{"tiktok":0,"instagram":0,"youtube":0}}'::jsonb) $$,
-  '22023', 'Posts a day must be between 0 and 3.', 'four posts a day is refused');
+select throws_ok($$ select public.save_posting_plan('{"text":{"x":1,"threads":4,"linkedin":0,"facebook":0},"video":{"tiktok":0,"instagram":0,"youtube":0}}'::jsonb) $$,
+  '22023', 'X takes 0 to 5 posts a day; the others 0 to 3.', 'four posts a day on Threads is refused (20270207010000)');
 select throws_ok($$ select public.save_posting_plan('{"text":{"x":1,"threads":1,"linkedin":0,"facebook":0},"video":{"tiktok":8,"instagram":0,"youtube":0}}'::jsonb) $$,
   '22023', 'Videos a week must be between 0 and 7.', 'eight videos a week is refused');
 select throws_ok($$ select public.save_posting_plan('{"text":{"x":1,"threads":1,"linkedin":0,"facebook":0,"myspace":1},"video":{"tiktok":0,"instagram":0,"youtube":0}}'::jsonb) $$,

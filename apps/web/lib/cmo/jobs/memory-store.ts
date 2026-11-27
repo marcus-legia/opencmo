@@ -10,6 +10,7 @@ import { latestPerTopic } from "./context";
 import { isoDay, type CmoStore, type DraftRating, type CompetitorInsight, type ConnectedAccountRow, type ReplyOutcomeDue, type MetricRow, type ZernioPostRow, type NicheVideoInsight, type SalesSettings, type SubredditRule, type Documents, type Goal, type ItemRow, type Lesson, type MemoryEvent, type Opportunity, type PostSource, type QueuedRun, type Step, type VoiceNoteRow, type WeekResults } from "./types";
 import type { AccountMetricRow } from "./metrics-source";
 import { chosenChannels, defaultPostingPlan, type PostingPlan } from "../posting-plan";
+import type { NewsCandidate } from "../news/pick";
 import { postProfile } from "../platforms";
 import { SALES_PLATFORMS } from "../social/conversations";
 import { recentFrom } from "./recent-scans";
@@ -30,6 +31,8 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
   const results: WeekResults = { posts: 0, replies: 0, views: 0 };
   const runs: RunState[] = [];
   const items: ItemRow[] = [];
+  /** X News stories as `x_news_stories` would return them (Part B5); tests push rows here. */
+  const news: (NewsCandidate & { relevant: boolean })[] = [];
   const opps: Opportunity[] = [];
   /** Library lines by conversation url, as `cmo_save_library` keeps them (one per conversation, themes by name). */
   const library = new Map<string, LibrarySaveItem & { theme: string }>();
@@ -75,6 +78,27 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
   };
   let seq = 0;
   const id = () => `id-${++seq}`;
+  /**
+   * As `news_taken_by`, by key and by story: news ridden by a post in review or out, drafted in the last three days, or
+   * held by a draft still running. One founder per memory store, and no leases: a running run holds.
+   */
+  const takenNews = (except?: string) => {
+    const live = (runId: unknown) => runs.some((r) => r.id === runId && r.status === "running");
+    const since = Date.now() - 3 * 86_400_000;
+    const keys = new Set<string>();
+    const stories = new Set<string>();
+    const add = (k: unknown, st: unknown) => {
+      if (typeof k === "string" && k) keys.add(k);
+      if (typeof st === "string" && st) stories.add(st);
+    };
+    for (const i of items) {
+      if (i.id === except || i.department !== "post") continue;
+      const rode = i.body?.news as { topicKey?: unknown; storyId?: unknown; at?: unknown } | undefined;
+      if (["in_review", "approved", "published"].includes(i.status) && rode && typeof rode.at === "string" && Date.parse(rode.at) > since) add(rode.topicKey, rode.storyId);
+      if (["planned", "drafting"].includes(i.status) && live(i.body?.news_topic_run)) add(i.body?.news_topic, i.body?.news_story);
+    }
+    return { keys, stories };
+  };
   const store: CmoStore = {
     async claim(runId) {
       const run = runs.find((r) => r.status === "queued" && (!runId || r.id === runId) && (!r.notBefore || r.notBefore <= Date.now()));
@@ -147,13 +171,15 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
     async planWeek(_u, runId, plan) {
       for (let i = items.length - 1; i >= 0; i--) if (items[i].status === "planned") items.splice(i, 1);
       for (const p of plan) {
-        const { targets, slot, sources, planned_from, ...item } = p;
+        const { targets, slot, sources, planned_from, news, ...item } = p;
         // As `cmo_plan_week` writes it: a post keeps its slot's platforms in `body.targets` and its index in `body.slot`,
         // and its valid Library sources in `body.sources`.
         const kept = item.department === "post" ? cleanSources(sources) : null;
         const body = {
           ...(targets?.length ? { targets, ...(slot === undefined ? {} : { slot }) } : {}),
           ...(kept ? { sources: kept } : item.department === "post" && planned_from ? { planned_from } : {}),
+          // As `cmo_plan_week` (20270207010000): a post keeps its news mode.
+          ...(item.department === "post" && news ? { news } : {}),
         };
         items.push({ id: id(), run_id: runId, ...item, status: "planned", priority: "medium", body, final_text: null, external_url: null, decided_at: null, published_at: null, created_at: new Date().toISOString() });
       }
@@ -161,8 +187,11 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
     },
     postingPlan: async () => posting.plan ?? defaultPostingPlan(zernio.accounts.map((a) => a.platform), chosenChannels(docs.post_plan)),
     async queueDueDrafts(run) {
-      // As `enqueueDueDrafts`: one run per due item, at most three a day.
-      const due = items.filter((i) => i.run_id === run.id && i.department === "post" && i.status === "planned" && i.day <= isoDay()).slice(0, 3);
+      // As `enqueueDueDrafts`: one run per due item, at most five a day (X takes five since 2026-11-27), and none past
+      // the backlog guard of ten drafts in review.
+      const waiting = items.filter((i) => i.department === "post" && i.status === "in_review").length;
+      const due = items.filter((i) => i.run_id === run.id && i.department === "post" && i.status === "planned" && i.day <= isoDay())
+        .slice(0, Math.min(5, Math.max(0, 10 - waiting)));
       for (const item of due) enqueue("post_draft", { source: "schedule", loop: "daily-post-draft", item_id: item.id });
       return due.length;
     },
@@ -288,6 +317,43 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
       const opp = opps.find((o) => o.url === opportunityId);
       return line && opp ? { opportunityId, summary: line.summary, platform: opp.platform ?? "reddit", community: opp.community } : null;
     },
+    async newsStories(hours) {
+      const since = Date.now() - hours * 3_600_000;
+      return news.filter((r) => Date.parse(r.takenAt) >= since).sort((a, b) => b.takenAt.localeCompare(a.takenAt));
+    },
+    async skipForNoNews(userId, runId, itemId, reason = "no_news") {
+      // As `cmo_news_skip_item`: a running draft of this founder that names this item, or names none.
+      const item = items.find((i) => i.id === itemId && i.department === "post" && i.status === "planned");
+      const run = runs.find((r) => r.id === runId && r.user_id === userId && r.kind === "post_draft" && r.status === "running");
+      if (!item || !run || (run.input?.item_id != null && run.input.item_id !== itemId)) return false;
+      item.status = "skipped";
+      item.decided_at = new Date().toISOString();
+      item.body = { ...(item.body ?? {}), skip_reason: reason };
+      return true;
+    },
+    async newsTaken() {
+      const t = takenNews();
+      return { keys: [...t.keys], stories: [...t.stories] };
+    },
+    async reserveNewsTopic(userId, runId, itemId, topicKey, storyId) {
+      // As `cmo_news_reserve`: refused when another recent, not skipped post holds or rode the same news.
+      const item = items.find((i) => i.id === itemId && i.department === "post" && (i.status === "planned" || i.status === "drafting"));
+      const run = runs.find((r) => r.id === runId && r.user_id === userId && r.kind === "post_draft" && r.status === "running");
+      if (!item || !run || (run.input?.item_id != null && run.input.item_id !== itemId)) return false;
+      const taken = takenNews(itemId);
+      if (taken.keys.has(topicKey) || taken.stories.has(storyId)) return false;
+      item.body = { ...(item.body ?? {}), news_topic: topicKey, news_story: storyId, news_topic_run: runId };
+      return true;
+    },
+    async saveDayFillIdea(userId, runId, itemId, idea) {
+      // As `cmo_day_fill_idea`: a running draft of this founder, the fill's own planned item, a non-empty idea.
+      const item = items.find((i) => i.id === itemId && i.department === "post" && i.status === "planned" && i.body?.planned_from === "day_fill");
+      const run = runs.find((r) => r.id === runId && r.user_id === userId && r.kind === "post_draft" && r.status === "running");
+      const text = Array.from(idea.trim()).slice(0, 300).join("");
+      if (!item || !run || !text || (run.input?.item_id != null && run.input.item_id !== itemId)) return false;
+      item.idea = text;
+      return true;
+    },
     async libraryTopThemes(_u, days = 14, limit = 5) {
       // The memory Library keys lines by url; the opportunity id is the url there too (as `saveOpportunityReply`).
       const since = Date.now() - days * 86_400_000;
@@ -380,5 +446,5 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
     runs.push(run);
     return run;
   };
-  return { store, posting, runs, items, opps, library, people, decided, rules, salesSettings, mentions, account, insights, niche, metrics, zernio, replies, lessons, goals, results, enqueue, voice, videos, captions, variants, ratings, ratingRules };
+  return { store, posting, runs, items, news, opps, library, people, decided, rules, salesSettings, mentions, account, insights, niche, metrics, zernio, replies, lessons, goals, results, enqueue, voice, videos, captions, variants, ratings, ratingRules };
 }

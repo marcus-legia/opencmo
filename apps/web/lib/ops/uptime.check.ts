@@ -157,6 +157,7 @@ async function main() {
   assert.equal(scheduleOf("/api/cron/cmo"), CRON_MONITORS.cmo.crontab);
   assert.equal(scheduleOf("/api/cron/cmo-digest"), CRON_MONITORS.digest.crontab);
   assert.equal(scheduleOf("/api/cron/cleanup"), CRON_MONITORS.cleanup.crontab);
+  assert.equal(scheduleOf("/api/cron/x-news"), CRON_MONITORS.xNews.crontab);
 
   console.log("uptime.check: ok");
 }

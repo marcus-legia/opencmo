@@ -7,6 +7,7 @@
  */
 
 import { mcpEndpoint } from "@/lib/cmo/connect";
+import { maxCalls } from "@/lib/cmo/news/config";
 import { publishAnalytics } from "@/lib/departments/publish/analytics";
 import { emailSender } from "@/lib/notify/email";
 import { vapidFromEnv } from "@/lib/notify/push";
@@ -70,6 +71,15 @@ export function cmoSwitches(env: Env = process.env): Switch[] {
       detail: set(env, "CREEM_API_KEY") && set(env, "CREEM_WEBHOOK_SECRET")
         ? env.CREEM_API_KEY?.trim().startsWith("creem_test_") ? "On, in test mode." : "On."
         : "Set CREEM_API_KEY and CREEM_WEBHOOK_SECRET, and point Creem's webhook at /api/webhooks/creem. Without the key, live AI images and video stay off.",
+    },
+    {
+      // X News (plan 2026-11-27, Part B3): the snapshot every three hours reads it with Ferreto's own app-only token.
+      id: "x_news",
+      label: "X News for post hooks",
+      on: set(env, "X_BEARER_TOKEN"),
+      detail: set(env, "X_BEARER_TOKEN")
+        ? `On: a snapshot every three hours, at most ${maxCalls(env)} calls each.`
+        : "Set X_BEARER_TOKEN (the X app's app-only bearer token) on Vercel. Without it no post rides the news, and a post that must is refunded.",
     },
     {
       id: "zernio_webhook",
