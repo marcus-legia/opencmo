@@ -4739,6 +4739,50 @@ $$;
 
 
 --
+-- Name: cmo_fill_day_slots(uuid, date, jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_fill_day_slots(p_user uuid, p_day date, p_items jsonb) RETURNS SETOF jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_item jsonb;
+  v_slot integer;
+  v_targets jsonb;
+  v_id uuid;
+begin
+  if p_user is null or p_day is null or p_items is null or jsonb_typeof(p_items) <> 'array' or jsonb_array_length(p_items) > 5 then
+    raise exception 'These slots are not valid.' using errcode = '22023';
+  end if;
+  perform pg_advisory_xact_lock(hashtextextended('cmo_fill_day_slots:' || p_user::text || ':' || p_day::text, 0));
+  for v_item in select * from jsonb_array_elements(p_items) loop
+    if jsonb_typeof(v_item->'slot') <> 'number' or (v_item->>'slot')::numeric not in (0, 1, 2, 3, 4) then
+      continue;
+    end if;
+    v_slot := (v_item->>'slot')::int;
+    v_targets := public.posting_plan_targets(v_item->'targets');
+    if v_targets is null then
+      continue;
+    end if;
+    if exists (select 1 from public.content_items
+               where user_id = p_user and department = 'post' and day = p_day
+                 and jsonb_typeof(body->'slot') = 'number' and (body->>'slot')::int = v_slot) then
+      continue;
+    end if;
+    insert into public.content_items (user_id, department, platform, day, idea, reason, body)
+    values (p_user, 'post', left(coalesce(public.platform_profile(v_targets->>0)->>'label', 'X'), 20), p_day,
+      'Today''s post, from your content plan', 'A slot your posting plan has and the week plan did not fill.',
+      jsonb_build_object('slot', v_slot, 'targets', v_targets, 'news', 'hook', 'planned_from', 'day_fill'))
+    returning id into v_id;
+    return next jsonb_build_object('id', v_id, 'slot', v_slot);
+  end loop;
+  return;
+end;
+$$;
+
+
+--
 -- Name: cmo_first_draft_after_plan(); Type: FUNCTION; Schema: public; Owner: -
 --
 

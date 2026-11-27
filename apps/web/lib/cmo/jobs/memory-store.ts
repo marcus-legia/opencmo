@@ -163,8 +163,11 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
     },
     postingPlan: async () => posting.plan ?? defaultPostingPlan(zernio.accounts.map((a) => a.platform), chosenChannels(docs.post_plan)),
     async queueDueDrafts(run) {
-      // As `enqueueDueDrafts`: one run per due item, at most three a day.
-      const due = items.filter((i) => i.run_id === run.id && i.department === "post" && i.status === "planned" && i.day <= isoDay()).slice(0, 3);
+      // As `enqueueDueDrafts`: one run per due item, at most five a day (X takes five since 2026-11-27), and none past
+      // the backlog guard of ten drafts in review.
+      const waiting = items.filter((i) => i.department === "post" && i.status === "in_review").length;
+      const due = items.filter((i) => i.run_id === run.id && i.department === "post" && i.status === "planned" && i.day <= isoDay())
+        .slice(0, Math.min(5, Math.max(0, 10 - waiting)));
       for (const item of due) enqueue("post_draft", { source: "schedule", loop: "daily-post-draft", item_id: item.id });
       return due.length;
     },

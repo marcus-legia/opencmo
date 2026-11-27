@@ -223,14 +223,20 @@ document field `post_plan.content_plan`.
     `no-library` case now expects a full week of `required` posts.
   - *Found in review:* with an empty Library, a post the model marks `none` (the content plan keeps it off the news)
     is not planned at all instead of being forced to `required`.
-- [ ] **A6. Fill today's empty slots.**
+- [x] **A6. Fill today's empty slots.**
   - Migration: an RPC `cmo_fill_day_slots(p_user uuid, p_day date, p_items jsonb)`, service role only. For each slot
     of `dayTargets(plan)` that has no post item that day (any status), insert a `planned` item with `idea = ''`,
     `body = {slot, targets, news: 'hook', planned_from: 'day_fill'}`, and the slot's platform label.
   - Idempotent on `(user, day, slot)`. Returns the ids it made.
   - pgTAP: it fills only the missing slots, a second call adds nothing, and a skipped item counts as taken.
   - `schedule.ts` calls it for today before queuing drafts.
-- [ ] **A7. Two waves and the backlog guard** in `schedule.ts`:
+  - *As built:* `content_items.idea` must be 1–300 characters, so the idea is a stand-in, "Today's post, from your
+    content plan", not `''`; B6's `plan_idea` step keys on `planned_from === 'day_fill'`, not on an empty idea. It
+    returns `{id, slot}` so the schedule knows each item's wave. Not called on Monday (the week plan written that
+    morning fills the day) nor for an unpaid account. The slots are read as the week plan reads them
+    (`daySlots` = `dayTargets(connectedOnly(planOrDefault(...)))`). Until Part B lands, a filled slot is drafted from
+    the stand-in idea and the documents.
+- [x] **A7. Two waves and the backlog guard** in `schedule.ts`:
   - `POST_RUNS_A_DAY = 5`.
   - Today's due post items are sorted by `body.slot`. Wave 1 is the first `ceil(n / 2)` slots, queued from
     `loopHour` (the founder's 06:00). Wave 2 is the rest, queued from `loopHour + 6`. The per-item `loopKey` already
@@ -240,6 +246,11 @@ document field `post_plan.content_plan`.
     says: "10 drafts are waiting for you. Review them to get new ones." Put it in `load-workspace.ts`, which Part A
     owns for this one line.
   - Pure helpers `draftWave(slot, n, localHour, loopHour)` and `backlogRoom(count)` with `.check.ts`.
+  - *As built:* `draftWave` takes UTC hours (as `loopHour` is); the second wave is capped at 23:00 UTC, the last hour
+    of the calendar's day. Due items sort by day, then slot. An unread backlog count queues nothing that hour. The
+    guard also applies to the Monday plan's drafts (`queueDueDrafts` goes through `enqueueDueDrafts`). The memory
+    store mirrors the cap of 5 and the guard. Tests are in `schedule.check.ts`.
+  - *Found in review:* the cap of 5 is a day's, not an hour's: drafts this loop already queued today count against it.
 - [ ] **A8.** Run `npm run typecheck`, `npm run build`, `npm run check:contracts`, `npm run db:reset`,
   `npm run db:test`, and the posting-plan and schedule e2e (`e2e/ui-v2-schedule.spec.ts`). Then run the final
   `/code-review` on the whole of Part A's diff and fix what it finds.

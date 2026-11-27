@@ -5,6 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { readAll } from "@/lib/cmo/jobs/progress-run";
 import { isoDay, SCAN_CADENCES, type CmoJobKind, type ScanCadence } from "@/lib/cmo/jobs/types";
 import { dueLoops, type LoopState } from "@/lib/cmo/loops";
+import { MAX_POSTS_A_DAY, chosenChannels, connectedOnly, dayTargets, planOrDefault } from "@/lib/cmo/posting-plan";
 import { socialReaderReady } from "@/lib/cmo/social/reddit";
 
 /**
@@ -43,9 +44,35 @@ export function loopHour(timezone: string | null | undefined, now = new Date()):
 
 /**
  * Posts drafted for one founder in a day: one run per due item, the oldest first, up to the planner's most posts a day
- * (`posting-plan.ts`). Each item is one core post for every platform of its slot (daily core drafts, 2026-11-12).
+ * (`posting-plan.ts`: X takes 5 since 2026-11-27). Each item is one core post for every platform of its slot (daily
+ * core drafts, 2026-11-12).
  */
-const POST_RUNS_A_DAY = 3;
+const POST_RUNS_A_DAY = MAX_POSTS_A_DAY;
+
+/**
+ * The backlog guard (owner, 2026-11-27, decision 6): with this many post drafts waiting in review, nothing new is
+ * drafted, and so nothing is charged, until the founder reviews them.
+ */
+export const BACKLOG_MAX = 10;
+
+/** How many more drafts may be queued with `waiting` post drafts in review: never above the guard. */
+export function backlogRoom(waiting: number): number {
+  return Math.max(0, BACKLOG_MAX - Math.max(0, waiting));
+}
+
+/** Hours after the founder's morning when the day's second wave of drafts is queued. */
+export const SECOND_WAVE_HOURS = 6;
+
+/**
+ * Two waves a day (owner, 2026-11-27, A7): the first `ceil(n / 2)` of a day's `n` slots are drafted from the founder's
+ * morning (`loopHour`), the rest six hours later, so the later posts take fresher news. `hour` and `loopHour` are UTC
+ * hours; the second wave is never later than 23:00 UTC, the last hour of the calendar's day. An item with no slot (an
+ * older plan) or a plan of unknown width is in the first wave.
+ */
+export function draftWave(slot: number | undefined, n: number, hour: number, loopHour: number): boolean {
+  const first = slot === undefined || !Number.isInteger(slot) || n <= 0 || slot < Math.ceil(n / 2);
+  return hour >= (first ? loopHour : Math.min(23, loopHour + SECOND_WAVE_HOURS));
+}
 export const DRAFT_LOOP = "daily-post-draft";
 /** The loop's name before 2026-11-12: a day in flight then is not drafted twice. Drop it after 2026-11-19. */
 const OLD_DRAFT_LOOP = "daily-x-draft";
@@ -53,7 +80,7 @@ const OLD_DRAFT_LOOP = "daily-x-draft";
 const OLD_SCAN_LOOP = "reddit-listening";
 const SCAN_LOOP = "sales-scan";
 
-type DueRow = { id: string; user_id: string; department: string; idea: string; platform: string | null };
+type DueRow = { id: string; user_id: string; department: string; idea: string; day?: string; platform: string | null; slot?: unknown };
 
 /**
  * The open work order of each due calendar item. The run carries it (`input.order_id`), so a failed run fails its
@@ -96,14 +123,36 @@ async function queuedToday(admin: SupabaseClient, today: string): Promise<Set<st
 export async function enqueueDueDrafts(
   admin: SupabaseClient,
   user: string,
-  due: readonly { id: string; platform: string | null }[],
-  opts: { done?: Set<string> } = {},
+  due: readonly { id: string; platform: string | null; day?: string; slot?: unknown }[],
+  opts: { done?: Set<string>; wave?: { n: number; hour: number; loopHour: number } } = {},
 ): Promise<number> {
-  const posts = due.slice(0, POST_RUNS_A_DAY);
+  const slotOf = (d: { slot?: unknown }) => (typeof d.slot === "number" && Number.isInteger(d.slot) ? d.slot : undefined);
+  // The oldest day first, then the day's slots in order (A7); the sort is stable, so the caller's order breaks ties.
+  const ordered = [...due].sort((a, b) => (a.day ?? "").localeCompare(b.day ?? "") || (slotOf(a) ?? 99) - (slotOf(b) ?? 99));
+  const wave = opts.wave;
+  const open = ordered.filter((d) => !opts.done?.has(loopKey(user, DRAFT_LOOP, d.id)) && (!wave || draftWave(slotOf(d), wave.n, wave.hour, wave.loopHour)));
+  if (!open.length) return 0;
+  // The backlog guard: count what waits for review before queuing anything (decision 6).
+  const { count, error: countError } = await admin.from("content_items").select("id", { count: "exact", head: true })
+    .eq("user_id", user).eq("department", "post").eq("status", "in_review");
+  if (countError) {
+    // Unknown backlog: queue nothing this hour rather than charge a founder who may be over the guard.
+    console.warn("[cron] cmo: backlog not read for", user, countError.message);
+    return 0;
+  }
+  const room = backlogRoom(count ?? 0);
+  if (room === 0) {
+    console.info("[cron] cmo: backlog full, no draft queued for", user);
+    return 0;
+  }
+  // The day's cap counts what this loop already queued today (each hourly call sees those in `done`).
+  const mine = loopKey(user, DRAFT_LOOP, "");
+  const queuedEarlier = [...(opts.done ?? [])].filter((key) => key.startsWith(mine)).length;
+  const posts = open.slice(0, Math.max(0, Math.min(POST_RUNS_A_DAY - queuedEarlier, room)));
+  if (!posts.length) return 0;
   const links = await dueLinks(admin, posts.map((d) => d.id));
   let queued = 0;
   for (const post of posts) {
-    if (opts.done?.has(loopKey(user, DRAFT_LOOP, post.id))) continue;
     const input = {
       source: "schedule",
       loop: DRAFT_LOOP,
@@ -136,15 +185,28 @@ async function paidUsers(admin: SupabaseClient, users: string[]): Promise<Set<st
   return out;
 }
 
-/** Each founder's timezone (`profiles.timezone`), read in chunks: one filter with every id is a URL PostgREST refuses. */
-async function timezones(admin: SupabaseClient, users: string[]): Promise<Map<string, string>> {
-  const out = new Map<string, string>();
+/**
+ * Each founder's timezone and saved posting plan (`profiles`), read in chunks: one filter with every id is a URL
+ * PostgREST refuses.
+ */
+async function profilesOf(admin: SupabaseClient, users: string[]): Promise<Map<string, { timezone: string; postingPlan: unknown }>> {
+  const out = new Map<string, { timezone: string; postingPlan: unknown }>();
   for (let i = 0; i < users.length; i += 200) {
-    const { data, error } = await admin.from("profiles").select("id, timezone").in("id", users.slice(i, i + 200));
+    const { data, error } = await admin.from("profiles").select("id, timezone, posting_plan").in("id", users.slice(i, i + 200));
     if (error) throw new Error(`profiles: ${error.message}`);
-    for (const row of (data ?? []) as { id: string; timezone: string | null }[]) out.set(row.id, row.timezone ?? "UTC");
+    for (const row of (data ?? []) as { id: string; timezone: string | null; posting_plan: unknown }[]) {
+      out.set(row.id, { timezone: row.timezone ?? "UTC", postingPlan: row.posting_plan });
+    }
   }
   return out;
+}
+
+/**
+ * Today's slots as `[{slot, targets}]` for `cmo_fill_day_slots` (A6): the plan as it really runs (the saved plan or the
+ * default, with no post for a platform that has no connected account), as the week plan reads it.
+ */
+export function daySlots(saved: unknown, connected: readonly string[], chosen: readonly string[]): { slot: number; targets: string[] }[] {
+  return dayTargets(connectedOnly(planOrDefault(saved, connected, chosen), connected)).map((targets, slot) => ({ slot, targets }));
 }
 
 /** `users`: the founders whose morning has come; `waiting`: those whose loops a later hour queues. */
@@ -154,11 +216,12 @@ export async function enqueueDueLoops(admin: SupabaseClient, now = new Date()): 
 
   // Every read is paged: PostgREST answers at most 1000 rows, and past that founders silently lost their loops.
   const rows = await readAll<{ user_id: string; kind: string; body: Record<string, unknown> }>((from, to) =>
-    admin.from("marketing_documents_latest").select("user_id, kind, body").in("kind", ["product", "competitors"]).order("user_id").order("kind").range(from, to),
+    admin.from("marketing_documents_latest").select("user_id, kind, body").in("kind", ["product", "competitors", "post_plan"]).order("user_id").order("kind").range(from, to),
   );
   const everyone = [...new Set(rows.filter((r) => r.kind === "product").map((r) => r.user_id))];
-  const zones = await timezones(admin, everyone);
-  const users = everyone.filter((user) => loopHour(zones.get(user), now) <= now.getUTCHours());
+  const profiles = await profilesOf(admin, everyone);
+  const hourOf = (user: string) => loopHour(profiles.get(user)?.timezone, now);
+  const users = everyone.filter((user) => hourOf(user) <= now.getUTCHours());
   const waiting = everyone.length - users.length;
   if (!users.length) return { users: 0, waiting, queued: 0 };
   const handles = new Map<string, number>();
@@ -172,9 +235,10 @@ export async function enqueueDueLoops(admin: SupabaseClient, now = new Date()): 
     for (const row of list) by.set(row.user_id, (by.get(row.user_id) ?? 0) + 1);
     return by;
   };
+  const channelsBy = new Map(rows.filter((r) => r.kind === "post_plan").map((r) => [r.user_id, chosenChannels(r.body)]));
   const dueBy = new Map<string, DueRow[]>();
   for (const row of await readAll<DueRow>((from, to) =>
-    admin.from("content_items").select("id, user_id, department, idea, day, platform").in("department", ["post", "sales"]).eq("status", "planned")
+    admin.from("content_items").select("id, user_id, department, idea, day, platform, slot:body->slot").in("department", ["post", "sales"]).eq("status", "planned")
       .lte("day", today).order("day").order("id").range(from, to),
   )) {
     dueBy.set(row.user_id, [...(dueBy.get(row.user_id) ?? []), row]);
@@ -184,7 +248,13 @@ export async function enqueueDueLoops(admin: SupabaseClient, now = new Date()): 
     admin.from("content_items").select("user_id").eq("status", "published").eq("department", "post").gte("published_at", since).order("id").range(from, to),
   ));
   // P6: Zernio measures connected accounts without the social reader; replies are checked three days on (A1, A3).
-  const connectedBy = count(await readAll((from, to) => admin.from("social_accounts").select("user_id").eq("status", "connected").order("id").range(from, to)));
+  const platformsBy = new Map<string, string[]>();
+  for (const row of await readAll<{ user_id: string; platform: string }>((from, to) =>
+    admin.from("social_accounts").select("user_id, platform").eq("status", "connected").order("id").range(from, to),
+  )) {
+    platformsBy.set(row.user_id, [...(platformsBy.get(row.user_id) ?? []), row.platform]);
+  }
+  const connectedBy = new Map([...platformsBy].map(([user, list]) => [user, list.length]));
   const repliesBy = count(await readAll((from, to) =>
     admin.from("cmo_draft_outcomes").select("user_id").eq("department", "sales").eq("action", "replied").is("outcome_checked_at", null)
       .lte("decided_at", new Date(now.getTime() - 3 * 86_400_000).toISOString()).order("id").range(from, to),
@@ -210,6 +280,17 @@ export async function enqueueDueLoops(admin: SupabaseClient, now = new Date()): 
   const enqueueFor = async (user: string) => {
     const due = dueBy.get(user) ?? [];
     const duePosts = due.filter((d) => d.department === "post");
+    const slots = daySlots(profiles.get(user)?.postingPlan, platformsBy.get(user) ?? [], channelsBy.get(user) ?? []);
+    // A6: today's slots the week plan did not fill (the founder raised a count mid-week) get a planned item before the
+    // drafts are queued. Not on Monday: the week plan written today fills them, and an item made here would be drafted
+    // beside the plan's own. Not for an unpaid account: it gets no draft.
+    if (weekday !== 1 && paid.has(user) && slots.length) {
+      const { data: made, error: fillError } = await admin.rpc("cmo_fill_day_slots", { p_user: user, p_day: today, p_items: slots });
+      if (fillError) console.warn("[cron] cmo: today's empty slots not filled for", user, fillError.message);
+      for (const row of (made ?? []) as { id?: unknown; slot?: unknown }[]) {
+        if (typeof row.id === "string") duePosts.push({ id: row.id, user_id: user, department: "post", idea: "Today's post, from your content plan", day: today, platform: null, slot: row.slot });
+      }
+    }
     const dueSales = due.find((d) => d.department === "sales");
     const state: LoopState = {
       weekday,
@@ -229,7 +310,7 @@ export async function enqueueDueLoops(admin: SupabaseClient, now = new Date()): 
       // core post per slot, which goes to every platform of the slot.
       if (run.kind === "post_draft") {
         // Awaited first: `queued += await …` reads `queued` before the wait, and the other workers' counts are lost.
-        const drafts = await enqueueDueDrafts(admin, user, duePosts, { done });
+        const drafts = await enqueueDueDrafts(admin, user, duePosts, { done, wave: { n: slots.length, hour: now.getUTCHours(), loopHour: hourOf(user) } });
         queued += drafts;
         continue;
       }
