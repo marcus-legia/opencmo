@@ -286,7 +286,7 @@ document field `post_plan.content_plan`.
     both the newest-snapshot read and the cleanup (review). A relevant story must carry a `topic_key`
     (`check (not relevant or topic_key <> '')`), because drafts dedupe by it. The cleanup calls `x_news_purge(14)`, a
     service-role definer function; the table is in `321_rls_no_policy_tables`.
-- [ ] **B2. X News client** in `lib/x/client.ts`. Server only, `X_BEARER_TOKEN` (app-only), base
+- [x] **B2. X News client** in `lib/x/client.ts`. Server only, `X_BEARER_TOKEN` (app-only), base
   `https://api.x.com/2`. One function:
   - `searchNews(query, maxAgeHours = 24, max = 20)` →
     `GET /news/search?query=&max_age_hours=&max_results=&news.fields=name,summary,hook,category,keywords,cluster_posts_results,updated_at`
@@ -295,6 +295,9 @@ document field `post_plan.content_plan`.
   - Seen on 27/11 with the owner's key: the search is fuzzy and **never returns empty** (a nonsense query still gives
     10 stories), `keywords` came back null, and the rate limit was 200 calls per 15 minutes. Read the doc again
     before coding, because X changes fields.
+  - *As built:* `searchNews` returns `{stories, called, status}` so the snapshot counts the calls it sent (a failed
+    request still counts). Text is cut by code point, as Postgres counts it: a UTF-16 cut can leave half an emoji, which
+    Postgres refuses (review). Without a key and outside the fake, nothing is sent. Check: `lib/x/client.check.ts`.
 - [ ] **B3. Snapshot** in `lib/cmo/news/snapshot.ts`, one run for all founders:
   1. News for a fixed list of broad queries in code: `AI`, `startups`, `SaaS`, `developer tools`, `tech`. These only
      gather stories that are breaking; they are not the founder's topics.
