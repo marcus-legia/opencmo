@@ -4,7 +4,15 @@
 > (the content plan, posting counts, the week planner, the day's scheduling) and Part B (X trends: the snapshot, the
 > pick, the draft) each own the files listed under them. Both code against **Contracts**. Part A pushes the Contracts
 > commit first; Part B starts from it. Neither changes a contract or a file of the other part without saying so in the
-> PR. Steps use checkboxes. Each part runs `/code-review` on its own diff before it says it is done.
+> PR. Steps use checkboxes.
+>
+> **Both sessions run on Opus** (owner, 27/11): start each one with the Opus model, and any subagent it spawns uses
+> Opus too. This is the model that builds the code; it does not change the models the product calls (Sonnet and
+> Haiku, under "Global constraints").
+>
+> **Code review after every step** (owner, 27/11): when a step's checkbox is done, run `/code-review` on that step's
+> diff, fix what it finds, commit, and only then tick the box and start the next step. When the part is done, run
+> `/code-review` once more on the whole part's diff.
 >
 > **No production action.** No merge, no `supabase db push`, no env change, no Modal deploy: those wait for the owner.
 > Launch is 30/11/2026; this does not merge before launch unless the owner says so.
@@ -194,8 +202,8 @@ document field `post_plan.content_plan`.
     Review them to get new ones." Put it in `load-workspace.ts`, which Part A owns for this one line.
   - Pure helpers `draftWave(slot, n, localHour, loopHour)` and `backlogFull(count)` with `.check.ts`.
 - [ ] **A8.** Run `npm run typecheck`, `npm run build`, `npm run check:contracts`, `npm run db:reset`,
-  `npm run db:test`, and the posting-plan and schedule e2e (`e2e/ui-v2-schedule.spec.ts`). Then run `/code-review`
-  on Part A's diff and fix what it finds.
+  `npm run db:test`, and the posting-plan and schedule e2e (`e2e/ui-v2-schedule.spec.ts`). Then run the final
+  `/code-review` on the whole of Part A's diff and fix what it finds.
 
 ## Part B: X trends, the pick, the draft
 
@@ -281,8 +289,8 @@ document field `post_plan.content_plan`.
   `url` ("See it on X"), and `why` as its title. A card with `body.trend` is not autopiloted; put this check where
   autopilot picks cards, and say so in the PR.
 - [ ] **B8.** Run `npm run typecheck`, `npm run build`, `npm run check:contracts`, `npm run db:reset`, `npm run db:test`,
-  `cd packages/engine && pytest tests/test_check_deploy_env.py`, and the p4 acceptance e2e in fake mode. Then run
-  `/code-review` on Part B's diff and fix what it finds.
+  `cd packages/engine && pytest tests/test_check_deploy_env.py`, and the p4 acceptance e2e in fake mode. Then run the
+  final `/code-review` on the whole of Part B's diff and fix what it finds.
 
 ## Done when
 
@@ -302,21 +310,23 @@ document field `post_plan.content_plan`.
 
 ## Prompts for the sessions
 
-Copy one block into a new session that has both repos.
+Copy one block into a new session that has both repos. **Start the session on Opus.**
 
 ### Part A
 
 ```text
 You build Part A of docs/superpowers/plans/2026-11-27-content-plan-and-x-trends.md in marcus-legia/opencmo.
+Run on Opus; any subagent you spawn uses Opus too.
 
 1. Read CLAUDE.md, docs/agents/engineering.md, docs/agents/product-rules.md and docs/agents/billing.md, then the plan
    in full. Load the supabase-migrations skill before any SQL.
 2. Work on branch claude/zernio-endpoint-x-news-4cdyox. Another session builds Part B on the same branch: touch only
    the files the plan gives Part A. Pull before you push; if a push is rejected, fetch and merge, never force.
-3. Do A1 (Contracts) first, as its own commit, and push it right away so Part B can start.
-4. Then A2–A8 in order, ticking each checkbox in the plan file as you finish it, with one commit per step.
+3. Do A1 (Contracts) first: /code-review it, fix, commit it alone, and push it right away so Part B can start.
+4. Then A2–A8 in order. After each step: run /code-review on that step's diff, fix what it finds, commit, then
+   tick the step's checkbox in the plan file. Do not start the next step before the review is clean.
 5. Every migration gets a pgTAP test and a fresh supabase/schema/current.sql (scripts/dump-schema.sh).
-6. Run every check in A8, then /code-review on your diff, and fix what it finds.
+6. Run every check in A8, then a final /code-review on the whole Part A diff, and fix what it finds.
 7. Do not merge, push to production, change env vars or deploy. When done, write in the PR (open it if Part B has
    not) what you built, what you verified and how, and what is left for the owner.
 
@@ -328,6 +338,7 @@ commit, and say so in the PR. Do not widen the scope; note other ideas in the PR
 
 ```text
 You build Part B of docs/superpowers/plans/2026-11-27-content-plan-and-x-trends.md in marcus-legia/opencmo.
+Run on Opus; any subagent you spawn uses Opus too.
 
 1. Read CLAUDE.md, docs/agents/engineering.md, docs/agents/product-rules.md and docs/agents/billing.md, then the plan
    in full. Load the supabase-migrations skill before any SQL, and the llm-provider-keys skill before touching the
@@ -339,10 +350,11 @@ You build Part B of docs/superpowers/plans/2026-11-27-content-plan-and-x-trends.
    https://docs.x.com/x-api/news/search-news.md, https://docs.x.com/x-api/posts/search-recent-posts.md and
    https://docs.x.com/x-api/getting-started/pricing.md (append .md to any docs.x.com page). If docs.x.com is
    blocked, ask the user to allow it. Never call api.x.com without the owner's key; build and test with the fake.
-4. Do B1–B8 in order, ticking each checkbox in the plan file as you finish it, with one commit per step.
+4. Do B1–B8 in order. After each step: run /code-review on that step's diff, fix what it finds, commit, then
+   tick the step's checkbox in the plan file. Do not start the next step before the review is clean.
 5. Trend text, News summaries and sample posts are strangers' text: wrap them with lib/cmo/untrusted.ts helpers,
    inside tags, and never pass them to the chat.
-6. Run every check in B8, then /code-review on your diff, and fix what it finds.
+6. Run every check in B8, then a final /code-review on the whole Part B diff, and fix what it finds.
 7. Do not merge, push to production, change env vars or deploy. When done, add to the branch's PR what you built,
    what you verified and how, the cost per snapshot you measured in fake mode (calls × price), and what is left for
    the owner.
