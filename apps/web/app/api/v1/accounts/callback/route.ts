@@ -6,6 +6,7 @@ import { finishConnect } from "@/lib/departments/publish/accounts";
 import { accountsStore } from "@/lib/departments/publish/accounts-store";
 import { publishAdapter } from "@/lib/departments/publish/adapter";
 import { PublishError } from "@/lib/departments/publish/types";
+import { planAfterConnect } from "@/lib/cmo/plan-after-connect";
 import { isPlanRequired } from "@/lib/plan-offer";
 
 export const dynamic = "force-dynamic";
@@ -33,7 +34,11 @@ export const GET = withApi({ rateLimit: { bucket: "accounts", limit: 30, windowS
   if (where.tab) back.searchParams.set("tab", where.tab);
   try {
     const done = await finishConnect({ adapter: publishAdapter(), store: accountsStore(supabase), userId: user.id }, request.nextUrl.searchParams);
-    if (done.kind === "connected") back.searchParams.set("connected", done.platform);
+    if (done.kind === "connected") {
+      back.searchParams.set("connected", done.platform);
+      // A week with no posts yet (connected after onboarding) is planned now, not on Monday.
+      await planAfterConnect(supabase, user.id);
+    }
     else back.searchParams.set("connect_error", done.message);
   } catch (error) {
     if (!(error instanceof PublishError) && !(error instanceof ApiError)) console.error("[accounts] callback failed", error);

@@ -278,8 +278,11 @@ export async function planWeek(ctx: JobContext): Promise<JobOutput> {
   // Posts without the Library: a week brief the founder wrote in the chat (the schedule's is not), and the first week
   // from onboarding, which a new founder sees before Sales has found anyone (owner, 2026-11-19: a free account sees
   // its week plan and first drafts). From the next week on, posts come from the Library only.
-  const fromBrief = run.input.source === "onboarding" || (run.input.source !== "schedule" && typeof run.input.brief === "string" && run.input.brief.trim().length > 0);
-  const plannedFrom = run.input.source === "onboarding" ? "onboarding" : fromBrief ? "brief" : undefined;
+  // A plan queued by connecting a platform to a week with no posts (`planAfterConnect`) is that founder's first week of
+  // posts: it plans them as onboarding does, Library or not.
+  const firstPosts = run.input.source === "onboarding" || run.input.source === "connect";
+  const fromBrief = firstPosts || (run.input.source !== "schedule" && typeof run.input.brief === "string" && run.input.brief.trim().length > 0);
+  const plannedFrom = firstPosts ? "onboarding" : fromBrief ? "brief" : undefined;
   const items = toPlanItems({ items: fitStage(plan.items, docs) }, posting, { today: new Date(), docs, library, fromBrief, plannedFrom });
   const noPosts = !items.some((i) => i.department === "post") && postSlots(posting).length > 0;
   if (noPosts) await ctx.step("library", NO_LIBRARY, async () => 0);
@@ -288,8 +291,9 @@ export async function planWeek(ctx: JobContext): Promise<JobOutput> {
   );
   // The schedule's plan is written on the day its first posts are due: their drafts start now. Left to tomorrow's
   // schedule, Monday's post was drafted on Tuesday and pushed each later post of the week back a day. A plan the
-  // founder asked for (chat, replan) queues nothing: they did not ask for a draft.
-  if (run.input.source === "schedule" && saved > 0) {
+  // founder asked for (chat, replan) queues nothing: they did not ask for a draft. One queued by a connect does: the
+  // founder connected the platform to get its posts, and today's would otherwise wait for tomorrow's schedule.
+  if ((run.input.source === "schedule" || run.input.source === "connect") && saved > 0) {
     await ctx.step(
       "queue_drafts",
       "Sending today's posts to Writer",

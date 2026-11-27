@@ -90,7 +90,8 @@ export function postWhen(proposed: NonNullable<Extract<Card["body"], { kind: "po
   if (new Date(proposed.at).getTime() <= now) return `Its time (${when}) has passed. Approve it and pick a new time, or change it here.`;
   return proposed.mode === "publish"
     ? `Goes out ${when} on ${where}${proposed.handle ? ` (${proposed.handle})` : ""}, your time.`
-    : `Opens ${where} to post at ${when}, your time. You post it from your account.`;
+    // No account: nothing is scheduled until one is connected (20270206040000, 20270206090000).
+    : `No ${where} account is connected, so nothing goes out at ${when}. Connect ${where} on the Post page and it is scheduled, or post it yourself.`;
 }
 
 function decidedNote(card: Card): string | null {
@@ -304,7 +305,9 @@ export function ApprovalCard({
           // Approve leads (owner, 2026-11-11: it was a quiet link after four buttons, and nobody found it). Posting it
           // right now by hand stays one click away, as the second and third buttons.
           return [
-            { label: proposed ? "Approve for this time" : "Approve and schedule", variant: "primary", run: approve },
+            // No account to post to, so approving schedules nothing yet: connecting the platform does
+            // (`social_account_save`, 20270206090000). "and schedule" / "for this time" would promise a post that waits.
+            { label: "Approve", variant: "primary", run: approve },
             // X and Threads open their composer with the words in it; LinkedIn's label already says it copies.
             ...(target
               ? [{
