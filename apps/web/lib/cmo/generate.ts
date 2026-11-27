@@ -96,6 +96,26 @@ function clampAll(drafts: OnboardingDrafts): OnboardingDrafts {
 }
 
 /**
+ * The first content plan (owner, 2026-11-27): written by code from the topics and rhythm the onboarding made, never by
+ * the model reading the website, so it holds only what the founder will see in the other fields. Short Markdown the
+ * founder edits. It says the mix, not how many posts a day: the count is the posting plan's number (decision 2), and a
+ * number here would go stale the day they change it.
+ */
+export function firstContentPlan(postPlan: { topics?: string[]; rhythm?: string }): string {
+  const topics = (postPlan.topics ?? []).map((t) => t.trim()).filter(Boolean);
+  const rhythm = postPlan.rhythm?.trim();
+  return [
+    "Each day: one post opens from today's tech news when a story fits; the others come from what people asked in my Sales conversations.",
+    "",
+    "Write about:",
+    ...(topics.length ? topics.map((t) => `- ${t}`) : ["- What my product does and who it helps"]),
+    ...(rhythm ? ["", `Rhythm: ${rhythm}`] : []),
+    "",
+    "Never:",
+  ].join("\n");
+}
+
+/**
  * What code sets after the model (wave 3 B4): the look the website's markup shows (never a model's guess), the three
  * B2B channels when none came back, and the founder's own answer as the ideal customer when the model dropped it.
  */
@@ -106,7 +126,11 @@ export function finishDrafts(drafts: OnboardingDrafts, site: SiteSnapshot, sells
   return {
     ...drafts,
     strategy: { ...drafts.strategy, icp: answer && !icp.toLowerCase().includes(answer.toLowerCase()) ? (icp && !/not stated/i.test(icp) ? `${answer}. ${icp}` : answer) : icp },
-    post_plan: { ...drafts.post_plan, channels: drafts.post_plan.channels?.length ? drafts.post_plan.channels : [...POST_CHANNELS] },
+    post_plan: {
+      ...drafts.post_plan,
+      channels: drafts.post_plan.channels?.length ? drafts.post_plan.channels : [...POST_CHANNELS],
+      content_plan: firstContentPlan(drafts.post_plan),
+    },
     brand: {
       ...drafts.brand,
       voice_samples: [],

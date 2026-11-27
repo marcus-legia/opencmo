@@ -17,7 +17,7 @@ import { ApiError } from "@/lib/api/errors";
 import { firstRow, rpcOrThrow, type SupabaseClient } from "@/lib/api/handler";
 
 import { DOCUMENT_KINDS, type OnboardingDrafts } from "./documents";
-import { draftDocuments, GenerateError } from "./generate";
+import { draftDocuments, firstContentPlan, GenerateError } from "./generate";
 import { kickCmoQueue, kickFirstWeek, startCmoRun, type StartedRun } from "./jobs/start";
 import { readSite, SiteError } from "./site";
 
@@ -38,7 +38,8 @@ export async function runOnboarding(supabase: SupabaseClient, userId: string, si
     await steps.set("site", "done");
     await steps.set(DOCUMENT_KINDS[0], "running");
     // Wave 3 B4: "who do you sell to?", asked while the site was read, reaches the documents when it is in by now.
-    const drafts = keepFounderBrand(await draftDocuments(snapshot, { sellsTo: await sellsTo(supabase, userId) }), await currentBrand(supabase, userId));
+    const [brand, postPlan] = await Promise.all([currentDocument(supabase, userId, "brand"), currentDocument(supabase, userId, "post_plan")]);
+    const drafts = keepFounderContentPlan(keepFounderBrand(await draftDocuments(snapshot, { sellsTo: await sellsTo(supabase, userId) }), brand), postPlan);
     for (const [index, kind] of DOCUMENT_KINDS.entries()) {
       await rpcOrThrow(supabase, "save_marketing_document", { p_kind: kind, p_body: drafts[kind], p_run: run.id });
       await steps.set(kind, "done");
@@ -80,9 +81,22 @@ export async function runOnboarding(supabase: SupabaseClient, userId: string, si
 }
 
 /** The Brand the founder already has, when the website is read again; null on the first read. */
-async function currentBrand(supabase: SupabaseClient, userId: string): Promise<Record<string, unknown> | null> {
-  const { data, error } = await supabase.from("marketing_documents_latest").select("body").eq("user_id", userId).eq("kind", "brand").maybeSingle<{ body: Record<string, unknown> }>();
+async function currentDocument(supabase: SupabaseClient, userId: string, kind: "brand" | "post_plan"): Promise<Record<string, unknown> | null> {
+  const { data, error } = await supabase.from("marketing_documents_latest").select("body").eq("user_id", userId).eq("kind", kind).maybeSingle<{ body: Record<string, unknown> }>();
   return error ? null : (data?.body ?? null);
+}
+
+/**
+ * Reading the website again rewrites the Post plan, but a content plan the founder (or the chat, at their ask) changed
+ * is theirs: it is kept. One still as the onboarding wrote it is written again from the new topics.
+ */
+export function keepFounderContentPlan(drafts: OnboardingDrafts, current: Record<string, unknown> | null): OnboardingDrafts {
+  const plan = typeof current?.content_plan === "string" ? current.content_plan.trim() : "";
+  if (!plan) return drafts;
+  const topics = Array.isArray(current?.topics) ? current.topics.filter((t): t is string => typeof t === "string") : [];
+  const rhythm = typeof current?.rhythm === "string" ? current.rhythm : "";
+  if (plan === firstContentPlan({ topics, rhythm }).trim()) return drafts;
+  return { ...drafts, post_plan: { ...drafts.post_plan, content_plan: plan } };
 }
 
 /**

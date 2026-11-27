@@ -84,6 +84,11 @@ export function DocumentRead({ fields, value }: { fields: Field[]; value: Body }
   );
 }
 
+/** A line under a field's label where the label alone does not say what to write. */
+const FIELD_HINTS: Record<string, string> = {
+  content_plan: "What to write, the mix each day, and what never to write. Ferreto plans and writes your posts from it.",
+};
+
 export function DocumentForm({ fields, value, onChange, idPrefix }: { fields: Field[]; value: Body; onChange: (next: Body) => void; idPrefix: string }) {
   const set = (key: string, next: unknown) => onChange({ ...value, [key]: next });
   return (
@@ -133,11 +138,12 @@ export function DocumentForm({ fields, value, onChange, idPrefix }: { fields: Fi
           );
         }
         const text = typeof value[field.key] === "string" ? (value[field.key] as string) : "";
+        const hint = FIELD_HINTS[field.key];
         return (
           <label key={field.key} className="cmo-field" htmlFor={id}>
-            <span>{field.label}</span>
+            <span>{field.label}{hint ? <> <small>{hint}</small></> : null}</span>
             {field.type === "long" ? (
-              <textarea id={id} rows={4} value={text} onChange={(e) => set(field.key, e.target.value)} />
+              <textarea id={id} rows={field.key === "content_plan" ? 12 : 4} value={text} onChange={(e) => set(field.key, e.target.value)} />
             ) : (
               <input id={id} type="text" value={text} onChange={(e) => set(field.key, e.target.value)} />
             )}

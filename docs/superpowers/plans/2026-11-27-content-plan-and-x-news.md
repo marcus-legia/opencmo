@@ -181,14 +181,21 @@ document field `post_plan.content_plan`.
   - Above M, add one plain warning line. Nothing is blocked.
   - The panel also links to the content plan ("What to write: edit your content plan").
   - Pure function `monthlyCredits(plan)` in `posting-plan.ts`, with a `.check.ts`.
-- [ ] **A4. Content plan editing.**
+- [x] **A4. Content plan editing.**
   - The Post plan document screen shows `content_plan` as a long text field, first.
   - CMO chat: add one rule to the system prompt. When the founder asks to plan, change or fix what they post, read the
     Post plan with `read_doc` and write `content_plan` with `update_document`, keeping the founder's own lines. Then
     tell them in one sentence what changed.
   - **Onboarding:** the Post plan the onboarding writes gets a first `content_plan`. Write it from the topics and
-    rhythm it already makes, as short Markdown: a "Each day" line built from the posting counts, a "Write about" list,
-    and an empty "Never" list. The structured fields (`topics`, `channels`, `rhythm`) stay for older readers.
+    rhythm it already makes, as short Markdown: a "Each day" line, a "Write about" list, and an empty "Never" list.
+    The structured fields (`topics`, `channels`, `rhythm`) stay for older readers.
+  - *Built differently:* the "Each day" line says the mix (one post from the day's news when one fits, the others
+    from Sales conversations), not the counts: a count in prose would go stale when the founder changes the posting
+    plan, and decision 2 keeps the count out of prose. Code writes it (`firstContentPlan` in `generate.ts`), never the
+    model reading the website. The form shows it first, 12 lines tall, with a hint under the label
+    (`components/cmo/DocumentFields.tsx`, outside Part A's list, for this one field).
+  - *Found in review:* reading the website again rewrites every document, so it would have replaced a content plan
+    the founder wrote. `keepFounderContentPlan` (`onboard.ts`) keeps one they changed, as `keepFounderBrand` does.
 - [ ] **A5. The week planner follows the content plan.** In `plan-week.ts`:
   - The content plan goes into the prompt as `<content_plan approved_by="founder">…</content_plan>`, right after the
     documents.
