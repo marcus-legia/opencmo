@@ -173,9 +173,11 @@ document field `post_plan.content_plan`.
     (for A5). The tests `216_p4_slots` and `234_p6_best_time` assumed one X default time; they now check the gap and the
     five times instead. Visible effect: a post approved in the morning can be proposed the same day (12:00, 15:00…)
     instead of 09:00 the next day.
-- [ ] **A3. Credit estimate on the plan panel.**
+- [x] **A3. Credit estimate on the plan panel.**
   - Drafts a month = `max(platform counts) × 30`, because one core post goes to every platform, plus 4 week plans.
-  - Show it under the counters: "About N credits a month. Your plan includes M." M comes from `plan_usage()`.
+  - Show it under the counters: "Posts use about N credits a month. Your plan includes M." M comes from `plan_usage()`
+    (read through `/api/v1/account`, live plans only; free and sample plans show N alone). Prices come from
+    `JOB_PRICES`, not new numbers.
   - Above M, add one plain warning line. Nothing is blocked.
   - The panel also links to the content plan ("What to write: edit your content plan").
   - Pure function `monthlyCredits(plan)` in `posting-plan.ts`, with a `.check.ts`.

@@ -629,6 +629,10 @@ html[data-theme="dark"] .k.pg-settings{--bg:#121110;--panel:#181715;--raised:#20
 .pg-calendar .pp-sum b{font-weight:600}
 .pg-calendar .pp-sum span{color:var(--muted)}
 .pg-calendar .pp-error{margin:0;font-size:13px;color:var(--warn)}
+.pg-calendar .pp-credits{display:grid;gap:4px}
+.pg-calendar .pp-credits p{margin:0;font-size:13px;line-height:1.45;color:var(--muted)}
+.pg-calendar .pp-credits a{color:var(--accent)}
+.pg-calendar .pp-over{color:var(--warn)}
 @media (max-width:480px){
   .pg-calendar .pp{padding:12px}
   .pg-calendar .pp-groups{grid-template-columns:1fr}

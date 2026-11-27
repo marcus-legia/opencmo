@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { JOB_PRICES } from "./jobs/progress";
+
 /**
  * The founder's posting plan: which platforms get a post every day and how many, and how many videos a week.
  * SQL keeps the same bounds in `save_posting_plan` (`profiles.posting_plan`, null = use the default).
@@ -53,6 +55,20 @@ export function dayTargets(plan: PostingPlan): string[][] {
   const days: string[][] = [];
   for (let i = 0; i < most; i++) days.push(TEXT_PLATFORMS.filter((p) => plan.text[p] > i));
   return days;
+}
+
+/** Week plans in a month: Monday's plan runs about four times (owner's estimate, 2026-11-27). */
+const WEEK_PLANS_A_MONTH = 4;
+
+/**
+ * About how many credits the plan's posts use in a month: one draft per core post a day for 30 days (one core post
+ * goes to every platform of its slot, so it is the most posts a day, not their sum), plus the week plans. A plan with
+ * no posts uses none. An estimate for the panel, not a hold: refunds (no story fits, the backlog guard) make it lower.
+ */
+export function monthlyCredits(plan: PostingPlan): number {
+  const posts = dayTargets(plan).length;
+  if (posts === 0) return 0;
+  return posts * 30 * (JOB_PRICES.post_draft ?? 1) + WEEK_PLANS_A_MONTH * (JOB_PRICES.plan_week ?? 1);
 }
 
 /**
