@@ -44,9 +44,12 @@ credit, so a plan read wrong spends the founder's money.
    the founder raised the count mid-week. That fill is part of the draft run's one credit, with no extra plan charge.
 6. **Backlog guard.** With 10 or more post cards waiting in review, nothing new is drafted and nothing is charged until
    the founder reviews.
-7. **Assumed, to confirm before merge.** The wave 3 B3 rule "no Library, no posts" (`NO_LIBRARY` in `plan-week.ts`
-   and `draft-post.ts`) is dropped. The Library becomes one source the plan may use. Without this, a founder whose
-   plan asks for topics outside the Library gets refunds instead of posts.
+7. **Every post rests on something real: a Library conversation or a news story** (owner, 27/11, option B). The wave
+   3 B3 rule "no Library, no posts" (`NO_LIBRARY` in `plan-week.ts` and `draft-post.ts`) is loosened, not dropped:
+   - A post that rides a news story needs no Library source.
+   - Any other post still needs at least one Library source, as today.
+   - So a founder with an empty Library still gets their news posts; their other slots wait for a scan.
+   - A draft that ends with neither a source nor a story is not written, and its credit comes back.
 8. **X News only, no trends** (owner, 27/11). Ferreto reads `GET /2/news/search` and nothing else from X: no trends
    by WOEID (a test on 27/11 gave 30 of 30 US trends off the ICP: Black Friday, NFL, films) and no recent-post search.
    The call uses Ferreto's own app-only bearer token, server side. That token carries no user context, so one
@@ -59,6 +62,7 @@ credit, so a plan read wrong spends the founder's money.
 - **Money.**
   - A draft is 1 credit (`cmo_job_price('post_draft')`) and is held before it runs (`enqueue_cmo_run_for`).
   - A `required` post with no fitting story returns `{ refund: true, reason }`.
+  - A post with no Library source and no fitting story returns `{ refund: true, reason }` (decision 7).
   - The backlog guard queues nothing, so nothing is charged.
   - The News snapshot is Ferreto's cost, never a founder's credit.
   - Every write goes through an ownership-checking RPC.
@@ -185,10 +189,16 @@ document field `post_plan.content_plan`.
     content plan says rides the news. Its idea is the angle only (for example 'today's AI news, from how we find
     customers'), because the story is chosen on the day. Mark hook for the others unless the plan says no news."
   - `toPlanItems` copies `news` (default `"hook"`).
-  - **Drop the Library gate:** with an empty Library, posts are planned from the content plan and the strategy, and
-    `sources` stays empty. `NO_LIBRARY` is no longer returned here. Keep the pillar fill for slots the model leaves
-    empty.
-  - `fakePlan` marks slot 0 of each day `required`, the others `hook`.
+  - **Loosen the Library gate (decision 7):**
+    - An item the model plans with no Library source is saved as `news: "required"`, whatever the model said. Its
+      idea is an angle for the day's news, taken from the content plan.
+    - An item with sources keeps the model's `news` mark.
+    - With an empty Library, every planned post is `required`. The plan still fills every slot.
+    - `NO_LIBRARY` stays only for a content plan that says no news (every item `none`) with an empty Library: then
+      nothing is planned and the note is returned, as today.
+    - Keep the pillar fill for slots the model leaves empty; a pillar slot with no source is `required` too.
+    - Rule in the prompt: "A post with no <sources> must ride the day's news: mark it required."
+  - `fakePlan` marks slot 0 of each day `required`, the others `hook`. With an empty fake Library, all `required`.
   - Update `plan-week` checks.
 - [ ] **A6. Fill today's empty slots.**
   - Migration: an RPC `cmo_fill_day_slots(p_user uuid, p_day date, p_items jsonb)`, service role only. For each slot
@@ -274,12 +284,14 @@ document field `post_plan.content_plan`.
     in `pick.check.ts`.
 - [ ] **B6. The draft** in `draft-post.ts`:
   1. **`plan_idea` step** when `planned_from === 'day_fill'` and the idea is empty. One Sonnet call writes the idea
-     and `news` mode from `content_plan`, the strategy and today's other items. It stays within the same run, and
-     the founder is not charged again.
+     and `news` mode from `content_plan`, the strategy, the Library and today's other items. It stays within the same
+     run, and the founder is not charged again. If it picks no Library source, the mode is `required` (decision 7).
   2. **`pick_news` step** for `news` `required` or `hook`. The step label says "Picking today's news". Its result
      line says "News: <name>" or "No news fits this post today".
-  3. **`required` with no pick:** return `{ refund: true, reason: "No news story fits this post today, so nothing
-     was written and your credit is back." }` and mark the item skipped through the existing RPC.
+  3. **No pick, and the post has nothing else to rest on:** when the item is `required`, or when it has no Library
+     source (an item planned before this work may be `hook` with no source), return `{ refund: true, reason: "No
+     news story fits this post today, so nothing was written and your credit is back." }` and mark the item skipped
+     through the existing RPC. A `hook` item with sources and no pick is written plainly from its sources.
   4. **The writer prompt gains:**
      - `<content_plan approved_by="founder">`;
      - `<news>`, untrusted: name, summary and hook, as data.
@@ -290,8 +302,9 @@ document field `post_plan.content_plan`.
        - "Follow <content_plan> before the Post plan topics."
   5. **The checker** gets the story summary. A number in a draft that is in neither the documents nor the summary is
      a problem.
-  6. **Drop the Library gate** (decision 7): no refund for missing sources. The Library still feeds `<sources>` when
-     the item has them.
+  6. **Loosen the Library gate** (decision 7): the `NO_LIBRARY` refund at the top of the job goes; step 3 replaces
+     it, so a post with a story is written without sources. The Library still feeds `<sources>` when the item has
+     them. A post with both uses the story as its opening and the sources as its body.
   7. **Save:** `body.news: PostNews` on the draft.
 - [ ] **B7. Card and autopilot.**
   - When `body.news` is set, the card shows one line under the post: "News: <name>", a link to `url` ("See it on
@@ -309,13 +322,14 @@ document field `post_plan.content_plan`.
 - X can be set to 5 a day. The panel shows the credit estimate.
 - A snapshot runs every 3 hours in fake mode and writes rows. With a key, one manual call to `/api/cron/x-news`
   writes real rows. **The owner runs this.**
-- A `required` post with no fitting story refunds. A `hook` post without one is written plainly. A post with a story
-  shows "News: …" and is never autopiloted.
+- A `required` post with no fitting story refunds. A `hook` post with Library sources and no story is written plainly.
+  A post with neither refunds. A post with a story shows "News: …" and is never autopiloted.
+- A founder with an empty Library gets a week plan of `required` posts, and drafts only on days a story fits.
 - Two drafts of one day never ride the same `topic_key`.
 - A founder with 10 cards in review gets no new draft and no charge.
 - Raising X from 3 to 5 on a Wednesday gives 5 drafts on Thursday.
-- All checks above are green. One PR, both parts, with this plan linked. The PR lists the owner steps: confirm
-  decision 7, add `X_BEARER_TOKEN` to Vercel and Modal, `supabase db push`, Modal deploy, and the first manual
+- All checks above are green. One PR, both parts, with this plan linked. The PR lists the owner steps: add
+  `X_BEARER_TOKEN` to Vercel and Modal, `supabase db push`, Modal deploy, and the first manual
   snapshot.
 
 ---
