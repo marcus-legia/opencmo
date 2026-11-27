@@ -330,7 +330,7 @@ document field `post_plan.content_plan`.
     `uptime.check.ts`). In production, a missing key answers 503 so the monitor raises it; locally it is skipped.
     **The key is Vercel's alone:** the route runs there and Modal only calls it, so `deploy_env.py` reads it on Vercel,
     not the worker. Verified in fake mode against local Supabase: one run stored 6 stories, 5 relevant.
-- [ ] **B5. The pick** in `lib/cmo/news/pick.ts`.
+- [x] **B5. The pick** in `lib/cmo/news/pick.ts`.
   - **Input:**
     - the newest snapshot younger than 6 hours (relevant rows only, one per `topic_key`, at most 30);
     - the founder's documents and `content_plan`;
@@ -341,6 +341,13 @@ document field `post_plan.content_plan`.
     with `fit ≥ 0.6`. Because the search never returns empty, this threshold is the real filter.
   - Agent `news_picker` (tier `check`), prompt in `lib/cmo/news/pick.ts`. Pure parsing and acceptance logic goes
     in `pick.check.ts`.
+  - *As built:* the store reads the stories (`newsStories(hours)` on `CmoStore`, the Supabase and memory stores), so
+    `lib/cmo/jobs/types.ts`, `store.ts` and `memory-store.ts` gain two methods (outside Part B's list; noted in the
+    PR). "Already used" counts the news ridden by posts planned from two days before today, not today only: an
+    overdue post drafted today has an earlier `day`, and the same news on the next day is a repeat too (review). The
+    skip of B6 step 3 needed an RPC (none existed for the runner), `cmo_news_skip_item`
+    (`20270207040000_news_skip_item.sql`, pgTAP 368): only a running `post_draft` of the same founder that names the
+    item, or names none, may skip it, and only while it is `planned`.
 - [ ] **B6. The draft** in `draft-post.ts`:
   1. **`plan_idea` step** when `planned_from === 'day_fill'` and the idea is empty. One Sonnet call writes the idea
      and `news` mode from `content_plan`, the strategy, the Library and today's other items. It stays within the same

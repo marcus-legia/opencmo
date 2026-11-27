@@ -5197,6 +5197,35 @@ $$;
 
 
 --
+-- Name: cmo_news_skip_item(uuid, uuid, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_news_skip_item(p_user uuid, p_run uuid, p_item uuid) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_id uuid;
+begin
+  if not exists (
+    select 1 from public.cmo_runs r
+    where r.id = p_run and r.user_id = p_user and r.kind = 'post_draft' and r.status = 'running'
+      -- A run that names no item drafts the founder's oldest due post, which is theirs (checked below).
+      and (r.input->>'item_id' = p_item::text or r.input->>'item_id' is null)
+  ) then
+    return false;
+  end if;
+  update public.content_items
+  set status = 'skipped', decided_at = now(), updated_at = now(),
+      body = coalesce(body, '{}'::jsonb) || jsonb_build_object('skip_reason', 'no_news')
+  where id = p_item and user_id = p_user and department = 'post' and status = 'planned'
+  returning id into v_id;
+  return v_id is not null;
+end;
+$$;
+
+
+--
 -- Name: cmo_nudges_due(uuid, integer); Type: FUNCTION; Schema: public; Owner: -
 --
 

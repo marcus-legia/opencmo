@@ -405,6 +405,16 @@ export interface CmoStore {
    */
   opportunitySource(userId: string, opportunityId: string): Promise<PostSource | null>;
   /**
+   * Part B5: the X News stories of the last `hours` (`x_news_stories`, every founder's), newest snapshot first. The pick
+   * keeps only the newest snapshot's relevant ones (`lib/cmo/news/pick.ts`).
+   */
+  newsStories(hours: number): Promise<(import("../news/pick").NewsCandidate & { relevant: boolean })[]>;
+  /**
+   * Part B6: a planned post that must ride the news and found none today is skipped (`cmo_news_skip_item`), so it does
+   * not take a later day's draft. False when the item is no longer planned, or not this run's.
+   */
+  skipForNoNews(userId: string, runId: string, itemId: string): Promise<boolean>;
+  /**
    * Wave 3 A3: the scan's reach checks (`cmo_save_reach`). SQL works the level out from the checks (Hacker News never
    * has DMs) and keeps a `dm` draft only for a DM-ready person without one, at most 20 a day.
    */

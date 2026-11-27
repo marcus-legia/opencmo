@@ -284,6 +284,29 @@ export function supabaseStore(admin: BaseClient): CmoStore {
     libraryThemeNames: (userId, limit = 30) => rpc<string[]>("cmo_library_theme_names", { p_user: userId, p_limit: limit }),
     libraryTopThemes: (userId, days = 14, limit = 5) =>
       rpc<LibraryTopTheme[]>("cmo_library_top_themes", { p_user: userId, p_days: days, p_limit: limit }).then((rows) => rows ?? []),
+    async newsStories(hours) {
+      const since = new Date(Date.now() - hours * 3_600_000).toISOString();
+      const { data, error } = await admin
+        .from("x_news_stories")
+        .select("id, name, summary, hook, topic_key, post_ids, taken_at, story_updated_at, relevant")
+        .gte("taken_at", since)
+        .order("taken_at", { ascending: false })
+        .limit(300);
+      if (error) throw new Error(`newsStories: ${error.message}`);
+      return ((data ?? []) as { id: string; name: string; summary: string; hook: string; topic_key: string; post_ids: string[] | null; taken_at: string; story_updated_at: string | null; relevant: boolean }[]).map((r) => ({
+        rowId: r.id,
+        name: r.name,
+        summary: r.summary,
+        hook: r.hook,
+        topicKey: r.topic_key,
+        postIds: r.post_ids ?? [],
+        // Postgres returns "+00:00"; the pick compares snapshot times as strings, so one form for all rows.
+        takenAt: new Date(r.taken_at).toISOString(),
+        storyUpdatedAt: r.story_updated_at ? new Date(r.story_updated_at).toISOString() : null,
+        relevant: r.relevant,
+      }));
+    },
+    skipForNoNews: (userId, runId, itemId) => rpc<boolean>("cmo_news_skip_item", { p_user: userId, p_run: runId, p_item: itemId }),
     async opportunitySource(userId, opportunityId) {
       const { data, error } = await admin
         .from("library_entries")
