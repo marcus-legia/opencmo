@@ -391,12 +391,19 @@ document field `post_plan.content_plan`.
       the known numbers of the code checks, so a draft may state them; the checker holds them to the summary.
     - `jobs.check.ts` (outside Part B's list) gains the news cases, and its earlier cases give the memory store a fresh
       story, because the fake plan's slot 0 is `required` (A5).
-- [ ] **B7. Card and autopilot.**
+- [x] **B7. Card and autopilot.**
   - When `body.news` is set, the card shows one line under the post: "News: <name>", a link to `url` ("See it on
     X", hidden when `url` is ""), and `why` as its title.
   - A card with `body.news` is not autopiloted. Autopilot is decided in SQL (the `approvals_autopilot` trigger and
     `post_autopilot_at`), so this is the migration `*_autopilot_skips_news.sql`. pgTAP: a post card with
     `news` in its snapshot gets no `auto_at` with autopilot on; one without still does.
+  - *As built:* the migration also puts the story on the post card's snapshot (`approval_snapshot_base`: name, link,
+    the picker's reason; a post without one keeps its old hash), because cards are built from snapshots, not item
+    bodies. The link is kept only when it is an X post (`https://x.com/i/status/<id>`), in SQL and again in
+    `cards.ts`. The line renders in `components/cards/bodies.tsx` (the post body; `ApprovalCard.tsx` only hosts it):
+    "News: <name>. Why it fits: <why> · See it on X", the reason visible, not a tooltip, so a phone shows it (review).
+    Autopilot and the card use one test, a story with a headline. The picker's and the morning fill's prompts carry
+    `NO_AI_SLOP`, since their words reach the card. pgTAP 369; `screens.check.ts` covers the card.
 - [ ] **B8.** Run `npm run typecheck`, `npm run build`, `npm run check:contracts`, `npm run db:reset`, `npm run db:test`,
   `cd packages/engine && pytest tests/test_check_deploy_env.py`, and the p4 acceptance e2e in fake mode. Then run the
   final `/code-review` on the whole of Part B's diff and fix what it finds.

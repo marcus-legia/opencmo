@@ -99,6 +99,15 @@ function captionsOf(rows: CaptionRow[] | undefined, clipId: string | null): Capt
   return rows.filter((c) => c.clip_id === clipId).map((c) => ({ id: c.caption_id, profile: c.profile, text: c.text, title: c.title }));
 }
 
+/** The post's X News story from its snapshot (Part B7); a malformed one is left off, never failing the card. */
+function newsOf(raw: unknown): { news?: NonNullable<PostBody["news"]> } {
+  const n = raw as { name?: unknown; url?: unknown; why?: unknown } | null | undefined;
+  const name = clip(str(n?.name), 120);
+  if (!name) return {};
+  const url = str(n?.url);
+  return { news: { name, url: /^https:\/\/x\.com\/i\/status\/[0-9]{1,19}$/.test(url) ? url : "", why: clip(str(n?.why), 200) } };
+}
+
 function build(row: ApprovalRow): Built | null {
   const s = row.snapshot;
   switch (row.kind) {
@@ -139,6 +148,7 @@ function build(row: ApprovalRow): Built | null {
           ...timed,
           ...(row.ref_kind === "content_item" ? { itemId: row.ref_id } : {}),
           ...(strings(s.photos).length ? { photos: strings(s.photos).slice(0, 4) } : {}),
+          ...newsOf(s.news),
         },
       };
     }

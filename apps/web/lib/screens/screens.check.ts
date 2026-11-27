@@ -155,6 +155,19 @@ check("cards: every wave-1 row maps to a valid card from its snapshot", () => {
   assert.equal(reply.body.kind === "reply" && reply.body.parts.length, 1, "a malformed score part is dropped");
 });
 
+check("cards: a post that opens from X News shows the story; a malformed one is left off (Part B7)", () => {
+  const news = (n: unknown) => approvalToCard(row("post", { kind: "post", platform: "X", idea: "Idea", text: "One line.", alternates: [], rationale: "", news: n }))!;
+  const rode = news({ name: "Anthropic ships a longer-running Claude", url: "https://x.com/i/status/123", why: "It is your field." });
+  ApprovalCardSchema.parse(rode);
+  assert.deepEqual(rode.body.kind === "post" && rode.body.news, { name: "Anthropic ships a longer-running Claude", url: "https://x.com/i/status/123", why: "It is your field." });
+  const odd = news({ name: "Story", url: "javascript:alert(1)", why: 3 });
+  ApprovalCardSchema.parse(odd);
+  assert.deepEqual(odd.body.kind === "post" && odd.body.news, { name: "Story", url: "", why: "" }, "only an X post link, never another address");
+  const noName = news({ url: "https://x.com/i/status/1" });
+  assert.equal(noName.body.kind === "post" && "news" in noName.body, false, "no headline, no story");
+  assert.equal(news(undefined).body.kind === "post" && "news" in news(undefined).body, false);
+});
+
 check("cards: a post planned with the calendar's label shows, with its platform's limits", () => {
   const post = (platform: string) =>
     approvalToCard(row("post", { kind: "post", platform, day: "2026-10-29", idea: "Idea", text: "One line.", alternates: [], rationale: "" }));

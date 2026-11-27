@@ -2361,7 +2361,7 @@ $$;
 CREATE FUNCTION public.approval_snapshot_base(p_ref_kind text, p_ref_id uuid) RETURNS jsonb
     LANGUAGE plpgsql STABLE SECURITY DEFINER
     SET search_path TO 'public'
-    AS $$
+    AS $_$
 declare
   v jsonb;
   v_captions jsonb;
@@ -2374,6 +2374,14 @@ begin
         'rationale', coalesce(body->>'rationale', reason))
         -- The founder's own photos are part of what they approve; a post without any keeps its old hash.
         || case when cardinality(photos) > 0 then jsonb_build_object('photos', to_jsonb(photos)) else '{}'::jsonb end
+        -- The X News story the draft opens from (Part B7): shown on the card and part of what the founder approves. A
+        -- post without one keeps its old hash.
+        || case when jsonb_typeof(body->'news') = 'object' and coalesce(body->'news'->>'name', '') <> '' then
+             jsonb_build_object('news', jsonb_build_object(
+               'name', left(body->'news'->>'name', 120),
+               'url', case when coalesce(body->'news'->>'url', '') ~ '^https://x\.com/i/status/[0-9]{1,19}$' then body->'news'->>'url' else '' end,
+               'why', left(coalesce(body->'news'->>'why', ''), 200)))
+           else '{}'::jsonb end
       into v from public.content_items where id = p_ref_id;
     when 'opportunity' then
       select jsonb_build_object('kind', 'reply', 'url', url, 'community', community, 'title', title,
@@ -2463,7 +2471,7 @@ begin
   end if;
   return v;
 end;
-$$;
+$_$;
 
 
 --
@@ -11415,8 +11423,10 @@ begin
     return null;
   end if;
   select * into v_item from public.content_items where id = p_ref_id and user_id = p_user and department = 'post';
-  -- A brief the founder wrote in the chat is theirs to read before it goes out.
-  if not found or v_item.status <> 'in_review' or v_item.body->>'source' = 'cmo_chat' then
+  -- A brief the founder wrote in the chat is theirs to read before it goes out. So is a post that opens from X News
+  -- (Part B7): the story's summary is written by a model and can be wrong.
+  if not found or v_item.status <> 'in_review' or v_item.body->>'source' = 'cmo_chat'
+     or (jsonb_typeof(v_item.body->'news') = 'object' and coalesce(v_item.body->'news'->>'name', '') <> '') then
     return null;
   end if;
   if not exists (select 1 from public.social_accounts a
@@ -11455,7 +11465,9 @@ CREATE FUNCTION public.post_autopilot_still_on(p_card public.approvals) RETURNS 
                   and p_card.snapshot->'proposed'->>'platform' = any (p.autopilot_platforms))
     and exists (select 1 from public.content_items c
                 where c.id = p_card.ref_id and c.user_id = p_card.user_id and c.status = 'in_review'
-                  and c.body->>'source' is distinct from 'cmo_chat')
+                  and c.body->>'source' is distinct from 'cmo_chat'
+                  -- The same test as the card's: a story with a headline (`approval_snapshot_base`).
+                  and not (jsonb_typeof(c.body->'news') = 'object' and coalesce(c.body->'news'->>'name', '') <> ''))
     and exists (select 1 from public.social_accounts a
                 where a.user_id = p_card.user_id and a.status = 'connected'
                   and a.platform = p_card.snapshot->'proposed'->>'platform'
