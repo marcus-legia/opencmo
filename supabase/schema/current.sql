@@ -4084,6 +4084,37 @@ $$;
 
 
 --
+-- Name: cmo_day_fill_idea(uuid, uuid, uuid, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cmo_day_fill_idea(p_user uuid, p_run uuid, p_item uuid, p_idea text) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_id uuid;
+  v_idea text := left(btrim(coalesce(p_idea, '')), 300);
+begin
+  if v_idea = '' then
+    return false;
+  end if;
+  if not exists (
+    select 1 from public.cmo_runs r
+    where r.id = p_run and r.user_id = p_user and r.kind = 'post_draft' and r.status = 'running'
+      and (r.input->>'item_id' = p_item::text or r.input->>'item_id' is null)
+  ) then
+    return false;
+  end if;
+  update public.content_items
+  set idea = v_idea, updated_at = now()
+  where id = p_item and user_id = p_user and department = 'post' and status = 'planned' and body->>'planned_from' = 'day_fill'
+  returning id into v_id;
+  return v_id is not null;
+end;
+$$;
+
+
+--
 -- Name: cmo_corrections; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -5197,16 +5228,19 @@ $$;
 
 
 --
--- Name: cmo_news_skip_item(uuid, uuid, uuid); Type: FUNCTION; Schema: public; Owner: -
+-- Name: cmo_news_skip_item(uuid, uuid, uuid, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.cmo_news_skip_item(p_user uuid, p_run uuid, p_item uuid) RETURNS boolean
+CREATE FUNCTION public.cmo_news_skip_item(p_user uuid, p_run uuid, p_item uuid, p_reason text DEFAULT 'no_news'::text) RETURNS boolean
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO ''
     AS $$
 declare
   v_id uuid;
 begin
+  if p_reason is null or p_reason not in ('no_news', 'no_source') then
+    raise exception 'Unknown skip reason.' using errcode = '22023';
+  end if;
   if not exists (
     select 1 from public.cmo_runs r
     where r.id = p_run and r.user_id = p_user and r.kind = 'post_draft' and r.status = 'running'
@@ -5217,7 +5251,7 @@ begin
   end if;
   update public.content_items
   set status = 'skipped', decided_at = now(), updated_at = now(),
-      body = coalesce(body, '{}'::jsonb) || jsonb_build_object('skip_reason', 'no_news')
+      body = coalesce(body, '{}'::jsonb) || jsonb_build_object('skip_reason', p_reason)
   where id = p_item and user_id = p_user and department = 'post' and status = 'planned'
   returning id into v_id;
   return v_id is not null;

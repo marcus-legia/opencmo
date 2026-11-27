@@ -17,6 +17,9 @@ import type { Documents, NewsMode, PostNews } from "../jobs/types";
 /** One plain line, cut by code point: a UTF-16 cut can leave half an emoji in a prompt. */
 const cut = (text: string, max: number) => Array.from(text.replace(/\s+/g, " ").trim()).slice(0, max).join("").trim();
 
+/** What the founder reads when a post that must ride the news found none: no draft, the credit back. */
+export const NO_NEWS = "No news story fits this post today, so nothing was written and your credit is back.";
+
 /** A snapshot older than this is not today's news any more. */
 export const NEWS_FRESH_HOURS = 6;
 export const MAX_CANDIDATES = 30;

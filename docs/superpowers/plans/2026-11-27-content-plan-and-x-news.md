@@ -348,7 +348,7 @@ document field `post_plan.content_plan`.
     skip of B6 step 3 needed an RPC (none existed for the runner), `cmo_news_skip_item`
     (`20270207040000_news_skip_item.sql`, pgTAP 368): only a running `post_draft` of the same founder that names the
     item, or names none, may skip it, and only while it is `planned`.
-- [ ] **B6. The draft** in `draft-post.ts`:
+- [x] **B6. The draft** in `draft-post.ts`:
   1. **`plan_idea` step** when `planned_from === 'day_fill'` and the idea is empty. One Sonnet call writes the idea
      and `news` mode from `content_plan`, the strategy, the Library and today's other items. It stays within the same
      run, and the founder is not charged again. If it picks no Library source, the mode is `required` (decision 7),
@@ -374,6 +374,23 @@ document field `post_plan.content_plan`.
      it, so a post with a story is written without sources. The Library still feeds `<sources>` when the item has
      them. A post with both uses the story as its opening and the sources as its body.
   7. **Save:** `body.news: PostNews` on the draft.
+  - *As built:*
+    - A founder's brief (and a thread, which only the chat asks for) is `none`: it is written as asked.
+    - **A brief's and the first week's posts need neither a source nor a story, even when marked `required`** (A5
+      says they "need neither"): a new founder's first drafts must not wait for the news. Their mark means "open from
+      a story when one fits".
+    - The refund reason: `required` with no story says NO_NEWS and skips the item (`no_news`). A post with neither a
+      source nor a story says NO_LIBRARY (a scan would give it a source), as before; only the morning fill's item is
+      skipped then (`no_source`), because it exists for today only. Other items keep waiting for a scan.
+    - `plan_idea` keeps the idea it plans on the item through `cmo_day_fill_idea` (same migration as the skip):
+      `cmo_save_draft` keeps an item's idea, so the card and the next fill's `<today>` would read the stand-in.
+    - A failed pick (a store read or the model) is no story, never a failed draft.
+    - "Already used" news is read from drafted posts only (in review, approved, published): the week's future planned
+      items would push recent drafts past the read limit (review).
+    - The checker gets `<content_plan>` and `<news>`; the fix round keeps "Open from <news>". The story's numbers join
+      the known numbers of the code checks, so a draft may state them; the checker holds them to the summary.
+    - `jobs.check.ts` (outside Part B's list) gains the news cases, and its earlier cases give the memory store a fresh
+      story, because the fake plan's slot 0 is `required` (A5).
 - [ ] **B7. Card and autopilot.**
   - When `body.news` is set, the card shows one line under the post: "News: <name>", a link to `url` ("See it on
     X", hidden when `url` is ""), and `why` as its title.

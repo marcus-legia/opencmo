@@ -410,10 +410,13 @@ export interface CmoStore {
    */
   newsStories(hours: number): Promise<(import("../news/pick").NewsCandidate & { relevant: boolean })[]>;
   /**
-   * Part B6: a planned post that must ride the news and found none today is skipped (`cmo_news_skip_item`), so it does
-   * not take a later day's draft. False when the item is no longer planned, or not this run's.
+   * Part B6: a planned post that must ride the news and found none today, or the morning fill's post with neither a
+   * source nor a story, is skipped (`cmo_news_skip_item`), so it does not take a later day's draft. False when the item
+   * is no longer planned, or not this run's.
    */
-  skipForNoNews(userId: string, runId: string, itemId: string): Promise<boolean>;
+  skipForNoNews(userId: string, runId: string, itemId: string, reason?: "no_news" | "no_source"): Promise<boolean>;
+  /** Part B6: the morning fill's item keeps the idea its draft planned (`cmo_day_fill_idea`); false when not a fill. */
+  saveDayFillIdea(userId: string, runId: string, itemId: string, idea: string): Promise<boolean>;
   /**
    * Wave 3 A3: the scan's reach checks (`cmo_save_reach`). SQL works the level out from the checks (Hacker News never
    * has DMs) and keeps a `dm` draft only for a DM-ready person without one, at most 20 a day.

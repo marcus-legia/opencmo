@@ -300,14 +300,23 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
       const since = Date.now() - hours * 3_600_000;
       return news.filter((r) => Date.parse(r.takenAt) >= since).sort((a, b) => b.takenAt.localeCompare(a.takenAt));
     },
-    async skipForNoNews(userId, runId, itemId) {
+    async skipForNoNews(userId, runId, itemId, reason = "no_news") {
       // As `cmo_news_skip_item`: a running draft of this founder that names this item, or names none.
       const item = items.find((i) => i.id === itemId && i.department === "post" && i.status === "planned");
       const run = runs.find((r) => r.id === runId && r.user_id === userId && r.kind === "post_draft" && r.status === "running");
       if (!item || !run || (run.input?.item_id !== undefined && run.input.item_id !== itemId)) return false;
       item.status = "skipped";
       item.decided_at = new Date().toISOString();
-      item.body = { ...(item.body ?? {}), skip_reason: "no_news" };
+      item.body = { ...(item.body ?? {}), skip_reason: reason };
+      return true;
+    },
+    async saveDayFillIdea(userId, runId, itemId, idea) {
+      // As `cmo_day_fill_idea`: a running draft of this founder, the fill's own planned item, a non-empty idea.
+      const item = items.find((i) => i.id === itemId && i.department === "post" && i.status === "planned" && i.body?.planned_from === "day_fill");
+      const run = runs.find((r) => r.id === runId && r.user_id === userId && r.kind === "post_draft" && r.status === "running");
+      const text = idea.trim().slice(0, 300);
+      if (!item || !run || !text || (run.input?.item_id !== undefined && run.input.item_id !== itemId)) return false;
+      item.idea = text;
       return true;
     },
     async libraryTopThemes(_u, days = 14, limit = 5) {

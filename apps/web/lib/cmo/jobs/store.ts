@@ -306,7 +306,8 @@ export function supabaseStore(admin: BaseClient): CmoStore {
         relevant: r.relevant,
       }));
     },
-    skipForNoNews: (userId, runId, itemId) => rpc<boolean>("cmo_news_skip_item", { p_user: userId, p_run: runId, p_item: itemId }),
+    skipForNoNews: (userId, runId, itemId, reason = "no_news") => rpc<boolean>("cmo_news_skip_item", { p_user: userId, p_run: runId, p_item: itemId, p_reason: reason }),
+    saveDayFillIdea: (userId, runId, itemId, idea) => rpc<boolean>("cmo_day_fill_idea", { p_user: userId, p_run: runId, p_item: itemId, p_idea: idea }),
     async opportunitySource(userId, opportunityId) {
       const { data, error } = await admin
         .from("library_entries")
