@@ -19076,6 +19076,27 @@ $$;
 
 
 --
+-- Name: x_news_purge(integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.x_news_purge(p_days integer DEFAULT 14) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_rows integer;
+begin
+  if p_days is null or p_days < 1 then
+    raise exception 'Keep at least one day of news.' using errcode = '22023';
+  end if;
+  delete from public.x_news_stories where taken_at < now() - make_interval(days => p_days);
+  get diagnostics v_rows = row_count;
+  return v_rows;
+end;
+$$;
+
+
+--
 -- Name: zernio_profile_save(uuid, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -20342,6 +20363,33 @@ ALTER TABLE public.write_budget_ledger ALTER COLUMN id ADD GENERATED ALWAYS AS I
 
 
 --
+-- Name: x_news_stories; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.x_news_stories (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    taken_at timestamp with time zone NOT NULL,
+    story_id text NOT NULL,
+    name text NOT NULL,
+    summary text DEFAULT ''::text NOT NULL,
+    hook text DEFAULT ''::text NOT NULL,
+    category text DEFAULT ''::text NOT NULL,
+    post_ids text[] DEFAULT '{}'::text[] NOT NULL,
+    story_updated_at timestamp with time zone,
+    relevant boolean DEFAULT false NOT NULL,
+    topic_key text DEFAULT ''::text NOT NULL,
+    CONSTRAINT x_news_stories_category_check CHECK ((char_length(category) <= 60)),
+    CONSTRAINT x_news_stories_check CHECK (((NOT relevant) OR (topic_key <> ''::text))),
+    CONSTRAINT x_news_stories_hook_check CHECK ((char_length(hook) <= 400)),
+    CONSTRAINT x_news_stories_name_check CHECK (((char_length(name) >= 1) AND (char_length(name) <= 120))),
+    CONSTRAINT x_news_stories_post_ids_check CHECK ((cardinality(post_ids) <= 10)),
+    CONSTRAINT x_news_stories_story_id_check CHECK ((story_id ~ '^[0-9]{1,19}$'::text)),
+    CONSTRAINT x_news_stories_summary_check CHECK ((char_length(summary) <= 1000)),
+    CONSTRAINT x_news_stories_topic_key_check CHECK ((topic_key ~ '^[a-z0-9-]{0,60}$'::text))
+);
+
+
+--
 -- Name: zernio_profiles; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -21313,6 +21361,22 @@ ALTER TABLE ONLY public.worker_operations
 
 ALTER TABLE ONLY public.write_budget_ledger
     ADD CONSTRAINT write_budget_ledger_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: x_news_stories x_news_stories_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.x_news_stories
+    ADD CONSTRAINT x_news_stories_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: x_news_stories x_news_stories_taken_at_story_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.x_news_stories
+    ADD CONSTRAINT x_news_stories_taken_at_story_id_key UNIQUE (taken_at, story_id);
 
 
 --
@@ -24763,6 +24827,12 @@ ALTER TABLE public.worker_operations ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.write_budget_ledger ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: x_news_stories; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.x_news_stories ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: zernio_profiles; Type: ROW SECURITY; Schema: public; Owner: -

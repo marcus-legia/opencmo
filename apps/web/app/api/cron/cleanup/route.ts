@@ -126,10 +126,13 @@ async function run(request: NextRequest) {
   const { data: purged, error: purgeError } = await supabase.rpc("purge_expired_jobs", {
     p_job_ids: null,
   });
-  if (purgeError) console.error("[cron] xoá hàng project thất bại", purgeError.code);
+  if (purgeError) console.error("[cron] purging expired project rows failed", purgeError.code);
 
   const { error: limitsError } = await supabase.rpc("purge_stale_rate_limits");
   if (limitsError) console.error("[cron] purging rate_limits failed", limitsError.code);
+  // X News snapshots (Part B1): drafts read only the last six hours; two weeks is kept to look back at a card's story.
+  const { error: newsError } = await supabase.rpc("x_news_purge", { p_days: 14 });
+  if (newsError) console.error("[cron] purging x_news_stories failed", newsError.code);
 
   // Credits that nothing else gives back (review R5): runs parked by a pause over a week, and caption translations
   // whose request died before its own refund.

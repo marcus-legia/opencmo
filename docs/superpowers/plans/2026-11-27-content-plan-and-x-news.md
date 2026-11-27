@@ -278,10 +278,14 @@ document field `post_plan.content_plan`.
 - migration `*_x_news_stories.sql` with its pgTAP test
 - migration `*_autopilot_skips_news.sql` with its pgTAP test (B7: autopilot lives in SQL)
 
-- [ ] **B1. Table.** Create the table from Contracts, with RLS on, no policies, and no grant to `anon` or
+- [x] **B1. Table.** Create the table from Contracts, with RLS on, no policies, and no grant to `anon` or
   `authenticated`. Add an index on `(taken_at desc)`.
   - pgTAP: an authenticated user cannot select or insert, and the service role can.
   - Cleanup cron: delete rows older than 14 days.
+  - *As built:* no separate `taken_at` index: the `unique (taken_at, story_id)` btree starts with `taken_at` and serves
+    both the newest-snapshot read and the cleanup (review). A relevant story must carry a `topic_key`
+    (`check (not relevant or topic_key <> '')`), because drafts dedupe by it. The cleanup calls `x_news_purge(14)`, a
+    service-role definer function; the table is in `321_rls_no_policy_tables`.
 - [ ] **B2. X News client** in `lib/x/client.ts`. Server only, `X_BEARER_TOKEN` (app-only), base
   `https://api.x.com/2`. One function:
   - `searchNews(query, maxAgeHours = 24, max = 20)` →
