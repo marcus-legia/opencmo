@@ -201,6 +201,10 @@ export type PostNews = {
   rowId: string;
   /** `x_news_stories.topic_key`: the same news told by several stories shares it. */
   topicKey: string;
+  /** X's story id (Part B6): the same story keeps it across snapshots, whatever key each one gave it. */
+  storyId?: string;
+  /** When the draft rode it (ISO, Part B6): "taken in the last three days" counts from here, not the planned day. */
+  at?: string;
   /** At most 200 characters: the picker's reason, shown to the founder. */
   why: string;
 };
@@ -410,13 +414,24 @@ export interface CmoStore {
    */
   newsStories(hours: number): Promise<(import("../news/pick").NewsCandidate & { relevant: boolean })[]>;
   /**
-   * Part B6: a planned post that must ride the news and found none today, or the morning fill's post with neither a
-   * source nor a story, is skipped (`cmo_news_skip_item`), so it does not take a later day's draft. False when the item
+   * Part B6: a planned post that must ride the news and found none today (`no_news`), the morning fill's post with
+   * neither a source nor a story (`no_source`), or one whose news could not be read on its last chance
+   * (`news_unreadable`) is skipped (`cmo_news_skip_item`), so it does not take a later day's draft. False when the item
    * is no longer planned, or not this run's.
    */
-  skipForNoNews(userId: string, runId: string, itemId: string, reason?: "no_news" | "no_source"): Promise<boolean>;
+  skipForNoNews(userId: string, runId: string, itemId: string, reason?: "no_news" | "no_source" | "news_unreadable"): Promise<boolean>;
   /** Part B6: the morning fill's item keeps the idea its draft planned (`cmo_day_fill_idea`); false when not a fill. */
   saveDayFillIdea(userId: string, runId: string, itemId: string, idea: string): Promise<boolean>;
+  /**
+   * Part B6: holds a story's news (`topic_key`) for this post before it is written (`cmo_news_reserve`), so two drafts
+   * of one wave do not ride the same news. False when another recent post of the founder holds or rode it.
+   */
+  reserveNewsTopic(userId: string, runId: string, itemId: string, topicKey: string, storyId: string): Promise<boolean>;
+  /**
+   * Part B6: the news this founder's posts have taken (`cmo_news_taken`), by key and by X story id: drafted in the last
+   * three days and in review or out, or held now by a draft still running.
+   */
+  newsTaken(userId: string): Promise<{ keys: string[]; stories: string[] }>;
   /**
    * Wave 3 A3: the scan's reach checks (`cmo_save_reach`). SQL works the level out from the checks (Hacker News never
    * has DMs) and keeps a `dm` draft only for a DM-ready person without one, at most 20 a day.

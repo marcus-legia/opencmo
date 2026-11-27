@@ -27,7 +27,7 @@ import { PASS_SCORE, quoteIn, reachScore, scoreThread, threadBlock, timingScore 
 import { parseRedditSearch, type RedditThread } from "../social/reddit";
 import { memoryStore } from "./memory-store";
 import { isoDay, type Documents, type ItemRow, type MemoryEvent, type PostNews } from "./types";
-import type { NewsCandidate } from "../news/pick";
+import { NEWS_UNREADABLE, NO_NEWS, type NewsCandidate } from "../news/pick";
 
 /** A memory store whose Library holds one conversation (wave 3 B3): the week plan writes posts only from it. */
 function withLibrary(m: ReturnType<typeof memoryStore>): ReturnType<typeof memoryStore> {
@@ -39,7 +39,7 @@ function withLibrary(m: ReturnType<typeof memoryStore>): ReturnType<typeof memor
 
 /** A fresh X News story about the fixture's field (Part B6): the fake plan's slot 0 rides the news each day (A5). */
 function withNews(m: ReturnType<typeof memoryStore>): ReturnType<typeof memoryStore> {
-  m.news.push({ rowId: "fixture-news", name: "Freelancers report longer payment delays", summary: "Freelancers on X say clients now take longer to pay invoices.", hook: "", topicKey: "freelancer-payment-delays", postIds: [], takenAt: new Date().toISOString(), storyUpdatedAt: null, relevant: true });
+  m.news.push({ rowId: "fixture-news", storyId: "1994000000000000101", name: "Freelancers report longer payment delays", summary: "Freelancers on X say clients now take longer to pay invoices.", hook: "", topicKey: "freelancer-payment-delays", postIds: [], takenAt: new Date().toISOString(), storyUpdatedAt: null, relevant: true });
   return m;
 }
 
@@ -216,19 +216,19 @@ async function main() {
   assert.equal(pickDueItem(named, "2026-10-05", named[1]!.id)?.day, "2026-10-04", "the item the schedule named wins");
   assert.equal(pickDueItem(named, "2026-10-05", "gone"), null, "a named item no longer planned is not swapped for another");
 
-  // W1 rồi W2 chạy hết hàng đợi với LLM giả.
+  // W1 then W2 drain the queue with the fake model.
   const mem = withLibrary(memoryStore(docs));
   const w1 = mem.enqueue("plan_week");
   const w2 = mem.enqueue("post_draft");
   // Today's slot 0 rides the news in the fake plan (A5), so the snapshot has one fresh story about the founder's field.
-  mem.news.push({ rowId: "w2-news", name: "Freelancers report longer payment delays", summary: "Freelancers on X say clients now take longer to pay invoices.", hook: "", topicKey: "freelancer-payment-delays", postIds: [], takenAt: new Date().toISOString(), storyUpdatedAt: null, relevant: true });
-  assert.equal(await drainCmoQueue(mem.store), 2, "chạy hai lượt");
-  assert.equal(w1.status, "done", `W1 xong (${w1.error})`);
-  assert.ok(w1.steps.every((s) => s.status === "done"), "mọi bước W1 xong");
+  mem.news.push({ rowId: "w2-news", storyId: "1994000000000000102", name: "Freelancers report longer payment delays", summary: "Freelancers on X say clients now take longer to pay invoices.", hook: "", topicKey: "freelancer-payment-delays", postIds: [], takenAt: new Date().toISOString(), storyUpdatedAt: null, relevant: true });
+  assert.equal(await drainCmoQueue(mem.store), 2, "two runs");
+  assert.equal(w1.status, "done", `W1 is done (${w1.error})`);
+  assert.ok(w1.steps.every((s) => s.status === "done"), "every W1 step is done");
   assert.deepEqual(w1.steps.map((s) => s.tool), ["read_doc", "get_results", "plan_items", "write_calendar"]);
-  assert.ok(mem.items.filter((i) => i.status === "planned").length >= 5, "lịch có ít nhất 5 mục");
+  assert.ok(mem.items.filter((i) => i.status === "planned").length >= 5, "the calendar has at least five items");
 
-  assert.equal(w2.status, "done", `W2 xong (${w2.error})`);
+  assert.equal(w2.status, "done", `W2 is done (${w2.error})`);
   // Part B6: a post looks for today's news before it is written.
   assert.deepEqual(w2.steps.map((s) => s.tool), ["next_due_item", "read_doc", "pick_news", "draft_post", "check_post", "create_card"]);
   const card = mem.items.find((i) => i.status === "in_review");
@@ -245,7 +245,7 @@ async function main() {
   {
     const now = new Date().toISOString();
     const story = (over: Partial<NewsCandidate & { relevant: boolean }> = {}) => ({
-      rowId: "n1", name: "Anthropic ships a longer-running Claude", summary: "Anthropic released a model on November 26 that runs coding tasks for 7 hours.",
+      rowId: "n1", storyId: "1994000000000000001", name: "Anthropic ships a longer-running Claude", summary: "Anthropic released a model on November 26 that runs coding tasks for 7 hours.",
       hook: "", topicKey: "anthropic-claude-release", postIds: ["123"], takenAt: now, storyUpdatedAt: now, relevant: true, ...over,
     });
     const newsItem = (id: string, body: Record<string, unknown>, idea = "Today's AI news, from how we chase invoices") =>
@@ -257,8 +257,10 @@ async function main() {
       return run;
     };
 
-    // No story: no draft, the credit back, and the item skipped so it does not take tomorrow's draft.
+    // A fresh snapshot with no story that fits: no draft, the credit back, and the item skipped so it does not take
+    // tomorrow's draft.
     const none = memoryStore(docs);
+    none.news.push(story({ rowId: "sport-only", storyId: "1994000000000000099", name: "Chiefs win", topicKey: "", relevant: false }));
     none.items.push(newsItem("req-none", { slot: 0, targets: ["x"], news: "required" }));
     const r1 = await draftOne(none, "req-none");
     assert.equal(r1.status, "done", `no story is not an error (${r1.error})`);
@@ -269,7 +271,7 @@ async function main() {
 
     // A fresh story: the post rides it, the card keeps it, and the writer and the checker read it as data.
     const fresh = memoryStore(docs);
-    fresh.news.push(story(), story({ rowId: "sport", name: "Chiefs win", topicKey: "", relevant: false }));
+    fresh.news.push(story(), story({ rowId: "sport", storyId: "1994000000000000005", name: "Chiefs win", topicKey: "", relevant: false }));
     fresh.items.push(newsItem("req-news", { slot: 0, targets: ["x"], news: "required" }));
     const asks: string[] = [];
     const r2 = await draftOne(fresh, "req-news", asks);
@@ -277,23 +279,48 @@ async function main() {
     const rode = fresh.items.find((i) => i.id === "req-news")!;
     assert.equal(rode.status, "in_review");
     const news = rode.body.news as PostNews;
-    assert.deepEqual([news.rowId, news.topicKey, news.url], ["n1", "anthropic-claude-release", "https://x.com/i/status/123"]);
+    assert.deepEqual([news.rowId, news.topicKey, news.storyId, news.url], ["n1", "anthropic-claude-release", "1994000000000000001", "https://x.com/i/status/123"]);
+    assert.ok(news.at && Date.now() - Date.parse(news.at) < 60_000, "the card records when it rode the story");
     assert.ok(r2.steps.find((s) => s.tool === "pick_news")?.label.includes("Anthropic"), "the step names the news");
     assert.ok(asks.some((p) => p.includes("<news ") && p.includes("runs coding tasks for 7 hours")), "the writer reads the story");
     assert.ok(asks.filter((p) => p.includes("<stories>")).every((p) => !p.includes("Chiefs win")), "an off-topic story is never offered");
 
-    // A snapshot older than six hours is not today's news.
+    // No snapshot in six hours: the news could not be read. Nothing written, and a post due today is left for tomorrow.
     const stale = memoryStore(docs);
     stale.news.push(story({ takenAt: new Date(Date.now() - 7 * 3_600_000).toISOString() }));
     stale.items.push(newsItem("req-stale", { slot: 0, targets: ["x"], news: "required" }));
-    assert.equal(((await draftOne(stale, "req-stale")).output as { refund?: boolean }).refund, true);
+    assert.equal(((await draftOne(stale, "req-stale")).output as { reason?: string }).reason, NEWS_UNREADABLE);
+    assert.equal(stale.items.find((i) => i.id === "req-stale")!.status, "planned");
 
     // News a recent post already rode is not offered again.
     const twice = memoryStore(docs);
     twice.news.push(story());
-    twice.items.push({ ...newsItem("rode", { news: { topicKey: "anthropic-claude-release" } }), status: "in_review" });
+    twice.items.push({ ...newsItem("rode", { news: { topicKey: "anthropic-claude-release", storyId: "1994000000000000001", at: new Date().toISOString() } }), status: "in_review" });
     twice.items.push(newsItem("req-twice", { slot: 1, targets: ["x"], news: "required" }));
     assert.equal(((await draftOne(twice, "req-twice")).output as { refund?: boolean }).refund, true, "the only story was ridden today");
+
+    // A story another draft of the same wave reserved is not taken: two posts never ride the same news on one day.
+    const wave = memoryStore(docs);
+    wave.news.push(story());
+    // The draft beside it is still running and holds the story.
+    const besideRun = wave.enqueue("post_draft", { source: "schedule", item_id: "beside" });
+    besideRun.status = "running";
+    wave.items.push(newsItem("beside", { slot: 0, targets: ["x"], news: "required", news_topic: "anthropic-claude-release", news_topic_run: besideRun.id }));
+    wave.items.push(newsItem("req-wave", { slot: 1, targets: ["x"], news: "required" }));
+    const rw = await draftOne(wave, "req-wave");
+    assert.equal((rw.output as { reason?: string }).reason, NO_NEWS, "the only story was reserved by the draft beside it");
+    // Once that draft ends (failed, here), its hold ends with it: the story is free again.
+    besideRun.status = "failed";
+    wave.items.push(newsItem("req-after", { slot: 2, targets: ["x"], news: "required" }));
+    assert.equal(((await draftOne(wave, "req-after")).output as { refund?: boolean } | null)?.refund, undefined, "a failed draft holds nothing");
+
+    // A pick that fails (the store cannot read the news) is not "no story fits": the post stays planned for later.
+    const broken = memoryStore(docs);
+    broken.items.push(newsItem("req-broken", { slot: 0, targets: ["x"], news: "required" }));
+    broken.store.newsStories = async () => { throw new Error("x_news_stories: connection reset"); };
+    const rb = await draftOne(broken, "req-broken");
+    assert.equal((rb.output as { refund?: boolean; reason?: string }).reason, NEWS_UNREADABLE);
+    assert.equal(broken.items.find((i) => i.id === "req-broken")!.status, "planned", "not skipped for a failed read");
 
     // A post that keeps off the news never looks for one; without a source it is not written.
     const off = memoryStore(docs);

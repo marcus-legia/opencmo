@@ -288,13 +288,14 @@ export function supabaseStore(admin: BaseClient): CmoStore {
       const since = new Date(Date.now() - hours * 3_600_000).toISOString();
       const { data, error } = await admin
         .from("x_news_stories")
-        .select("id, name, summary, hook, topic_key, post_ids, taken_at, story_updated_at, relevant")
+        .select("id, story_id, name, summary, hook, topic_key, post_ids, taken_at, story_updated_at, relevant")
         .gte("taken_at", since)
         .order("taken_at", { ascending: false })
         .limit(300);
       if (error) throw new Error(`newsStories: ${error.message}`);
-      return ((data ?? []) as { id: string; name: string; summary: string; hook: string; topic_key: string; post_ids: string[] | null; taken_at: string; story_updated_at: string | null; relevant: boolean }[]).map((r) => ({
+      return ((data ?? []) as { id: string; story_id: string; name: string; summary: string; hook: string; topic_key: string; post_ids: string[] | null; taken_at: string; story_updated_at: string | null; relevant: boolean }[]).map((r) => ({
         rowId: r.id,
+        storyId: r.story_id,
         name: r.name,
         summary: r.summary,
         hook: r.hook,
@@ -307,6 +308,13 @@ export function supabaseStore(admin: BaseClient): CmoStore {
       }));
     },
     skipForNoNews: (userId, runId, itemId, reason = "no_news") => rpc<boolean>("cmo_news_skip_item", { p_user: userId, p_run: runId, p_item: itemId, p_reason: reason }),
+    async newsTaken(userId) {
+      const taken = await rpc<{ keys?: unknown; stories?: unknown } | null>("cmo_news_taken", { p_user: userId });
+      const list = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
+      return { keys: list(taken?.keys), stories: list(taken?.stories) };
+    },
+    reserveNewsTopic: (userId, runId, itemId, topicKey, storyId) =>
+      rpc<boolean>("cmo_news_reserve", { p_user: userId, p_run: runId, p_item: itemId, p_topic: topicKey, p_story: storyId }),
     saveDayFillIdea: (userId, runId, itemId, idea) => rpc<boolean>("cmo_day_fill_idea", { p_user: userId, p_run: runId, p_item: itemId, p_idea: idea }),
     async opportunitySource(userId, opportunityId) {
       const { data, error } = await admin

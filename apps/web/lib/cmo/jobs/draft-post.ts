@@ -37,7 +37,7 @@ import type { LibraryTopTheme } from "../library";
 import { libraryBlock, libraryRefs, NO_LIBRARY, sourcesBlock, sourcesFor, storedSources, themeSources } from "./library-sources";
 import { contentPlanBlock, withoutContentPlan } from "./plan-week";
 import {
-  acceptPick,
+  acceptPicks,
   candidatesBlock,
   fakePick,
   freshCandidates,
@@ -45,13 +45,13 @@ import {
   newsBlock,
   newsModeOf,
   newsNumbers,
+  NEWS_UNREADABLE,
   NO_NEWS,
   PICK_SYSTEM,
   PickSchema,
   postBlock,
   toPostNews,
-  usedTopicKeys,
-  type NewsCandidate,
+  type AcceptedPick,
 } from "../news/pick";
 
 /** The Library theme an older item (planned before sources) is closest to: most words in common, else the top one. */
@@ -188,7 +188,8 @@ export async function draftPost(ctx: JobContext): Promise<JobOutput> {
   const fromFounder = Boolean(asked) || due?.body?.source === "cmo_chat";
   // Part B6: how this post uses today's news. A founder's brief (and a thread, which only the chat asks for) is
   // written as they asked, without a story.
-  let mode: NewsMode = fromFounder || run.input.thread === true ? "none" : newsModeOf(due?.body);
+  // A post with no calendar item (none was due) has nothing to hold a story on, so it never rides one.
+  let mode: NewsMode = !due || fromFounder || run.input.thread === true ? "none" : newsModeOf(due.body);
   // Wave 3 B3: the conversations this post is written from. The plan's own; for an item planned before them, the
   // Library theme closest to its idea.
   let planned = storedSources(due?.body);
@@ -238,40 +239,58 @@ export async function draftPost(ctx: JobContext): Promise<JobOutput> {
   const plannedWithout = due?.body?.planned_from === "brief" || due?.body?.planned_from === "onboarding";
   const needsNothing = fromFounder || plannedWithout || run.input.source === "onboarding";
 
-  // Part B5/B6: the story this post opens from, picked from the newest snapshot for this founder and this post. A
-  // failed pick is no story, never a failed draft: a hook post is still written from its sources.
-  let news: { candidate: NewsCandidate; why: string; angle: string } | null = null;
+  // Part B5/B6: the story this post opens from, picked from the newest snapshot for this founder and this post, then
+  // reserved on the item so a draft of the same wave running beside it takes another story.
+  // A pick that failed (a store read or the model) is not "no story fits": the post is not skipped for it.
+  let news: AcceptedPick | null = null;
+  let pickFailed = false;
   if (mode !== "none") {
-    news = await ctx.step(
+    const picked = await ctx.step(
       "pick_news",
       "Picking today's news",
-      async () => {
+      async (): Promise<{ pick: AcceptedPick | null; failed: boolean }> => {
         try {
-          const fresh = freshCandidates(await store.newsStories(NEWS_FRESH_HOURS), new Date());
-          // Drafted posts only: the week's future planned items would push recent drafts past the limit.
-          const drafted = await store.items(run.user_id, { department: "post", statuses: ["in_review", "approved", "published"], limit: 50 });
-          const used = usedTopicKeys(drafted, isoDay(-2));
-          const candidates = fresh.filter((c) => !used.has(c.topicKey));
-          if (!candidates.length) return null;
+          const rows = await store.newsStories(NEWS_FRESH_HOURS);
+          // No snapshot in six hours means the news could not be read (the snapshot failed), not that none fits.
+          if (!rows.length) return { pick: null, failed: true };
+          // The news this founder's posts rode lately or hold now is left out before the picker sees the list, so a
+          // story still free is never missed because the picker named only taken ones.
+          const candidates = freshCandidates(rows, new Date(), await store.newsTaken(run.user_id));
+          if (!candidates.length) return { pick: null, failed: false };
           const answer = await ctx.think({
             title: `Pick the news today's post opens from: "${idea.slice(0, 100)}"`,
             fake: () => fakePick(candidates),
             agent: "news_picker",
             system: PICK_SYSTEM,
-            prompt: `${documentsBlock(withoutContentPlan(docs))}\n\n${contentPlanBlock(docs)}\n\n${postBlock(idea, mode)}\n\n${candidatesBlock(candidates)}\n\nPick the story this post opens from, or none.`,
+            prompt: `${documentsBlock(withoutContentPlan(docs))}\n\n${contentPlanBlock(docs)}\n\n${postBlock(idea, mode)}\n\n${candidatesBlock(candidates)}\n\nPick up to three stories this post could open from, best first, or none.`,
             schema: PickSchema,
-            maxTokens: 1500,
+            maxTokens: 2000,
             label: "pick_news",
             failure: "We could not pick today's news.",
           });
-          return acceptPick(answer, candidates);
+          // The first story no other post of this founder holds: a draft beside this one may have reserved the best.
+          // A reserve that errors is tried on the next pick. When none was reserved and any errored, the read failed: a
+          // story may have been free, so the post is not skipped as "none fits".
+          const picks = acceptPicks(answer, candidates);
+          let errors = 0;
+          for (const pick of picks) {
+            const held = await store.reserveNewsTopic(run.user_id, run.id, due!.id, pick.candidate.topicKey, pick.candidate.storyId).catch((error) => {
+              console.error(`[cmo] post_draft ${run.id}: news not reserved`, error instanceof Error ? error.message : error);
+              errors += 1;
+              return false;
+            });
+            if (held) return { pick, failed: false };
+          }
+          return { pick: null, failed: errors > 0 };
         } catch (error) {
           console.error(`[cmo] post_draft ${run.id}: news pick failed`, error instanceof Error ? error.message : error);
-          return null;
+          return { pick: null, failed: true };
         }
       },
-      (n) => (n ? `News: ${n.candidate.name}` : "No news fits this post today"),
+      (r) => (r.pick ? `News: ${r.pick.candidate.name}` : r.failed ? "Could not read today's news" : "No news fits this post today"),
     );
+    news = picked.pick;
+    pickFailed = picked.failed;
   }
 
   // Decision 7: a post rests on a Library source or a story; a required post needs its story whatever else it has.
@@ -280,12 +299,18 @@ export async function draftPost(ctx: JobContext): Promise<JobOutput> {
   if (!news && !needsNothing && (mode === "required" || !sources.length)) {
     // A required post found no story; any other found neither a story nor a source, which a scan would give it.
     const noNews = mode === "required";
-    const reason = noNews ? NO_NEWS : NO_LIBRARY;
-    // Skipped so it does not come back tomorrow and take a draft from that day's own posts: a required post, and the
-    // morning fill's post, which exists for today only. Another post keeps waiting for a scan, as before.
-    const skip = due && (noNews || dayFill) ? due : null;
-    await ctx.step(noNews ? "news" : "library", reason, async () =>
-      skip ? store.skipForNoNews(run.user_id, run.id, skip.id, noNews ? "no_news" : "no_source").catch((error) => (console.error(`[cmo] post_draft ${run.id}: not skipped`, error), false)) : false,
+    // "Could not read the news" where the news was what the post needed: a required post, or any post the morning fill
+    // made. A post that lacks a source says so instead, since a scan, not the news, is what it waits for.
+    const unreadable = pickFailed && (noNews || dayFill);
+    const reason = unreadable ? NEWS_UNREADABLE : noNews ? NO_NEWS : NO_LIBRARY;
+    // Skipped so it does not come back tomorrow and take a draft from that day's own posts: a required post that found
+    // no story, and the morning fill's post, which exists for today only (a failed read included). A required post
+    // whose pick failed gets one more try, on the next day's run, if its day is today; another post keeps waiting for a
+    // scan, as before.
+    const skip = due && (dayFill || (noNews && (!pickFailed || due.day < today))) ? due : null;
+    const skipReason = unreadable ? "news_unreadable" : noNews ? "no_news" : "no_source";
+    await ctx.step(noNews || unreadable ? "news" : "library", reason, async () =>
+      skip ? store.skipForNoNews(run.user_id, run.id, skip.id, skipReason).catch((error) => (console.error(`[cmo] post_draft ${run.id}: not skipped`, error), false)) : false,
     );
     return { refund: true, reason };
   }

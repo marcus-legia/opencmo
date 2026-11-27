@@ -78,6 +78,27 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
   };
   let seq = 0;
   const id = () => `id-${++seq}`;
+  /**
+   * As `news_taken_by`, by key and by story: news ridden by a post in review or out, drafted in the last three days, or
+   * held by a draft still running. One founder per memory store, and no leases: a running run holds.
+   */
+  const takenNews = (except?: string) => {
+    const live = (runId: unknown) => runs.some((r) => r.id === runId && r.status === "running");
+    const since = Date.now() - 3 * 86_400_000;
+    const keys = new Set<string>();
+    const stories = new Set<string>();
+    const add = (k: unknown, st: unknown) => {
+      if (typeof k === "string" && k) keys.add(k);
+      if (typeof st === "string" && st) stories.add(st);
+    };
+    for (const i of items) {
+      if (i.id === except || i.department !== "post") continue;
+      const rode = i.body?.news as { topicKey?: unknown; storyId?: unknown; at?: unknown } | undefined;
+      if (["in_review", "approved", "published"].includes(i.status) && rode && typeof rode.at === "string" && Date.parse(rode.at) > since) add(rode.topicKey, rode.storyId);
+      if (["planned", "drafting"].includes(i.status) && live(i.body?.news_topic_run)) add(i.body?.news_topic, i.body?.news_story);
+    }
+    return { keys, stories };
+  };
   const store: CmoStore = {
     async claim(runId) {
       const run = runs.find((r) => r.status === "queued" && (!runId || r.id === runId) && (!r.notBefore || r.notBefore <= Date.now()));
@@ -304,18 +325,32 @@ export function memoryStore(docs: Documents, memories: string[] = ["Skipped the 
       // As `cmo_news_skip_item`: a running draft of this founder that names this item, or names none.
       const item = items.find((i) => i.id === itemId && i.department === "post" && i.status === "planned");
       const run = runs.find((r) => r.id === runId && r.user_id === userId && r.kind === "post_draft" && r.status === "running");
-      if (!item || !run || (run.input?.item_id !== undefined && run.input.item_id !== itemId)) return false;
+      if (!item || !run || (run.input?.item_id != null && run.input.item_id !== itemId)) return false;
       item.status = "skipped";
       item.decided_at = new Date().toISOString();
       item.body = { ...(item.body ?? {}), skip_reason: reason };
+      return true;
+    },
+    async newsTaken() {
+      const t = takenNews();
+      return { keys: [...t.keys], stories: [...t.stories] };
+    },
+    async reserveNewsTopic(userId, runId, itemId, topicKey, storyId) {
+      // As `cmo_news_reserve`: refused when another recent, not skipped post holds or rode the same news.
+      const item = items.find((i) => i.id === itemId && i.department === "post" && (i.status === "planned" || i.status === "drafting"));
+      const run = runs.find((r) => r.id === runId && r.user_id === userId && r.kind === "post_draft" && r.status === "running");
+      if (!item || !run || (run.input?.item_id != null && run.input.item_id !== itemId)) return false;
+      const taken = takenNews(itemId);
+      if (taken.keys.has(topicKey) || taken.stories.has(storyId)) return false;
+      item.body = { ...(item.body ?? {}), news_topic: topicKey, news_story: storyId, news_topic_run: runId };
       return true;
     },
     async saveDayFillIdea(userId, runId, itemId, idea) {
       // As `cmo_day_fill_idea`: a running draft of this founder, the fill's own planned item, a non-empty idea.
       const item = items.find((i) => i.id === itemId && i.department === "post" && i.status === "planned" && i.body?.planned_from === "day_fill");
       const run = runs.find((r) => r.id === runId && r.user_id === userId && r.kind === "post_draft" && r.status === "running");
-      const text = idea.trim().slice(0, 300);
-      if (!item || !run || !text || (run.input?.item_id !== undefined && run.input.item_id !== itemId)) return false;
+      const text = Array.from(idea.trim()).slice(0, 300).join("");
+      if (!item || !run || !text || (run.input?.item_id != null && run.input.item_id !== itemId)) return false;
       item.idea = text;
       return true;
     },

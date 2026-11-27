@@ -114,7 +114,7 @@ export function PostBody({
         {body.news ? (
           <span className="v2-card-news" data-testid="post-news">
             News: {body.news.name}
-            {body.news.why ? `. Why it fits: ${body.news.why}` : null}
+            {body.news.why ? `${/[.!?]$/.test(body.news.name) ? "" : "."} Why it fits: ${body.news.why}` : null}
             {body.news.url ? (
               <>
                 {" · "}

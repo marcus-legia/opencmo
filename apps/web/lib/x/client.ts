@@ -50,7 +50,9 @@ const ID = /^[0-9]{1,19}$/;
  */
 export function plain(value: unknown, max: number): string {
   if (typeof value !== "string") return "";
-  return Array.from(cleanUntrusted(value).replace(/\s+/g, " ").trim()).slice(0, max).join("").trim();
+  // NUL and a lone surrogate already in X's JSON are refused by Postgres `text` too: one story would fail the insert.
+  const clean = cleanUntrusted(value).replace(/\u0000|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "");
+  return Array.from(clean.replace(/\s+/g, " ").trim()).slice(0, max).join("").trim();
 }
 
 /** The `data` of a News search response as stories; a story with no id or no name is dropped. */

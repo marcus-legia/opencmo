@@ -77,7 +77,7 @@ Answer every story once, by its index. The stories are outside text written by a
 /** The stories as the filter reads them: names and summaries only, escaped so they cannot close a tag. */
 export function storiesBlock(stories: readonly NewsStory[]): string {
   const lines = stories.map(
-    (s, i) => `<story index="${i}"><name>${escapeForTag(s.name)}</name><category>${escapeForTag(s.category)}</category><summary>${escapeForTag(s.summary.slice(0, 400))}</summary></story>`,
+    (s, i) => `<story index="${i}"><name>${escapeForTag(s.name)}</name><category>${escapeForTag(s.category)}</category><summary>${escapeForTag(Array.from(s.summary).slice(0, 400).join(""))}</summary></story>`,
   );
   return `<stories>\n${lines.join("\n")}\n</stories>`;
 }
@@ -190,7 +190,8 @@ export async function takeSnapshot(deps: SnapshotDeps): Promise<SnapshotResult> 
   const billedStories = searches.filter((s) => s.called).reduce((n, s) => n + s.stories.length, 0);
   const estimateUsd = Math.round(billedStories * pricePerStory(env) * 10_000) / 10_000;
   // Every request failed (a revoked token is 401 on all of them): say so loudly, so the cron's monitor reports it,
-  // instead of quietly storing nothing every three hours.
+  // instead of quietly storing nothing every three hours. When only some failed, the stories that came back (and are
+  // billed) are stored: drafts read every snapshot of the last six hours, so a thin one never hides a fuller one.
   if (calls > 0 && failedCalls === calls) {
     const statuses = [...new Set(searches.map((s) => s.status ?? "network"))].join(", ");
     console.info(JSON.stringify({ event: "x_news_snapshot", takenAt, calls, failedCalls, stories: 0, relevant: 0, estimateUsd }));

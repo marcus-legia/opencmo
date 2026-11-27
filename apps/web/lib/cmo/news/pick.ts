@@ -20,6 +20,8 @@ const cut = (text: string, max: number) => Array.from(text.replace(/\s+/g, " ").
 
 /** What the founder reads when a post that must ride the news found none: no draft, the credit back. */
 export const NO_NEWS = "No news story fits this post today, so nothing was written and your credit is back.";
+/** A pick that failed (the store or the model): nothing written, the credit back. */
+export const NEWS_UNREADABLE = "Today's news could not be read, so nothing was written and your credit is back.";
 
 /** A snapshot older than this is not today's news any more. */
 export const NEWS_FRESH_HOURS = 6;
@@ -30,6 +32,8 @@ export const FIT_MIN = 0.6;
 /** A stored story (`x_news_stories`) as the pick reads it. */
 export type NewsCandidate = {
   rowId: string;
+  /** X's story id: the same story in two snapshots has one, whatever key each snapshot's filter gave it. */
+  storyId: string;
   name: string;
   summary: string;
   hook: string;
@@ -40,33 +44,32 @@ export type NewsCandidate = {
 };
 
 /**
- * The stories a draft may pick from: only the newest snapshot, and only when it is younger than `NEWS_FRESH_HOURS`;
- * relevant ones with a key, the most recently updated story of each `topic_key`, at most `MAX_CANDIDATES`.
+ * The stories a draft may pick from: every snapshot younger than `NEWS_FRESH_HOURS` (so a thin newest one, after a
+ * burst of failed calls, still has the earlier one beside it), relevant ones with a key, one story per `topic_key`
+ * (the newest snapshot's, then the most recently updated), at most `MAX_CANDIDATES`.
  */
-export function freshCandidates(rows: readonly (NewsCandidate & { relevant: boolean })[], now: Date): NewsCandidate[] {
-  const newest = rows.reduce<string | null>((max, r) => (max === null || r.takenAt > max ? r.takenAt : max), null);
-  if (!newest || now.getTime() - Date.parse(newest) > NEWS_FRESH_HOURS * 3_600_000) return [];
+export function freshCandidates(
+  rows: readonly (NewsCandidate & { relevant: boolean })[],
+  now: Date,
+  taken: { keys: readonly string[]; stories: readonly string[] } = { keys: [], stories: [] },
+): NewsCandidate[] {
+  // News this founder's posts took is left out before the list is cut, so a free story is never cut for a taken one.
+  const takenKeys = new Set(taken.keys);
+  const takenStories = new Set(taken.stories);
+  const since = now.getTime() - NEWS_FRESH_HOURS * 3_600_000;
   const byKey = new Map<string, NewsCandidate>();
+  const seenStory = new Set<string>();
   const sorted = rows
-    .filter((r) => r.takenAt === newest && r.relevant && r.topicKey)
-    .sort((a, b) => (b.storyUpdatedAt ?? "").localeCompare(a.storyUpdatedAt ?? ""));
-  for (const { relevant: _relevant, ...r } of sorted) if (!byKey.has(r.topicKey)) byKey.set(r.topicKey, r);
-  return [...byKey.values()].slice(0, MAX_CANDIDATES);
-}
-
-/**
- * The news this founder's recent drafts already rode (`body.news.topicKey`), from posts planned on `sinceDay` or later.
- * The caller passes two days before today: an overdue post drafted today has an earlier `day`, and posting the same
- * news again on the next day is a repeat too.
- */
-export function usedTopicKeys(items: readonly { day: string; body?: Record<string, unknown> | null }[], sinceDay: string): Set<string> {
-  const used = new Set<string>();
-  for (const item of items) {
-    if (item.day < sinceDay) continue;
-    const key = (item.body?.news as { topicKey?: unknown } | undefined)?.topicKey;
-    if (typeof key === "string" && key) used.add(key);
+    .filter((r) => Date.parse(r.takenAt) >= since)
+    .sort((a, b) => b.takenAt.localeCompare(a.takenAt) || (b.storyUpdatedAt ?? "").localeCompare(a.storyUpdatedAt ?? ""));
+  for (const { relevant, ...r } of sorted) {
+    // A story's newest verdict and key win: an older snapshot cannot bring back a story the newest one ruled out, nor
+    // offer it again under the key it gave it then (every draft sees the same key, so the reserve compares like).
+    if (seenStory.has(r.storyId)) continue;
+    seenStory.add(r.storyId);
+    if (relevant && r.topicKey && !byKey.has(r.topicKey) && !takenKeys.has(r.topicKey) && !takenStories.has(r.storyId)) byKey.set(r.topicKey, r);
   }
-  return used;
+  return [...byKey.values()].slice(0, MAX_CANDIDATES);
 }
 
 /** A planned item's news mode; absent or unknown reads as `hook` (items planned before modes). */
@@ -76,20 +79,27 @@ export function newsModeOf(body: Record<string, unknown> | null | undefined): Ne
 }
 
 export const PickSchema = z.object({
-  index: z.number().int().describe("The index attribute of the story this post should open from, or -1 when none fits"),
-  fit: z.number().describe("0 to 1: how naturally this founder can link the story to what they know and sell"),
-  why: z.string().describe("One plain sentence for the founder: why this story fits this post. Empty when none fits."),
-  angle: z.string().describe("One sentence: the link from the story to the founder's angle for this post. Empty when none fits."),
+  picks: z
+    .array(
+      z.object({
+        index: z.number().int().describe("The index attribute of a story this post could open from"),
+        fit: z.number().describe("0 to 1: how naturally this founder can link the story to what they know and sell"),
+        why: z.string().describe("One plain sentence for the founder: why this story fits this post"),
+        angle: z.string().describe("One sentence: the link from the story to the founder's angle for this post"),
+      }),
+    )
+    .describe("Up to three stories, best first; empty when none fits"),
 });
 export type PickAnswer = z.infer<typeof PickSchema>;
+type OnePick = PickAnswer["picks"][number];
 
-export const PICK_SYSTEM = `You pick the one news story a founder's social post should open from, or none.
+export const PICK_SYSTEM = `You pick up to three news stories a founder's social post could open from, best first, or none.
 
 The founder sells software to businesses and professionals. <documents> says what they sell and to whom; <content_plan> is their own rules for their posts. <post> is the post planned for today: its idea, and whether it must ride the news (required) or opens from a story only when one fits (hook).
 
 Pick the story the founder can link to what they know and sell in one honest sentence, so their post adds a view of their own to news people are talking about now. Prefer news their customers would care about. Never pick a story for being popular alone, and never one the content plan rules out.
 
-fit: 0.9 or more for a story right in the founder's field, about 0.7 for one they can link in a sentence without stretching, below 0.6 when the link would be forced. When nothing fits, answer index -1 and fit 0. A required post needs a story as much as any other: never force one.
+fit: 0.9 or more for a story right in the founder's field, about 0.7 for one they can link in a sentence without stretching, below 0.6 when the link would be forced. Give up to three stories, best first (another of the founder's posts may take the first). When nothing fits, give none. A required post needs a story as much as any other: never force one.
 
 why is read by the founder on the card: one plain sentence, no hype, no dashes.
 
@@ -110,19 +120,32 @@ export function postBlock(idea: string, mode: NewsMode): string {
   return `<post news="${mode}"><idea>${escapeForTag(cut(idea, 300))}</idea></post>`;
 }
 
-/** The picker's answer, accepted only for a story from the list with a fit of at least `FIT_MIN`. */
-export function acceptPick(answer: PickAnswer, candidates: readonly NewsCandidate[]): { candidate: NewsCandidate; why: string; angle: string } | null {
+export type AcceptedPick = { candidate: NewsCandidate; why: string; angle: string };
+
+/** One answer of the picker, accepted only for a story from the list with a fit of at least `FIT_MIN`. */
+export function acceptPick(answer: OnePick, candidates: readonly NewsCandidate[]): AcceptedPick | null {
   if (!Number.isInteger(answer.index) || answer.index < 0 || answer.index >= candidates.length) return null;
   if (!Number.isFinite(answer.fit) || answer.fit < FIT_MIN) return null;
   const candidate = candidates[answer.index]!;
   return { candidate, why: cut(answer.why ?? "", 200), angle: cut(answer.angle ?? "", 300) };
 }
 
-/** The fake picker: the first story, when there is one. */
+/** The picker's accepted stories, best first: at most three, each story and each news once. */
+export function acceptPicks(answer: PickAnswer, candidates: readonly NewsCandidate[]): AcceptedPick[] {
+  const out: AcceptedPick[] = [];
+  for (const one of answer.picks ?? []) {
+    const ok = acceptPick(one, candidates);
+    if (ok && !out.some((o) => o.candidate.topicKey === ok.candidate.topicKey)) out.push(ok);
+    if (out.length >= 3) break;
+  }
+  return out;
+}
+
+/** The fake picker: the first two stories, when there are any. */
 export function fakePick(candidates: readonly NewsCandidate[]): PickAnswer {
-  return candidates.length
-    ? { index: 0, fit: 0.8, why: "It is news in your field today.", angle: "What the news means for the founder's customers." }
-    : { index: -1, fit: 0, why: "", angle: "" };
+  return {
+    picks: candidates.slice(0, 2).map((_, index) => ({ index, fit: 0.8, why: "It is news in your field today.", angle: "What the news means for the founder's customers." })),
+  };
 }
 
 /** The story as the draft stores it on its body (`body.news`) and the card shows it. */
@@ -134,6 +157,8 @@ export function toPostNews(candidate: NewsCandidate, why: string): PostNews {
     url: first ? `https://x.com/i/status/${first}` : "",
     rowId: candidate.rowId,
     topicKey: candidate.topicKey,
+    storyId: candidate.storyId,
+    at: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
     why: cut(why, 200),
   };
 }

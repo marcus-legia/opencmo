@@ -82,6 +82,19 @@ async function main() {
     /Every X News call failed \(401\)/,
   );
 
+  // Most calls failed (a burst of 429s): the stories that came back are billed, so they are stored.
+  let n = 0;
+  let partial = 0;
+  const thin = await takeSnapshot({
+    queries: ["a", "b", "c"],
+    search: async () => (n++ === 0 ? { stories: all, called: true, status: 200 } : { stories: [], called: true, status: 429 }),
+    filter: async (stories) => fakeFilter(stories),
+    insert: async (rows) => {
+      partial = rows.length;
+    },
+  });
+  assert.deepEqual([thin.failedCalls, partial], [2, 6]);
+
   // The filter learns whether the stories are real, so the fake verdicts never sort real stories.
   let sawReal: boolean | null = null;
   await takeSnapshot({

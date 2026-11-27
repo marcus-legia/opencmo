@@ -404,9 +404,28 @@ document field `post_plan.content_plan`.
     "News: <name>. Why it fits: <why> · See it on X", the reason visible, not a tooltip, so a phone shows it (review).
     Autopilot and the card use one test, a story with a headline. The picker's and the morning fill's prompts carry
     `NO_AI_SLOP`, since their words reach the card. pgTAP 369; `screens.check.ts` covers the card.
-- [ ] **B8.** Run `npm run typecheck`, `npm run build`, `npm run check:contracts`, `npm run db:reset`, `npm run db:test`,
+- [x] **B8.** Run `npm run typecheck`, `npm run build`, `npm run check:contracts`, `npm run db:reset`, `npm run db:test`,
   `cd packages/engine && pytest tests/test_check_deploy_env.py`, and the p4 acceptance e2e in fake mode. Then run the
   final `/code-review` on the whole of Part B's diff and fix what it finds.
+  - *As run (27/11):* typecheck, build, `check:contracts`, `db:reset` + `db:test` (242 files, all pass), the engine's
+    deploy-env, cron-monitor and Modal tests, and a fake-mode snapshot into local Supabase (6 stories, 5 relevant).
+    **The p4 acceptance e2e is broken on `main`, not by B:** its founder has no plan, so connecting X answers 402 since
+    #288; with a plan set locally, F3–F7 pass and the "missed window" case fails at line 141 (`waiting`, not `missed`),
+    the same at Part A's last commit `f469545`. Left for its own fix.
+  - *Final review fixes (one story, one news, one day):*
+    - A draft **reserves** its story before writing (`cmo_news_reserve`, under the founder's lock), so two drafts of
+      one wave never ride the same news. "Taken" is one SQL rule (`news_taken_by`), by news key **and** X story id
+      (each snapshot names the news afresh): a post in review or out whose draft (`body.news.at`) is under three days
+      old, or a post a draft is writing, while that draft runs on a live lease or for 15 minutes from its reserve. The
+      draft leaves taken news out before the picker sees the list (`cmo_news_taken`), and the picker ranks up to three.
+    - The pick reads every snapshot of the last six hours, one story once (newest verdict and key win), so a thin
+      snapshot after a burst of failed calls never hides a fuller one; a snapshot stores what came back unless every
+      call failed.
+    - **A failed read is not "none fits":** no snapshot in six hours, a store or model error, or a reserve error with
+      none reserved gives NEWS_UNREADABLE; a required post due today is left for one more try, an overdue one and the
+      morning fill's are skipped (`news_unreadable`). A hook post without a source still says NO_LIBRARY.
+    - A post with no calendar item never rides a story (nothing to hold it on).
+    - Outside text drops NUL and lone surrogates and is cut by code point everywhere it reaches a prompt or Postgres.
 
 ## Done when
 

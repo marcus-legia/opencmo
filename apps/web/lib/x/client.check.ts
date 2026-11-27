@@ -37,6 +37,9 @@ async function main() {
   const emoji = parseNewsSearch({ data: [{ id: "5", name: `${"a".repeat(119)}🚀🚀` }] })[0]!.name;
   assert.equal(Array.from(emoji).length, 120);
   assert.ok(emoji.endsWith("🚀") && !/[\ud800-\udbff]$/.test(emoji));
+  // NUL and a lone surrogate from X are dropped: Postgres refuses both in text.
+  assert.equal(parseNewsSearch({ data: [{ id: "6", name: "A\u0000B \ud83d end" }] })[0]!.name, "AB end");
+  assert.equal(parseNewsSearch({ data: [{ id: "7", name: "Caf\uFFFD 🚀" }] })[0]!.name, "Caf\uFFFD 🚀", "a real replacement character and a whole emoji stay");
   assert.deepEqual(parseNewsSearch(null), []);
   assert.deepEqual(parseNewsSearch({ data: "nope" }), []);
 
