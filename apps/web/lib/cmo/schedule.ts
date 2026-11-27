@@ -67,7 +67,7 @@ export const SECOND_WAVE_HOURS = 6;
  * Two waves a day (owner, 2026-11-27, A7): the first `ceil(n / 2)` of a day's `n` slots are drafted from the founder's
  * morning (`loopHour`), the rest six hours later, so the later posts take fresher news. `hour` and `loopHour` are UTC
  * hours; the second wave is never later than 23:00 UTC, the last hour of the calendar's day. An item with no slot (an
- * older plan) or a plan of unknown width is in the first wave.
+ * older plan), a plan of unknown width, or an overdue item from an earlier day is in the first wave.
  */
 export function draftWave(slot: number | undefined, n: number, hour: number, loopHour: number): boolean {
   const first = slot === undefined || !Number.isInteger(slot) || n <= 0 || slot < Math.ceil(n / 2);
@@ -124,13 +124,13 @@ export async function enqueueDueDrafts(
   admin: SupabaseClient,
   user: string,
   due: readonly { id: string; platform: string | null; day?: string; slot?: unknown }[],
-  opts: { done?: Set<string>; wave?: { n: number; hour: number; loopHour: number } } = {},
+  opts: { done?: Set<string>; wave?: { n: number; hour: number; loopHour: number; today: string } } = {},
 ): Promise<number> {
   const slotOf = (d: { slot?: unknown }) => (typeof d.slot === "number" && Number.isInteger(d.slot) ? d.slot : undefined);
   // The oldest day first, then the day's slots in order (A7); the sort is stable, so the caller's order breaks ties.
   const ordered = [...due].sort((a, b) => (a.day ?? "").localeCompare(b.day ?? "") || (slotOf(a) ?? 99) - (slotOf(b) ?? 99));
   const wave = opts.wave;
-  const open = ordered.filter((d) => !opts.done?.has(loopKey(user, DRAFT_LOOP, d.id)) && (!wave || draftWave(slotOf(d), wave.n, wave.hour, wave.loopHour)));
+  const open = ordered.filter((d) => !opts.done?.has(loopKey(user, DRAFT_LOOP, d.id)) && (!wave || (d.day !== undefined && d.day < wave.today) || draftWave(slotOf(d), wave.n, wave.hour, wave.loopHour)));
   if (!open.length) return 0;
   // The backlog guard: count what waits for review before queuing anything (decision 6).
   const { count, error: countError } = await admin.from("content_items").select("id", { count: "exact", head: true })
@@ -310,7 +310,7 @@ export async function enqueueDueLoops(admin: SupabaseClient, now = new Date()): 
       // core post per slot, which goes to every platform of the slot.
       if (run.kind === "post_draft") {
         // Awaited first: `queued += await …` reads `queued` before the wait, and the other workers' counts are lost.
-        const drafts = await enqueueDueDrafts(admin, user, duePosts, { done, wave: { n: slots.length, hour: now.getUTCHours(), loopHour: hourOf(user) } });
+        const drafts = await enqueueDueDrafts(admin, user, duePosts, { done, wave: { n: slots.length, hour: now.getUTCHours(), loopHour: hourOf(user), today } });
         queued += drafts;
         continue;
       }

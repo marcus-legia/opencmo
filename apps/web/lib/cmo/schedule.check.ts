@@ -155,9 +155,12 @@ async function main() {
   const waves: Record<string, Row[]> = { work_orders: [], cmo_runs: [], content_items: [] };
   const { admin: waveAdmin } = fakeAdmin(waves, new Set());
   const daySet = [0, 1, 2, 3].map((slot) => ({ id: `w${slot}`, platform: "X", day: today, slot }));
-  assert.equal(await enqueueDueDrafts(waveAdmin, "u", daySet, { wave: { n: 4, hour: 2, loopHour: 0 } }), 2, "morning: two of four");
+  assert.equal(await enqueueDueDrafts(waveAdmin, "u", daySet, { wave: { n: 4, hour: 2, loopHour: 0, today } }), 2, "morning: two of four");
   const done = new Set(waves.cmo_runs!.map((run) => loopKey("u", "daily-post-draft", (run.input as Row).item_id as string)));
-  assert.equal(await enqueueDueDrafts(waveAdmin, "u", daySet, { done, wave: { n: 4, hour: 6, loopHour: 0 } }), 2, "six hours on: the other two");
+  assert.equal(await enqueueDueDrafts(waveAdmin, "u", daySet, { done, wave: { n: 4, hour: 6, loopHour: 0, today } }), 2, "six hours on: the other two");
+  const overdue: Record<string, Row[]> = { work_orders: [], cmo_runs: [], content_items: [] };
+  assert.equal(await enqueueDueDrafts(fakeAdmin(overdue, new Set()).admin, "u", [{ id: "y3", platform: "X", day: isoDay(-1), slot: 3 }],
+    { wave: { n: 4, hour: 0, loopHour: 0, today } }), 1, "yesterday's late slot is drafted in the first wave");
   const fiveDone = new Set(["p1", "p2", "p3", "p4", "p5"].map((id) => loopKey("u", "daily-post-draft", id)));
   assert.equal(await enqueueDueDrafts(waveAdmin, "u", [{ id: "late", platform: "X", day: today, slot: 0 }], { done: fiveDone }), 0,
     "five drafts queued earlier today: the day's cap is spent, whatever is still planned");

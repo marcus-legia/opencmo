@@ -251,7 +251,12 @@ document field `post_plan.content_plan`.
     guard also applies to the Monday plan's drafts (`queueDueDrafts` goes through `enqueueDueDrafts`). The memory
     store mirrors the cap of 5 and the guard. Tests are in `schedule.check.ts`.
   - *Found in review:* the cap of 5 is a day's, not an hour's: drafts this loop already queued today count against it.
-- [ ] **A8.** Run `npm run typecheck`, `npm run build`, `npm run check:contracts`, `npm run db:reset`,
+  - *Found in the final review of Part A:* an overdue item from an earlier day is in the first wave. The first content
+    plan is built after the onboarding's clamp, so re-onboarding still recognises it as untouched.
+  - **Part A alone is not shippable.** `draft-post.ts` still refunds a post with no Library source unless it is a brief
+    or onboarding post, so with an empty Library the `required` posts A5 plans (and the `day_fill` items) end as
+    NO_LIBRARY refunds until B6 lets them ride the news. Merge A and B together.
+- [x] **A8.** Run `npm run typecheck`, `npm run build`, `npm run check:contracts`, `npm run db:reset`,
   `npm run db:test`, and the posting-plan and schedule e2e (`e2e/ui-v2-schedule.spec.ts`). Then run the final
   `/code-review` on the whole of Part A's diff and fix what it finds.
 

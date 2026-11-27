@@ -75,6 +75,9 @@ async function main(): Promise<void> {
   const untouched = { topics: ["Old topic"], rhythm: "", content_plan: firstContentPlan({ topics: ["Old topic"], rhythm: "" }) };
   assert.equal(keepFounderContentPlan(drafts, untouched).post_plan.content_plan, firstPlan, "an untouched first plan follows the new topics");
   assert.equal(keepFounderContentPlan(drafts, null).post_plan.content_plan, firstPlan);
+  // As saved: a long rhythm is cut, and the saved first plan still reads as untouched (it is built after the cut).
+  assert.equal(keepFounderContentPlan(drafts, drafts.post_plan).post_plan.content_plan, firstPlan, "the saved first plan is the onboarding's");
+  assert.equal(firstPlan, firstContentPlan(drafts.post_plan), "built from the fields as saved");
 
   // The e2e's site (`paylane.test`): its title is "paylane: invoicing that chases late payments". The fake week plan
   // turns the product name into the first post idea, and the fake post repeats the idea; a name that kept the tagline

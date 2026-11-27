@@ -92,6 +92,10 @@ function fakeDrafts(site: SiteSnapshot): OnboardingDrafts {
 function clampAll(drafts: OnboardingDrafts): OnboardingDrafts {
   const out = {} as Record<string, unknown>;
   for (const kind of DOCUMENT_KINDS) out[kind] = clampDocument(kind, drafts[kind] as Record<string, unknown>);
+  // The first content plan is written again from the topics and rhythm as saved (cut to their limits), so re-onboarding
+  // can tell it from one the founder changed (`keepFounderContentPlan` rebuilds it from the saved fields).
+  const plan = out.post_plan as OnboardingDrafts["post_plan"];
+  out.post_plan = clampDocument("post_plan", { ...plan, content_plan: firstContentPlan(plan) });
   return out as OnboardingDrafts;
 }
 
@@ -129,7 +133,6 @@ export function finishDrafts(drafts: OnboardingDrafts, site: SiteSnapshot, sells
     post_plan: {
       ...drafts.post_plan,
       channels: drafts.post_plan.channels?.length ? drafts.post_plan.channels : [...POST_CHANNELS],
-      content_plan: firstContentPlan(drafts.post_plan),
     },
     brand: {
       ...drafts.brand,
