@@ -198,6 +198,8 @@ export const CALLER_PATHS: Record<string, CallerPath> = {
   // The founder's buttons: "Plan my week", "Run now".
   "apps/web/app/api/v1/cmo/runs/route.ts": { callers: ["ui"], reaches: (t) => literals(/kind: z\.enum\(\[([^\]]*)\]/.exec(t)?.[1] ?? "", /"([a-z_]+)"/g) },
   "apps/web/lib/cmo/onboard.ts": { callers: ["ui"], reaches: (t) => literals(t, /p_kind: "([a-z_]+)"/g) },
+  // The founder's Connect (OAuth callback): a week with no posts yet is planned at once, not on Monday.
+  "apps/web/lib/cmo/plan-after-connect.ts": { callers: ["ui"], reaches: (t) => literals(t, /startCmoRun\(supabase, "([a-z_]+)"/g) },
   // The CMO chat (Assistant, scope `cmo`). The MCP server is the editor's and never runs it (checked below).
   "apps/web/lib/agent/cmo-tools.ts": { callers: ["assistant"], reaches: (t) => literals(/const JOB_OF = \{([^}]*)\}/.exec(t)?.[1] ?? "", /: "([a-z_]+)"/g) },
   // The brain's loops: the daily schedule runs the kinds `loops.ts` names; the progress check replans the week.

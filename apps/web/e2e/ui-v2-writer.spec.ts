@@ -250,7 +250,7 @@ async function postCard(db: SupabaseClient, userId: string, platform: string, te
   return { itemId: id, cardId: (data as { id: string }).id };
 }
 
-test("an approved Threads draft opens nothing: its card's time is approved, a slot waits, no schedule card (copy and open then)", async ({ page }) => {
+test("an approved Threads draft with no Threads account opens nothing and gets no slot until Threads is connected", async ({ page }) => {
   const db = admin();
   const user = await founder(db);
   const threadsText = "I spent more time cutting my demo than building the feature. So the editor came first: delete a word and the cut follows. ".repeat(3).trim();
@@ -275,17 +275,17 @@ test("an approved Threads draft opens nothing: its card's time is approved, a sl
   await page.goto(`/app/inbox/${threads.cardId}`);
   const card = page.getByTestId("inbox-card-page").getByTestId("approval-card");
   await expect(card).toContainText(`${threadsText.length}/500`);
-  // With its accounts read (a founder with a plan), a post you post yourself reads "Approve for this time" (1.2).
-  await card.getByRole("button", { name: /^Approve( for this time)?$/ }).click();
-  await expect(page.getByText(/Approved for .*, your time: then a card gives you the post to copy and open\./)).toBeVisible();
+  // With its accounts read (a founder with a plan), a post with no account to post to reads plain "Approve": it is
+  // scheduled only once Threads is connected (20270206040000, 20270206090000).
+  await card.getByRole("button", { name: /^Approve$/ }).click();
+  await expect(page.getByText(/Approved\. Nothing goes out on Threads until you connect it on the Post page/)).toBeVisible();
   expect(popups).toHaveLength(0);
   await expect.poll(async () => (await db.from("content_items").select("status, final_text").eq("id", threads.itemId).single()).data).toEqual({ status: "approved", final_text: threadsText });
   await expect.poll(async () => (await db.from("cmo_draft_outcomes").select("platform").eq("item_id", threads.itemId).single()).data?.platform).toBe("threads");
-  // cmo-review-3 1.2: the card showed its time, so the slot waits at it (no Threads account: copy and open) and no
-  // schedule card asks again.
+  // No Threads account: no slot at all, and no schedule card asks (connecting Threads schedules it).
   await expect
     .poll(async () => (await db.from("schedule_slots").select("platform, mode, status").eq("user_id", user.id)).data)
-    .toEqual([{ platform: "threads", mode: "intent", status: "waiting" }]);
+    .toEqual([]);
   expect((await db.from("approvals").select("kind").eq("user_id", user.id).eq("status", "waiting").eq("kind", "schedule")).data).toEqual([]);
 });
 

@@ -162,7 +162,9 @@ export function decidedMessage(card: ApprovalCard, decision: Decision, sample: b
         // The server checks the time once more as it schedules it; if it was taken meanwhile, a card asks again.
         return p.mode === "publish"
           ? `Approved for ${when}, your time, on ${PLATFORM_LABEL[p.platform]}. If that time was taken meanwhile, a card asks for a new one${suffix}.`
-          : `Approved for ${when}, your time: then a card gives you the post to copy and open. If that time was taken meanwhile, a card asks for a new one${suffix}.`;
+          // No account on that platform: a post is scheduled only where one is connected (20270206040000), and
+          // connecting it schedules this one (20270206090000).
+          : `Approved. Nothing goes out on ${PLATFORM_LABEL[p.platform]} until you connect it on the Post page; then it is scheduled${suffix}.`;
       }
       if (card.kind === "post") return `Approved. A schedule card asks you for its time${suffix}.`;
       if (card.kind === "script") return `Script approved. The keyframes are being made${suffix}.`;

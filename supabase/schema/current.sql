@@ -15636,6 +15636,29 @@ $$;
 
 
 --
+-- Name: schedule_failure_cards_reopen(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.schedule_failure_cards_reopen() RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_n integer;
+begin
+  update public.approvals a
+  set expires_at = null
+  from public.schedule_slots s
+  where a.ref_kind = 'schedule_slot' and a.ref_id = s.id and a.kind = 'schedule'
+    and a.status in ('waiting', 'held') and a.expires_at is not null
+    and s.status = 'failed' and s.error is not null;
+  get diagnostics v_n = row_count;
+  return v_n;
+end;
+$$;
+
+
+--
 -- Name: schedule_follow_content(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -16853,6 +16876,7 @@ CREATE FUNCTION public.social_account_save(p_user uuid, p_platform text, p_handl
     AS $$
 declare
   v_row public.social_accounts;
+  v_d uuid;
 begin
   if not exists (select 1 from public.zernio_profiles where user_id = p_user) then
     raise exception 'Connect starts with a Zernio profile.' using errcode = 'P0001';
@@ -16871,6 +16895,21 @@ begin
           then social_accounts.connected_at else now() end,
         updated_at = now()
   returning * into v_row;
+  if v_row.status = 'connected' then
+    for v_d in
+      select d.id from public.deliverables d
+      join public.content_items c on c.id = d.ref_id and c.user_id = p_user
+      where d.user_id = p_user and d.kind = 'post' and d.ref_kind = 'content_item' and d.status = 'decided'
+        and c.department = 'post' and c.status = 'approved' and c.day >= current_date
+        and p_platform = any(public.post_targets(c.id))
+    loop
+      begin
+        perform public.schedule_propose(v_d);
+      exception when others then
+        raise warning 'schedule after connect failed for deliverable %: %', v_d, sqlerrm;
+      end;
+    end loop;
+  end if;
   return v_row;
 end;
 $$;
