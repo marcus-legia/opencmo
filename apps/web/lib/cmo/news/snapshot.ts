@@ -157,6 +157,9 @@ export type SnapshotResult = {
   estimateUsd: number;
 };
 
+/** The filter's own timeout, one retry included by the client: it must leave the insert its share of the route's time. */
+export const FILTER_TIMEOUT_MS = 45_000;
+
 /** Haiku sorts the stories; the fake does only when the stories are the fake's too, never real ones. */
 async function haikuFilter(stories: readonly NewsStory[], real: boolean): Promise<FilterAnswer> {
   if (!real && fakeAllowed()) return fakeFilter(stories);
@@ -166,6 +169,8 @@ async function haikuFilter(stories: readonly NewsStory[], real: boolean): Promis
     prompt: `${storiesBlock(stories)}\n\nSort every story.`,
     schema: FilterSchema,
     maxTokens: 6000,
+    // Inside the route's budget (`maxDuration` 180 s): five searches of 15 s at worst, this, then the insert.
+    timeoutMs: FILTER_TIMEOUT_MS,
     label: "news_filter",
     failure: "The news filter could not run.",
   });

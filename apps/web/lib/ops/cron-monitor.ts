@@ -23,6 +23,7 @@ export const CRON_MONITORS = {
   cmo: { slug: "cron-cmo", crontab: "5 * * * *", maxRuntime: 6 },
   digest: { slug: "cron-cmo-digest", crontab: "2 * * * *", maxRuntime: 3 },
   cleanup: { slug: "cron-cleanup", crontab: "0 3 * * *", maxRuntime: 2 },
+  xNews: { slug: "cron-x-news", crontab: "20 */3 * * *", maxRuntime: 3 },
 } as const satisfies Record<string, CronMonitor>;
 
 /** Modal retries a failed call up to twice, a minute apart: a check-in up to 10 minutes late is still on time. */

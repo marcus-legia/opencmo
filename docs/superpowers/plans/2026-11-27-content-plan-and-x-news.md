@@ -318,12 +318,18 @@ document field `post_plan.content_plan`.
   it instead of storing nothing in silence. The fake filter sorts only fake stories, never real ones. The filter runs
   on `news_picker` (the one new agent, tier `check`). The Haiku call is not in the logged estimate: the provider
   ledger is per founder, and the snapshot has none. Check: `lib/cmo/news/snapshot.check.ts`.
-- [ ] **B4. Cron.**
+- [x] **B4. Cron.**
   - `GET /api/cron/x-news`, behind `cronAuthorized`, runs the snapshot.
   - Modal: `x_news()` on `modal.Cron("20 */3 * * *")` calls it through `cmo_dispatch.call_cron`, like
     `cmo_schedule`.
   - `deploy_env.py`: a feature "X News" that needs `X_BEARER_TOKEN`.
   - `.env.example`: the key, commented.
+  - *As built:* `maxDuration` 180 s (five 15 s searches, the filter's 45 s timeout, the insert's own 30 s client
+    started at the insert) so a slow run never pays X and stores nothing (review). Modal retries a failed call once, a
+    minute later. A Sentry monitor `cron-x-news` (`CRON_MONITORS.xNews`, checked against `modal_app.py` in
+    `uptime.check.ts`). In production, a missing key answers 503 so the monitor raises it; locally it is skipped.
+    **The key is Vercel's alone:** the route runs there and Modal only calls it, so `deploy_env.py` reads it on Vercel,
+    not the worker. Verified in fake mode against local Supabase: one run stored 6 stories, 5 relevant.
 - [ ] **B5. The pick** in `lib/cmo/news/pick.ts`.
   - **Input:**
     - the newest snapshot younger than 6 hours (relevant rows only, one per `topic_key`, at most 30);
@@ -384,7 +390,7 @@ document field `post_plan.content_plan`.
 - A founder with 10 cards in review gets no new draft and no charge.
 - Raising X from 3 to 5 on a Wednesday gives 5 drafts on Thursday.
 - All checks above are green. One PR, both parts, with this plan linked. The PR lists the owner steps: add
-  `X_BEARER_TOKEN` to Vercel and Modal, `supabase db push`, Modal deploy, and the first manual
+  `X_BEARER_TOKEN` to Vercel (not Modal: the route reads it), `supabase db push`, Modal deploy, and the first manual
   snapshot.
 
 ---

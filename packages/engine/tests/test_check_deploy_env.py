@@ -236,6 +236,7 @@ def test_the_other_scrapecreators_name_counts_and_half_a_vapid_pair_is_a_problem
 
 def test_vercel_reads_the_feature_keys_and_their_gates():
     keys = env.keys_to_read(VERCEL)
-    for name in ("ZERNIO_API_KEY", "OPENCMO_PUBLISH_LIVE", "RESEND_API_KEY", "VAPID_PRIVATE_KEY", "SCRAPE_CREATORS_API_KEY", "CREEM_WEBHOOK_SECRET"):
+    for name in ("ZERNIO_API_KEY", "OPENCMO_PUBLISH_LIVE", "RESEND_API_KEY", "VAPID_PRIVATE_KEY", "SCRAPE_CREATORS_API_KEY", "CREEM_WEBHOOK_SECRET", "X_BEARER_TOKEN"):
         assert name in keys
     assert "ZERNIO_API_KEY" not in env.keys_to_read(WORKER)
+    assert "X_BEARER_TOKEN" not in env.keys_to_read(WORKER)

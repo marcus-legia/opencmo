@@ -107,6 +107,8 @@ FEATURES = (
     Feature("Zernio posting", ("ZERNIO_API_KEY", "ZERNIO_WEBHOOK_SECRET"), ("OPENCMO_PUBLISH_LIVE", "1")),
     Feature("Resend email", ("RESEND_API_KEY",), ("OPENCMO_EMAIL_LIVE", "1")),
     Feature("Web push (VAPID)", ("NEXT_PUBLIC_VAPID_PUBLIC_KEY", "VAPID_PRIVATE_KEY")),
+    # The snapshot route runs on Vercel; Modal's x_news cron only calls it, so the key is Vercel's alone.
+    Feature("X News (post hooks)", ("X_BEARER_TOKEN",)),
 )
 
 # The MCP server reads apps/web/lib with no VERCEL_ENV: everything Vercel has implicitly or by its
