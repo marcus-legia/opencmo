@@ -67,7 +67,11 @@ check("chosenChannels keeps strings only", () => {
 check("the schema rejects out-of-range counts", () => {
   const base = defaultPostingPlan([]);
   assert.equal(PostingPlanSchema.safeParse(base).success, true);
-  assert.equal(PostingPlanSchema.safeParse({ ...base, text: { ...base.text, x: 4 } }).success, false);
+  // X takes 5 a day, the others 3 (owner, 2026-11-27).
+  assert.equal(PostingPlanSchema.safeParse({ ...base, text: { ...base.text, x: 5 } }).success, true);
+  assert.equal(PostingPlanSchema.safeParse({ ...base, text: { ...base.text, x: 6 } }).success, false);
+  assert.equal(PostingPlanSchema.safeParse({ ...base, text: { ...base.text, threads: 4 } }).success, false);
+  assert.equal(PostingPlanSchema.safeParse({ ...base, text: { ...base.text, linkedin: 3 } }).success, true);
   assert.equal(PostingPlanSchema.safeParse({ ...base, video: { ...base.video, tiktok: 8 } }).success, false);
   assert.equal(PostingPlanSchema.safeParse({ ...base, text: { ...base.text, x: 1.5 } }).success, false);
 });

@@ -5348,7 +5348,7 @@ declare
   v_targets jsonb;
   v_sources jsonb;
 begin
-  if p_items is null or jsonb_typeof(p_items) <> 'array' or jsonb_array_length(p_items) > 60 then
+  if p_items is null or jsonb_typeof(p_items) <> 'array' or jsonb_array_length(p_items) > 80 then
     raise exception 'This plan is not valid.' using errcode = '22023';
   end if;
   delete from public.content_items where user_id = p_user and status = 'planned' and day >= current_date;
@@ -5366,13 +5366,16 @@ begin
       coalesce(v_item->>'department' = 'post' and jsonb_typeof(v_item->'image') = 'boolean' and (v_item->>'image')::boolean, false),
       (case
         when v_targets is null then '{}'::jsonb
-        when jsonb_typeof(v_item->'slot') = 'number' and (v_item->>'slot')::numeric in (0, 1, 2)
+        when jsonb_typeof(v_item->'slot') = 'number' and (v_item->>'slot')::numeric in (0, 1, 2, 3, 4)
           then jsonb_build_object('targets', v_targets, 'slot', (v_item->>'slot')::int)
         else jsonb_build_object('targets', v_targets)
       end) || jsonb_strip_nulls(jsonb_build_object(
         'sources', v_sources,
         -- The planner's angle (owner, 2026-11-24): about four posts in five share, one asks to try the product.
         'angle', case when v_item->>'department' = 'post' and v_item->>'angle' in ('share', 'cta') then v_item->>'angle' end,
+        -- How the post uses an X News story (owner, 2026-11-27): required, hook or none; anything else is dropped and
+        -- the draft reads it as hook.
+        'news', case when v_item->>'department' = 'post' and v_item->>'news' in ('required', 'hook', 'none') then v_item->>'news' end,
         -- A post planned with no Library sources from the founder's brief or the first week (onboarding): the draft
         -- writes it without sources instead of refusing it for an empty Library.
         'planned_from', case when v_item->>'department' = 'post' and v_sources is null
@@ -15154,10 +15157,11 @@ begin
   if (select array_agg(k order by k) from jsonb_object_keys(p_plan->'text') k) is distinct from array['facebook', 'linkedin', 'threads', 'x'] then
     raise exception 'Posts a day are set for X, Threads, LinkedIn and Facebook.' using errcode = '22023';
   end if;
+  -- X takes up to 5 posts a day, the others up to 3 (owner, 2026-11-27; posting-plan.ts `TEXT_MAX`).
   for v_key, v_val in select * from jsonb_each(p_plan->'text') loop
     if jsonb_typeof(v_val) <> 'number' or (v_val #>> '{}')::numeric <> trunc((v_val #>> '{}')::numeric)
-       or (v_val #>> '{}')::numeric not between 0 and 3 then
-      raise exception 'Posts a day must be between 0 and 3.' using errcode = '22023';
+       or (v_val #>> '{}')::numeric not between 0 and (case when v_key = 'x' then 5 else 3 end) then
+      raise exception 'X takes 0 to 5 posts a day; the others 0 to 3.' using errcode = '22023';
     end if;
   end loop;
 
@@ -16088,7 +16092,7 @@ $$;
 CREATE FUNCTION public.schedule_rules() RETURNS jsonb
     LANGUAGE sql IMMUTABLE
     SET search_path TO 'public'
-    AS $$ select '{"minGapHours": 3, "windowMinutes": 15, "leadMinutes": 30, "horizonDays": 14, "maxProposals": 3, "jitterSeconds": 240, "platforms": {"x": {"times": ["09:00"], "dailyCap": 5}, "threads": {"times": ["09:00", "12:00"], "dailyCap": 2}, "linkedin": {"times": ["16:00"], "dailyCap": 1}, "facebook": {"times": ["09:00", "13:00"], "dailyCap": 2}, "tiktok": {"times": ["09:00", "13:00"], "dailyCap": 2}, "instagram": {"times": ["09:00"], "dailyCap": 1}, "youtube": {"times": ["16:00", "19:00"], "dailyCap": 2}}}'::jsonb $$;
+    AS $$ select '{"minGapHours": 3, "windowMinutes": 15, "leadMinutes": 30, "horizonDays": 14, "maxProposals": 3, "jitterSeconds": 240, "platforms": {"x": {"times": ["09:00", "12:00", "15:00", "18:00", "21:00"], "dailyCap": 5}, "threads": {"times": ["09:00", "12:00"], "dailyCap": 2}, "linkedin": {"times": ["16:00"], "dailyCap": 1}, "facebook": {"times": ["09:00", "13:00"], "dailyCap": 2}, "tiktok": {"times": ["09:00", "13:00"], "dailyCap": 2}, "instagram": {"times": ["09:00"], "dailyCap": 1}, "youtube": {"times": ["16:00", "19:00"], "dailyCap": 2}}}'::jsonb $$;
 
 
 --

@@ -13,19 +13,24 @@ export type TextPlatform = (typeof TEXT_PLATFORMS)[number];
 export type VideoPlatform = (typeof VIDEO_PLATFORMS)[number];
 
 export type PostingPlan = {
-  text: Record<TextPlatform, number>; // posts a day, 0–3
+  text: Record<TextPlatform, number>; // posts a day, 0 to TEXT_MAX
   video: Record<VideoPlatform, number>; // videos a week, 0–7
 };
 
-function counts<K extends string>(keys: readonly K[], max: number) {
+/** Posts a day each text platform takes (owner, 2026-11-27): X up to 5, the others up to 3. */
+export const TEXT_MAX: Record<TextPlatform, number> = { x: 5, threads: 3, linkedin: 3, facebook: 3 };
+/** The most core posts a day can have: the largest `TEXT_MAX`. */
+export const MAX_POSTS_A_DAY = Math.max(...Object.values(TEXT_MAX));
+
+function counts<K extends string>(keys: readonly K[], max: (key: K) => number) {
   // A plan saved before Facebook joined has no `facebook`: it reads as 0, not as an unset plan.
-  const count = z.number().int().min(0).max(max).default(0);
-  return z.object(Object.fromEntries(keys.map((k) => [k, count])) as Record<K, typeof count>);
+  const count = (key: K) => z.number().int().min(0).max(max(key)).default(0);
+  return z.object(Object.fromEntries(keys.map((k) => [k, count(k)])) as Record<K, ReturnType<typeof count>>);
 }
 
 export const PostingPlanSchema = z.object({
-  text: counts(TEXT_PLATFORMS, 3),
-  video: counts(VIDEO_PLATFORMS, 7),
+  text: counts(TEXT_PLATFORMS, (p) => TEXT_MAX[p]),
+  video: counts(VIDEO_PLATFORMS, () => 7),
 }) as z.ZodType<PostingPlan>;
 
 /**

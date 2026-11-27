@@ -5,14 +5,13 @@ import { useEffect, useRef, useState } from "react";
 
 import { isPlanRequired, PlanSheet } from "@/components/billing/PlanSheet";
 import { ApiError, api, jsonBody } from "@/components/clipping/api";
-import { TEXT_PLATFORMS, connectedOnly, dayTargets, type PostingPlan } from "@/lib/cmo/posting-plan";
+import { TEXT_MAX, TEXT_PLATFORMS, connectedOnly, dayTargets, type PostingPlan } from "@/lib/cmo/posting-plan";
 import { CONNECTABLE_PLATFORMS } from "@/lib/departments/publish/types";
 import type { ScheduleScreen } from "@/lib/screens/schedule";
 
 import { PlatformLogo, type LogoPlatform } from "./platform-logos";
 
 const TEXT_LABEL: Record<(typeof TEXT_PLATFORMS)[number], string> = { x: "X", threads: "Threads", linkedin: "LinkedIn", facebook: "Facebook Page" };
-const TEXT_MAX = 3;
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
@@ -186,7 +185,7 @@ export function PostingPlanPanel({ initial, accounts, live, onSaved }: { initial
               name={TEXT_LABEL[id]}
               per="day"
               value={plan.text[id]}
-              max={TEXT_MAX}
+              max={TEXT_MAX[id]}
               connected={connected(id)}
               busy={busy === id}
               onConnect={

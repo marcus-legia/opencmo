@@ -159,15 +159,20 @@ document field `post_plan.content_plan`.
 - the CMO chat prompt lines about the plan (`lib/agent/prompt.ts`, `lib/agent/cmo-tools.ts` `update_document` description)
 - migrations `*_posting_plan_x5.sql` and `*_fill_day_slots.sql`, with their pgTAP tests
 
-- [ ] **A1. Contracts.** Add the types above, plus `content_plan` on `PostPlanSchema` and `DOCUMENTS.post_plan`. Check
+- [x] **A1. Contracts.** Add the types above, plus `content_plan` on `PostPlanSchema` and `DOCUMENTS.post_plan`. Check
   that `clampDocument` keeps the field and cuts it at 6,000. Push this commit alone.
-- [ ] **A2. X up to 5 a day.**
-  - `posting-plan.ts`: X `0–5`; Threads, LinkedIn and Facebook `0–3`.
+- [x] **A2. X up to 5 a day.**
+  - `posting-plan.ts`: X `0–5`; Threads, LinkedIn and Facebook `0–3` (`TEXT_MAX`, also the panel's steppers).
   - Migration: `save_posting_plan` with the same bounds. The error message names the platform: "X takes 0 to 5 posts
     a day; the others 0 to 3."
   - `schedule-defaults.json` and SQL `schedule_rules()`: X times `09:00, 12:00, 15:00, 18:00, 21:00`, cap 5. The gap
     stays 3 hours. `schedule-defaults.check.ts` must still pass.
   - pgTAP: 5 on X saves, 6 fails, 4 on Threads fails, and retargeting still works.
+  - *Found while building:* `cmo_plan_week` kept only slots 0 to 2 and at most 60 items, so the same migration keeps
+    slots 0 to 4, takes 80 items (5 × 7 posts + 21 videos + 7 Reddit items = 63), and stores each post's `news` mode
+    (for A5). The tests `216_p4_slots` and `234_p6_best_time` assumed one X default time; they now check the gap and the
+    five times instead. Visible effect: a post approved in the morning can be proposed the same day (12:00, 15:00…)
+    instead of 09:00 the next day.
 - [ ] **A3. Credit estimate on the plan panel.**
   - Drafts a month = `max(platform counts) × 30`, because one core post goes to every platform, plus 4 week plans.
   - Show it under the counters: "About N credits a month. Your plan includes M." M comes from `plan_usage()`.
