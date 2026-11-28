@@ -112,9 +112,6 @@
   .k .pc-span { font-size: var(--fs-sm); }
 }
 
-.k .pc-legend { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-3); }
-.k .pc-legend__hint { margin-left: auto; }
-@media (max-width: 900px) { .k .pc-legend__hint { margin-left: 0; flex-basis: 100%; } }
 .k .pc-ghost-chip { border: 1px dashed var(--accent) !important; }
 
 .k .pc-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--panel); overflow: hidden; }
@@ -133,6 +130,12 @@
 .k .pc-ev:focus-visible { outline: none; box-shadow: var(--focus); }
 .k .pc-ev[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 .k .pc-ev[draggable="true"] { cursor: grab; }
+/* The post's state as its left edge (28/11 redesign): grey scheduled, green posted, accent waiting, warn, danger. */
+.k .pc-ev { border-left: 3px solid var(--line-2); }
+.k .pc-ev[data-tone="ok"] { border-left-color: var(--ok); }
+.k .pc-ev[data-tone="accent"] { border-left-color: var(--accent); }
+.k .pc-ev[data-tone="warn"] { border-left-color: var(--warn); }
+.k .pc-ev[data-tone="danger"] { border-left-color: var(--danger); }
 /* A draft still waiting for the founder's OK: dashed, on the page's own background, so it reads as not yet booked. */
 .k .pc-ev[data-ghost] { border-style: dashed; border-color: color-mix(in srgb, var(--accent) 55%, var(--line-2)); background: transparent; }
 .k .pc-ev__time { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--muted); }
@@ -161,6 +164,8 @@
 .k .pc-drawer[hidden] { display: none; }
 .k .pc-drawer__head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); min-height: 52px; padding: 0 var(--sp-3) 0 var(--sp-4); border-bottom: 1px solid var(--line); }
 .k .pc-drawer__body { display: flex; flex-direction: column; gap: var(--sp-3); padding: var(--sp-4); flex: 1 1 auto; }
+.k .pc-drawer__when { display: inline-flex; align-items: center; gap: 8px; }
+.k .pc-drawer__handle { font-weight: 600; }
 .k .pc-drawer__title { margin: 0; font-size: var(--fs-lg); line-height: 1.35; font-weight: 600; overflow-wrap: anywhere; }
 .k .pc-drawer__foot { display: flex; gap: var(--sp-2); justify-content: flex-end; flex-wrap: wrap; padding: var(--sp-3) var(--sp-4); border-top: 1px solid var(--line); }
 .k .pc-move { display: flex; flex-direction: column; gap: var(--sp-2); }

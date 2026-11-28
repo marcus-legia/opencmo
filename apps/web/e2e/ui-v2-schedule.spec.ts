@@ -123,6 +123,12 @@ test("a post card shows its time; approving it schedules the post then, with no 
   await page.goto(`/app/schedule?from=${mondayOf(slot.publish_at)}`);
   await expect(page.locator(`[data-slot-id="${slot.id}"]`)).toBeVisible();
   await page.screenshot({ path: "test-results/calendar-1440.png" });
+  // The selected post's drawer: the logo, the account and the time in its head.
+  await page.locator(`[data-slot-id="${slot.id}"]`).click();
+  await expect(page.locator(".pc-drawer")).toBeVisible();
+  await page.screenshot({ path: "test-results/calendar-drawer-1440.png" });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: "test-results/calendar-390.png", fullPage: true });
 });
 
 test("Settings → Accounts: connect Threads through the fake Zernio, then disconnect it", async ({ page }) => {
