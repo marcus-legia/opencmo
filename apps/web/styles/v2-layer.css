@@ -626,3 +626,6 @@ html[data-ui="v2"] .v2-main-body:has(.ed2) {
 @media (max-width: 640px) {
   .td-bizfield, .td-bizpair { grid-template-columns: minmax(0, 1fr); gap: 4px; }
 }
+/* A feature or problem is a sentence, not a tag: the shared .chip has a fixed 22px height, so a long one wrapped and
+   overlapped the next (production 28/11). Let it grow. */
+.td-bizfield .chip { height: auto; min-height: 22px; padding: 3px 10px; border-radius: 12px; line-height: 1.45; white-space: normal; }
