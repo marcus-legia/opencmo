@@ -11838,6 +11838,45 @@ $_$;
 
 
 --
+-- Name: post_refresh_proposals(integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.post_refresh_proposals(p_limit integer DEFAULT 500) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  v_lead interval := make_interval(mins => (public.schedule_rules()->>'leadMinutes')::integer);
+  v_row record;
+  v_new jsonb;
+  v_n integer := 0;
+begin
+  for v_row in
+    select c.id, c.user_id, c.platform from public.content_items c
+    where c.department = 'post' and c.status = 'in_review'
+      and public.post_proposed_at(c.body) < now() + v_lead
+    order by public.post_proposed_at(c.body), c.id
+    limit greatest(1, least(coalesce(p_limit, 500), 2000))
+    for update of c skip locked
+  loop
+    begin
+      v_new := public.post_proposal(v_row.user_id, v_row.platform, v_row.id);
+    exception when others then
+      -- A time is a convenience on the card: one founder's failure never stops the others' refresh.
+      raise warning 'post proposal refresh for content item % failed: %', v_row.id, sqlerrm;
+      v_new := null;
+    end;
+    -- A null proposal is stripped by the trigger, which then leaves the card without a time.
+    update public.content_items set body = jsonb_set(body, '{proposed}', coalesce(v_new, 'null'::jsonb)), updated_at = now()
+    where id = v_row.id;
+    v_n := v_n + 1;
+  end loop;
+  return v_n;
+end;
+$$;
+
+
+--
 -- Name: post_schedules(text, uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 

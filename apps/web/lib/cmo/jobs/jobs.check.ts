@@ -17,7 +17,7 @@ import { DRAFT_REASONS } from "../../../components/cards/labels";
 import { mondayOf } from "./summarize-memory";
 import { goalBlock, knownNumbers, recall } from "./context";
 import { goalLine, nextGoalFallback } from "./review-week";
-import { pickDueItem } from "./draft-post";
+import { DAY_FILL_STAND_IN, pickDueItem } from "./draft-post";
 import { fakePlan, toPlanItems } from "./plan-week";
 import type { PostingPlan } from "../posting-plan";
 import { drainCmoQueue } from "./runner";
@@ -87,19 +87,24 @@ async function main() {
   // its idea and rides it; an idea with no source otherwise takes a theme with its sources.
   {
     const library = [{ id: "t1", name: "Late payments", count: 1, entries: [{ opportunityId: "o1", platform: "reddit", community: "freelance", postedAt: null, summary: "Chasing a client for 60 days", quotes: [] }] }] as never;
-    const marked = toPlanItems({ items: [
+    // "none" holds only where the founder's content plan keeps posts off the news (28/11 review).
+    const offNewsDocs: Documents = { ...docs, post_plan: { ...(docs.post_plan ?? {}), content_plan: "Tuesdays: no news, a lesson from our own work." } };
+    const markedItems = { items: [
       { ...post(0, "Today's AI news, from how we chase invoices", 0), news: "required" as const },
       { ...post(1, "A plain idea", 0), news: "none" as const },
       { ...post(2, "Cites c1", 0), sources: ["c1"], news: "hook" as const },
-    ] }, plan({ x: 1 }), { today, docs, library });
+    ] };
+    const marked = toPlanItems(markedItems, plan({ x: 1 }), { today, docs: offNewsDocs, library });
     assert.deepEqual(marked.slice(0, 3).map((p) => [p.news, p.sources?.length ?? 0, p.idea.startsWith("What people say")]),
       [["required", 0, false], ["none", 1, true], ["hook", 1, false]]);
+    assert.equal(toPlanItems(markedItems, plan({ x: 1 }), { today, docs, library })[1]!.news, "hook",
+      "with no content plan, the model's none is a guess: the post may still open from a story");
     const fakeWeek = toPlanItems(fakePlan(docs, plan({ x: 2 }), undefined, library), plan({ x: 2 }), { today, docs, library });
     assert.deepEqual(fakeWeek.slice(0, 2).map((p) => p.news), ["required", "hook"], "the fake plan: slot 0 rides the news");
     const bareWeek = toPlanItems(fakePlan(docs, plan({ x: 2 })), plan({ x: 2 }), { today, docs, library: [] }).filter((p) => p.department === "post");
     assert.ok(bareWeek.length === 14 && bareWeek.every((p) => p.news === "required" && !p.sources), "an empty Library: every post required");
     const someDays = toPlanItems({ items: [{ ...post(0, "No news today", 0), news: "none" as const }, { ...post(1, "News day", 0), news: "hook" as const }] },
-      plan({ x: 1 }), { today, docs, library: [] }).filter((p) => p.department === "post");
+      plan({ x: 1 }), { today, docs: offNewsDocs, library: [] }).filter((p) => p.department === "post");
     assert.deepEqual(someDays.slice(0, 2).map((p) => [p.day.slice(8), p.news]), [["06", "required"], ["07", "required"]],
       "an empty Library: a post the content plan keeps off the news is not written; the others ride it");
   }
@@ -160,7 +165,7 @@ async function main() {
     const riding = empty.items.filter((i) => i.department === "post");
     assert.ok(riding.length > 0 && riding.every((i) => i.body.news === "required" && !i.body.sources), "with no Library every post rides the news");
     assert.ok(!bare.steps.some((s) => s.tool === "library"), "and there is nothing to explain");
-    const quiet = memoryStore(docs);
+    const quiet = memoryStore({ ...docs, post_plan: { ...(docs.post_plan ?? {}), content_plan: "No news posts." } });
     const noNews = quiet.enqueue("plan_week", { source: "schedule" });
     await drainCmoQueue(quiet.store, { think: async (call) => {
       const answer = call.fake!() as { items: { department: string; news?: string }[] };
@@ -345,13 +350,35 @@ async function main() {
     assert.equal(fill.items.find((i) => i.id === "fill")!.idea, "What we learned this week about finding customers", "the card keeps the planned idea");
 
     // A fill the content plan keeps off the news, with no source: nothing to write, and skipped so it does not linger.
-    const quietFill = memoryStore(docs);
+    const quietFill = memoryStore({ ...docs, post_plan: { ...(docs.post_plan ?? {}), content_plan: "No news posts. Only lessons from our own work." } });
     quietFill.items.push(newsItem("quiet-fill", { slot: 2, targets: ["x"], news: "hook", planned_from: "day_fill" }, "Today's post, from your content plan"));
     const r7 = quietFill.enqueue("post_draft", { source: "schedule", item_id: "quiet-fill" });
     await drainCmoQueue(quietFill.store, { think: async (call) => (call.label === "plan_idea" ? { idea: "A note on pricing", news: "none", sources: [] } : call.fake!()) as never });
     assert.equal((r7.output as { refund?: boolean }).refund, true);
     assert.equal(quietFill.items.find((i) => i.id === "quiet-fill")!.status, "skipped");
     assert.equal(quietFill.items.find((i) => i.id === "quiet-fill")!.body.skip_reason, "no_source");
+
+    // 28/11 review: with no content plan, the planner's "none" is its own guess. A fill with sources still looks for
+    // the day's story (hook), and one without sources rides it (required).
+    const guess = withLibrary(memoryStore(docs));
+    guess.news.push(story());
+    guess.items.push(newsItem("guess", { slot: 2, targets: ["x"], news: "hook", planned_from: "day_fill" }, DAY_FILL_STAND_IN));
+    const r8 = guess.enqueue("post_draft", { source: "schedule", item_id: "guess" });
+    await drainCmoQueue(guess.store, { think: async (call) => (call.label === "plan_idea" ? { ...(call.fake!() as object), news: "none" } : call.fake!()) as never });
+    assert.equal(r8.status, "done", `written (${r8.error})`);
+    assert.ok(r8.steps.some((s) => s.tool === "pick_news"), "no content plan: the planner's none does not keep it off the news");
+
+    // The fill sees the last two weeks of ideas, not only today's, so it does not plan yesterday's topic again.
+    const rotate = withLibrary(memoryStore(docs));
+    rotate.items.push({ ...newsItem("yesterday", { slot: 0, targets: ["x"] }, "How to find your first 100 users"), day: isoDay(-1), status: "in_review" });
+    rotate.items.push({ ...newsItem("old", { slot: 0, targets: ["x"] }, "A post from a month ago"), day: isoDay(-30), status: "published" });
+    rotate.items.push(newsItem("rotate", { slot: 2, targets: ["x"], news: "hook", planned_from: "day_fill" }, DAY_FILL_STAND_IN));
+    const rotateAsks: string[] = [];
+    await draftOne(rotate, "rotate", rotateAsks);
+    const planAsk = rotateAsks.find((p) => p.includes("<recent_ideas>"));
+    assert.ok(planAsk?.includes(`${isoDay(-1)}: How to find your first 100 users`), "yesterday's topic is shown to the planner");
+    assert.ok(!planAsk?.includes("A post from a month ago"), "older than two weeks is left out");
+    assert.ok(!planAsk?.includes(DAY_FILL_STAND_IN), "the stand-in is not a topic");
   }
   // Owner, 2026-11-24: the chat writes a post from a Sales conversation by its id. The founder's own becomes the
   // draft's source; an id that is not theirs writes the brief with none.
