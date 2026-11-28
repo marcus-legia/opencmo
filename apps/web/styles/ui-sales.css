@@ -1,0 +1,175 @@
+/*
+ * Feed and Sales on the UI system (redesign 2026-11-28). Imported right after `ui-system.css`, so it wins ties with
+ * the older per-page rules (`today.css` `.pg-main` / `.pg-agentsales`, `redesign.css` `.score-sq`, `.their-post`…).
+ * Only tokens from ui-system.css: no section colours, no inverted cards. `fd-*` is the Feed, `sl-*` is Sales.
+ */
+
+/* ── Feed ──────────────────────────────────────────────────────────────────────────────────────────────────────── */
+.k .fd-page { flex: 1 1 auto; overflow: auto; width: 100%; max-width: 920px; margin: 0 auto; padding: var(--sp-6) var(--sp-6) 40px; }
+
+/* The week's steps: icon, number and word always visible; the row wraps instead of cutting a word. */
+.k .fd-flow { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin: 0 0 var(--sp-6); }
+.k .fd-step {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 4px 12px 4px 10px;
+  border: 1px solid var(--line); border-radius: var(--r-pill); background: var(--panel); color: var(--muted);
+  font-family: inherit; font-size: var(--fs-sm); line-height: 1.3; cursor: pointer; white-space: nowrap;
+}
+.k .fd-step svg { width: 15px; height: 15px; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.k .fd-step b { color: var(--text); font-weight: 600; }
+.k .fd-step:hover { border-color: var(--line-2); color: var(--text); }
+.k .fd-step[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-wash); color: var(--accent-text); }
+.k .fd-step[aria-pressed="true"] b { color: inherit; }
+.k .fd-step:focus-visible { outline: none; box-shadow: var(--focus); }
+@media (pointer: coarse) { .k .fd-step { min-height: 44px; } }
+
+/* A row of the list is a card; the open one has the accent border, nothing inverted. */
+.pg-main .item.fd-item { border-radius: var(--r-lg); background: var(--panel); color: var(--text); }
+.pg-main .fd-item .row { min-height: 52px; padding: 8px 10px 8px 12px; gap: var(--sp-3); }
+.pg-main .fd-item button.row { cursor: pointer; }
+.pg-main .fd-item button.row:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--accent); border-radius: var(--r-lg); }
+.pg-main .fd-item .ttl { font-size: var(--fs-sm); font-weight: 500; }
+.pg-main .fd-item .kind { color: var(--muted); }
+.pg-main .fd-item .meta { display: inline-flex; align-items: center; gap: 6px; color: var(--subtle); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; }
+.pg-main .fd-item .do { min-height: 28px; border-radius: var(--r-sm); background: var(--panel); border-color: var(--line-2); }
+.pg-main .fd-item .do:hover { background: var(--hover); }
+.pg-main .fd-item .skip { border-radius: var(--r-sm); }
+.pg-main .fd-item .detail { padding: var(--sp-4); border-top-color: var(--line); background: transparent; }
+.pg-main .fd-item[data-active] .detail { padding-left: 52px; }
+.k .fd-reason { margin: 0 0 var(--sp-3); color: var(--muted); font-size: var(--fs-xs); line-height: 1.5; }
+.k .fd-reason b { color: var(--text); font-weight: 600; }
+.pg-main .fd-item .td-reach { flex: 0 0 auto; margin: 0; }
+@media (max-width: 640px) {
+  .k .fd-page { padding: var(--sp-4) var(--sp-4) 32px; }
+  .pg-main .fd-item[data-active] .detail { padding-left: var(--sp-4); }
+  .k .fd-step { padding: 4px 10px 4px 8px; }
+}
+
+/* ── Sales: page ───────────────────────────────────────────────────────────────────────────────────────────────── */
+.pg-agentsales .sl-page { display: flex; flex-wrap: wrap; gap: var(--sp-6); max-width: 1320px; margin: 0 auto; padding: var(--sp-6) var(--sp-6) 40px; }
+.pg-agentsales .sl-main { flex: 999 1 600px; min-width: 0; }
+.pg-agentsales .sl-side { flex: 1 1 280px; max-width: 340px; display: flex; flex-direction: column; gap: var(--sp-3); }
+.pg-agentsales .sl-gap { margin-top: var(--sp-4); }
+.pg-agentsales .sl-page .ui-tabs .ui-chip { min-height: 18px; padding: 0 6px; }
+@media (max-width: 640px) {
+  .pg-agentsales .sl-page, .pg-agentsales .sales-page.sl-page { padding: var(--sp-4) var(--sp-4) 32px !important; gap: var(--sp-4); }
+  .pg-agentsales .sl-side { max-width: none; }
+}
+
+/* Plain text helpers: one muted size for every note on the page. */
+.k .sl-note { margin: 0; color: var(--muted); font-size: var(--fs-xs); line-height: 1.5; }
+.k .sl-note[data-tone="warn"] { color: var(--warn); }
+.k .sl-link { color: var(--accent-text); font-size: 13px; font-weight: 500; text-decoration: none; border-radius: var(--r-sm); }
+.k .sl-link:hover { text-decoration: underline; text-underline-offset: 2px; }
+.k .sl-link:focus-visible { outline: none; box-shadow: var(--focus); }
+.k .sl-end { justify-content: flex-end; }
+.k .sl-select { width: auto; min-height: 32px; padding: 0 8px; }
+.k .sl-textarea { font-size: 15px; line-height: 1.55; resize: vertical; }
+
+/* Scan now, confirmed under the header */
+.k .sl-confirm { max-width: 440px; margin: 0 0 var(--sp-4); display: flex; flex-direction: column; gap: var(--sp-2); }
+.k .sl-confirm-title { margin: 0; font-size: var(--fs-sm); font-weight: 600; }
+.k .sl-confirm-list { margin: 0; padding-left: 18px; color: var(--muted); font-size: 13.5px; line-height: 1.5; }
+
+/* The groups: "To reply 3", a section per scan, then the folded rest */
+.k .sl-group { display: flex; align-items: baseline; gap: var(--sp-2); margin: var(--sp-6) 0 var(--sp-2); font-size: var(--fs-md); font-weight: 600; }
+.k .sl-group .ui-num { color: var(--muted); font-weight: 500; }
+.k .sl-section { display: flex; flex-direction: column; gap: var(--sp-2); margin: var(--sp-3) 0 var(--sp-4); }
+.k .sl-section-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px var(--sp-3); margin: 0; font-size: 13px; font-weight: 600; color: var(--muted); }
+.k .sl-section-link { margin-left: auto; }
+.k .sl-list { display: flex; flex-direction: column; gap: var(--sp-2); }
+.k .sl-done { margin: var(--sp-6) 0 0; padding-top: var(--sp-3); border-top: 1px solid var(--line); }
+.k .sl-done > summary { font-size: var(--fs-sm); }
+.k .sl-done .ui-num { color: var(--subtle); }
+
+/* ── Sales: a thread ───────────────────────────────────────────────────────────────────────────────────────────── */
+.pg-agentsales .th.sl-thread { border-radius: var(--r-lg); background: var(--panel); }
+.pg-agentsales .th.sl-thread[data-done] { background: transparent; }
+.pg-agentsales .sl-head { display: flex; align-items: flex-start; gap: var(--sp-3); width: 100%; min-height: 0; padding: var(--sp-3) var(--sp-4); border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+.pg-agentsales .sl-head:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--accent); border-radius: var(--r-lg); }
+.k .sl-head-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.k .sl-head-side { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; }
+.k .sl-chev { color: var(--subtle); }
+.k .sl-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; color: var(--muted); font-size: var(--fs-xs); line-height: 1.4; font-variant-numeric: tabular-nums; }
+.k .sl-meta > span { display: inline-flex; align-items: center; gap: 4px; }
+.k .sl-meta svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.k .sl-ellipsis { display: block; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.k .sl-title { display: block; font-size: var(--fs-md); font-weight: 600; line-height: 1.4; color: var(--text); overflow-wrap: anywhere; }
+.k .sl-thread[data-done] .sl-title { color: var(--muted); font-weight: 500; }
+.k .sl-no { display: inline-block; min-width: 1.6em; margin-right: 8px; padding: 0 5px; border-radius: var(--r-sm); background: var(--raised); color: var(--muted); font-size: 12.5px; font-weight: 600; text-align: center; vertical-align: 1px; }
+/* One quote, whole lines only: a line box that fits the clamp, so nothing shows cut through the middle. */
+.k .sl-quote { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin-top: 2px; color: var(--muted); font-size: var(--fs-sm); line-height: 1.5; max-height: calc(2 * 1.5em); overflow-wrap: anywhere; }
+
+/* The score: a number and a word, the word in the accent only when it is a strong match. */
+.k .sl-score { display: inline-flex; align-items: baseline; gap: 5px; min-height: 26px; padding: 3px 8px; border-radius: var(--r-md); border: 1px solid var(--line); background: var(--raised); color: var(--muted); font-size: var(--fs-xs); font-weight: 500; white-space: nowrap; }
+.k .sl-score b { color: var(--text); font-size: var(--fs-sm); font-weight: 600; }
+.k .sl-score[data-tone="hi"] { border-color: transparent; background: var(--accent-wash); color: var(--accent-text); }
+.k .sl-score[data-tone="hi"] b { color: inherit; }
+.k .sl-score[data-tone="lo"] b { color: var(--muted); }
+
+.pg-agentsales .th-body.sl-body { display: flex; flex-direction: column; gap: var(--sp-3); padding: 0 var(--sp-4) var(--sp-4); border-top: 0; }
+.k .sl-post { display: flex; flex-direction: column; gap: 6px; padding: var(--sp-3) var(--sp-4); border-radius: var(--r-md); background: var(--raised); }
+.k .sl-post-head { color: var(--muted); font-size: var(--fs-xs); font-weight: 600; }
+.k .sl-post-text { margin: 0; color: var(--text); font-size: var(--fs-sm); line-height: 1.6; white-space: pre-line; overflow-wrap: anywhere; }
+.k .sl-post-text[data-folded] { display: -webkit-box; -webkit-line-clamp: 8; -webkit-box-orient: vertical; overflow: hidden; }
+.k .sl-post-text mark { background: var(--accent-wash); color: inherit; border-radius: 3px; padding: 0 2px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+.k .sl-more { align-self: flex-start; margin-left: -10px; }
+
+/* "Why 67": the parts, the lines they were counted from, and the reach checks */
+.k .sl-whybox > summary { font-variant-numeric: tabular-nums; }
+.k .sl-whybox[open] { padding-bottom: var(--sp-1); }
+.k .sl-why { display: flex; flex-direction: column; gap: var(--sp-2); margin: 0 0 var(--sp-3); padding-left: 14px; border-left: 2px solid var(--line); }
+.k .sl-parts { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-2); }
+.k .sl-parts li { display: grid; grid-template-columns: 72px minmax(60px, 140px) auto; align-items: center; gap: 2px var(--sp-3); font-size: 13px; }
+.k .sl-part-label { color: var(--text); font-weight: 500; }
+.k .sl-part-score { color: var(--muted); font-size: var(--fs-xs); }
+.k .sl-part-line { grid-column: 1 / -1; margin: 0; color: var(--muted); font-size: var(--fs-xs); line-height: 1.5; overflow-wrap: anywhere; }
+.k .sl-checks { display: flex; flex-direction: column; gap: 6px; padding-left: 14px; border-left: 2px solid var(--line); font-size: 13px; }
+.k .sl-checklist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.k .sl-checklist li { display: flex; gap: var(--sp-2); font-size: 13px; line-height: 1.45; }
+.k .sl-check-mark { flex: 0 0 14px; color: var(--subtle); }
+.k .sl-checklist li[data-ok="true"] .sl-check-mark { color: var(--ok); }
+.k .sl-check-text { display: flex; flex-wrap: wrap; gap: 0 var(--sp-2); min-width: 0; flex: 1 1 auto; }
+.k .sl-check-label { font-weight: 500; white-space: nowrap; }
+
+.k .sl-rule { display: flex; flex-wrap: wrap; align-items: center; gap: 6px var(--sp-2); }
+.k .sl-rule .ui-chip { font-size: 13px; font-weight: 600; }
+.k .sl-locked { justify-content: space-between; }
+.k .sl-locked > .sl-note { flex: 1 1 220px; }
+
+/* Reach: the three tabs as one segmented control, the level beside them */
+.k .sl-reach { display: flex; flex-direction: column; gap: var(--sp-3); }
+.k .sl-reach-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
+.k .sl-reach-row .ui-seg svg { width: 12px; height: 12px; opacity: .7; }
+
+/* The reply idea and the founder's own reply: the idea box keeps its two keywords, in the UI system's quieter tones. */
+.k .sl-body .idea-box { background: var(--bg); border: 1px solid var(--line); border-radius: var(--r-md); padding: var(--sp-3) var(--sp-4); }
+.k .sl-body .idea-say { color: var(--muted); }
+.k .sl-reply-label { margin: 0; color: var(--text); }
+.k .sl-body .idea-mine { border-radius: var(--r-md); border-width: 1px; font-size: 15px; line-height: 1.55; min-height: 96px; }
+.k .sl-body .idea-meter > span { background: var(--accent); }
+.k .sl-body .idea-badge { height: auto; min-height: 24px; padding: 2px 10px; background: var(--raised); color: var(--muted); font-weight: 600; }
+.k .sl-body .idea-badge[data-mine] { background: var(--ok-wash); color: var(--ok); }
+
+/* Phone: the open person, full width (`.th-person`) keeps its sticky actions from today-app.css. */
+.pg-agentsales .th-person .sl-body { padding: 0; }
+.pg-agentsales .th-person .th-phonehead .sl-score { flex: 0 0 auto; }
+@media (max-width: 640px) {
+  .pg-agentsales .sl-head { padding: var(--sp-3); gap: var(--sp-2); }
+  .k .sl-score-word { display: none; }
+  .pg-agentsales .th-body.sl-body { padding: 0 var(--sp-3) var(--sp-3); }
+  .k .sl-section-link { margin-left: 0; flex-basis: 100%; }
+  .k .sl-parts li { grid-template-columns: 64px minmax(0, 1fr) auto; }
+}
+
+/* ── Sales: side column ────────────────────────────────────────────────────────────────────────────────────────── */
+.k .sl-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-2); margin: 0; }
+.k .sl-stats > div { display: flex; flex-direction: column-reverse; gap: 2px; min-width: 0; }
+.k .sl-stats dt { color: var(--muted); font-size: var(--fs-xs); line-height: 1.35; }
+.k .sl-stats dd { margin: 0; color: var(--text); font-size: var(--fs-lg); font-weight: 600; line-height: 1.2; }
+.k .sl-run { display: flex; gap: var(--sp-3); padding: var(--sp-2) 0; border-top: 1px solid var(--line); font-size: 13.5px; line-height: 1.45; }
+.k .sl-run:first-of-type { border-top: 0; padding-top: 0; }
+.k .sl-run > .sl-note { flex: 0 0 76px; }
+.k .sl-place { display: flex; align-items: center; gap: var(--sp-3); min-height: 36px; font-size: var(--fs-sm); }
+.k .sl-place:not([data-on]):not(.sl-place--foot) .sl-place-name { color: var(--muted); }
+.k .sl-place-name { flex: 1 1 auto; min-width: 0; }
+.k .sl-place--foot { margin-top: var(--sp-2); padding-top: var(--sp-2); border-top: 1px solid var(--line); }

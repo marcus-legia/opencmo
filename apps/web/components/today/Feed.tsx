@@ -33,6 +33,7 @@ import type { WriterScreen } from "@/lib/screens/writer";
 import type { TodayRowData } from "@/lib/screens/dashboard";
 
 import { KIND_ICON, PLATFORM_ICON, cardIcon, kindLabel, whenLabel } from "./cards";
+import { PageHeader } from "./PageHeader";
 import { dayLabel, draftsLeftOver, draftsThisWeek } from "./week";
 
 type Draft = WriterScreen["drafts"][number];
@@ -79,40 +80,17 @@ function firstName(email: string | null | undefined): string | null {
   return local.length >= 2 ? local.charAt(0).toUpperCase() + local.slice(1).toLowerCase() : null;
 }
 
-/** The artboard's robot at the planning board, as drawn there. */
-function Robot() {
-  return (
-    <svg width="56" height="56" viewBox="0 0 56 56" role="img" aria-label="Ferreto at the planning board" style={{ flexShrink: "0" }}>
-      <rect className="rb-bg" x="0.75" y="0.75" width="54.5" height="54.5" rx="12" strokeWidth="1.5" />
-      <rect className="rb-m" x="31" y="11" width="17" height="14" rx="2" fill="none" strokeWidth="1.5" />
-      <line className="r-l1 rb-a" x1="34" y1="15" x2="44" y2="15" strokeWidth="1.5" strokeLinecap="round" />
-      <line className="r-l2 rb-a" x1="34" y1="18" x2="41" y2="18" strokeWidth="1.5" strokeLinecap="round" />
-      <line className="r-l3 rb-a" x1="34" y1="21" x2="43" y2="21" strokeWidth="1.5" strokeLinecap="round" />
-      <line className="rb-m" x1="17" y1="12" x2="17" y2="16" strokeWidth="1.5" strokeLinecap="round" />
-      <circle className="rb-ok" cx="17" cy="10.5" r="1.8" />
-      <rect className="rb-t" x="9" y="16" width="16" height="12" rx="4" fill="none" strokeWidth="1.5" />
-      <circle className="r-eye rb-tf" cx="14" cy="22" r="1.4" />
-      <circle className="r-eye rb-tf" cx="20" cy="22" r="1.4" />
-      <rect className="rb-t" x="10" y="31" width="14" height="13" rx="3.5" fill="none" strokeWidth="1.5" />
-      <g className="r-arm">
-        <line className="rb-t" x1="24" y1="34" x2="31" y2="27" strokeWidth="1.5" strokeLinecap="round" />
-        <circle className="rb-af" cx="31.5" cy="26.5" r="1.4" />
-      </g>
-      <line className="rb-t" x1="14" y1="44" x2="14" y2="48" strokeWidth="1.5" strokeLinecap="round" />
-      <line className="rb-t" x1="20" y1="44" x2="20" y2="48" strokeWidth="1.5" strokeLinecap="round" />
-    </svg>
-  );
-}
-
 const Chevron = ({ up, color }: { up?: boolean; color?: string }) => (
   <svg className="i s" viewBox="0 0 24 24" aria-hidden="true" style={color ? { color } : undefined}>
     <path d={up ? "m18 15-6-6-6 6" : "m6 9 6 6 6-6"} />
   </svg>
 );
 
-/** One row of the list, as the artboard draws it: tile, kind and title, a short meta, then its actions or a chevron. */
+/**
+ * One row of the list: tile, kind and title, a short meta, then its actions or a chevron. The open row is the same card
+ * with an accent border (`data-active`), never an inverted one (redesign 2026-11-28).
+ */
 function Row({
-  inv,
   icon,
   kind,
   title,
@@ -125,7 +103,6 @@ function Row({
   testId = "feed-row",
 }: {
   testId?: string;
-  inv?: boolean;
   icon: ReactNode;
   kind: string;
   title: string;
@@ -148,11 +125,11 @@ function Row({
     </>
   );
   return (
-    <div className={inv ? "item inv" : "item"} data-testid={testId} data-card-id={cardId}>
+    <div className="item ui-card ui-card--flush fd-item" data-active={open && children ? "" : undefined} data-testid={testId} data-card-id={cardId}>
       {onToggle && !actions ? (
         <button type="button" className="row" onClick={onToggle} aria-expanded={open}>
           {line}
-          <Chevron up={open} color={inv ? "var(--inv-muted)" : "var(--subtle)"} />
+          <Chevron up={open} color="var(--subtle)" />
         </button>
       ) : (
         <div className="row">
@@ -165,14 +142,14 @@ function Row({
   );
 }
 
-function CardRow({ card, inv, open, onToggle, onLater, onDecide, sample }: { card: Card; inv: boolean; open: boolean; onToggle: () => void; onLater: () => void; onDecide: DecideHandler; sample: boolean }) {
+function CardRow({ card, open, onToggle, onLater, onDecide, sample }: { card: Card; open: boolean; onToggle: () => void; onLater: () => void; onDecide: DecideHandler; sample: boolean }) {
   const label = kindLabel(card);
   const when = whenLabel(card);
   // A Sales card says how far the person can be reached, as Sales does (wave 4 B3/C2): "DM ready", and why when open.
   const reach = card.body.kind === "reply" ? (card.body.reach ?? null) : null;
   const meta = reach ? (
     <>
-      <span className="chip td-reach" data-testid="feed-reach-level">
+      <span className="ui-chip td-reach" data-tone={reach.level === "reply_first" ? undefined : "ok"} data-testid="feed-reach-level">
         {REACH_LEVEL_LABEL[reach.level]}
       </span>
       {when ? ` ${when}` : null}
@@ -183,7 +160,6 @@ function CardRow({ card, inv, open, onToggle, onLater, onDecide, sample }: { car
   return (
     <Row
       cardId={card.id}
-      inv={inv}
       icon={cardIcon(card)}
       kind={label}
       title={card.title}
@@ -191,7 +167,7 @@ function CardRow({ card, inv, open, onToggle, onLater, onDecide, sample }: { car
       open={open}
       onToggle={onToggle}
       actions={
-        inv || open ? undefined : (
+        open ? undefined : (
           <>
             <button type="button" className="skip" onClick={onLater}>
               Not now
@@ -204,8 +180,8 @@ function CardRow({ card, inv, open, onToggle, onLater, onDecide, sample }: { car
       }
     >
       {reach ? (
-        <p className="meta" data-testid="feed-reach-reason" style={{ margin: "0 0 10px" }}>
-          <b style={{ fontWeight: "600", color: "var(--text)" }}>{REACH_LEVEL_LABEL[reach.level]}</b> · {reach.reason}
+        <p className="fd-reason" data-testid="feed-reach-reason">
+          <b>{REACH_LEVEL_LABEL[reach.level]}</b> · {reach.reason}
         </p>
       ) : null}
       {/* The real card body: its versions, text, time and every action it has (cards.css draws it as the artboard does). */}
@@ -365,13 +341,13 @@ export function Feed({ email }: { email?: string | null }) {
     };
   }, [data, slots]);
 
-  // One colour and icon per step (owner, 2026-11-23: icons over words); the word stays for screen readers and the title.
-  const steps: { id: Step; label: string; sec: string; d: string }[] = [
-    { id: "planned", label: "planned", sec: "biz", d: "M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z" },
-    { id: "waiting", label: "waiting on you", sec: "idea", d: "M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0" },
-    { id: "making", label: "being made", sec: "find", d: "m12 3-1.9 5.8L4 12l6.1 3.2L12 21l1.9-5.8L20 12l-6.1-3.2Z" },
-    { id: "scheduled", label: "scheduled", sec: "post", d: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM12 7v5l3 2" },
-    { id: "posted", label: "posted", sec: "sol", d: "m22 2-7 20-4-9-9-4ZM22 2 11 13" },
+  // One icon per step, with its word always next to it (redesign 2026-11-28: a chip never cuts its status).
+  const steps: { id: Step; label: string; d: string }[] = [
+    { id: "planned", label: "planned", d: "M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z" },
+    { id: "waiting", label: "waiting on you", d: "M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0" },
+    { id: "making", label: "being made", d: "m12 3-1.9 5.8L4 12l6.1 3.2L12 21l1.9-5.8L20 12l-6.1-3.2Z" },
+    { id: "scheduled", label: "scheduled", d: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM12 7v5l3 2" },
+    { id: "posted", label: "posted", d: "m22 2-7 20-4-9-9-4ZM22 2 11 13" },
   ];
 
   const cards = (data?.queue ?? []).filter((c) => c.status === "waiting" && !later.has(c.id));
@@ -487,56 +463,52 @@ export function Feed({ email }: { email?: string | null }) {
       <RatingSheet open={rating} onClose={closeRating} />
 
       <main className="mid" data-testid="v2-dashboard">
-        <div style={{ flex: "1 1 auto", overflow: "auto", padding: "18px 24px 40px", maxWidth: "920px", width: "100%", margin: "0 auto" }}>
-          <div style={{ display: "flex", alignItems: "flex-start", gap: "14px", marginBottom: "16px" }}>
-            <Robot />
-            <div style={{ flex: "1 1 auto", minWidth: "0" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <h1 data-testid="dash-headline" style={{ margin: "0", fontSize: "22px", fontWeight: "600", letterSpacing: "-0.4px", lineHeight: "28px" }}>
-                  {name ? `Hi, ${name}.` : "Hi."}
-                </h1>
-                <span className="live" title="Ferreto is working"></span>
-              </div>
-              <p style={{ margin: "4px 0 0", color: "var(--muted)", fontSize: "14px", lineHeight: "18px" }}>
-                {state.status === "loading"
-                  ? "Loading your team…"
-                  : needs === 0
-                    ? held > 0
-                      ? `Nothing in the queue today. ${held} ${held === 1 ? "card is" : "cards are"} held until tomorrow.`
-                      : "Nothing waits on you. Your team keeps working."
-                    : `${needs} ${needs === 1 ? "item needs" : "items need"} your attention today.`}
-              </p>
-            </div>
-            {/* The planner lives on the calendar: a founder who lands here first needs a way to it (which platforms, how often). */}
-            <Link href="/app/schedule#posting-plan" className="ib" aria-label="Posting plan: pick your platforms and how often" title="Posting plan: pick your platforms and how often" data-testid="feed-posting-plan">
-              <svg className="i" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M4 21v-7" />
-                <path d="M4 10V3" />
-                <path d="M12 21v-9" />
-                <path d="M12 8V3" />
-                <path d="M20 21v-5" />
-                <path d="M20 12V3" />
-                <path d="M2 14h4" />
-                <path d="M10 8h4" />
-                <path d="M18 16h4" />
-              </svg>
-            </Link>
-            <button type="button" className="ib" aria-label="Refresh" onClick={() => void reload()}>
-              <svg className="i" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
-                <path d="M21 3v5h-5" />
-                <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
-                <path d="M8 16H3v5" />
-              </svg>
-            </button>
-          </div>
+        <div className="fd-page">
+          <PageHeader
+            title={<span data-testid="dash-headline">{name ? `Hi, ${name}.` : "Hi."}</span>}
+            status={
+              state.status === "loading"
+                ? "Loading your team…"
+                : needs === 0
+                  ? held > 0
+                    ? `Nothing in the queue today. ${held} ${held === 1 ? "card is" : "cards are"} held until tomorrow.`
+                    : "Nothing waits on you. Your team keeps working."
+                  : `${needs} ${needs === 1 ? "item needs" : "items need"} your attention today.`
+            }
+            actions={
+              <>
+                {/* The planner lives on the calendar: a founder who lands here first needs a way to it (which platforms, how often). */}
+                <Link href="/app/schedule#posting-plan" className="ui-btn ui-btn--quiet ui-btn--icon" aria-label="Posting plan: pick your platforms and how often" title="Posting plan: pick your platforms and how often" data-testid="feed-posting-plan">
+                  <svg className="i" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M4 21v-7" />
+                    <path d="M4 10V3" />
+                    <path d="M12 21v-9" />
+                    <path d="M12 8V3" />
+                    <path d="M20 21v-5" />
+                    <path d="M20 12V3" />
+                    <path d="M2 14h4" />
+                    <path d="M10 8h4" />
+                    <path d="M18 16h4" />
+                  </svg>
+                </Link>
+                <button type="button" className="ui-btn ui-btn--quiet ui-btn--icon" aria-label="Refresh" title="Refresh" onClick={() => void reload()}>
+                  <svg className="i" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+                    <path d="M21 3v5h-5" />
+                    <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+                    <path d="M8 16H3v5" />
+                  </svg>
+                </button>
+              </>
+            }
+          />
 
           {state.status === "error" ? (
             <div className="item" role="alert">
               <div className="row" style={{ color: "var(--muted)" }}>
                 {state.message}
                 <div style={{ flex: "1 1 auto" }}></div>
-                <button type="button" className="do" onClick={() => void reload()}>
+                <button type="button" className="ui-btn ui-btn--ghost ui-btn--sm" onClick={() => void reload()}>
                   Try again
                 </button>
               </div>
@@ -545,14 +517,14 @@ export function Feed({ email }: { email?: string | null }) {
 
           <AllowanceBanner state={usageState} />
           <FreeLockedCard state={usageState} where="feed" />
-          <div className="flow flow-v3" role="group" aria-label="This week's workflow" style={{ marginBottom: "22px" }}>
+          <div className="fd-flow" role="group" aria-label="This week's workflow">
             {steps.map((s) => (
-              <button key={s.id} type="button" className="flow-step" data-step-sec={s.sec} aria-pressed={step === s.id} onClick={() => setStep(s.id)} data-testid={`flow-${s.id}`} title={`${counts[s.id]} ${s.label}`} style={{ ["--fs" as string]: `var(--sec-${s.sec})`, ["--fs-wash" as string]: `var(--sec-${s.sec}-wash)` }}>
+              <button key={s.id} type="button" className="fd-step" aria-pressed={step === s.id} onClick={() => setStep(s.id)} data-testid={`flow-${s.id}`}>
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <path d={s.d} />
                 </svg>
-                <b>{counts[s.id]}</b>
-                <span className="flow-label">{s.label}</span>
+                <b className="ui-num">{counts[s.id]}</b>
+                <span className="fd-step-label">{s.label}</span>
               </button>
             ))}
           </div>
@@ -593,7 +565,6 @@ export function Feed({ email }: { email?: string | null }) {
                     <CardRow
                       key={item.card.id}
                       card={item.card}
-                      inv={item.card.id === firstCardId}
                       open={openId === item.card.id}
                       onToggle={() => setOpen(openId === item.card.id ? "" : item.card.id)}
                       onLater={() => setLater((was) => new Set([...was, item.card.id]))}

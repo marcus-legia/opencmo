@@ -22,6 +22,7 @@ import type { SalesScreen } from "@/lib/screens/sales";
 import { createClient } from "@/lib/supabase/client";
 
 import { IdeaDraft } from "./IdeaDraft";
+import { PageHeader } from "./PageHeader";
 import { usePhone } from "./phone";
 import { hasLogo, PlatformBadge } from "./platform-logos";
 import { useWorkspace } from "./workspace";
@@ -39,7 +40,7 @@ type Tab = "threads" | "following" | "runs" | "settings";
 const DISMISS_REASONS = ["Not our customer", "Already solved", "Too old", "Wrong community"] as const;
 
 /** A word reads faster than a number (owner, 2026-11-19); the number stays in "how it was counted". */
-const tone = (score: number) => (score >= STRONG_MATCH ? "score hi" : score >= 60 ? "score mid" : "score lo");
+const tone = (score: number) => (score >= STRONG_MATCH ? "hi" : score >= 60 ? "mid" : "lo");
 
 function ago(iso: string | null): string {
   if (!iso) return "";
@@ -123,12 +124,12 @@ function ScanProgress({ scan, onClose }: { scan: Scan; onClose: () => void }) {
               : "Scan finished · nothing worth joining this time";
 
   return (
-    <section className="card" role="status" aria-live="polite" style={{ marginTop: "14px" }}>
+    <section className="ui-card" role="status" aria-live="polite" style={{ marginTop: "14px" }}>
       <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
         {active ? <span className="live"></span> : null}
         <b style={{ flex: "1 1 auto" }}>{title}</b>
         {active ? null : (
-          <button type="button" className="ghost" onClick={onClose}>
+          <button type="button" className="ui-btn ui-btn--ghost" onClick={onClose}>
             Close
           </button>
         )}
@@ -164,18 +165,17 @@ function ScanProgress({ scan, onClose }: { scan: Scan; onClose: () => void }) {
   );
 }
 
-/**
- * Scan now: the same card as a scan asked in the CMO chat, with its cost line (owner test 2026-11-23);
- * nothing runs until the founder approves it. An
- * unpaid account's first scan is free (`cmo_first_run_free`); after it, the button opens the plan sheet instead of
- * answering with the 402's text.
- */
-function ScanNow({ scanning, paused, platforms, free, freeLeft, onPlan, onStarted }: { scanning: boolean; paused: boolean; platforms?: SalesPlatform[]; free: boolean; freeLeft: boolean; onPlan: (action: string) => void; onStarted: (run: { id: string; status: string; created_at: string }) => void }) {
-  // The card names the places the founder's switches leave on: the scan searches those only.
-  const card = salesScanCard(undefined, platforms);
-  const [step, setStep] = useState<"idle" | "confirm" | "busy">("idle");
-  const [error, setError] = useState<string | null>(null);
+type ScanStepState = "idle" | "confirm" | "busy";
 
+/**
+ * Scan now: the same card as a scan asked in the CMO chat, with its cost line (owner test 2026-11-23); nothing runs
+ * until the founder approves it. An unpaid account's first scan is free (`cmo_first_run_free`); after it, the button
+ * opens the plan sheet instead of answering with the 402's text. The button is the page header's primary action; the
+ * confirm card opens under the header (redesign 2026-11-28), so the header stays one line.
+ */
+function useScanNow({ free, freeLeft, onPlan, onStarted }: { free: boolean; freeLeft: boolean; onPlan: (action: string) => void; onStarted: (run: { id: string; status: string; created_at: string }) => void }) {
+  const [step, setStep] = useState<ScanStepState>("idle");
+  const [error, setError] = useState<string | null>(null);
   function open() {
     setError(null);
     if (free && !freeLeft) onPlan("scan again");
@@ -198,48 +198,56 @@ function ScanNow({ scanning, paused, platforms, free, freeLeft, onPlan, onStarte
       setStep("confirm");
     }
   }
+  return { step, setStep, error, open, start };
+}
 
+function ScanNowButton({ scanning, paused, freeLeft, scan }: { scanning: boolean; paused: boolean; freeLeft: boolean; scan: ReturnType<typeof useScanNow> }) {
   if (scanning) {
     return (
-      <span className="chip">
+      <span className="ui-chip" data-tone="accent">
         <span className="live"></span>Scanning…
       </span>
     );
   }
-  if (step === "idle") {
-    return (
-      <span style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-end", gap: "6px" }}>
-        <button type="button" className="primary" onClick={open} disabled={paused} title={paused ? "New scans wait for the allowance to reset" : undefined}>
-          <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
-            <circle cx="11" cy="11" r="8" />
-            <path d="m21 21-4.3-4.3" />
-          </svg>
-          {freeLeft ? "Scan now · free" : "Scan now"}
-        </button>
-        {error ? <span className="meta">{error}</span> : null}
-      </span>
-    );
-  }
   return (
-    <div className="card" role="group" aria-labelledby="scan-now-title" style={{ maxWidth: "360px" }}>
-      <h2 id="scan-now-title" style={{ margin: "0 0 6px", fontSize: "14px", fontWeight: "600" }}>
+    <button type="button" className="ui-btn ui-btn--primary" onClick={scan.open} disabled={paused || scan.step !== "idle"} aria-expanded={scan.step !== "idle"} title={paused ? "New scans wait for the allowance to reset" : undefined}>
+      <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="11" cy="11" r="8" />
+        <path d="m21 21-4.3-4.3" />
+      </svg>
+      {freeLeft ? "Scan now · free" : "Scan now"}
+    </button>
+  );
+}
+
+function ScanNowConfirm({ platforms, freeLeft, scan }: { platforms?: SalesPlatform[]; freeLeft: boolean; scan: ReturnType<typeof useScanNow> }) {
+  // The card names the places the founder's switches leave on: the scan searches those only.
+  const card = salesScanCard(undefined, platforms);
+  if (scan.step === "idle") return scan.error ? <p className="sl-note" role="alert">{scan.error}</p> : null;
+  return (
+    <div className="ui-card sl-confirm" role="group" aria-labelledby="scan-now-title">
+      <h2 id="scan-now-title" className="sl-confirm-title">
         {freeLeft ? "Your free scan" : "Scan now"}
       </h2>
-      <ul style={{ margin: "0 0 10px", paddingLeft: "18px", fontSize: "13.5px", color: "var(--muted)" }}>
+      <ul className="sl-confirm-list">
         {card.changes.map((line) => (
           <li key={line}>{line}</li>
         ))}
       </ul>
-      <p className="meta" style={{ margin: "0 0 10px" }} data-testid="scan-cost">
+      <p className="sl-note" data-testid="scan-cost">
         {costLine(card.credits, freeLeft)}
       </p>
-      {error ? <div className="meta">{error}</div> : null}
-      <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
-        <button type="button" className="skip" disabled={step === "busy"} onClick={() => setStep("idle")}>
+      {scan.error ? (
+        <p className="sl-note" role="alert" data-tone="warn">
+          {scan.error}
+        </p>
+      ) : null}
+      <div className="ui-row sl-end">
+        <button type="button" className="ui-btn ui-btn--quiet" disabled={scan.step === "busy"} onClick={() => scan.setStep("idle")}>
           Cancel
         </button>
-        <button type="button" className="primary" disabled={step === "busy"} onClick={() => void start()}>
-          {step === "busy" ? "Starting…" : freeLeft ? "Start the free scan" : "Start the scan"}
+        <button type="button" className="ui-btn ui-btn--primary" disabled={scan.step === "busy"} onClick={() => void scan.start()}>
+          {scan.step === "busy" ? "Starting…" : freeLeft ? "Start the free scan" : "Start the scan"}
         </button>
       </div>
     </div>
@@ -272,7 +280,7 @@ function WriteReplies({ count, busy, onPlan, onStarted }: { count: number; busy:
   }
 
   return (
-    <div className="card" role="group" aria-labelledby="write-replies-title" style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", marginBottom: "10px" }}>
+    <div className="ui-card" role="group" aria-labelledby="write-replies-title" style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", marginBottom: "10px" }}>
       <div style={{ flex: "1 1 260px", minWidth: "0" }}>
         <b id="write-replies-title">
           {count} {count === 1 ? "thread has" : "threads have"} no reply idea yet
@@ -285,20 +293,20 @@ function WriteReplies({ count, busy, onPlan, onStarted }: { count: number; busy:
         ) : null}
       </div>
       {busy ? (
-        <span className="chip">
+        <span className="ui-chip">
           <span className="live"></span>Writing…
         </span>
       ) : step === "idle" ? (
-        <button type="button" className="primary" onClick={() => setStep("confirm")}>
+        <button type="button" className="ui-btn ui-btn--primary" onClick={() => setStep("confirm")}>
           Write the ideas
         </button>
       ) : (
         <span style={{ display: "inline-flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
           <span className="meta" data-testid="write-cost">{costLine(JOB_PRICES.sales_reply_drafts ?? 0)}</span>
-          <button type="button" className="skip" disabled={step === "busy"} onClick={() => setStep("idle")}>
+          <button type="button" className="ui-btn ui-btn--quiet" disabled={step === "busy"} onClick={() => setStep("idle")}>
             Cancel
           </button>
-          <button type="button" className="primary" disabled={step === "busy"} onClick={() => void start()}>
+          <button type="button" className="ui-btn ui-btn--primary" disabled={step === "busy"} onClick={() => void start()}>
             {step === "busy" ? "Starting…" : "Write them"}
           </button>
         </span>
@@ -323,7 +331,7 @@ function places(list: SalesPlatform[]): string {
  */
 function WhileYouWait() {
   return (
-    <section className="card" data-testid="sales-while-you-wait" style={{ marginTop: "14px", display: "flex", flexDirection: "column", gap: "8px" }}>
+    <section className="ui-card" data-testid="sales-while-you-wait" style={{ marginTop: "14px", display: "flex", flexDirection: "column", gap: "8px" }}>
       <b>Your first scan is running. It takes a few minutes.</b>
       <div className="meta">While you wait:</div>
       <ul style={{ margin: "0", paddingLeft: "18px", fontSize: "14px", display: "flex", flexDirection: "column", gap: "4px" }}>
@@ -343,17 +351,17 @@ function WhileYouWait() {
 
 function ScanProblem({ testId, title, detail, action }: { testId: string; title: string; detail: string; action?: { label: string; href?: string; onClick?: () => void } }) {
   return (
-    <div className="card" role="status" data-testid={testId} style={{ marginTop: "14px", display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+    <div className="ui-card" role="status" data-testid={testId} style={{ marginTop: "14px", display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
       <div style={{ flex: "1 1 260px", minWidth: "0" }}>
         <b>{title}</b>
         <div className="meta">{detail}</div>
       </div>
       {action?.href ? (
-        <a href={action.href} className="ghost" style={{ textDecoration: "none" }}>
+        <a href={action.href} className="ui-btn ui-btn--ghost">
           {action.label}
         </a>
       ) : action?.onClick ? (
-        <button type="button" className="ghost" onClick={action.onClick}>
+        <button type="button" className="ui-btn ui-btn--ghost" onClick={action.onClick}>
           {action.label}
         </button>
       ) : null}
@@ -367,7 +375,7 @@ function ScanProblem({ testId, title, detail, action }: { testId: string; title:
  */
 function FreeResult({ count, onPlan }: { count: number; onPlan: () => void }) {
   return (
-    <section className="card" data-testid="sales-free-result" style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "10px" }}>
+    <section className="ui-card" data-testid="sales-free-result" style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "10px" }}>
       <b style={{ fontSize: "16px" }}>
         {count} {count === 1 ? "person asked" : "people asked"} about the problem you solve in the last 30 days.
       </b>
@@ -375,7 +383,7 @@ function FreeResult({ count, onPlan }: { count: number; onPlan: () => void }) {
         Read what each one wrote below. With a plan, Ferreto writes a reply to each, checked against the community&apos;s rules, and a DM or an email when someone is ready for one.
       </p>
       <div>
-        <button type="button" className="primary" onClick={onPlan}>
+        <button type="button" className="ui-btn ui-btn--primary" onClick={onPlan}>
           See plans
         </button>
       </div>
@@ -390,7 +398,7 @@ function NoOneAsked({ scan, onEdit, freeLeft }: { scan: NonNullable<SalesScreen[
     ? `No one asked on ${places(answered)} in the last 30 days. ${places(scan.failed)} did not answer, so this is not the whole picture.`
     : "No one asked about this in the last 30 days.";
   return (
-    <section className="card" data-testid="sales-none" style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "14px" }}>
+    <section className="ui-card" data-testid="sales-none" style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "14px" }}>
       <h2 style={{ margin: "0", fontSize: "16px", fontWeight: "600" }}>{headline}</h2>
       {scan.queries.length ? (
         <div>
@@ -418,10 +426,10 @@ function NoOneAsked({ scan, onEdit, freeLeft }: { scan: NonNullable<SalesScreen[
         </p>
       ) : null}
       <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-        <a className="ghost" href="/app/business?d=strategy" style={{ textDecoration: "none" }}>
+        <a className="ui-btn ui-btn--ghost" href="/app/business?d=strategy">
           Edit Strategy
         </a>
-        <button type="button" className="ghost" onClick={onEdit}>
+        <button type="button" className="ui-btn ui-btn--ghost" onClick={onEdit}>
           Edit what Sales looks for
         </button>
       </div>
@@ -445,7 +453,7 @@ function ReplyIdea({ id, idea, mine, onMine, done, checks }: { id: string; idea:
       ) : (
         <>
           <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
-            <label htmlFor={`reply-${id}`} style={{ fontSize: "12px", fontWeight: "700", letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--muted)" }}>
+            <label htmlFor={`reply-${id}`} className="ui-label sl-reply-label">
               Your reply
             </label>
             <span style={{ flex: "1 1 auto" }}></span>
@@ -456,7 +464,7 @@ function ReplyIdea({ id, idea, mine, onMine, done, checks }: { id: string; idea:
               {yours ? `${share}% yours` : `Write it in your own words · ${share}%`}
             </span>
           </div>
-          <textarea id={`reply-${id}`} className="idea-mine" value={mine} onChange={(e) => onMine(e.target.value)} rows={4} placeholder="Say it the way you would, with what you know first-hand" />
+          <textarea id={`reply-${id}`} className="idea-mine ui-input" value={mine} onChange={(e) => onMine(e.target.value)} rows={4} placeholder="Say it the way you would, with what you know first-hand" />
           <div className="idea-meter" role="meter" aria-label="Your own words" aria-valuemin={0} aria-valuemax={100} aria-valuenow={share}>
             <span style={{ width: `${share}%` }}></span>
           </div>
@@ -470,58 +478,167 @@ function ReplyIdea({ id, idea, mine, onMine, done, checks }: { id: string; idea:
 /** The community's rule as one badge (`ruleHeadline`), with the rule reader's line beside it. */
 function RuleBadge({ t }: { t: Thread }) {
   const kind = t.rule.kind;
-  const tone = kind === "mention_allowed" || kind === "requires_disclosure" ? "ok" : kind === "skipped" ? "no" : "help";
+  const tone = kind === "mention_allowed" || kind === "requires_disclosure" ? "ok" : kind === "skipped" ? "danger" : "warn";
   return (
-    <div className="rule-badge-row" data-testid="sales-rule">
-      <span className="rule-badge" data-tone={tone}>
+    <div className="sl-rule" data-testid="sales-rule">
+      <span className="ui-chip" data-tone={tone}>
         {ruleHeadline(t)}
       </span>
-      {t.rule.text ? <span className="meta">{t.rule.text}</span> : null}
+      {t.rule.text ? <span className="sl-note">{t.rule.text}</span> : null}
     </div>
   );
+}
+
+/** Lower case, one space: how a quote is matched against the post it came from. */
+const flat = (text: string) => text.toLowerCase().replace(/\s+/g, " ").trim();
+
+/**
+ * Bug 6 (production 2026-11-28): the pain quote is usually a sentence of the post, so the card showed the same words
+ * twice. A quote that is already in the post shown above is marked there instead, and not repeated under "Why".
+ */
+function inPost(body: string, quote: string): boolean {
+  const q = flat(bare(quote));
+  return q.length >= 4 && flat(body).includes(q);
+}
+
+/** The post with its quoted words marked, once each. Only exact (case-insensitive) runs are marked. */
+function Marked({ body, quotes }: { body: string; quotes: string[] }) {
+  const lower = body.toLowerCase();
+  const spans: [number, number][] = [];
+  for (const q of quotes) {
+    const needle = bare(q).toLowerCase();
+    if (needle.length < 4) continue;
+    const at = lower.indexOf(needle);
+    if (at >= 0 && !spans.some(([a, b]) => at < b && at + needle.length > a)) spans.push([at, at + needle.length]);
+  }
+  spans.sort((a, b) => a[0] - b[0]);
+  const out: React.ReactNode[] = [];
+  let from = 0;
+  for (const [a, b] of spans) {
+    if (a > from) out.push(body.slice(from, a));
+    out.push(<mark key={a}>{body.slice(a, b)}</mark>);
+    from = b;
+  }
+  out.push(body.slice(from));
+  return <>{out}</>;
 }
 
 /**
  * What the person wrote, first thing in an open card (owner, 2026-11-23: "I need to read their post before I can write a
  * reply"). Long posts fold to eight lines. A Reddit card saved before posts were read has only its title: the link to
- * read it on the platform takes the post's place.
+ * read it on the platform takes the post's place. Their quoted words are marked in the text.
  */
 function TheirPost({ t }: { t: Thread }) {
   const [all, setAll] = useState(false);
   const body = (t.body ?? "").trim();
   const where = PLATFORM_LABEL[t.platform] ?? "the thread";
   const long = body.length > 520;
+  const said = t.quotes.filter((q) => isTheirWords(q.from)).map((q) => q.text);
+  // No post text: the person's own words still show once, as the quote.
+  const lead = !body ? (said[0] ?? null) : null;
   return (
-    <div className="their-post" data-testid="sales-their-post">
-      <div className="their-post-head">
-        <PlatformBadge platform={t.platform} size={16} />
-        <span>{t.author ? `${t.author} wrote` : "They wrote"}</span>
-      </div>
+    <div className="sl-post" data-testid="sales-their-post">
+      <div className="sl-post-head">{t.author ? `${t.author} wrote` : "They wrote"}</div>
       {body ? (
         <>
-          <p className="their-post-text" data-folded={long && !all ? "" : undefined}>
-            {body}
+          <p className="sl-post-text" data-folded={long && !all ? "" : undefined}>
+            <Marked body={body} quotes={said} />
           </p>
           {long ? (
-            <button type="button" className="their-post-more" onClick={() => setAll((v) => !v)}>
+            <button type="button" className="ui-btn ui-btn--quiet ui-btn--sm sl-more" onClick={() => setAll((v) => !v)}>
               {all ? "Show less" : "Read the whole post"}
             </button>
           ) : null}
         </>
       ) : (
-        <a className="their-post-open" href={t.url} target="_blank" rel="noopener noreferrer">
-          Read their post on {where} before you reply ↗
-        </a>
+        <>
+          {lead ? <p className="sl-post-text">“{bare(lead)}”</p> : null}
+          <a className="sl-link" href={t.url} target="_blank" rel="noopener noreferrer">
+            Read their post on {where} before you reply ↗
+          </a>
+        </>
       )}
     </div>
   );
 }
 
 /**
- * One thread: a row that opens in place, or, on a phone (`onBack`), the open person full width with a way back to the
- * list and its actions held at the bottom of the screen (canvas board "Sales on a phone").
+ * Why the score: the five parts and the lines they were counted from (redesign 2026-11-28, progressive disclosure). A
+ * quote already shown in the post above is not repeated (bug 6).
  */
-function ThreadRow({ t, free, open, onToggle, onBack, onPlan, onDecide, onSent }: { t: Thread; free: boolean; open: boolean; onToggle: () => void; onBack?: () => void; onPlan: (action: string) => void; onDecide: (t: Thread, action: "replied" | "dismissed", reason?: string, text?: string) => Promise<void>; onSent: (t: Thread, via: "dm" | "email") => Promise<void> }) {
+function WhyRows({ t }: { t: Thread }) {
+  const body = (t.body ?? "").trim();
+  const shownAbove = (text: string) => (body ? inPost(body, text) : t.quotes.find((q) => isTheirWords(q.from))?.text === text);
+  const lineFor = (label: string) => t.quotes.find((q) => q.from.trim().toLowerCase() === label.toLowerCase()) ?? null;
+  return (
+    <div className="sl-why" data-testid="sales-why">
+      <p className="sl-note">
+        {matchLabel(t.score)}: {t.score} of 100
+      </p>
+      {t.parts.length ? (
+        <ul className="sl-parts">
+          {t.parts.map((p) => {
+            const line = lineFor(p.label);
+            const above = line ? shownAbove(line.text) : false;
+            return (
+              <li key={p.label}>
+                <span className="sl-part-label">{p.label}</span>
+                <span className="ui-meter" aria-hidden="true">
+                  <span style={{ width: `${Math.round((p.score / p.max) * 100)}%` }}></span>
+                </span>
+                <span className="sl-part-score ui-num">
+                  {p.score}/{p.max}
+                </span>
+                {line ? (
+                  <span className="sl-part-line">{above ? "Their words, marked in the post above" : isTheirWords(line.from) ? `“${bare(line.text)}”` : bare(line.text)}</span>
+                ) : null}
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        t.quotes
+          .filter((q) => !shownAbove(q.text))
+          .map((q) => (
+            <p key={q.text} className="sl-part-line">
+              {isTheirWords(q.from) ? `“${bare(q.text)}”` : bare(q.text)} <span className="sl-note">· {q.from}</span>
+            </p>
+          ))
+      )}
+    </div>
+  );
+}
+
+/** "Why 67": closed by default, so the card shows the decision first. */
+function Why({ t, children, testId }: { t: Thread; children?: React.ReactNode; testId?: string }) {
+  return (
+    <details className="ui-disclosure sl-whybox" data-testid={testId}>
+      <summary>Why {t.score}</summary>
+      <WhyRows t={t} />
+      {children}
+    </details>
+  );
+}
+
+const CLOCK = (
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 7v5l3 2" />
+  </svg>
+);
+const BUBBLE = (
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12Z" />
+  </svg>
+);
+
+/**
+ * One thread: a card that opens in place, or, on a phone (`onBack`), the open person full width with a way back to the
+ * list and its actions held at the bottom of the screen (canvas board "Sales on a phone"). Closed, it shows who, one
+ * quote and the score; open, the post, the rule, the reply idea and the one next action. The score's parts and the
+ * reach checks wait behind "Why" (redesign 2026-11-28). `n` is its number in the list as shown (bug 7).
+ */
+function ThreadRow({ t, n, free, open, onToggle, onBack, onPlan, onDecide, onSent }: { t: Thread; n?: number; free: boolean; open: boolean; onToggle: () => void; onBack?: () => void; onPlan: (action: string) => void; onDecide: (t: Thread, action: "replied" | "dismissed", reason?: string, text?: string) => Promise<void>; onSent: (t: Thread, via: "dm" | "email") => Promise<void> }) {
   // The founder's own reply. The idea (`t.draft`) shows above it and is never the text that gets copied.
   const [draft, setDraft] = useState("");
   // Copy and open waits until most of the reply is the founder's own words (owner, 2026-11-23).
@@ -534,7 +651,9 @@ function ThreadRow({ t, free, open, onToggle, onBack, onPlan, onDecide, onSent }
   const done = t.status !== "open";
   // Free: the reply is written (or shown) once the founder picks a plan. Until then the thread is still worth reading.
   const locked = free && !skipped && t.draft === null;
-  const lead = t.quotes[0] ?? null;
+  // The one quote a closed card shows: the person's own words, the pain first.
+  const lead = t.quotes.find((q) => isTheirWords(q.from)) ?? t.quotes[0] ?? null;
+  const where = t.community !== PLATFORM_LABEL[t.platform] ? t.community : PLATFORM_LABEL[t.platform];
 
   function copyAndOpen() {
     // The tab opens in the click itself: opened after an await, Safari and some Chrome setups block it as a popup
@@ -557,172 +676,149 @@ function ThreadRow({ t, free, open, onToggle, onBack, onPlan, onDecide, onSent }
     setBusy(false);
   }
 
+  const reply = <ReplyIdea id={t.id} idea={t.draft ?? ""} mine={draft} onMine={setDraft} done={done} checks={t.draftChecks} />;
+  const withPerson = !skipped && !locked && t.draft !== null && Boolean(t.person) && t.status !== "dismissed";
+
   return (
-    <div className={onBack ? "th th-person" : "th"} data-open={open} data-thread={t.id} id={onBack ? undefined : `thread-${t.id}`} role={onBack ? undefined : "listitem"}>
+    <div className={`${onBack ? "th th-person" : "th ui-card ui-card--flush"} sl-thread`} data-open={open} data-done={done || undefined} data-active={open && !onBack ? "" : undefined} data-thread={t.id} id={onBack ? undefined : `thread-${t.id}`} role={onBack ? undefined : "listitem"}>
       {onBack ? (
         <>
           <div className="th-phonehead">
-            <button type="button" className="ib th-back" aria-label="Back to people" onClick={onBack}>
+            <button type="button" className="ui-btn ui-btn--quiet ui-btn--icon th-back" aria-label="Back to people" onClick={onBack}>
               <svg className="i" viewBox="0 0 24 24" aria-hidden="true">
                 <path d="m15 18-6-6 6-6" />
               </svg>
             </button>
-            <span className="meta" style={{ flex: "1 1 auto", minWidth: "0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {[t.community !== PLATFORM_LABEL[t.platform] ? t.community : PLATFORM_LABEL[t.platform], t.postedAt ? ago(t.postedAt) : null].filter(Boolean).join(" · ")}
+            <span className="sl-meta sl-ellipsis">{[where, t.postedAt ? ago(t.postedAt) : null].filter(Boolean).join(" · ")}</span>
+            <span className="sl-score" data-tone={tone(t.score)}>
+              <b className="ui-num">{t.score}</b> {matchLabel(t.score)}
             </span>
-            <span className={tone(t.score)}>{matchLabel(t.score)}</span>
           </div>
           <h1 className="th-title">{t.title}</h1>
         </>
       ) : null}
-      <button type="button" className="row" onClick={onToggle} aria-expanded={open} hidden={Boolean(onBack)}>
-        {hasLogo(t.platform) ? <PlatformBadge platform={t.platform} size={30} label={PLATFORM_LABEL[t.platform]} dim={done} /> : null}
-        <span style={{ flex: "1 1 auto", minWidth: "0" }}>
-          <span style={{ display: "block", fontSize: "14.5px", fontWeight: "600", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: done ? "var(--muted)" : undefined }}>
-            {t.no ? (
-              <span className="idx-no" data-testid="sales-no">
-                {t.no}
-              </span>
-            ) : null}
-            {t.title}
-          </span>
-          <span className="meta icon-meta">
-            {t.community !== PLATFORM_LABEL[t.platform] ? <span>{t.community}</span> : null}
+      <button type="button" className="row sl-head" onClick={onToggle} aria-expanded={open} hidden={Boolean(onBack)}>
+        <span className="sl-head-main">
+          <span className="sl-meta">
+            {hasLogo(t.platform) ? <PlatformBadge platform={t.platform} size={16} label={PLATFORM_LABEL[t.platform]} dim={done} /> : null}
+            {where !== PLATFORM_LABEL[t.platform] || !hasLogo(t.platform) ? <span>{where}</span> : null}
             {t.postedAt ? (
-              <span title={`Posted ${ago(t.postedAt)}`}>
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <circle cx="12" cy="12" r="9" />
-                  <path d="M12 7v5l3 2" />
-                </svg>
-                {ago(t.postedAt).replace(/ ago$/, "")}
+              <span title={`Posted ${ago(t.postedAt)} ago`}>
+                {CLOCK}
+                {ago(t.postedAt)}
               </span>
             ) : null}
             {t.comments != null ? (
               <span title={`${t.comments} comments`}>
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12Z" />
-                </svg>
+                {BUBBLE}
                 {t.comments}
               </span>
             ) : null}
             {done ? (
-              <span style={{ color: t.status === "replied" ? "var(--sec-idea)" : undefined, fontWeight: "600" }}>
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d={t.status === "replied" ? "M9 17 4 12l5-5M20 18v-2a4 4 0 0 0-4-4H4" : "M18 6 6 18M6 6l12 12"} />
-                </svg>
+              <span className="ui-chip" data-tone={t.status === "replied" ? "ok" : undefined}>
                 {t.status === "replied" ? "Replied" : "Dismissed"}
               </span>
+            ) : skipped ? (
+              <span className="ui-chip">Don&apos;t reply here</span>
             ) : null}
-            {t.usedIn?.length ? <span style={{ fontWeight: "600" }}>↳ Post #{t.usedIn.map((p) => p.no).join(", #")}</span> : null}
+            {t.usedIn?.length ? <span>↳ Post #{t.usedIn.map((p) => p.no).join(", #")}</span> : null}
           </span>
-          {lead && !open && !done ? (
-            <span className="quote" style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", marginTop: "6px", fontSize: "13.5px" }}>
-              “{bare(lead.text)}”
-            </span>
-          ) : null}
+          <span className="sl-title">
+            {n ? (
+              <span className="sl-no ui-num" data-testid="sales-no">
+                {n}
+              </span>
+            ) : null}
+            {t.title}
+          </span>
+          {lead && !open && !done ? <span className="sl-quote">“{bare(lead.text)}”</span> : null}
         </span>
-        <span className="score-sq" data-strong={t.score >= STRONG_MATCH || undefined} data-weak={t.score < 50 || undefined} title={`${matchLabel(t.score)} · ${t.score}/100`} aria-label={`${matchLabel(t.score)}, ${t.score} of 100`}>
-          {t.score}
+        <span className="sl-head-side">
+          <span className="sl-score" data-tone={tone(t.score)} title={`${matchLabel(t.score)} · ${t.score}/100`} aria-label={`${matchLabel(t.score)}, ${t.score} of 100`}>
+            <b className="ui-num">{t.score}</b>
+            <span className="sl-score-word">{matchLabel(t.score)}</span>
+          </span>
+          <svg className="i s sl-chev" viewBox="0 0 24 24" aria-hidden="true">
+            <path d={open ? "m18 15-6-6-6 6" : "m6 9 6 6 6-6"} />
+          </svg>
         </span>
-        <svg className="i s" viewBox="0 0 24 24" aria-hidden="true" style={{ color: "var(--subtle)" }}>
-          <path d={open ? "m18 15-6-6-6 6" : "m6 9 6 6 6-6"} />
-        </svg>
       </button>
       {open ? (
-        <div className="th-body">
+        <div className="th-body sl-body">
           {t.usedIn?.length ? (
-            <div className="idx-links" data-testid="sales-used-in">
-              <span className="meta">Used in</span>
+            <div className="ui-row" data-testid="sales-used-in">
+              <span className="sl-note">Used in</span>
               {t.usedIn.map((p) => (
-                <a key={p.id} className="idx-link" href={`/app/writer#post-${p.id}`}>
-                  Post #{p.no} →
+                <a key={p.id} className="sl-link" href={`/app/writer#post-${p.id}`}>
+                  Post #{p.no}
                 </a>
               ))}
             </div>
           ) : null}
           <TheirPost t={t} />
           {oldDays(t.postedAt) !== null ? (
-            <p className="meta" style={{ margin: "0" }} data-testid="sales-old-thread">
+            <p className="sl-note" data-testid="sales-old-thread">
               Old thread: posted {oldDays(t.postedAt)} days ago. Reply only if people are still answering in it.
             </p>
           ) : null}
-          {t.quotes.length ? (
-            <div>
-              <div className="meta" style={{ marginBottom: "6px" }}>
-                {matchLabel(t.score)} ({t.score}/100): how it was counted
-              </div>
-              {t.quotes.map((q) => (
-                <p key={q.text} className="quote" style={{ marginBottom: "6px" }}>
-                  {isTheirWords(q.from) ? `“${bare(q.text)}”` : bare(q.text)} <span className="meta">· {q.from}</span>
-                </p>
-              ))}
-            </div>
-          ) : null}
+          {withPerson ? null : <Why t={t} />}
           <RuleBadge t={t} />
           {skipped ? (
-            <div className="meta">Sales did not draft a reply. The community&apos;s rules leave no room for one.</div>
+            <p className="sl-note">Sales did not draft a reply. The community&apos;s rules leave no room for one.</p>
           ) : locked ? (
-            <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }} data-testid="sales-reply-locked">
-              <span className="meta" style={{ flex: "1 1 220px" }}>
-                {t.drafted ? "Your reply idea is written. You see it once you pick a plan." : "Your reply idea is written once you pick a plan."}
-              </span>
-              <button type="button" className="primary" onClick={() => onPlan("reply to these people")}>
+            <div className="ui-row sl-locked" data-testid="sales-reply-locked">
+              <span className="sl-note">{t.drafted ? "Your reply idea is written. You see it once you pick a plan." : "Your reply idea is written once you pick a plan."}</span>
+              <button type="button" className="ui-btn ui-btn--primary" onClick={() => onPlan("reply to these people")}>
                 Pick a plan
               </button>
             </div>
           ) : t.draft === null ? (
-            <div className="meta">No reply idea yet. Write the ideas above, or reply in your own words and mark it replied.</div>
-          ) : t.person && t.status !== "dismissed" ? (
-            <ReachPanel
-              t={t}
-              onSent={(via) => onSent(t, via)}
-              publicReply={
-                <ReplyIdea id={t.id} idea={t.draft} mine={draft} onMine={setDraft} done={done} checks={t.draftChecks} />
-              }
-            />
+            <p className="sl-note">No reply idea yet. Write the ideas above, or reply in your own words and mark it replied.</p>
+          ) : withPerson ? (
+            <ReachPanel t={t} onSent={(via) => onSent(t, via)} why={(checks) => <Why t={t} testId="sales-reach-card">{checks}</Why>} publicReply={reply} />
           ) : (
-            <ReplyIdea id={t.id} idea={t.draft} mine={draft} onMine={setDraft} done={done} checks={t.draftChecks} />
+            reply
           )}
           {done ? (
-            <div style={{ display: "flex", justifyContent: "flex-end" }}>
-              <a href={t.url} target="_blank" rel="noopener noreferrer" className="ghost" style={{ textDecoration: "none" }}>
+            <div className="ui-row sl-end">
+              <a href={t.url} target="_blank" rel="noopener noreferrer" className="ui-btn ui-btn--ghost">
                 Open thread
               </a>
             </div>
           ) : (
-            <div className="th-actions" style={{ display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "flex-end", alignItems: "center" }}>
+            <div className="th-actions ui-row sl-end">
               {dismissing ? (
                 <>
-                  <label className="meta" htmlFor={`why-${t.id}`}>
+                  <label className="sl-note" htmlFor={`why-${t.id}`}>
                     Reason
                   </label>
-                  <select id={`why-${t.id}`} value={reason} onChange={(e) => setReason(e.target.value)} className="pill" style={{ height: "32px" }}>
+                  <select id={`why-${t.id}`} value={reason} onChange={(e) => setReason(e.target.value)} className="ui-input sl-select">
                     {DISMISS_REASONS.map((r) => (
                       <option key={r}>{r}</option>
                     ))}
                   </select>
-                  <button type="button" className="ghost" disabled={busy} onClick={() => void run("dismissed", reason)}>
+                  <button type="button" className="ui-btn ui-btn--ghost" disabled={busy} onClick={() => void run("dismissed", reason)}>
                     Dismiss
                   </button>
                 </>
               ) : (
-                <button type="button" className="skip" onClick={() => setDismissing(true)}>
+                <button type="button" className="ui-btn ui-btn--quiet" onClick={() => setDismissing(true)}>
                   Dismiss
                 </button>
               )}
               {skipped ? null : locked ? (
-                <a href={t.url} target="_blank" rel="noopener noreferrer" className="ghost" style={{ textDecoration: "none" }}>
+                <a href={t.url} target="_blank" rel="noopener noreferrer" className="ui-btn ui-btn--ghost">
                   Open thread
                 </a>
               ) : (
-                <button type="button" className="ghost" disabled={busy} onClick={() => void run("replied")}>
+                <button type="button" className="ui-btn ui-btn--ghost" disabled={busy} onClick={() => void run("replied")}>
                   I replied
                 </button>
               )}
               {!skipped && t.draft !== null ? (
                 <button
                   type="button"
-                  className="primary"
+                  className="ui-btn ui-btn--primary primary"
                   disabled={!draft.trim() || !edited}
                   title={edited ? undefined : "Write most of the reply in your own words first"}
                   onClick={() => void copyAndOpen()}
@@ -806,7 +902,8 @@ export function AgentSales() {
     if (!data) return;
     setThreads([...data.threads].sort((a, b) => b.score - a.score));
     setWeek(data.week);
-    if (!phone) setOpen((was) => was ?? data.threads.find((t) => t.status === "open")?.id ?? null);
+    // The first person in the list as shown: the newest scan's best open thread (scanSections orders them so).
+    if (!phone) setOpen((was) => was ?? scanSections(data.threads.filter((t) => t.status === "open" && t.rule.kind !== "skipped"), data.scans ?? [])[0]?.threads[0]?.id ?? null);
   }, [data, phone]);
 
   const loadRuns = useCallback(() => {
@@ -914,8 +1011,14 @@ export function AgentSales() {
   const list = threads ?? [];
   const following = list.filter((t) => t.status === "replied" && t.person && t.person.status !== "found" && t.person.status !== "not_interested").length;
   const worth = list.filter((t) => t.status === "open" && t.rule.kind !== "skipped");
-  const below = list.length - worth.length;
-  const lastScan = runs[0]?.at ?? null;
+  // The list as shown (bug 7): people to reply to, a section per scan, numbered 1, 2, 3 down the page; everyone else
+  // (replied, dismissed, or in a community that leaves no room for a reply) in one folded group under them.
+  const worthIds = new Set(worth.map((t) => t.id));
+  const toReply = data ? scanSections(worth, data.scans ?? []) : [];
+  const numbers = new Map(toReply.flatMap((section) => section.threads).map((t, i) => [t.id, i + 1] as const));
+  const rest = list.filter((t) => !worthIds.has(t.id));
+  // The newest finished scan, or the newest Sales line in the log when the scan was read before that one.
+  const lastScan = data?.lastScan?.at ?? runs[0]?.at ?? null;
   // Paid, and threads the free scan found without a reply: one click writes them.
   const undrafted = free ? 0 : worth.filter((t) => !t.drafted).length;
   // The free scan is used once a scan finished (or one is under way); a failed one is given back by SQL. One that found
@@ -945,6 +1048,8 @@ export function AgentSales() {
     }
   }, [personId]);
 
+  const scanNow = useScanNow({ free, freeLeft, onPlan: setPlanFor, onStarted: startedScan });
+
   const openSettings = () => {
     setTab("settings");
     requestAnimationFrame(() => document.getElementById("sales-settings-title")?.focus());
@@ -962,39 +1067,36 @@ export function AgentSales() {
     );
   }
 
+  const looks = data?.settings.platforms ?? SALES_PLATFORMS;
+  const scanned = lastScan ? (ago(lastScan) === "just now" ? "Scanned just now" : `Scanned ${ago(lastScan)} ago`) : "No scan yet";
+  const scanning = scanActive(scan) && scan.kind === "sales_scan";
+
   return (
-    <div className="sales-page" data-sec="find" style={{ display: "flex", flexWrap: "wrap", maxWidth: "1320px", margin: "0 auto", padding: "22px 24px 40px", gap: "24px" }} data-testid="v2-sales">
-      <main style={{ flex: "999 1 600px", minWidth: "0" }}>
-        <div className="sec-band">
-          <span className="sec-tile">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <circle cx="11" cy="11" r="7" />
-              <path d="m20 20-3.5-3.5" />
-            </svg>
-          </span>
-          <div style={{ display: "flex", flexDirection: "column", gap: "6px", flex: "1 1 200px", minWidth: "0" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-              <h1>Sales</h1>
-              {lastScan ? (
-                <span className="sec-chip" title="Last scan" style={{ color: "var(--ok)" }}>
-                  <span className="live"></span>
-                  {ago(lastScan) === "just now" ? "Scanned just now" : `Scanned ${ago(lastScan)} ago`}
-                </span>
-              ) : null}
-            </div>
-            {/* Where it looks, as the platforms' own icons (owner, 2026-11-23: fewer words). */}
-            <span className="pl-row" aria-label={`Looks on ${(data?.settings.platforms ?? SALES_PLATFORMS).map((p) => PLATFORM_LABEL[p]).join(", ")}`}>
-              {SALES_PLATFORMS.map((p) => (hasLogo(p) ? <PlatformBadge key={p} platform={p} size={20} dim={!(data?.settings.platforms ?? SALES_PLATFORMS).includes(p)} /> : null))}
-            </span>
+    <div className="sales-page sl-page" data-testid="v2-sales">
+      <main className="sl-main">
+        <PageHeader
+          title="Sales"
+          status={data ? `${scanned} · ${list.length} checked` : scanned}
+          platforms={looks.filter(hasLogo).map((p) => ({ id: p, label: PLATFORM_LABEL[p] }))}
+          primary={<ScanNowButton scanning={scanning} paused={paused !== null} freeLeft={freeLeft} scan={scanNow} />}
+        >
+          <div className="ui-tabs" role="tablist" aria-label="Sales">
+            {(
+              [
+                ["threads", "Threads"],
+                ["following", "Following up"],
+                ["runs", "Runs"],
+                ["settings", "Settings"],
+              ] as const
+            ).map(([id, labelText]) => (
+              <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)}>
+                {labelText}
+                {id === "following" && following > 0 ? <span className="ui-chip ui-num">{following}</span> : null}
+              </button>
+            ))}
           </div>
-          <span className="sec-stat" title="Replied since Monday" style={{ color: "var(--sec-idea)" }}>
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M9 17 4 12l5-5M20 18v-2a4 4 0 0 0-4-4H4" />
-            </svg>
-            {week?.replied ?? 0}
-          </span>
-          <ScanNow scanning={scanActive(scan) && scan.kind === "sales_scan"} paused={paused !== null} platforms={data?.settings.platforms} free={free} freeLeft={freeLeft} onPlan={setPlanFor} onStarted={startedScan} />
-        </div>
+        </PageHeader>
+        <ScanNowConfirm platforms={data?.settings.platforms} freeLeft={freeLeft} scan={scanNow} />
         {scan ? <ScanProgress scan={scan} onClose={() => setScan(null)} /> : null}
         {data && !free && !data.lastScan && scanActive(scan) && scan.kind === "sales_scan" ? <WhileYouWait /> : null}
         {noStrategy ? (
@@ -1023,29 +1125,13 @@ export function AgentSales() {
         {/* 100% used (wave 4 C2): what stopped, until when, what still works. The shell's bar still disables Scan now. */}
         <AllowanceBanner state={usageState} testId="sales-paused" />
 
-        <div className="tabs" role="tablist" aria-label="Sales">
-          {(
-            [
-              ["threads", "Threads"],
-              ["following", "Following up"],
-              ["runs", "Runs"],
-              ["settings", "Settings"],
-            ] as const
-          ).map(([id, labelText]) => (
-            <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)}>
-              {labelText}
-              {id === "following" && following > 0 ? ` · ${following}` : ""}
-            </button>
-          ))}
-        </div>
-
         {state.status === "loading" ? <div className="meta" style={{ marginTop: "14px" }}>Loading…</div> : null}
         {state.status === "error" ? <div className="meta" style={{ marginTop: "14px" }}>{state.message}</div> : null}
         {error ? <div className="meta" style={{ marginTop: "14px", color: "var(--warn)" }}>{error}</div> : null}
         {data?.stuck ? (
-          <div className="card" role="alert" style={{ marginTop: "14px" }}>
+          <div className="ui-card" role="alert" style={{ marginTop: "14px" }}>
             <b>{data.stuck.text}</b>{" "}
-            <button type="button" className="ghost" onClick={openSettings} style={{ marginLeft: "8px" }}>
+            <button type="button" className="ui-btn ui-btn--ghost" onClick={openSettings} style={{ marginLeft: "8px" }}>
               Change where Sales looks
             </button>
           </div>
@@ -1066,133 +1152,142 @@ export function AgentSales() {
         {tab === "following" && data ? <FollowingUp threads={list} live={Boolean(live)} onStatus={(id, status) => setPerson(id, { status, statusAt: new Date().toISOString() })} /> : null}
         {tab === "threads" && data ? (
           <>
-            <div style={{ display: list.length === 0 && data.lastScan?.verdict === "none" ? "none" : "flex", alignItems: "center", gap: "8px", margin: "14px 0 10px", flexWrap: "wrap" }}>
-              <span style={{ fontWeight: "600" }}>
-                {worth.length} {worth.length === 1 ? "thread" : "threads"} worth a reply
-              </span>
-              <span className="meta">
-                · {list.length} checked, {below} below your bar or done
-              </span>
-              <div style={{ flex: "1 1 auto" }}></div>
-              <span className="meta">Sort</span>
-              <span className="pill">Score</span>
-            </div>
             {free && worth.length > 0 ? <FreeResult count={worth.length} onPlan={() => setPlanFor("reply to these people")} /> : null}
             {live && undrafted > 0 ? <WriteReplies count={undrafted} busy={scanActive(scan) && scan.kind === "sales_reply_drafts"} onPlan={setPlanFor} onStarted={startedScan} /> : null}
             {list.length === 0 && data.lastScan?.verdict === "none" ? <NoOneAsked scan={data.lastScan} onEdit={openSettings} freeLeft={freeLeft} /> : null}
-            {list.length === 0 && data.lastScan?.verdict !== "none" ? <div className="meta">No threads yet. Sales scans the communities your customers use and scores what it finds.</div> : null}
+            {list.length === 0 && data.lastScan?.verdict !== "none" ? (
+              <div className="ui-empty">
+                <p className="ui-empty__title">No threads yet</p>
+                <p>Sales scans the communities your customers use and scores what it finds.</p>
+              </div>
+            ) : null}
             {linkGone ? (
-              <p className="meta" role="status" data-testid="sales-link-gone">
+              <p className="sl-note" role="status" data-testid="sales-link-gone">
                 The person that post was written from is older than this list, so it is not shown here.
               </p>
             ) : null}
-            {/* The index (owner, 2026-11-25): a section per scan, Scan #n, its people numbered n.k. */}
-            {scanSections(list, data.scans ?? []).map((section) => (
-              <section key={section.key} className="idx-section" aria-label={section.scan ? `Scan ${section.scan.no}` : "Earlier"} data-testid="sales-scan-section">
-                <h2 className="idx-head">
-                  <span>{section.scan ? `Scan #${section.scan.no}` : "Earlier"}</span>
-                  {composeSub(section.threads) ? (
-                    <Link className="idx-link" href={`/app/compose?${new URLSearchParams({ platform: "reddit", sub: composeSub(section.threads)! })}`} data-testid="sales-write-yourself" style={{ marginLeft: "auto", order: 2 }}>
-                      Write a post yourself in r/{composeSub(section.threads)}
-                    </Link>
-                  ) : null}
-                  <span className="meta">
-                    {section.scan?.at ? `${runTime(section.scan.at)} · ` : ""}
+            {/* Bug 7 (production 2026-11-28): "3 worth a reply" sat over all 13 and scan numbers skipped. The people to
+                reply to come first, numbered as shown, a section per scan by its time; the rest fold away below. */}
+            {list.length ? (
+              <h2 className="sl-group" data-testid="sales-to-reply">
+                To reply <span className="ui-num">{worth.length}</span>
+              </h2>
+            ) : null}
+            {list.length && !worth.length ? <p className="sl-note">Nothing waits on a reply. The next scan adds new people here.</p> : null}
+            {toReply.map((section) => (
+              <section key={section.key} className="sl-section" aria-label={section.scan?.at ? `Scan, ${runTime(section.scan.at)}` : "Earlier"} data-testid="sales-scan-section">
+                <h3 className="sl-section-head">
+                  <span>{section.scan?.at ? `Scan · ${runTime(section.scan.at)}` : section.scan ? "Scan" : "Earlier"}</span>
+                  <span className="sl-note ui-num">
                     {section.threads.length
                       ? `${section.threads.length} ${section.threads.length === 1 ? "person" : "people"}`
                       : "no one worth a reply, credits given back"}
                   </span>
-                </h2>
+                  {composeSub(section.threads) ? (
+                    <Link className="sl-link sl-section-link" href={`/app/compose?${new URLSearchParams({ platform: "reddit", sub: composeSub(section.threads)! })}`} data-testid="sales-write-yourself">
+                      Write a post yourself in r/{composeSub(section.threads)}
+                    </Link>
+                  ) : null}
+                </h3>
                 {section.threads.length ? (
-                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }} role="list" aria-label={section.scan ? `Threads, Scan ${section.scan.no}` : "Threads, earlier"}>
+                  <div className="sl-list" role="list" aria-label={section.scan?.at ? `Threads, scan of ${runTime(section.scan.at)}` : "Threads, earlier"}>
                     {section.threads.map((t) => (
-                      <ThreadRow key={t.id} t={t} free={free} open={open === t.id} onToggle={() => setOpen(open === t.id ? null : t.id)} onPlan={setPlanFor} onDecide={decide} onSent={(x, via) => decide(x, "replied", undefined, undefined, false, via)} />
+                      <ThreadRow key={t.id} t={t} n={numbers.get(t.id)} free={free} open={open === t.id} onToggle={() => setOpen(open === t.id ? null : t.id)} onPlan={setPlanFor} onDecide={decide} onSent={(x, via) => decide(x, "replied", undefined, undefined, false, via)} />
                     ))}
                   </div>
                 ) : null}
               </section>
             ))}
+            {rest.length ? (
+              <details className="ui-disclosure sl-done" data-testid="sales-done">
+                <summary>
+                  Replied, dismissed or not for a reply <span className="ui-num">{rest.length}</span>
+                </summary>
+                <div className="sl-list" role="list" aria-label="Replied, dismissed or not for a reply">
+                  {rest.map((t) => (
+                    <ThreadRow key={t.id} t={t} free={free} open={open === t.id} onToggle={() => setOpen(open === t.id ? null : t.id)} onPlan={setPlanFor} onDecide={decide} onSent={(x, via) => decide(x, "replied", undefined, undefined, false, via)} />
+                  ))}
+                </div>
+              </details>
+            ) : null}
           </>
         ) : null}
 
         {tab === "runs" ? (
-          <section className="card" style={{ marginTop: "14px" }}>
-            {runs.length === 0 ? <div className="meta">No scans yet.</div> : null}
+          <section className="ui-card sl-gap">
+            {runs.length === 0 ? <p className="sl-note">No scans yet.</p> : null}
             {runs.map((r) => (
-              <div key={r.id} className="run">
-                <span className="meta" style={{ width: "96px" }}>
-                  {runTime(r.at)}
-                </span>
-                <span style={{ flex: "1" }}>{r.text}</span>
+              <div key={r.id} className="sl-run">
+                <span className="sl-note ui-num">{runTime(r.at)}</span>
+                <span>{r.text}</span>
               </div>
             ))}
           </section>
         ) : null}
 
         {tab === "settings" && data ? (
-          <div className="v2" style={{ marginTop: "14px" }}>
+          <div className="v2 sl-gap">
             <SalesSettings initial={data.settings} live={Boolean(state.status === "ready" && state.live.settings)} onSaved={reload} />
           </div>
         ) : null}
       </main>
 
-      <aside style={{ flex: "1 1 300px", maxWidth: "360px", display: "flex", flexDirection: "column", gap: "14px" }}>
-        <section className="card">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "6px" }}>
+      <aside className="sl-side">
+        <section className="ui-card">
+          <div className="ui-card__head">
             {/* The funnel ("This week") is the Context column's; this box is the replies and the 1-in-10 mention rule. */}
-            <h2 style={{ margin: "0", fontSize: "14px", fontWeight: "600" }}>Your replies</h2>
-            <span className="meta">since Mon</span>
+            <h2>Your replies</h2>
+            <span className="sl-note">since Mon</span>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: "8px" }}>
+          <dl className="sl-stats">
             <div>
-              <div style={{ fontSize: "20px", fontWeight: "600" }}>{week?.replied ?? "–"}</div>
-              <div className="meta">replied</div>
+              <dt>replied</dt>
+              <dd className="ui-num">{week?.replied ?? "–"}</dd>
             </div>
             <div>
-              <div style={{ fontSize: "20px", fontWeight: "600" }}>{week?.dismissed ?? "–"}</div>
-              <div className="meta">dismissed</div>
+              <dt>dismissed</dt>
+              <dd className="ui-num">{week?.dismissed ?? "–"}</dd>
             </div>
             <div>
-              <div style={{ fontSize: "20px", fontWeight: "600" }}>{data ? `${data.mentions.used}/${data.mentions.window}` : "–"}</div>
-              <div className="meta">named the product</div>
+              <dt>named the product</dt>
+              <dd className="ui-num">{data ? `${data.mentions.used}/${data.mentions.window}` : "–"}</dd>
             </div>
-          </div>
+          </dl>
         </section>
-        <section className="card">
-          <h2 style={{ margin: "0 0 6px", fontSize: "14px", fontWeight: "600" }}>Recent runs</h2>
-          {runs.length === 0 ? <div className="meta">No scans yet.</div> : null}
+        <section className="ui-card">
+          <div className="ui-card__head">
+            <h2>Recent runs</h2>
+          </div>
+          {runs.length === 0 ? <p className="sl-note">No scans yet.</p> : null}
           {runs.slice(0, 3).map((r) => (
-            <div key={r.id} className="run">
-              <span className="meta" style={{ width: "64px" }}>
-                {runTime(r.at)}
-              </span>
-              <span style={{ flex: "1" }}>{r.text}</span>
+            <div key={r.id} className="sl-run">
+              <span className="sl-note ui-num">{runTime(r.at)}</span>
+              <span>{r.text}</span>
             </div>
           ))}
         </section>
-        <section className="card">
-          <h2 style={{ margin: "0 0 8px", fontSize: "14px", fontWeight: "600" }}>Where it looks</h2>
+        <section className="ui-card">
+          <div className="ui-card__head">
+            <h2>Where it looks</h2>
+          </div>
           {SALES_PLATFORMS.map((p) => {
             const on = (data?.settings.platforms ?? SALES_PLATFORMS).includes(p);
             const excluded = data?.settings.excludedSubreddits.length ?? 0;
             return (
-              <div key={p} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "6px 0" }}>
-                {hasLogo(p) ? <PlatformBadge platform={p} size={26} dim={!on} /> : null}
-                <span style={{ flex: "1", color: on ? undefined : "var(--muted)" }}>
+              <div key={p} className="sl-place" data-on={on || undefined}>
+                {hasLogo(p) ? <PlatformBadge platform={p} size={20} dim={!on} /> : null}
+                <span className="sl-place-name">
                   {PLATFORM_LABEL[p]}
-                  {on && p === "reddit" && excluded ? <span className="meta"> · {excluded} excluded</span> : null}
+                  {on && p === "reddit" && excluded ? <span className="sl-note"> · {excluded} excluded</span> : null}
                 </span>
                 <button type="button" className="sw" role="switch" aria-checked={on} aria-label={`${PLATFORM_LABEL[p]}: change in Settings`} title="Change in Settings" onClick={() => setTab("settings")}></button>
               </div>
             );
           })}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 0 0", marginTop: "6px", borderTop: "1px solid var(--line)" }}>
-            <span>Term pairs</span>
-            <button type="button" className="pill" onClick={() => setTab("settings")}>
+          <div className="sl-place sl-place--foot">
+            <span className="sl-place-name">Term pairs</span>
+            <button type="button" className="ui-btn ui-btn--ghost ui-btn--sm" onClick={() => setTab("settings")}>
               {data?.settings.pairs.length ?? 0} set
-              <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="m6 9 6 6 6-6" />
-              </svg>
             </button>
           </div>
         </section>

@@ -140,7 +140,7 @@ export const ScoreSchema = z.object({
       fit: z.object({ score: z.number().int().describe("0 to 25"), why: z.string().describe("One short sentence: how the product fits this person") }),
       evidence: z.object({ score: z.number().int().describe("0 to 15"), quote: z.string().describe("Exact words showing they want a solution now, or empty") }),
       summary: z.string().describe("One line under 25 words: what this person needs or is stuck on, in plain words. Not the post's title and not a rewording of it. No names."),
-      theme: z.string().describe("A short name for the problem, 2 to 5 words, e.g. \"Chasing late invoices\". Reuse a name from <themes> when it fits."),
+      theme: z.string().describe("A short name for the problem, 2 to 5 words, in the words people use for it in the thread. Reuse a name from <themes> when it fits."),
       buyer: z.object({
         quote: z.string().describe("Exact words where the author says who they are or what they run, showing they are like the ideal customer; empty for a vendor, a promoter, or when it is unclear"),
       }),
@@ -332,6 +332,7 @@ Rules:
 - With "yes", name it at most once, at the end, only if it is genuinely relevant, and say the relation in that same sentence ("I make X, so I'm biased"). Never name it in a sentence that does not say it is the founder's own.
 - When the person asks which tools to use, name one or two real alternatives as well, with a fair word on each, so the reply helps even if they never pick the founder's product.
 - Never invent personal experiences, customers, numbers or results. No links. No hype. Match the community's tone (Hacker News: plain, technical, no marketing).
+- Every example, phrase or question in the idea comes from this thread and the founder's documents. Never borrow an example from another product or market (a reply for a marketing tool never mentions invoices or payments unless the thread does).
 - On Facebook groups and Threads, write it as a comment under the post, not as a forum answer.
 - Respect the brand voice and the words to avoid.
 - ${FOUNDER_WRITING_RULE}
@@ -837,7 +838,7 @@ export const DM_SYSTEM = `You draft one private message from a founder to a pers
 Rules:
 - Short: under 80 words. Plain, warm, one person to another. No greeting card phrases, no hype, no sales pitch.
 - Open with what they wrote, in a few of your own words, so it is clear this is not a mass message.
-- When the founder already replied in the thread (replied="yes"), say so in a few words ("I replied in the thread about your late invoices"). When replied="no", the founder has posted nothing there yet: write it as a first contact, and never say or hint that they replied, commented or answered.
+- When the founder already replied in the thread (replied="yes"), say so in a few words ("I replied in the thread about <their problem, in a few words>"). When replied="no", the founder has posted nothing there yet: write it as a first contact, and never say or hint that they replied, commented or answered.
 - Say plainly that the product is the founder's own ("I make X"). Name it at most once.
 - No links. Ask before sending one ("Want me to send the link?"), so the person chooses.
 - Never invent experiences, customers, numbers or results. Never pretend to be anything but the founder.
