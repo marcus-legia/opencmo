@@ -11,6 +11,7 @@ import { PLATFORMS } from "./common";
 import { BEST_HOURS } from "./analytics";
 import type { AnalyticsScreen, Range } from "./analytics";
 import type { DashboardScreen } from "./dashboard";
+import { localDay, localMonday } from "@/lib/time-zone";
 
 export type AccountIn = { id: string; platform: string; handle: string; avatarUrl: string | null; status: string; updatedAt: string };
 export type AccountDayIn = {
@@ -114,21 +115,71 @@ function percentChange(now: number | null, before: number | null): number | null
   return Math.round(((now - before) / before) * 100);
 }
 
-export type AnalyticsInput = { range: Range; now: Date; accounts: AccountIn[]; days: AccountDayIn[]; posts: PostIn[]; publishedInRange: number; timezone?: string };
+export type AnalyticsInput = {
+  range: Range;
+  now: Date;
+  accounts: AccountIn[];
+  days: AccountDayIn[];
+  posts: PostIn[];
+  /** Fallback count when `published` is not given. */
+  publishedInRange: number;
+  /** When each published post went out, measured or not; counted against the range in the founder's zone. */
+  published?: string[];
+  timezone?: string;
+};
 
-export function buildAnalytics({ range, now, accounts, days, posts, publishedInRange, timezone = "UTC" }: AnalyticsInput): AnalyticsScreen {
-  const current = rangeDays(now, range);
-  const previous = rangeDays(new Date(now.getTime() - range * DAY_MS), range);
+const shiftDay = (day: string, n: number) => dayOf(Date.parse(`${day}T00:00:00Z`) + n * DAY_MS);
+const zoneDay = (iso: string, timezone: string) => {
+  try {
+    return localDay(Date.parse(iso), timezone);
+  } catch {
+    return iso.slice(0, 10);
+  }
+};
+
+/**
+ * The days Analytics draws and compares, in the founder's zone. The week is Monday to Sunday, as Calendar reads it
+ * (`schedule()` in load.ts): it was the last seven UTC days, so the chart started on a Sunday while Calendar started on
+ * Monday. Days after today stay in `current` (drawn as missing); the comparison takes the same weekdays of the week
+ * before, so a Wednesday is not measured against a full week. Month and 90 days are the days ending today.
+ */
+export function analyticsDays(range: Range, now: Date, timezone: string): { current: string[]; elapsed: string[]; previous: string[] } {
+  let today: string;
+  let monday: string;
+  try {
+    today = localDay(now, timezone);
+    monday = localMonday(now.getTime(), timezone);
+  } catch {
+    today = dayOf(now.getTime());
+    monday = localMonday(now.getTime(), "UTC");
+  }
+  if (range === 7) {
+    const current = Array.from({ length: 7 }, (_, i) => shiftDay(monday, i));
+    const elapsed = current.filter((d) => d <= today);
+    return { current, elapsed, previous: elapsed.map((d) => shiftDay(d, -7)) };
+  }
+  const current = Array.from({ length: range }, (_, i) => shiftDay(today, i - (range - 1)));
+  return { current, elapsed: current, previous: current.map((d) => shiftDay(d, -range)) };
+}
+
+export function buildAnalytics({ range, now, accounts, days, posts, publishedInRange, published, timezone = "UTC" }: AnalyticsInput): AnalyticsScreen {
+  const { current, elapsed, previous } = analyticsDays(range, now, timezone);
   const inDays = (set: string[]) => {
     const s = new Set(set);
     return days.filter((d) => s.has(d.day));
   };
-  const cur = inDays(current);
+  const cur = inDays(elapsed);
   const prev = inDays(previous);
   const from = current[0]!;
-  const prevFrom = previous[0]!;
-  const curPosts = posts.filter((p) => p.publishedAt.slice(0, 10) >= from);
-  const prevPosts = posts.filter((p) => p.publishedAt.slice(0, 10) >= prevFrom && p.publishedAt.slice(0, 10) < from);
+  const last = elapsed.at(-1) ?? from;
+  const prevFrom = previous[0] ?? shiftDay(from, -range);
+  const prevTo = previous.at(-1) ?? shiftDay(from, -1);
+  const inRange = (iso: string, a: string, b: string) => {
+    const d = zoneDay(iso, timezone);
+    return d >= a && d <= b;
+  };
+  const curPosts = posts.filter((p) => inRange(p.publishedAt, from, last));
+  const prevPosts = posts.filter((p) => inRange(p.publishedAt, prevFrom, prevTo));
 
   // Account days measure everything an account did; without them (public reading only) the posts are all there is.
   const impressionsOf = (rows: AccountDayIn[], ps: PostIn[]) => (rows.some((d) => d.impressions !== null) ? sumOrNull(rows.map((d) => d.impressions)) : sumOrNull(ps.map(reach)));
@@ -143,9 +194,11 @@ export function buildAnalytics({ range, now, accounts, days, posts, publishedInR
 
   const live = accounts.filter((a) => a.status !== "disconnected" && isPlatform(a.platform));
   // "Followers gained": the change over the range, summed over the accounts that reported both ends.
-  const followerValues = live.map((a) => followerChange(days, a.id, from, current.at(-1)!)).filter((f): f is number => f !== null);
+  const followerValues = live.map((a) => followerChange(days, a.id, from, last)).filter((f): f is number => f !== null);
   const followers = followerValues.length ? followerValues.reduce((a, b) => a + b, 0) : null;
-  const withoutData = Math.max(0, publishedInRange - curPosts.length);
+  // Every post that went out in the range, measured or not: the card says "Posts published", so it counts these.
+  const publishedCount = Math.max(curPosts.length, published ? published.filter((t) => inRange(t, from, last)).length : publishedInRange);
+  const withoutData = publishedCount - curPosts.length;
 
   const kpis: AnalyticsScreen["kpis"] = [
     { key: "impressions", value: impressions, change: percentChange(impressions, prevImpressions), changeUnit: "percent", note: null },
@@ -180,8 +233,8 @@ export function buildAnalytics({ range, now, accounts, days, posts, publishedInR
     const impr = sumOrNull(mine.map(reach));
     return {
       where: { platform: a.platform as Platform, handle: a.handle.slice(0, 80) },
-      followers: followersAt(days, a.id, current.at(-1)!),
-      change: followerChange(days, a.id, from, current.at(-1)!),
+      followers: followersAt(days, a.id, last),
+      change: followerChange(days, a.id, from, last),
       posts: mine.length,
       medianImpressions: reachOf(mine).length ? Math.round(median(reachOf(mine))!) : null,
       engagementRate: mine.length ? rate(sumOrNull(mine.map(engaged)), impr) : null,
@@ -214,7 +267,7 @@ export function buildAnalytics({ range, now, accounts, days, posts, publishedInR
       : [],
   );
 
-  return { range, accounts: analyticsAccounts(accounts, days), kpis, daily, brainReads: [], byAccount, posts: postRows, bestTimes: bestTimes(scored, timezone) };
+  return { range, accounts: analyticsAccounts(accounts, days), kpis, published: publishedCount, daily, brainReads: [], byAccount, posts: postRows, bestTimes: bestTimes(scored, timezone) };
 }
 
 /**

@@ -42,9 +42,6 @@ html[data-ui="v2"][data-theme="dark"] body { background: #121110; }
   .td-frame .top .td-crumb:not(.is-last) { display: none !important; }
   .td-frame .top .td-pill-more,
   .td-frame .top .td-pill-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-  /* A post row's action goes under the post instead of past the screen's edge. */
-  .pg-analytics .row { flex-wrap: wrap; }
-  .pg-analytics .row > .ghost { margin-left: auto; }
 }
 .td-menu-note { padding: 6px 8px; font-size: 12.5px; color: var(--subtle); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .td-menu a, .td-menu button { display: flex; align-items: center; height: 32px; padding: 0 8px; border: 0; border-radius: 6px; background: transparent; color: var(--text); font: inherit; font-size: 14px; text-align: left; text-decoration: none; cursor: pointer; width: 100%; }
@@ -538,8 +535,6 @@ html:not([data-theme="dark"]) .k { --ok: #16744c; --warn: #8f5a0e; }
 @media (max-width: 640px) {
   /* The share used is in the chip's words; its little bar gives way so the account keeps the first row. */
   .td-frame .top .td-usage-meter { display: none; }
-  .pg-settings .nav :is(a, button) { min-height: 44px; }
-  .pg-settings .bd > .ghost, .pg-settings [data-testid="billing-usage"] .ghost { min-height: 44px; }
 }
 
 /* Delete my account (wave 4 C3): a separate block under the account line, its refusal in the warning colour. */

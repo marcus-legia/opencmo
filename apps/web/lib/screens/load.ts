@@ -1636,8 +1636,13 @@ async function sales({ supabase, userId }: LoadContext): Promise<Partial<SalesSc
 /** A stored count as a number, or null when it was not reported (bigint columns can arrive as strings). */
 const orNull = (v: number | string | null): number | null => (v === null ? null : Number(v));
 
-async function measured(supabase: SupabaseClient, range: number, now: Date): Promise<{ accounts: AccountIn[]; days: AccountDayIn[]; posts: PostIn[]; published: number }> {
-  const since = new Date(now.getTime() - 2 * range * 86_400_000);
+async function measured(
+  supabase: SupabaseClient,
+  range: number,
+  now: Date,
+): Promise<{ accounts: AccountIn[]; days: AccountDayIn[]; posts: PostIn[]; published: number; publishedAt: string[] }> {
+  // One day more than twice the range: the founder's today can be a day ahead of UTC's.
+  const since = new Date(now.getTime() - (2 * range + 1) * 86_400_000);
   const sinceDay = since.toISOString().slice(0, 10);
   const [accounts, days, items] = await Promise.all([
     socialAccounts(supabase),
@@ -1697,6 +1702,7 @@ async function measured(supabase: SupabaseClient, range: number, now: Date): Pro
     })),
     posts,
     published: itemRows.filter((i) => i.published_at >= fromRange).length,
+    publishedAt: itemRows.map((i) => new Date(i.published_at).toISOString()),
   };
 }
 
@@ -1710,7 +1716,7 @@ async function analytics({ supabase, userId, params }: LoadContext): Promise<Par
     measured(supabase, range, now),
     profile(supabase, userId).then((p) => p.timezone, () => "UTC"),
   ]);
-  return buildAnalytics({ range, now, accounts: m.accounts, days: m.days, posts: m.posts, publishedInRange: m.published, timezone });
+  return buildAnalytics({ range, now, accounts: m.accounts, days: m.days, posts: m.posts, publishedInRange: m.published, published: m.publishedAt, timezone });
 }
 
 /**

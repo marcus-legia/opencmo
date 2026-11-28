@@ -32,6 +32,7 @@ export const analyticsFixture: AnalyticsScreen = {
     { key: "video_views", value: 51500, change: 31, changeUnit: "percent", note: null },
     { key: "posts_measured", value: 26, change: null, changeUnit: "percent", note: "4 without data" },
   ],
+  published: 30,
   daily: daily(),
   brainReads: [
     { text: "Demo clips beat text on X.", evidence: "2.8× your median impressions · 6 posts", feeds: "feeds Writer and Monday's plan" },
@@ -71,6 +72,7 @@ export const analyticsEmpty: AnalyticsScreen = {
     changeUnit: key === "engagement_rate" ? "points" : "percent",
     note: null,
   })),
+  published: 0,
   daily: [],
   brainReads: [],
   byAccount: [],

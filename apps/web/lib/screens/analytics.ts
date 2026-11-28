@@ -30,7 +30,9 @@ export const AnalyticsScreenSchema = z.object({
   range: RangeSchema,
   accounts: z.array(AccountSchema),
   kpis: z.array(KpiSchema).length(KPI_KEYS.length),
-  /** One entry per day of the range, oldest first. */
+  /** Posts that went out in the range, measured or not (`posts_measured` counts only those with numbers). */
+  published: z.number().int().min(0).optional(),
+  /** One entry per day of the range, oldest first. The week runs Monday to Sunday in the founder's zone; later days are empty. */
   daily: z.array(z.object({ day, values: z.partialRecord(PlatformSchema, z.number().int().min(0).nullable()) })),
   /** "What the Brain takes from this": the line, its evidence, and what it feeds. */
   brainReads: z.array(z.object({ text: z.string().max(200), evidence: z.string().max(200), feeds: z.string().max(120) })),

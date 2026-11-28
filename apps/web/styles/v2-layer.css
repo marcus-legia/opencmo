@@ -619,13 +619,4 @@ html[data-ui="v2"] .v2-main-body:has(.ed2) {
 .td-setup-buyer-input { flex: 1 1 220px; min-width: 0; }
 .scr-setup-title { margin: 0 0 4px; font-size: 22px; font-weight: 500; letter-spacing: -.02em; }
 
-/* Your business (wave 3 C3): a field's name beside its value on a wide screen, above it on a phone, where two columns
-   left the value one word a line (review of #239). */
-.td-bizfield { display: grid; grid-template-columns: minmax(0, 200px) minmax(0, 1fr); gap: 8px 24px; }
-.td-bizpair { display: grid; grid-template-columns: minmax(0, 180px) minmax(0, 1fr); gap: 4px 16px; }
-@media (max-width: 640px) {
-  .td-bizfield, .td-bizpair { grid-template-columns: minmax(0, 1fr); gap: 4px; }
-}
-/* A feature or problem is a sentence, not a tag: the shared .chip has a fixed 22px height, so a long one wrapped and
-   overlapped the next (production 28/11). Let it grow. */
-.td-bizfield .chip { height: auto; min-height: 22px; padding: 3px 10px; border-radius: 12px; line-height: 1.45; white-space: normal; }
+/* Your business: its field rows moved to `.uip-field` in ui-pages.css (redesign 2026-11-28). */

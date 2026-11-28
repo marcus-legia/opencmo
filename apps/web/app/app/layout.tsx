@@ -20,6 +20,7 @@ import "@/styles/today-app.css";
 import "@/styles/redesign.css";
 // The shared UI system (tokens, cards, buttons, chips, PageHeader): last, so it wins ties with the older sheets.
 import "@/styles/ui-system.css";
+import "@/styles/ui-pages.css";
 
 import { shellAccount } from "./shell";
 

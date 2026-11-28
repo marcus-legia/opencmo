@@ -5,6 +5,8 @@ import { useState } from "react";
 import { api, jsonBody } from "@/components/clipping/api";
 import type { CompetitorIdea } from "@/lib/agent/cmo-competitors";
 
+import { useWorkspace } from "./workspace";
+
 type Answer = { query: string; ideas: CompetitorIdea[]; failed: string[] };
 
 /** One name people mention, with why and where, and Add: the founder gives its website, then it is read and kept. */
@@ -29,23 +31,23 @@ function Idea({ idea, onAdded }: { idea: CompetitorIdea; onAdded: () => void }) 
     }
   }
   return (
-    <li data-testid="research-idea" style={{ display: "flex", flexDirection: "column", gap: "4px", padding: "10px 0", borderTop: "1px solid var(--line)" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-        <b style={{ fontWeight: "600" }}>{idea.name}</b>
-        <span className="meta" style={{ marginLeft: "auto" }}>
+    <li data-testid="research-idea" className="uip-idea">
+      <div className="uip-idea__head">
+        <b>{idea.name}</b>
+        <span className="ui-t-xs ui-muted ui-num">
           {idea.mentions} {idea.mentions === 1 ? "mention" : "mentions"}
         </span>
       </div>
-      <span style={{ fontSize: "13.5px" }}>{idea.why}</span>
-      <a href={idea.where.url} target="_blank" rel="noopener noreferrer nofollow" className="meta">
+      <span className="ui-t-sm">{idea.why}</span>
+      <a href={idea.where.url} target="_blank" rel="noopener noreferrer nofollow" className="ui-t-xs">
         Seen on {idea.where.source}
       </a>
       {added ? (
-        <span className="meta" role="status" style={{ color: "var(--ok)" }}>
+        <span className="ui-t-xs" role="status" style={{ color: "var(--ok)" }}>
           Added to your competitors.
         </span>
       ) : site === null ? (
-        <button type="button" className="ghost" style={{ alignSelf: "flex-start" }} onClick={() => setSite("")}>
+        <button type="button" className="ui-btn ui-btn--ghost ui-btn--sm" style={{ alignSelf: "flex-start" }} onClick={() => setSite("")}>
           Add
         </button>
       ) : (
@@ -54,17 +56,17 @@ function Idea({ idea, onAdded }: { idea: CompetitorIdea; onAdded: () => void }) 
             e.preventDefault();
             void add();
           }}
-          style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}
+          className="uip-idea__form"
         >
-          <label className="meta" htmlFor={`idea-site-${idea.name}`} style={{ width: "100%" }}>
+          <label className="ui-label" htmlFor={`idea-site-${idea.name}`}>
             Its website
           </label>
-          <input id={`idea-site-${idea.name}`} type="text" inputMode="url" autoFocus placeholder="theirsite.com" value={site} onChange={(e) => setSite(e.target.value)} style={{ flex: "1 1 140px", minWidth: "0", height: "32px", padding: "0 8px", border: "1px solid var(--line-2)", borderRadius: "7px", background: "var(--bg)", color: "var(--text)", font: "inherit" }} />
-          <button type="submit" className="primary" disabled={busy || !site.trim()}>
+          <input id={`idea-site-${idea.name}`} className="ui-input" type="text" inputMode="url" autoFocus placeholder="theirsite.com" value={site} onChange={(e) => setSite(e.target.value)} />
+          <button type="submit" className="ui-btn ui-btn--primary ui-btn--sm" disabled={busy || !site.trim()}>
             {busy ? "Adding…" : "Add"}
           </button>
           {error ? (
-            <span role="alert" className="meta" style={{ width: "100%", color: "var(--warn)" }}>
+            <span role="alert" className="ui-t-xs" style={{ width: "100%", color: "var(--danger)" }}>
               {error}
             </span>
           ) : null}
@@ -84,6 +86,10 @@ export function ResearchChat({ onAdded }: { onAdded: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [answers, setAnswers] = useState<Answer[]>([]);
+  // The example comes from the founder's own Product document: another product's example ("chase unpaid invoices")
+  // read as if Ferreto had mixed up whose business this is (production 28/11).
+  const { category } = useWorkspace();
+  const example = category ? `e.g. ${category.replace(/[.\s]+$/, "")}` : "what your product does, in a few words";
 
   async function ask() {
     const q = query.trim();
@@ -102,48 +108,51 @@ export function ResearchChat({ onAdded }: { onAdded: () => void }) {
   }
 
   return (
-    <aside aria-label="Find competitors" className="card" data-testid="research-chat" style={{ flex: "1 1 300px", maxWidth: "380px", display: "flex", flexDirection: "column", gap: "10px" }}>
-      <b>Ask what else they use</b>
-      <p className="meta" style={{ margin: "0" }}>
-        Searches Reddit, Hacker News and the web for the tools people mention. Nothing is added until you press Add.
-      </p>
+    <aside aria-label="Find competitors" className="ui-card uip-ask" data-testid="research-chat">
+      <h2 className="uip-ask__title">Ask what else they use</h2>
+      <p className="ui-t-sm ui-muted uip-flat">Searches Reddit, Hacker News and the web for the tools people mention. Nothing is added until you press Add.</p>
       <form
         onSubmit={(e) => {
           e.preventDefault();
           void ask();
         }}
-        style={{ display: "flex", flexDirection: "column", gap: "6px" }}
+        className="ui-stack"
+        style={{ gap: "var(--sp-2)" }}
       >
-        <label className="meta" htmlFor="research-ask">
+        <label className="ui-label" htmlFor="research-ask" style={{ margin: 0 }}>
           What do the tools do, in your customers&apos; words?
         </label>
-        <input id="research-ask" type="text" placeholder="chase unpaid invoices" value={query} onChange={(e) => setQuery(e.target.value)} maxLength={120} style={{ height: "34px", padding: "0 10px", border: "1px solid var(--line-2)", borderRadius: "7px", background: "var(--bg)", color: "var(--text)", font: "inherit" }} />
-        <button type="submit" className="primary" disabled={busy || query.trim().length < 2} style={{ alignSelf: "flex-end" }}>
+        <input id="research-ask" className="ui-input" type="text" placeholder={example} value={query} onChange={(e) => setQuery(e.target.value)} maxLength={120} />
+        <button type="submit" className="ui-btn ui-btn--primary" disabled={busy || query.trim().length < 2} style={{ alignSelf: "flex-end" }}>
           {busy ? "Looking…" : "Find them"}
         </button>
       </form>
       {error ? (
-        <p role="alert" className="meta" style={{ margin: "0", color: "var(--warn)" }}>
+        <p role="alert" className="ui-t-sm uip-flat" style={{ color: "var(--danger)" }}>
           {error}
         </p>
       ) : null}
       {answers.map((a) => (
         <section key={a.query} aria-label={`Names for ${a.query}`}>
-          <div className="meta" style={{ fontWeight: "500" }}>
+          <div className="ui-t-xs ui-muted" style={{ fontWeight: 500 }}>
             “{a.query}”
           </div>
           {a.ideas.length ? (
-            <ul style={{ listStyle: "none", margin: "0", padding: "0" }}>
+            <ul className="uip-ideas">
               {a.ideas.map((idea) => (
                 <Idea key={idea.name} idea={idea} onAdded={onAdded} />
               ))}
             </ul>
           ) : (
-            <p className="meta" style={{ margin: "4px 0 0" }}>
+            <p className="ui-t-sm ui-muted uip-flat" style={{ marginTop: "var(--sp-1)" }}>
               No new names. People did not mention a tool you do not list already.
             </p>
           )}
-          {a.failed.length ? <p className="meta" style={{ margin: "4px 0 0" }}>{a.failed.join(" and ")} did not answer.</p> : null}
+          {a.failed.length ? (
+            <p className="ui-t-xs ui-muted uip-flat" style={{ marginTop: "var(--sp-1)" }}>
+              {a.failed.join(" and ")} did not answer.
+            </p>
+          ) : null}
         </section>
       ))}
     </aside>

@@ -111,9 +111,9 @@ async function main() {
     assert.equal(run2.status, "done", `a refusal does not fail the run (${run2.error})`);
   }
 
-  // Analytics from stored numbers.
+  // Analytics from stored numbers. A Sunday: the week (Monday to Sunday) is then the last seven days.
   {
-    const now = new Date("2026-10-31T12:00:00Z");
+    const now = new Date("2026-11-01T12:00:00Z");
     const accounts = [
       { id: "sa-x", platform: "x", handle: "@me", avatarUrl: null, status: "connected", updatedAt: "2026-10-01T00:00:00Z" },
       { id: "sa-t", platform: "threads", handle: "@me", avatarUrl: null, status: "connected", updatedAt: "2026-10-01T00:00:00Z" },
@@ -186,6 +186,16 @@ async function main() {
     assert.equal(withGap.byAccount.find((a) => a.where.platform === "x")!.medianImpressions, x.medianImpressions, "not counted as zero");
     const gapRow = withGap.posts.find((p) => p.id === "n");
     assert.ok(!gapRow || (gapRow.impressions === null && gapRow.engagementRate === null && gapRow.vsMedian === null), "shown as a dash");
+
+    // Mid-week: the week still starts on Monday in the founder's zone, later days are empty, and "Posts published"
+    // counts every post that went out, measured or not (it said 0 next to 49 views when the one post had no numbers).
+    const wed = new Date("2026-10-28T20:00:00Z"); // Thursday 03:00 in Ho Chi Minh City
+    const midweek = buildAnalytics({ range: 7, now: wed, accounts, days, posts: [], publishedInRange: 0, published: ["2026-10-27T09:00:00Z"], timezone: "Asia/Ho_Chi_Minh" });
+    AnalyticsScreenSchema.parse(midweek);
+    assert.deepEqual(midweek.daily.map((d) => d.day), ["2026-10-26", "2026-10-27", "2026-10-28", "2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01"], "Monday to Sunday");
+    assert.equal(midweek.published, 1);
+    assert.equal(midweek.kpis.find((k) => k.key === "posts_measured")!.note, "1 without data");
+    assert.equal(midweek.kpis.find((k) => k.key === "impressions")!.value, 4 * 1000 + 2 * 100, "Monday to Thursday only (X four days, Threads two), not the empty days");
   }
 
   // A4: the brain's measures; an empty week is dashes, not zeros.

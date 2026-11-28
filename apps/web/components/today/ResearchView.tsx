@@ -8,6 +8,7 @@ import { useShellState } from "@/components/shell-v2/ShellState";
 import type { CompetitorView } from "@/lib/screens/research";
 
 import { CompanyLogo } from "./company-logo";
+import { PageHeader } from "./PageHeader";
 import { ResearchChat } from "./ResearchChat";
 import { siteLabel, useWorkspace } from "./workspace";
 
@@ -24,30 +25,26 @@ function CompetitorCard({ c, onRemove }: { c: CompetitorView; onRemove: (c: Comp
   const week = thisWeek(c);
   const total = c.mentions.reduce((n, m) => n + m.count, 0);
   return (
-    <article className="card" data-testid="research-competitor" style={{ display: "flex", flexDirection: "column", gap: "8px", minWidth: "0" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-        <CompanyLogo name={c.name} site={c.site} size={36} />
-        <span style={{ minWidth: "0", flex: "1 1 auto" }}>
-          <b style={{ fontWeight: "600", display: "block" }}>{c.name}</b>
-          <span className="meta" style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            <a href={`https://${c.site}`} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>
+    <article className="ui-card uip-rival" data-testid="research-competitor">
+      <div className="uip-rival__head">
+        <CompanyLogo name={c.name} site={c.site} size={32} />
+        <span className="uip-rival__who">
+          <b>{c.name}</b>
+          <span className="ui-t-xs ui-muted uip-ellipsis">
+            <a href={`https://${c.site}`} target="_blank" rel="noopener noreferrer">
               {c.site}
             </a>
             {c.price ? ` · ${c.price}` : ""}
           </span>
         </span>
-        <span className="sec-stat" title={`Named in ${week} conversations this week${total ? `, ${total} in the last 8 weeks` : ""}`} style={{ height: "30px", background: "var(--raised)", color: week ? "var(--sec-find)" : "var(--muted)" }}>
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12Z" />
-          </svg>
-          {week}
-          <span className="sr-only"> this week</span>
+        <span className="ui-chip ui-num" data-tone={week ? "accent" : undefined} title={`Named in ${week} conversations this week${total ? `, ${total} in the last 8 weeks` : ""}`}>
+          {week} this week
         </span>
       </div>
-      {c.offer ? <p style={{ margin: "0", fontSize: "13.5px" }}>{c.offer}</p> : <p className="meta" style={{ margin: "0" }}>Its site said nothing we could read about what it sells.</p>}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px" }}>
-        <span className="meta">{c.addedVia === "chat" ? "Found in the chat" : "Added by website"}</span>
-        <button type="button" className="skip" onClick={() => onRemove(c)}>
+      {c.offer ? <p className="ui-t-sm uip-flat">{c.offer}</p> : <p className="ui-t-sm ui-muted uip-flat">Its site said nothing we could read about what it sells.</p>}
+      <div className="uip-rival__foot">
+        <span className="ui-t-xs ui-subtle">{c.addedVia === "chat" ? "Found in the chat" : "Added by website"}</span>
+        <button type="button" className="ui-btn ui-btn--quiet ui-btn--sm" onClick={() => onRemove(c)}>
           Remove
         </button>
       </div>
@@ -71,6 +68,7 @@ export function ResearchView({ withChat = false }: { withChat?: boolean }) {
   const ws = useWorkspace();
   const you = ws.name ?? siteLabel(ws.site) ?? "Your business";
   const named = ws.competitors.filter((c) => c.name);
+  const mentioned = list.reduce((sum, c) => sum + thisWeek(c), 0);
 
   async function add(site: string) {
     setAdding(true);
@@ -98,80 +96,81 @@ export function ResearchView({ withChat = false }: { withChat?: boolean }) {
   }
 
   return (
-    <div data-sec="biz" style={{ maxWidth: "1320px", margin: "0 auto", padding: "22px 24px 40px", display: "flex", gap: "24px", flexWrap: "wrap", alignItems: "flex-start" }} data-testid="v2-research">
-      <main style={{ flex: "999 1 560px", minWidth: "0", display: "flex", flexDirection: "column", gap: "14px" }}>
-        <form
-          className="sec-band"
-          style={{ marginBottom: "0" }}
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (url.trim()) void add(url.trim());
-          }}
+    <div className="uip uip-research" data-has-chat={withChat ? "" : undefined} data-testid="v2-research">
+      <main className="uip-research__main">
+        <PageHeader
+          title="Competitors"
+          status={list.length ? `${list.length} kept · named in ${mentioned} ${mentioned === 1 ? "conversation" : "conversations"} this week` : "The tools your customers compare you with"}
+          actions={
+            withChat ? null : (
+              <button type="button" className="ui-btn ui-btn--ghost" onClick={() => focusChat()} title="Ask the chat to find them">
+                Find more
+              </button>
+            )
+          }
         >
-          <span className="sec-tile">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM23 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8" />
-            </svg>
-          </span>
-          <h1>Competitors</h1>
-          {list.length ? <span className="sec-chip">{list.length}</span> : null}
-          <span style={{ flex: "1 1 auto" }}></span>
-          <label htmlFor="research-add" className="sr-only">
-            Add one
-          </label>
-          <input id="research-add" type="text" inputMode="url" placeholder="competitor.com" value={url} onChange={(e) => setUrl(e.target.value)} style={{ flex: "0 1 260px", minWidth: "0", height: "38px", padding: "0 12px", border: "1px solid var(--sec-line)", borderRadius: "10px", background: "var(--panel)", color: "var(--text)", font: "inherit" }} />
-          <button type="submit" className="primary" disabled={adding || !url.trim()}>
-            {adding ? "Reading their site…" : "Add"}
-          </button>
-          {withChat ? null : (
-            <button type="button" className="ghost" onClick={() => focusChat()} title="Ask the chat to find them">
-              Find more
+          <form
+            className="uip-addform"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (url.trim()) void add(url.trim());
+            }}
+          >
+            <label htmlFor="research-add" className="sr-only">
+              Add one
+            </label>
+            <input id="research-add" className="ui-input" type="text" inputMode="url" placeholder="Paste a website: competitor.com" value={url} onChange={(e) => setUrl(e.target.value)} />
+            <button type="submit" className="ui-btn ui-btn--primary" disabled={adding || !url.trim()}>
+              {adding ? "Reading their site…" : "Add"}
             </button>
-          )}
-        </form>
-        {/* You first, by your own logo (owner, 2026-11-23). */}
-        <article className="card" data-testid="research-you" style={{ display: "flex", alignItems: "center", gap: "12px", background: "var(--sec-find-wash)", borderColor: "var(--sec-find-line)" }}>
-          <CompanyLogo name={you} site={ws.site} size={36} you />
-          <b style={{ flex: "1 1 auto", fontWeight: "650" }}>{you}</b>
-          <span style={{ fontSize: "11px", fontWeight: "750", letterSpacing: "0.12em", color: "var(--sec-find)" }}>YOU</span>
-        </article>
+          </form>
+        </PageHeader>
         {error ? (
-          <p role="alert" className="meta" style={{ color: "var(--warn)", margin: "0" }}>
+          <p role="alert" className="ui-t-sm uip-flat" style={{ color: "var(--danger)" }}>
             {error}
           </p>
         ) : null}
-        {state.status === "loading" ? <p className="meta">Loading…</p> : null}
-        {state.status === "error" ? <p className="meta">{state.message}</p> : null}
+        {/* You first, by your own logo (owner, 2026-11-23). */}
+        <article className="uip-you" data-testid="research-you">
+          <CompanyLogo name={you} site={ws.site} size={28} you />
+          <b>{you}</b>
+          <span className="ui-chip">You</span>
+        </article>
+        {state.status === "loading" ? <p className="ui-t-sm ui-muted">Loading…</p> : null}
+        {state.status === "error" ? <p className="ui-t-sm ui-muted">{state.message}</p> : null}
         {state.status === "ready" && list.length === 0 && named.length ? (
           // The Competitors document names them, but none is kept yet (E2E 2026-11-23: the Context column showed four
           // while this page said "No competitors yet"). Keep reads each one's site.
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 260px), 1fr))", gap: "12px" }} data-testid="research-named">
-            {named.map((c) => (
-              <article key={c.name} className="card" style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                <CompanyLogo name={c.name} site={c.website} size={36} />
-                <span style={{ flex: "1 1 auto", minWidth: "0" }}>
-                  <b style={{ display: "block", fontWeight: "600" }}>{c.name}</b>
-                  <span className="meta" style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{siteLabel(c.website) ?? ""}</span>
-                </span>
-                {c.website ? (
-                  <button type="button" className="ghost" disabled={adding} onClick={() => void add(c.website)}>
-                    Keep
-                  </button>
-                ) : null}
-              </article>
-            ))}
-          </div>
+          <section aria-labelledby="research-named-title" className="ui-stack">
+            <h2 id="research-named-title" className="ui-t-sm uip-flat" style={{ fontWeight: 600 }}>
+              Named in your Competitors document
+            </h2>
+            <div className="uip-cards uip-cards--sm" data-testid="research-named">
+              {named.map((c) => (
+                <article key={c.name} className="ui-card uip-rival__head">
+                  <CompanyLogo name={c.name} site={c.website} size={32} />
+                  <span className="uip-rival__who">
+                    <b>{c.name}</b>
+                    <span className="ui-t-xs ui-muted uip-ellipsis">{siteLabel(c.website) ?? ""}</span>
+                  </span>
+                  {c.website ? (
+                    <button type="button" className="ui-btn ui-btn--ghost ui-btn--sm" disabled={adding} onClick={() => void add(c.website)}>
+                      Keep
+                    </button>
+                  ) : null}
+                </article>
+              ))}
+            </div>
+          </section>
         ) : null}
         {state.status === "ready" && list.length === 0 && !named.length ? (
-          <div className="card" data-testid="research-empty">
-            <b>No competitors yet.</b>
-            <p className="meta" style={{ margin: "4px 0 0" }}>
-              Paste the website of a tool your customers compare you with.
-            </p>
+          <div className="ui-card ui-empty" data-testid="research-empty">
+            <p className="ui-empty__title">No competitors yet.</p>
+            <p>Paste the website of a tool your customers compare you with.</p>
           </div>
         ) : null}
         {list.length ? (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 320px), 1fr))", gap: "12px" }}>
+          <div className="uip-cards">
             {list.map((c) => (
               <CompetitorCard key={c.id} c={c} onRemove={(x) => void remove(x)} />
             ))}
