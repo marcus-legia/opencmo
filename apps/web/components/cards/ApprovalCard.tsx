@@ -36,6 +36,7 @@ import { NUMERAL, autoLabel, cardHead, headNote, type DraftReason } from "./labe
 import { ReasonChips } from "./ReasonChips";
 import { approveBlocked, formatWhen, fromLocalInput, sameOptions, savedOptions, toLocalInput } from "./schedule";
 import { PhotoStrip, PostPhotos } from "./post-photos";
+import { PlatformMark, hasLogo } from "@/components/today/platform-logos";
 
 export type DecideHandler = (card: Card, decision: Decision) => Promise<boolean>;
 
@@ -59,7 +60,7 @@ const PROBLEM_LABEL = { expired: "Expired", decided_elsewhere: "Decided", needs_
 
 /** The decline action of each kind: its label and the decision it sends with the optional reason. */
 const DECLINE: Partial<Record<Card["kind"], { label: string; action: "skip" | "dismissed" | "reject" | "cancel" | "send_back" }>> = {
-  post: { label: "Skip with reason", action: "skip" },
+  post: { label: "Skip", action: "skip" },
   reply: { label: "Not a fit", action: "dismissed" },
   goal: { label: "Reject", action: "reject" },
   script: { label: "Cancel", action: "cancel" },
@@ -92,6 +93,36 @@ export function postWhen(proposed: NonNullable<Extract<Card["body"], { kind: "po
     ? `Goes out ${when} on ${where}${proposed.handle ? ` (${proposed.handle})` : ""}, your time.`
     // No account: nothing is scheduled until one is connected (20270206040000, 20270206090000).
     : `No ${where} account is connected, so nothing goes out at ${when}. Connect ${where} on the Post page and it is scheduled, or post it yourself.`;
+}
+
+/**
+ * A post card's time as one line at its top (28/11 redesign): the platform's logo, the account and the time. The full
+ * sentence stays as its tooltip; a time that has passed, or a post with no account, keeps the sentence itself.
+ */
+function PostWhen({ proposed }: { proposed: NonNullable<Extract<Card["body"], { kind: "post" }>["proposed"]> }) {
+  const sentence = postWhen(proposed);
+  if (proposed.mode !== "publish" || new Date(proposed.at).getTime() <= Date.now()) {
+    return (
+      <p className="v2-card-meta" data-testid="post-when">
+        {sentence}
+      </p>
+    );
+  }
+  const handle = proposed.handle ? (proposed.handle.startsWith("@") ? proposed.handle : `@${proposed.handle}`) : null;
+  return (
+    <p className="pcx-when" data-testid="post-when" title={sentence}>
+      {hasLogo(proposed.platform) ? <PlatformMark platform={proposed.platform} size={16} /> : null}
+      <span className="v2-visually-hidden">Goes out on {PLATFORM_LABEL[proposed.platform]}</span>
+      {handle ? <span className="pcx-handle">{handle}</span> : null}
+      <span className="pcx-time ui-num">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="10" />
+          <path d="M12 6v6l4 2" />
+        </svg>
+        {formatWhen(proposed.at, proposed.timezone)}
+      </span>
+    </p>
+  );
 }
 
 function decidedNote(card: Card): string | null {
@@ -283,7 +314,7 @@ export function ApprovalCard({
   const postChangeTime: Action | null = proposed
     ? {
         label: "Change time",
-        variant: "secondary",
+        variant: "quiet",
         checks: "change_time",
         run: () => {
           setNewTime(toLocalInput(proposed.at, proposed.timezone));
@@ -436,6 +467,7 @@ export function ApprovalCard({
 
       {open ? (
         <div id={bodyId} className="v2-card-body">
+          {proposed ? <PostWhen proposed={proposed} /> : null}
           {card.body.kind === "post" ? (
             <PostBody
               body={card.body}
@@ -509,18 +541,14 @@ export function ApprovalCard({
           {card.body.kind === "post" && editing && draft.trim() !== shown && card.status === "waiting" ? (
             <ReasonChips label="What did you fix? Optional. Ferreto learns from it." value={fixCode} onChange={setFixCode} only={FIX_REASONS} disabled={busy} />
           ) : null}
-          {proposed ? (
-            <p className="v2-card-meta" data-testid="post-when">
-              {postWhen(proposed)}
-            </p>
-          ) : null}
           {card.autoAt && card.status === "waiting" ? (
             <p className="v2-card-state is-decided_elsewhere" data-testid="post-auto">
               <b>Autopilot</b>
               <span>{autoLabel(card.autoAt)}. Edit or skip it before then; Approve sends it to the schedule now.</span>
             </p>
           ) : null}
-          {foot ? <div className="v2-card-meta">{foot}</div> : null}
+          {/* A post card's time line already names where and when; its "2 versions · X · goes out…" repeated it. */}
+          {foot && !(proposed && card.priceCredits === null) ? <div className="v2-card-meta">{foot}</div> : null}
 
           {"lookNote" in card.body && card.body.lookNote ? (
             <p className="v2-card-state is-expired" data-testid="look-note">

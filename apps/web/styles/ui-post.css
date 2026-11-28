@@ -27,7 +27,9 @@
 .k .pw-ask .ui-label { margin: 0; }
 .k .pw-ask__row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
 .k .pw-ask__row > .ui-input { flex: 1 1 220px; min-width: 0; }
-.k .pw-ask__kinds > button { gap: 6px; }
+.k .pw-ask__kinds > button { gap: 6px; min-width: 36px; justify-content: center; padding-inline: 8px; }
+/* Platform filters as logos (28/11): square chips, the logo in the middle. */
+.k .pw-logo-chip { min-width: 32px; justify-content: center; padding-inline: 8px; }
 .k .pw-ask__kinds .pl-badge { border-radius: 4px !important; }
 .k .pw-ask__note { color: var(--muted); }
 
@@ -58,6 +60,7 @@
 .k .pw-no { margin-right: 6px; color: var(--subtle); font-weight: 500; }
 .k .pw-row__meta { font-size: var(--fs-xs); color: var(--muted); }
 .k .pw-row__meta--clip { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.k .pw-row__sources { display: inline-flex; align-items: center; gap: 4px; }
 .k .pw-row__end { display: flex; align-items: center; gap: var(--sp-3); flex: 0 0 auto; padding-right: var(--sp-3); }
 .k .pw-row__when { min-width: 72px; text-align: right; font-size: var(--fs-xs); color: var(--muted); white-space: nowrap; }
 /* Two lines on a phone: the title row, then its state and time under it, aligned with the text. */
@@ -77,7 +80,9 @@
 .k .pw-time__note { margin-top: 6px; }
 
 .k .pw-sources { display: flex; flex-direction: column; gap: 6px; }
-.k .pw-sources ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-xs); line-height: 1.5; }
+.k .pw-sources ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; font-size: var(--fs-xs); line-height: 1.5; }
+.k .pw-sources li { display: flex; align-items: flex-start; gap: 8px; }
+.k .pw-sources li > svg, .k .pw-sources li > span:first-child:not(.pw-sources__text) { flex: 0 0 auto; margin-top: 2px; }
 
 .k .pw-voice { margin: 0 0 var(--sp-3); padding: 0; list-style: none; }
 .k .pw-voice li { display: flex; flex-direction: column; gap: 2px; padding: var(--sp-2) 0; border-bottom: 1px solid var(--line); }
@@ -89,6 +94,7 @@
 .k .pw-week__when { width: 76px; flex: 0 0 auto; color: var(--muted); font-size: var(--fs-xs); }
 .k .pw-week__dot { width: 6px; height: 6px; border-radius: 50%; flex: 0 0 auto; background: var(--accent); }
 .k .pw-week__dot[data-done] { background: var(--ok); }
+.k .pw-week__what svg { margin-right: 6px; vertical-align: -2px; }
 .k .pw-week__what { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .k .pw-side__group { margin-top: var(--sp-3); }
 .k .pw-cut { text-decoration: line-through; }
@@ -106,9 +112,6 @@
   .k .pc-span { font-size: var(--fs-sm); }
 }
 
-.k .pc-legend { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-3); }
-.k .pc-legend__hint { margin-left: auto; }
-@media (max-width: 900px) { .k .pc-legend__hint { margin-left: 0; flex-basis: 100%; } }
 .k .pc-ghost-chip { border: 1px dashed var(--accent) !important; }
 
 .k .pc-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--panel); overflow: hidden; }
@@ -127,9 +130,15 @@
 .k .pc-ev:focus-visible { outline: none; box-shadow: var(--focus); }
 .k .pc-ev[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 .k .pc-ev[draggable="true"] { cursor: grab; }
+/* The post's state as its left edge (28/11 redesign): grey scheduled, green posted, accent waiting, warn, danger. */
+.k .pc-ev { border-left: 3px solid var(--line-2); }
+.k .pc-ev[data-tone="ok"] { border-left-color: var(--ok); }
+.k .pc-ev[data-tone="accent"] { border-left-color: var(--accent); }
+.k .pc-ev[data-tone="warn"] { border-left-color: var(--warn); }
+.k .pc-ev[data-tone="danger"] { border-left-color: var(--danger); }
 /* A draft still waiting for the founder's OK: dashed, on the page's own background, so it reads as not yet booked. */
 .k .pc-ev[data-ghost] { border-style: dashed; border-color: color-mix(in srgb, var(--accent) 55%, var(--line-2)); background: transparent; }
-.k .pc-ev__time { font-size: 12px; color: var(--muted); }
+.k .pc-ev__time { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--muted); }
 .k .pc-ev__title { font-size: 13.5px; line-height: 1.35; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .k .pc-ev__state { display: flex; align-items: center; gap: 4px; }
 .k .pc-failed { width: 14px; height: 14px; color: var(--danger); flex: 0 0 auto; }
@@ -155,6 +164,8 @@
 .k .pc-drawer[hidden] { display: none; }
 .k .pc-drawer__head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); min-height: 52px; padding: 0 var(--sp-3) 0 var(--sp-4); border-bottom: 1px solid var(--line); }
 .k .pc-drawer__body { display: flex; flex-direction: column; gap: var(--sp-3); padding: var(--sp-4); flex: 1 1 auto; }
+.k .pc-drawer__when { display: inline-flex; align-items: center; gap: 8px; }
+.k .pc-drawer__handle { font-weight: 600; }
 .k .pc-drawer__title { margin: 0; font-size: var(--fs-lg); line-height: 1.35; font-weight: 600; overflow-wrap: anywhere; }
 .k .pc-drawer__foot { display: flex; gap: var(--sp-2); justify-content: flex-end; flex-wrap: wrap; padding: var(--sp-3) var(--sp-4); border-top: 1px solid var(--line); }
 .k .pc-move { display: flex; flex-direction: column; gap: var(--sp-2); }
@@ -225,7 +236,7 @@
 .k .pcm-main > .ui-ph { margin-bottom: var(--sp-2); }
 .k .pcm-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-3); }
 .k .pcm-platforms { flex-wrap: wrap; }
-.k .pcm-platforms > button { gap: 6px; }
+.k .pcm-platforms > button { gap: 6px; min-width: 36px; justify-content: center; padding-inline: 8px; }
 .k .pcm-platforms .pl-badge { border-radius: 4px !important; }
 .k .pcm-who { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); min-width: 0; }
 .k .pcm-inline {

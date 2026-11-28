@@ -18,7 +18,7 @@ import { formatWhen, fromLocalInput, localMonday, toLocalInput } from "@/lib/tim
 import { PostViews } from "./CalendarView";
 import { KIND_ICON, PLATFORM_ICON } from "./cards";
 import { PageHeader } from "./PageHeader";
-import { PlatformBadge } from "./platform-logos";
+import { PlatformBadge, PlatformMark, hasLogo } from "./platform-logos";
 import { whereSaid } from "./LibraryView";
 import { useDecide } from "./useDecide";
 import { POST_SECTIONS, dayLabel, draftsLeftOver, draftsThisWeek, postSections } from "./week";
@@ -89,24 +89,28 @@ function SourceList({ sources }: { sources: readonly Source[] }) {
   return (
     <section aria-label="What this post is based on" data-testid="writer-sources" className="pw-sources">
       <p className="ui-t-xs ui-muted">
-        Based on {sources.length === 1 ? "this conversation" : `these ${sources.length} conversations`} in your <Link href="/app/library">Library</Link>
+        Written from {sources.length === 1 ? "this conversation" : `these ${sources.length} conversations`} in your <Link href="/app/library">Library</Link>
       </p>
       <ul>
         {sources.map((s) => (
           <li key={s.opportunityId} data-testid="writer-source">
-            {s.summary}{" "}
-            {s.ref ? (
-              <a href={`/app/sales#thread-${s.opportunityId}`} data-testid="writer-source-sales">
-                From Scan #{s.ref.split(".")[0]} · {s.ref}
-              </a>
-            ) : null}{" "}
-            {s.url ? (
-              <a className="ui-muted" href={s.url} target="_blank" rel="noopener noreferrer" data-testid="writer-source-link">
-                {whereSaid(s)} thread ↗
-              </a>
-            ) : (
-              <span className="ui-muted">{whereSaid(s)}</span>
-            )}
+            {hasLogo(s.platform) ? <PlatformMark platform={s.platform} size={14} /> : null}
+            <span className="pw-sources__text">
+              {s.summary}{" "}
+              {/* The scan reference ("3.1") is the way back to the person on Sales; the words around it were noise. */}
+              {s.ref ? (
+                <a className="ui-muted" href={`/app/sales#thread-${s.opportunityId}`} data-testid="writer-source-sales" title={`From Scan #${s.ref.split(".")[0]}`}>
+                  #{s.ref}
+                </a>
+              ) : null}{" "}
+              {s.url ? (
+                <a className="ui-muted" href={s.url} target="_blank" rel="noopener noreferrer" data-testid="writer-source-link" >
+                  {whereSaid(s)} ↗
+                </a>
+              ) : (
+                <span className="ui-muted">{whereSaid(s)}</span>
+              )}
+            </span>
           </li>
         ))}
       </ul>
@@ -259,7 +263,8 @@ export function AgentWriter() {
                     #{d.no}
                   </span>
                 ) : null}
-                <span className="ui-muted">{kindOf(d)} · </span>
+                {/* The row's icon already shows the platform (28/11 redesign): the words stay for screen readers. */}
+                <span className="v2-visually-hidden">{kindOf(d)}: </span>
                 {d.title}
               </span>
               {lastWeek.has(d.id) && d.column === "waiting" ? (
@@ -268,9 +273,14 @@ export function AgentWriter() {
                 </span>
               ) : null}
               {d.sources?.length ? (
-                <span className="pw-row__meta pw-row__meta--clip" data-testid="writer-based-on">
-                  {basedOn(d.sources)}
-                  {d.sources.some((s) => s.ref) ? ` · From ${d.sources.flatMap((s) => (s.ref ? [`Scan #${s.ref.split(".")[0]} · ${s.ref}`] : [])).join(", ")}` : ""}
+                <span className="pw-row__meta pw-row__sources" data-testid="writer-based-on" title={basedOn(d.sources)}>
+                  {[...new Set(d.sources.map((s) => s.platform))].map((p) =>
+                    hasLogo(p) ? <PlatformMark key={p} platform={p} size={13} /> : null,
+                  )}
+                  <span className="v2-visually-hidden">{basedOn(d.sources)}</span>
+                  <span aria-hidden="true">
+                    {d.sources.length} {d.sources.length === 1 ? "source" : "sources"}
+                  </span>
                 </span>
               ) : null}
             </span>
@@ -377,9 +387,16 @@ export function AgentWriter() {
             {/* Which platform, as the platforms' own icons: a toggle each instead of a select (owner, 2026-11-23). */}
             <span role="group" aria-label="Write for" className="ui-seg pw-ask__kinds">
               {ASK_KINDS.map((k) => (
-                <button key={k.id} type="button" aria-pressed={askKind === k.id} onClick={() => setAskKind(k.id)} data-testid={`ask-kind-${k.id}`}>
-                  <PlatformBadge platform={k.id === "post" ? "x" : k.id} size={16} />
-                  {k.label.replace(/ post$/, "")}
+                <button
+                  key={k.id}
+                  type="button"
+                  aria-pressed={askKind === k.id}
+                  onClick={() => setAskKind(k.id)}
+                  data-testid={`ask-kind-${k.id}`}
+                  aria-label={k.label.replace(/ post$/, "")}
+                  title={k.label}
+                >
+                  <PlatformBadge platform={k.id === "post" ? "x" : k.id} size={18} />
                 </button>
               ))}
             </span>
@@ -391,8 +408,8 @@ export function AgentWriter() {
             Or{" "}
             <Link href="/app/compose" data-testid="writer-write-yourself">
               write it yourself
-            </Link>
-            : Ferreto checks each line against the platform&apos;s rules and for lines that read as AI. Reddit posts are written there.
+            </Link>{" "}
+            (Reddit posts too).
           </p>
         </form>
 
@@ -412,8 +429,17 @@ export function AgentWriter() {
           {tab !== "voice" && platforms.length > 1 ? (
             <div role="group" aria-label="Platform" className="ui-row pw-bar__filter">
               {[null, ...platforms].map((p) => (
-                <button key={p ?? "all"} type="button" className="ui-chip" aria-pressed={active === p} onClick={() => setPlatform(p)}>
-                  {p ? PLATFORM_LABEL[p] : "All"}
+                <button
+                  key={p ?? "all"}
+                  type="button"
+                  className="ui-chip pw-logo-chip"
+                  aria-pressed={active === p}
+                  onClick={() => setPlatform(p)}
+                  aria-label={p ? PLATFORM_LABEL[p] : undefined}
+                  title={p ? PLATFORM_LABEL[p] : undefined}
+                >
+                  {/* Platforms as their logos, not words (owner, 28/11); the name stays the button's label. */}
+                  {p && hasLogo(p) ? <PlatformMark platform={p} size={15} /> : p ? PLATFORM_LABEL[p] : "All"}
                 </button>
               ))}
             </div>
@@ -491,7 +517,11 @@ export function AgentWriter() {
                     {/* The same instant as the row's, in the founder's zone: day and time, never the plan's day alone. */}
                     <span className="pw-week__when ui-num">{at ? zoned(at, timezone, { weekday: "short", hour: "2-digit", minute: "2-digit" }) : (d.dayText ?? "").slice(0, 3)}</span>
                     <span className="pw-week__dot" data-done={done || undefined} aria-hidden="true"></span>
-                    <span className="pw-week__what">{kindOf(d)}</span>
+                    <span className="pw-week__what">
+                      {hasLogo(d.platform) ? <PlatformMark platform={d.platform} size={13} /> : null}
+                      <span className={hasLogo(d.platform) ? "v2-visually-hidden" : undefined}>{kindOf(d)}</span>
+                      {hasLogo(d.platform) ? <span aria-hidden="true">{d.title}</span> : null}
+                    </span>
                     <span className="ui-t-xs ui-muted">{badgeOf(d)[0].toLowerCase()}</span>
                   </li>
                 );

@@ -133,8 +133,8 @@ export function LibraryView() {
                 className="uip-filter"
                 data-empty={t.n === 0 && !on ? "" : undefined}
               >
-                {t.id && hasLogo(t.id) ? <PlatformMark platform={t.id} size={13} /> : null}
-                {t.label}{" "}
+                {t.id && hasLogo(t.id) ? <PlatformMark platform={t.id} size={14} /> : null}
+                <span className={t.id && hasLogo(t.id) ? "v2-visually-hidden" : undefined}>{t.label}</span>{" "}
                 {t.n !== null ? <span className="uip-filter__n ui-num">{t.n}</span> : null}
               </Link>
             );

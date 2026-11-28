@@ -18,6 +18,7 @@ import { PageHeader } from "./PageHeader";
 import { PostingPlanPanel } from "./PostingPlanPanel";
 import { SamplePosts } from "./SamplePosts";
 import { useDecide } from "./useDecide";
+import { PlatformMark, hasLogo } from "./platform-logos";
 
 /** A slot, or a draft still waiting for the founder's OK drawn at the time its card proposes (`ghost`). */
 type Slot = ScheduleScreen["slots"][number] & { ghost?: boolean };
@@ -50,6 +51,8 @@ type ChanId = (typeof CHANS)[number]["id"];
  * 2026-11-24: "Scheduled" there made a founder think it would): it says the founder posts it.
  */
 const unposted = (s: Slot) => s.status === "scheduled" && s.connected === false;
+/** The states a week shows only as a coloured edge on the post, with the word kept for screen readers. */
+const QUIET: ReadonlySet<string> = new Set(["Scheduled", "Posted"]);
 const stOf = (s: Slot): [string, Tone] => (unposted(s) ? ["Post it yourself", "warn"] : ST[s.status]);
 
 /** Slots that have not started posting can move (the same rule as before the redesign). A waiting draft moves on its card. */
@@ -231,8 +234,16 @@ export function CalendarView() {
             </div>
             <div role="group" aria-label="Platform" className="ui-row">
               {CHANS.map((c) => (
-                <button key={c.id} type="button" className="ui-chip" aria-pressed={chan === c.id} onClick={() => setChan(c.id)}>
-                  {c.label}
+                <button
+                  key={c.id}
+                  type="button"
+                  className="ui-chip pw-logo-chip"
+                  aria-pressed={chan === c.id}
+                  onClick={() => setChan(c.id)}
+                  aria-label={c.id === "all" ? undefined : c.label}
+                  title={c.id === "all" ? undefined : c.label}
+                >
+                  {c.id !== "all" && hasLogo(c.id) ? <PlatformMark platform={c.id} size={15} /> : c.label}
                 </button>
               ))}
             </div>
@@ -248,27 +259,8 @@ export function CalendarView() {
 
         {data ? (
           <>
-            <div className="pc-legend ui-t-xs ui-muted">
-              <span className="ui-chip pc-ghost-chip" data-tone="accent">
-                Waiting on you
-              </span>
-              <span className="ui-chip">Scheduled</span>
-              {slots.some(unposted) ? (
-                <span>
-                  <span className="ui-chip" data-tone="warn">
-                    Post it yourself
-                  </span>{" "}
-                  no account connected
-                </span>
-              ) : null}
-              <span className="ui-chip" data-tone="ok">
-                Posted
-              </span>
-              <span className="ui-chip" data-tone="danger">
-                Failed
-              </span>
-              <span className="pc-legend__hint">Drag a post to another day to move it. Ferreto asks before it changes a time.</span>
-            </div>
+            {/* No legend or hint line (28/11 redesign): each post says its own state, and a movable one says "drag" in its
+                tooltip. */}
             <div className="pc-grid" data-range={range}>
               {days.map((key) => {
                 const items = slots.filter((s) => zone.dayKey(s.at) === key).sort((a, b) => a.at.localeCompare(b.at));
@@ -289,20 +281,31 @@ export function CalendarView() {
                           data-ghost={e.ghost || undefined}
                           data-testid={e.ghost ? "calendar-waiting-draft" : undefined}
                           aria-pressed={sel?.id === e.id}
+                          data-tone={tone}
+                          title={movable(e) ? `${stLabel}. Drag to another day to move it.` : stLabel}
                           draggable={movable(e)}
                           onDragStart={(ev) => ev.dataTransfer.setData("text/plain", e.id)}
                           onClick={() => setPicked(e.id)}
                         >
                           <span className="pc-ev__time ui-num">
-                            {zone.time(e.at)} · {chanName(e)}
+                            {hasLogo(e.where.platform) ? <PlatformMark platform={e.where.platform} size={12} /> : null}
+                            {zone.time(e.at)}
+                            <span className={hasLogo(e.where.platform) ? "v2-visually-hidden" : undefined}> · {chanName(e)}</span>
                           </span>
                           <span className="pc-ev__title">{e.title}</span>
-                          <span className="pc-ev__state">
-                            {e.status === "failed" ? <FailedMark /> : null}
-                            <span className="ui-chip" data-tone={tone} data-testid="slot-state">
+                          {/* Scheduled and Posted are the calm states: a coloured edge says them; the rest ask for the founder. */}
+                          {QUIET.has(stLabel) ? (
+                            <span className="v2-visually-hidden" data-testid="slot-state">
                               {stLabel}
                             </span>
-                          </span>
+                          ) : (
+                            <span className="pc-ev__state">
+                              {e.status === "failed" ? <FailedMark /> : null}
+                              <span className="ui-chip" data-tone={tone} data-testid="slot-state">
+                                {stLabel}
+                              </span>
+                            </span>
+                          )}
                         </button>
                       );
                     })}
@@ -316,7 +319,7 @@ export function CalendarView() {
         {!sel && !slots.length ? (
           <p className="ui-t-sm ui-muted pc-empty" data-testid="calendar-empty">
             {/* Until the week is read, "nothing on the calendar" would be a guess. */}
-            {data ? `Nothing on the calendar this ${range}. Drafts waiting for your OK and approved posts show here at their time.` : state.status === "error" ? null : "Loading…"}
+            {data ? `Nothing on the calendar this ${range}.` : state.status === "error" ? null : "Loading…"}
           </p>
         ) : null}
 
@@ -329,10 +332,12 @@ export function CalendarView() {
         {sel ? (
           <>
             <div className="pc-drawer__head">
-              <span className="ui-t-sm">
-                <b>{chanName(sel)}</b>{" "}
+              <span className="ui-t-sm pc-drawer__when">
+                {hasLogo(sel.where.platform) ? <PlatformMark platform={sel.where.platform} size={16} /> : null}
+                <b className={hasLogo(sel.where.platform) ? "v2-visually-hidden" : undefined}>{chanName(sel)}</b>
+                {sel.where.handle ? <span className="pc-drawer__handle">{sel.where.handle}</span> : null}
                 <span className="ui-muted ui-num">
-                  · {label(zone.dayKey(sel.at), { weekday: "short", day: "numeric", month: "short" })} {zone.time(sel.at)}
+                  {label(zone.dayKey(sel.at), { weekday: "short", day: "numeric", month: "short" })} {zone.time(sel.at)}
                 </span>
               </span>
               <button type="button" className="ui-btn ui-btn--quiet ui-btn--icon ui-btn--sm" aria-label="Close" onClick={() => setPicked(null)}>
@@ -349,13 +354,10 @@ export function CalendarView() {
                 </span>
               </div>
               <h2 className="pc-drawer__title">{sel.title}</h2>
-              <p className="ui-t-xs ui-muted">
-                {sel.ghost ? "A draft: approve it on its card and it goes out at this time." : sel.where.handle ? `${chanName(sel)} · ${sel.where.handle}` : chanName(sel)}
-                {sel.note && !(unposted(sel) && sel.note === "post it yourself") ? ` · ${sel.note}` : ""}
-              </p>
+              {sel.note && !sel.ghost && !(unposted(sel) && sel.note === "post it yourself") ? <p className="ui-t-xs ui-muted">{sel.note}</p> : null}
               {unposted(sel) ? (
                 <p className="ui-t-sm ui-muted" data-testid="slot-not-connected">
-                  No {chanName(sel)} account is connected, so this does not go out on its own. Post it yourself at this time, or connect {chanName(sel)} and it goes out by itself.
+                  No {chanName(sel)} account connected: post it yourself at this time, or connect {chanName(sel)}.
                 </p>
               ) : null}
               {selCard ? (

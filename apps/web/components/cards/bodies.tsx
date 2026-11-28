@@ -88,45 +88,59 @@ export function PostBody({
           <FoldedText text={text} fold={fold} />
         )}
       </div>
-      {photos}
-      <div className="v2-card-chips">
-        {limit ? (
-          <span className={`v2-chip ${length > limit ? "is-stuck" : "is-posted"}`}>
-            {length}/{limit}
-          </span>
-        ) : null}
-        {body.checks.map((check) => (
-          <span key={check} className="v2-chip is-posted">
-            {check}
-          </span>
-        ))}
-      </div>
-      <div className="v2-card-meta">
-        {versions.length > 1 ? (
-          <span className="v2-card-versions">
-            Version {index + 1} of {versions.length}
-            <button type="button" className="v2-card-link" disabled={editing} onClick={() => pick(platform, (index + 1) % versions.length)}>
-              Next version
+      {/* One quiet row under the post (28/11 redesign): the photo tools on the left; the version switch, the news it
+          rides and the length on the right. The length turns into "n/limit" only when the post is over it; the reasons
+          sit behind "Why this post". */}
+      <div className="pcx-bar">
+        {photos}
+        <div className="pcx-meta">
+          {versions.length > 1 ? (
+            <button
+              type="button"
+              className="pcx-ver"
+              disabled={editing}
+              onClick={() => pick(platform, (index + 1) % versions.length)}
+              aria-label={`Next version (${index + 1} of ${versions.length})`}
+              title="Next version"
+              data-testid="post-next-version"
+            >
+              <span className="ui-num">
+                {index + 1}/{versions.length}
+              </span>
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="m9 18 6-6-6-6" />
+              </svg>
             </button>
-          </span>
-        ) : null}
-        {body.why ? <span>Why: {body.why}</span> : null}
-        {body.news ? (
-          <span className="v2-card-news" data-testid="post-news">
-            News: {body.news.name}
-            {body.news.why ? `${/[.!?]$/.test(body.news.name) ? "" : "."} Why it fits: ${body.news.why}` : null}
-            {body.news.url ? (
-              <>
-                {" · "}
-                <a className="v2-card-link" href={body.news.url} target="_blank" rel="noopener noreferrer">
-                  See it on X
+          ) : null}
+          {body.news ? (
+            <span className="pcx-news" data-testid="post-news" title={body.news.why ?? undefined}>
+              {body.news.url ? (
+                <a href={body.news.url} target="_blank" rel="noopener noreferrer">
+                  News: {body.news.name} ↗
                 </a>
-              </>
-            ) : null}
-          </span>
-        ) : null}
-        {fold ? <span>The first {fold} characters show before “more” on a phone.</span> : null}
+              ) : (
+                <>News: {body.news.name}</>
+              )}
+            </span>
+          ) : null}
+          {body.checks.map((check) => (
+            <span key={check} className="pcx-check">
+              {check}
+            </span>
+          ))}
+          {limit ? (
+            <span className={`pcx-count ui-num${length > limit ? " is-over" : ""}`} title={`${length} of ${limit} characters`}>
+              {length > limit ? `${length}/${limit}` : length}
+            </span>
+          ) : null}
+        </div>
       </div>
+      {body.why ? (
+        <details className="pcx-why">
+          <summary>Why this post</summary>
+          <p>{body.why}</p>
+        </details>
+      ) : null}
       {body.targets && body.targets.length ? <PostTargets targets={body.targets} onRewrite={editing ? undefined : onRewrite} rewriting={rewriting} /> : null}
     </>
   );
@@ -146,16 +160,21 @@ function PostTargets({
   rewriting?: ReadonlySet<string>;
 }) {
   const several = targets.length > 1;
+  // One platform with no rewrite: the card's time line already shows its logo (28/11 redesign).
+  if (!several && !targets.some((t) => t.variant)) return null;
   return (
     <div className="v2-card-targets" data-testid="post-targets">
       <div className="v2-card-goes">
-        <span className="v2-card-goes-label">{several ? "One post, goes out on" : "Goes out on"}</span>
-        <ul>
+        <span className="v2-visually-hidden">{several ? "One post, goes out on" : "Goes out on"}</span>
+        <ul className="pcx-logos">
           {targets.map((t) => (
-            <li key={t.platform} data-own={t.variant ? "" : undefined}>
-              {hasLogo(t.platform) ? <PlatformMark platform={t.platform} /> : null}
-              {PLATFORM_LABEL[t.platform]}
-              {t.variant ? <span className="v2-card-goes-own">own version</span> : null}
+            <li key={t.platform} data-own={t.variant ? "" : undefined} title={`${PLATFORM_LABEL[t.platform]}${t.variant ? ": its own version" : ""}`}>
+              {hasLogo(t.platform) ? <PlatformMark platform={t.platform} size={16} /> : PLATFORM_LABEL[t.platform]}
+              <span className="v2-visually-hidden">
+                {PLATFORM_LABEL[t.platform]}
+                {t.variant ? ", own version" : ""}
+              </span>
+              {t.variant ? <span className="pcx-own" aria-hidden="true" /> : null}
             </li>
           ))}
         </ul>
@@ -174,17 +193,15 @@ function PostTargets({
       )}
       {several && onRewrite ? (
         <div className="v2-card-rewrite" role="group" aria-label="Rewrite for one platform">
-          <p>
-            <b>Want it to read differently on one platform?</b> Ferreto rewrites it for that platform only.
-          </p>
           <div className="v2-card-rewrite-row">
+            <span className="pcx-rewrite-label">Rewrite for</span>
             {targets.map((t) => {
               const busy = rewriting?.has(t.platform);
               const label = PLATFORM_LABEL[t.platform];
               return (
                 <button key={t.platform} type="button" disabled={busy} onClick={() => onRewrite(t.platform)} aria-label={`${t.variant ? "Rewrite again" : "Rewrite"} for ${label}`}>
                   {hasLogo(t.platform) ? <PlatformMark platform={t.platform} /> : null}
-                  {busy ? `Rewriting for ${label}…` : `${t.variant ? "Rewrite again" : "Rewrite"} for ${label}`}
+                  {busy ? "Rewriting…" : t.variant ? "Again" : label}
                 </button>
               );
             })}
@@ -258,7 +275,7 @@ function FoldedText({ text, fold }: { text: string; fold: number | null }) {
   return (
     <p className="v2-card-text">
       {chars.slice(0, cut).join("")}
-      <span className="v2-card-fold">
+      <span className="v2-card-fold" title={`The first ${fold} characters show before “more” on a phone.`}>
         <span aria-hidden="true">…more</span>
         <span className="v2-visually-hidden"> (on a phone the post is cut here behind “more”) </span>
       </span>

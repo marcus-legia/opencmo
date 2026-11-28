@@ -60,14 +60,15 @@ test("LinkedIn shows where “more” cuts the post; approving opens nothing (Sc
   await signIn(page, state().users.a);
   await page.goto("/app/inbox/card-post-linkedin");
   const card = page.getByTestId("inbox-card-page").getByTestId("approval-card");
-  await expect(card).toContainText("The first 140 characters show before “more” on a phone.");
+  // The "…more" mark says where the cut is; its tooltip gives the number. The length names its limit in the tooltip.
   await expect(card.locator(".v2-card-fold")).toHaveCount(1);
-  await expect(card).toContainText("/3000");
+  await expect(card.locator(".v2-card-fold")).toHaveAttribute("title", "The first 140 characters show before “more” on a phone.");
+  await expect(card.locator(".pcx-count")).toHaveAttribute("title", /of 3000 characters/);
   await expect(card.getByRole("button", { name: "Approve", exact: true })).toBeVisible();
 
   await page.goto("/app/inbox/card-post-threads");
   const threads = page.getByTestId("inbox-card-page").getByTestId("approval-card");
-  await expect(threads).toContainText("/500");
+  await expect(threads.locator(".pcx-count")).toHaveAttribute("title", /of 500 characters/);
   await expect(threads.locator(".v2-card-fold")).toHaveCount(0);
   const popups: unknown[] = [];
   page.on("popup", (tab) => popups.push(tab));
@@ -224,6 +225,7 @@ test("Writer filters drafts per platform", async ({ page }) => {
   }
   await filter.getByRole("button", { name: "All", exact: true }).click();
   await expect(rows).toHaveCount(all);
+  await page.screenshot({ path: "test-results/writer-filters-1440.png" });
 });
 
 // ------------------------------------------------------------------ C3: posts and captions on live rows
@@ -274,7 +276,7 @@ test("an approved Threads draft with no Threads account opens nothing and gets n
   page.on("popup", (tab) => popups.push(tab));
   await page.goto(`/app/inbox/${threads.cardId}`);
   const card = page.getByTestId("inbox-card-page").getByTestId("approval-card");
-  await expect(card).toContainText(`${threadsText.length}/500`);
+  await expect(card.locator(".pcx-count")).toHaveAttribute("title", `${threadsText.length} of 500 characters`);
   // With its accounts read (a founder with a plan), a post with no account to post to reads plain "Approve": it is
   // scheduled only once Threads is connected (20270206040000, 20270206090000).
   await card.getByRole("button", { name: /^Approve$/ }).click();

@@ -357,6 +357,39 @@ html[data-ui="v2"] body { background: var(--v2-paper); }
 .v2-card-rewrite-row button:hover:not(:disabled) { background: var(--v2-paper); }
 .v2-card-rewrite-row button:disabled { color: var(--v2-ink2); cursor: progress; }
 .v2-card-rewrite-row button:focus-visible { outline: 2px solid var(--v2-brand-deep); outline-offset: 1px; }
+/* The post card after the 28/11 redesign: logos instead of platform words, one quiet meta line, tools as small buttons. */
+.pcx-when { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 13px; color: var(--v2-ink2); }
+.pcx-handle { font-weight: 600; color: var(--v2-ink); }
+.pcx-time { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; }
+.pcx-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; font-size: 12px; color: var(--v2-ink2); }
+.pcx-meta:empty { display: none; }
+.pcx-ver { display: inline-flex; align-items: center; gap: 2px; height: 24px; padding: 0 4px 0 8px; border: 1px solid var(--v2-line); border-radius: 999px; background: transparent; color: var(--v2-ink); font: 500 12px var(--v2-sans); cursor: pointer; }
+.pcx-ver:hover:not(:disabled) { background: var(--v2-paper); }
+.pcx-ver:disabled { color: var(--v2-ink2); cursor: default; }
+.pcx-ver:focus-visible, .pcx-tool:focus-within, .pcx-why summary:focus-visible { outline: 2px solid var(--v2-brand-deep); outline-offset: 1px; }
+.pcx-news { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pcx-news a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.pcx-check { color: var(--v2-ink); }
+.pcx-count.is-over { color: var(--v2-brand-deep); font-weight: 600; }
+.pcx-why { font-size: 12px; color: var(--v2-ink2); }
+.pcx-why summary { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; list-style: none; }
+.pcx-why summary::-webkit-details-marker { display: none; }
+.pcx-why summary::after { content: "+"; font-weight: 600; }
+.pcx-why[open] summary::after { content: "–"; }
+.pcx-why p { margin: 6px 0 0; font-size: 13px; line-height: 1.5; color: var(--v2-ink); }
+.pcx-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.pcx-bar > .v2-card-photos { flex: 1 1 100%; }
+.pcx-bar .pcx-meta { flex: 1 1 auto; justify-content: flex-end; }
+.v2-card-photo-edit.pcx-tools { display: contents; }
+.pcx-tools > .v2-card-photos, .pcx-tools > .v2-quote-card { flex: 1 1 100%; }
+.pcx-tools > .v2-card-photo-hint { font-size: 12px; color: var(--v2-ink2); }
+.v2-card-photo-add.pcx-tool { display: inline-flex; flex-direction: row; align-self: auto; align-items: center; gap: 6px; height: 30px; min-height: 0; padding: 0 10px; border: 1px solid var(--v2-line); border-radius: 8px; background: transparent; color: var(--v2-ink); font: 500 12.5px var(--v2-sans); cursor: pointer; }
+.v2-card-photo-add.pcx-tool:hover { background: var(--v2-paper); }
+.v2-card-goes ul.pcx-logos { gap: 4px; }
+.v2-card-goes .pcx-logos li { position: relative; justify-content: center; width: 30px; height: 30px; padding: 0; }
+.pcx-own { position: absolute; top: -1px; right: -1px; width: 8px; height: 8px; border-radius: 50%; background: var(--v2-brand); border: 2px solid var(--v2-paper); }
+.pcx-rewrite-label { align-self: center; margin-right: 2px; font-size: 13px; color: var(--v2-ink2); }
+.v2-card-rewrite:has(.pcx-rewrite-label) { padding: 8px 10px; }
 /* An X thread (P6 W4): number, post, its length chip; the chip drops under the text on a phone. */
 .v2-card-thread { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .v2-card-thread li { display: grid; grid-template-columns: 24px 1fr auto; gap: 8px; align-items: start; padding: 10px 0; }
