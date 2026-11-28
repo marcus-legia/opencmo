@@ -159,7 +159,7 @@ function Project({ menu }: { menu: ReactNode }) {
   return (
     <details className="td-menuwrap" ref={ref} onClick={(e) => (e.target as HTMLElement).closest("a") && ref.current?.removeAttribute("open")}>
       {/* Named for screen readers: on a phone the name is hidden and the logo is decorative. */}
-      <summary className="pill td-project" aria-label={name}>
+      <summary className="pill td-project" aria-label={name || "Business menu"}>
         <CompanyLogo name={name} site={ws.site} size={24} />
         <span className="td-project-name">{name}</span>
         <Chevron />

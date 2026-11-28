@@ -223,7 +223,7 @@ export function AnalyticsView() {
           </span>
         </div>
         <div className="ui-card uip-kpi">
-          <span className="uip-kpi__label">Views</span>
+          <span className="uip-kpi__label">{platform ? `Views on ${PLATFORM_LABEL[platform]}` : "Views"}</span>
           <span className="uip-kpi__value ui-num">{impressions?.value != null ? n.format(impressions.value) : "–"}</span>
           {impressions?.change != null ? (
             <span className="uip-kpi__note ui-num" data-tone={impressions.change >= 0 ? "ok" : undefined}>
@@ -252,7 +252,7 @@ export function AnalyticsView() {
         <section className="ui-card" aria-labelledby="views-title">
           <div className="ui-card__head">
             <h2 id="views-title">Views per day</h2>
-            <span className="ui-t-xs ui-muted">{platform ? `${PLATFORM_LABEL[platform]}, all posts` : "No account reports yet"}</span>
+            <span className="ui-t-xs ui-muted">{platform ? `${PLATFORM_LABEL[platform]} · all posts` : "No account reports yet"}</span>
           </div>
           {platform ? (
             <DayBars points={points} platformLabel={PLATFORM_LABEL[platform]} />

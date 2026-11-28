@@ -347,3 +347,7 @@ html[data-theme="dark"] .k {
 @media (prefers-reduced-motion: reduce) {
   .k .ui-btn, .k .ui-disclosure > summary::before { transition: none; }
 }
+
+/* A link inside a line of text must not rely on colour alone (axe link-in-text-block, 2026-11-28). Buttons styled as
+   links (.ui-btn) keep their own look. */
+.k :is(p, li, .ui-muted, .ui-subtle, .ui-t-xs, .ui-t-sm, .meta) a:not(.ui-btn):not(.ui-chip) { text-decoration: underline; text-underline-offset: 2px; text-decoration-thickness: 1px; }
