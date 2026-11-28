@@ -100,7 +100,7 @@ const SR: React.CSSProperties = { position: "absolute", width: "1px", height: "1
  * open only when the checks allow them, and a locked tab says why. "I sent it" marks the person replied, which moves
  * them to Following up. Nothing is sent from here.
  */
-export function ReachPanel({ t, publicReply, onSent }: { t: Thread; publicReply: React.ReactNode; onSent: (via: "dm" | "email") => Promise<void> }) {
+export function ReachPanel({ t, publicReply, onSent, why }: { t: Thread; publicReply: React.ReactNode; onSent: (via: "dm" | "email") => Promise<void>; why?: (checks: React.ReactNode) => React.ReactNode }) {
   const person = t.person;
   const [tab, setTab] = useState<Tab>("public");
   const [dm, setDm] = useState(person?.dmDraft ?? "");
@@ -154,6 +154,38 @@ export function ReachPanel({ t, publicReply, onSent }: { t: Thread; publicReply:
     }
   }
 
+  // The five checks sit behind the card's "Why" with the score (redesign 2026-11-28); the level stays on the tab row.
+  const checks = (
+    <section aria-label="Ready to reach out" className="sl-checks">
+      <div className="ui-row">
+        <b>Ready to reach out</b>
+        <span className="sl-note">From their post and thread only</span>
+      </div>
+      {!reach ? (
+        <p className="sl-note" data-testid="sales-reach-unchecked">
+          Found before Ferreto checked who is ready for a DM or an email. Your next scan checks the people it finds.
+        </p>
+      ) : null}
+      <ul className="sl-checklist">
+        {checksOf(reach).map((c) => (
+          <li key={c.label} data-testid="sales-reach-check" data-ok={c.ok}>
+            <span aria-hidden="true" className="sl-check-mark">
+              {c.ok ? "✓" : "–"}
+            </span>
+            {/* The reason goes under the check when the row is narrow (a phone), not beside it one word a line. */}
+            <span className="sl-check-text">
+              <span className="sl-check-label">{c.label}</span>
+              <span className="sl-note">
+                <span style={SR}>{c.ok === null ? "not checked" : c.ok ? "yes" : "no"}: </span>
+                {c.why}
+              </span>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+
   const tabs: [Tab, string, string | null][] = [
     ["public", "Public reply", null],
     ["dm", "DM", dmLock],
@@ -161,42 +193,11 @@ export function ReachPanel({ t, publicReply, onSent }: { t: Thread; publicReply:
   ];
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }} data-testid="sales-reach">
-      {(
-        <section aria-label="Ready to reach out" className="card" data-testid="sales-reach-card" style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-            <b>Ready to reach out</b>
-            <span className="chip" data-testid="sales-reach-level">
-              {LEVEL_LABEL[level]}
-            </span>
-            <span className="meta">From their post and thread only</span>
-          </div>
-          {!reach ? (
-            <p className="meta" data-testid="sales-reach-unchecked" style={{ margin: "0" }}>
-              Found before Ferreto checked who is ready for a DM or an email. Your next scan checks the people it finds.
-            </p>
-          ) : null}
-          <ul style={{ listStyle: "none", margin: "0", padding: "0", display: "flex", flexDirection: "column", gap: "3px" }}>
-            {checksOf(reach).map((c) => (
-              <li key={c.label} data-testid="sales-reach-check" data-ok={c.ok} style={{ display: "flex", gap: "8px", fontSize: "13.5px" }}>
-                <span aria-hidden="true" style={{ width: "14px", color: c.ok ? "var(--ok)" : "var(--subtle)" }}>
-                  {c.ok ? "✓" : "–"}
-                </span>
-                {/* The reason goes under the check when the row is narrow (a phone), not beside it one word a line. */}
-                <span style={{ display: "flex", flexWrap: "wrap", gap: "0 8px", minWidth: "0", flex: "1 1 auto" }}>
-                  <span style={{ fontWeight: "500", whiteSpace: "nowrap" }}>{c.label}</span>
-                  <span className="meta" style={{ minWidth: "0" }}>
-                    <span style={SR}>{c.ok === null ? "not checked" : c.ok ? "yes" : "no"}: </span>
-                    {c.why}
-                  </span>
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+    <div className="sl-reach" data-testid="sales-reach">
+      {why ? why(checks) : <details className="ui-disclosure sl-whybox" data-testid="sales-reach-card"><summary>Ready to reach out</summary>{checks}</details>}
 
-      <div role="tablist" aria-label="How to reach them" className="reach-tabs" style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+      <div className="sl-reach-row">
+      <div role="tablist" aria-label="How to reach them" className="reach-tabs ui-seg">
         {tabs.map(([id, label, lock]) => (
           <button
             key={id}
@@ -207,13 +208,23 @@ export function ReachPanel({ t, publicReply, onSent }: { t: Thread; publicReply:
               setTab(id);
               setNote(null);
             }}
-            className="pill"
-            style={tab === id ? { color: "var(--text)", borderColor: "var(--text)" } : undefined}
           >
             {label}
-            {lock ? <span style={SR}> (locked)</span> : null}
+            {lock ? (
+              <>
+                <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
+                  <rect width="18" height="11" x="3" y="11" rx="2" />
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                </svg>
+                <span style={SR}> (locked)</span>
+              </>
+            ) : null}
           </button>
         ))}
+      </div>
+      <span className="ui-chip" data-tone={level === "reply_first" ? undefined : "ok"} data-testid="sales-reach-level">
+        {LEVEL_LABEL[level]}
+      </span>
       </div>
 
       {tab === "public" ? publicReply : null}
@@ -236,15 +247,15 @@ export function ReachPanel({ t, publicReply, onSent }: { t: Thread; publicReply:
                 They have not answered you yet. Keep it short and about their post; it lands best after your public reply.
               </p>
             ) : null}
-            <textarea id={`dm-${t.id}`} className="reply" rows={4} value={dm} onChange={(e) => setDm(e.target.value)} placeholder="No draft yet. Write one short message about their post." style={{ width: "100%", resize: "vertical", font: "inherit", fontSize: "15px", lineHeight: "1.55", color: "var(--text)" }} />
+            <textarea id={`dm-${t.id}`} className="ui-input sl-textarea" rows={4} value={dm} onChange={(e) => setDm(e.target.value)} placeholder="No draft yet. Write one short message about their post." style={{ width: "100%", resize: "vertical", font: "inherit", fontSize: "15px", lineHeight: "1.55", color: "var(--text)" }} />
             <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "flex-end", alignItems: "center" }}>
               {note ? <span className="meta">{note}</span> : null}
-              <button type="button" className="ghost" disabled={busy} onClick={() => void sent("dm")}>
+              <button type="button" className="ui-btn ui-btn--ghost" disabled={busy} onClick={() => void sent("dm")}>
                 I sent it
               </button>
               <button
                 type="button"
-                className="primary"
+                className="ui-btn ui-btn--primary"
                 disabled={!dm.trim()}
                 onClick={() => {
                   // Open in the click itself, not after the copy's await: a late open is blocked as a popup.
@@ -284,26 +295,26 @@ export function ReachPanel({ t, publicReply, onSent }: { t: Thread; publicReply:
               <span className="meta">Subject </span>
               {subject}
             </div>
-            <textarea aria-label="Email" className="reply" rows={6} value={email} onChange={(e) => setEmail(e.target.value)} style={{ width: "100%", resize: "vertical", font: "inherit", fontSize: "15px", lineHeight: "1.55", color: "var(--text)" }} />
+            <textarea aria-label="Email" className="ui-input sl-textarea" rows={6} value={email} onChange={(e) => setEmail(e.target.value)} style={{ width: "100%", resize: "vertical", font: "inherit", fontSize: "15px", lineHeight: "1.55", color: "var(--text)" }} />
             <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "flex-end", alignItems: "center" }}>
               {note ? <span className="meta">{note}</span> : null}
               {email.trim() && !links.gmail ? <span className="meta" data-testid="sales-email-long">Too long for a link. Copy it into your mail.</span> : null}
-              <button type="button" className="ghost" disabled={busy} onClick={() => void sent("email")}>
+              <button type="button" className="ui-btn ui-btn--ghost" disabled={busy} onClick={() => void sent("email")}>
                 I sent it
               </button>
-              <button type="button" className="ghost" onClick={async () => setNote((await copy(reach!.emailFound!)) ? "Address copied." : "Select the address and copy it.")}>
+              <button type="button" className="ui-btn ui-btn--ghost" onClick={async () => setNote((await copy(reach!.emailFound!)) ? "Address copied." : "Select the address and copy it.")}>
                 Copy address
               </button>
-              <button type="button" className="ghost" disabled={!email.trim()} onClick={async () => setNote((await copy(emailBody(email))) ? "Email copied." : "Select the email and copy it.")}>
+              <button type="button" className="ui-btn ui-btn--ghost" disabled={!email.trim()} onClick={async () => setNote((await copy(emailBody(email))) ? "Email copied." : "Select the email and copy it.")}>
                 Copy
               </button>
               {links.mailto ? (
-                <a className="ghost" data-testid="sales-email-mailto" href={links.mailto} style={{ textDecoration: "none" }}>
+                <a className="ui-btn ui-btn--ghost" data-testid="sales-email-mailto" href={links.mailto}>
                   Open in your mail app
                 </a>
               ) : null}
               {links.gmail ? (
-                <a className="primary" data-testid="sales-email-gmail" href={links.gmail} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none" }}>
+                <a className="ui-btn ui-btn--primary" data-testid="sales-email-gmail" href={links.gmail} target="_blank" rel="noopener noreferrer">
                   Open in Gmail
                 </a>
               ) : null}
@@ -337,7 +348,7 @@ export function ReplyLink({ t, live, onDone }: { t: Thread; live: boolean; onDon
   }
   return (
     <form
-      className="card"
+      className="ui-card"
       data-testid="sales-reply-link"
       onSubmit={(e) => {
         e.preventDefault();
@@ -357,10 +368,10 @@ export function ReplyLink({ t, live, onDone }: { t: Thread; live: boolean; onDon
         </span>
       ) : null}
       <span style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
-        <button type="button" className="ghost" onClick={() => onDone(null)}>
+        <button type="button" className="ui-btn ui-btn--ghost" onClick={() => onDone(null)}>
           Skip
         </button>
-        <button type="submit" className="primary" disabled={busy || !url.trim()}>
+        <button type="submit" className="ui-btn ui-btn--primary" disabled={busy || !url.trim()}>
           {busy ? "Saving…" : "Save and follow up"}
         </button>
       </span>
@@ -429,12 +440,12 @@ export function FollowingUp({ threads, live, onStatus }: { threads: Thread[]; li
         const answered = p.status === "answered_back";
         const canDm = (answered || p.status === "talking") && t.platform !== "hn";
         return (
-          <div key={t.id} className="card" data-testid="sales-person" style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+          <div key={t.id} className="ui-card" data-testid="sales-person" style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
               <span className="meta">
                 {[PLATFORM_LABEL[t.platform], t.community !== PLATFORM_LABEL[t.platform] ? t.community : null, p.repliedAt ? `you replied ${ago(p.repliedAt)}` : null].filter(Boolean).join(" · ")}
               </span>
-              <span className="chip" data-testid="sales-person-status" style={answered ? { color: "var(--ok)" } : undefined}>
+              <span className="ui-chip" data-testid="sales-person-status" style={answered ? { color: "var(--ok)" } : undefined}>
                 {p.status === "replied" ? "No answer yet" : STATUS_LABEL[p.status]}
               </span>
             </div>
@@ -454,14 +465,14 @@ export function FollowingUp({ threads, live, onStatus }: { threads: Thread[]; li
                 <label className="meta" htmlFor={`fdm-${t.id}`}>
                   {p.dmDraft ? "Ferreto's draft. Edit it, then send it from your own account." : "Write one short message from what they answered. You send it from your own account."}
                 </label>
-                <textarea id={`fdm-${t.id}`} className="reply" rows={4} value={dmText} onChange={(e) => setDmText(e.target.value)} style={{ width: "100%", resize: "vertical", font: "inherit", fontSize: "15px", lineHeight: "1.55", color: "var(--text)" }} />
+                <textarea id={`fdm-${t.id}`} className="ui-input sl-textarea" rows={4} value={dmText} onChange={(e) => setDmText(e.target.value)} style={{ width: "100%", resize: "vertical", font: "inherit", fontSize: "15px", lineHeight: "1.55", color: "var(--text)" }} />
               </div>
             ) : null}
             <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center", justifyContent: "flex-end" }}>
               {canDm && dmFor !== t.id ? (
                 <button
                   type="button"
-                  className="ghost"
+                  className="ui-btn ui-btn--ghost"
                   onClick={() => {
                     setDmFor(t.id);
                     setDmText(p.dmDraft ?? "");
@@ -473,7 +484,7 @@ export function FollowingUp({ threads, live, onStatus }: { threads: Thread[]; li
               {dmFor === t.id ? (
                 <button
                   type="button"
-                  className="primary"
+                  className="ui-btn ui-btn--primary"
                   disabled={!dmText.trim()}
                   onClick={() => {
                     // Open in the click itself, not after the copy's await: a late open is blocked as a popup.
@@ -488,7 +499,7 @@ export function FollowingUp({ threads, live, onStatus }: { threads: Thread[]; li
               <label className="meta" htmlFor={`status-${t.id}`}>
                 Mark
               </label>
-              <select id={`status-${t.id}`} className="pill" style={{ height: "32px" }} value={p.status} onChange={(e) => void mark(t, e.target.value as PersonStatus)}>
+              <select id={`status-${t.id}`} className="ui-input sl-select" value={p.status} onChange={(e) => void mark(t, e.target.value as PersonStatus)}>
                 {PERSON_STATUSES.filter((s) => s !== "found").map((s) => (
                   <option key={s} value={s}>
                     {STATUS_LABEL[s]}
@@ -496,14 +507,14 @@ export function FollowingUp({ threads, live, onStatus }: { threads: Thread[]; li
                 ))}
               </select>
               {p.nudgeDraft && open !== t.id ? (
-                <button type="button" className="ghost" onClick={() => setOpen(t.id)}>
+                <button type="button" className="ui-btn ui-btn--ghost" onClick={() => setOpen(t.id)}>
                   Read the nudge
                 </button>
               ) : null}
               {p.nudgeDraft && open === t.id ? (
                 <button
                   type="button"
-                  className="primary"
+                  className="ui-btn ui-btn--primary"
                   onClick={async () => {
                     if (await copy(p.nudgeDraft!)) setCopied(t.id);
                     window.open(p.replyUrl ?? t.url, "_blank", "noopener,noreferrer");
@@ -512,7 +523,7 @@ export function FollowingUp({ threads, live, onStatus }: { threads: Thread[]; li
                   {copied === t.id ? "Copied · thread opened" : "Copy and open thread"}
                 </button>
               ) : (
-                <a href={p.replyUrl ?? t.url} target="_blank" rel="noopener noreferrer" className="ghost" style={{ textDecoration: "none" }}>
+                <a href={p.replyUrl ?? t.url} target="_blank" rel="noopener noreferrer" className="ui-btn ui-btn--ghost">
                   {answered ? "Read and reply" : "Open thread"}
                 </a>
               )}

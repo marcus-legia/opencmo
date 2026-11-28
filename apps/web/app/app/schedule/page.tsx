@@ -5,7 +5,7 @@ import { CalendarView } from "@/components/today/CalendarView";
 import { TodayLoading } from "@/components/today/TodayLoading";
 import { requireUiV2 } from "@/lib/screens/flag";
 
-export const metadata: Metadata = { title: "Calendar" };
+export const metadata: Metadata = { title: "Post calendar" };
 
 export default function SchedulePage() {
   requireUiV2();

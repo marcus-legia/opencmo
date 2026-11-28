@@ -29,7 +29,7 @@ export default async function SettingsPage() {
   const ownerLinks = owner ? <OwnerLinks /> : null;
   if (UI_V2)
     return (
-      <SettingsFrame current="general" keys={editorLive()}>
+      <SettingsFrame current="accounts" keys={editorLive()}>
         <SettingsScreen mcpEndpoint={mcpEndpoint()} paid={paid} editor={editorLive()} />
         {ownerLinks}
       </SettingsFrame>

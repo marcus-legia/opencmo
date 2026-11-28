@@ -12,6 +12,7 @@ import { formatBytes } from "@/lib/upload";
 import { AUTOPILOT_HOURS, AUTOPILOT_PLATFORMS, BUDGET_MAX, BUDGET_MIN, type Autopilot, type SettingsScreen as Data } from "@/lib/screens/settings";
 
 import { publishAutopilot, useAutopilotChanges } from "@/components/today/autopilot";
+import { PageHeader as UiPageHeader } from "@/components/today/PageHeader";
 
 import { PauseButton } from "../brain/PauseButton";
 import { cx, ErrorNote, PageHeader, Panel, Screen, SkeletonBlocks } from "../parts";
@@ -45,9 +46,7 @@ export function SettingsScreen({ mcpEndpoint, paid, editor = false }: { mcpEndpo
 
   return (
     <div className="v2 scr td-cardhost td-v2host" data-testid="v2-settings">
-      <h1 style={{ margin: "0 0 4px", fontSize: "22px", fontWeight: "600", letterSpacing: "-0.4px" }}>
-        Settings {state.status === "ready" && isSample(state.live) ? <span className="meta">· sample data</span> : null}
-      </h1>
+      <UiPageHeader title="Settings" status={state.status === "ready" && isSample(state.live) ? "Sample data" : "Connected accounts, Sales scans, planning and notifications"} />
         <div className="td-settings-body">
           {state.status === "loading" && <SkeletonBlocks />}
           {state.status === "error" && <ErrorNote>{state.message}</ErrorNote>}

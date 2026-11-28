@@ -36,30 +36,28 @@ const SAMPLES: { platform: LogoPlatform; name: string; text: string }[] = [
 export function SamplePosts() {
   const [plans, setPlans] = useState(false);
   return (
-    <section className="card" data-testid="sample-posts" aria-labelledby="sample-posts-title" style={{ padding: "16px", marginBottom: "14px" }}>
-      <div style={{ display: "flex", alignItems: "flex-start", gap: "12px", flexWrap: "wrap", marginBottom: "12px" }}>
-        <div style={{ flex: "1 1 260px", minWidth: "0" }}>
-          <b id="sample-posts-title">What your posts look like</b>
-          <div className="meta">
+    <section className="ui-card ps" data-testid="sample-posts" aria-labelledby="sample-posts-title">
+      <div className="ps-head">
+        <div>
+          <h2 id="sample-posts-title">What your posts look like</h2>
+          <p className="ui-t-sm ui-muted">
             Samples for a made-up invoicing app, not posts about your product. With a plan, Ferreto writes yours from your
             site and what people said in your scans, for the platforms you connect, and you approve each one.
-          </div>
+          </p>
         </div>
-        <button type="button" className="primary" onClick={() => setPlans(true)}>
+        <button type="button" className="ui-btn ui-btn--primary" onClick={() => setPlans(true)}>
           See plans
         </button>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "10px" }}>
+      <div className="ps-grid">
         {SAMPLES.map((s) => (
-          <article key={s.platform} data-platform={s.platform} style={{ border: "1px solid var(--line)", borderRadius: "10px", padding: "12px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+          <article key={s.platform} data-platform={s.platform} className="ps-post">
+            <div className="ps-post__head">
               <PlatformLogo platform={s.platform} size={22} />
               <b>{s.name}</b>
-              <span className="meta" style={{ marginLeft: "auto" }}>
-                Sample
-              </span>
+              <span className="ui-chip">Sample</span>
             </div>
-            <p style={{ margin: "0", whiteSpace: "pre-line", fontSize: "14px", lineHeight: "1.45" }}>{s.text}</p>
+            <p>{s.text}</p>
           </article>
         ))}
       </div>

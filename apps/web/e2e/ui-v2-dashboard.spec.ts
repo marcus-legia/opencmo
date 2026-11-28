@@ -34,8 +34,8 @@ test("on the fixture, approving drops every count and empties the feed", async (
   await expect(rows).toHaveCount(5);
   await expect(waiting).toContainText("5");
   await expect(feed).toContainText("5 items need your attention today.");
-  // The first row is the inverted one, opened on its card (Main.dc.html).
-  await expect(rows.first()).toHaveClass(/\binv\b/);
+  // The first row is the open one, marked data-active (redesign 2026-11-28: no inverted card).
+  await expect(rows.first()).toHaveAttribute("data-active", "");
   await expect(rows.first().getByTestId("approval-card")).toBeVisible();
 
   // The X post card itself; after 1.2 a post you post yourself reads "Approve for this time", others "Approve".

@@ -158,9 +158,9 @@ test("a schedule card is approved; dragging its slot to another day asks again w
   await page.goto(`/app/schedule?from=${mondayOf(slot.publish_at)}`);
   // Month view, so the day after the slot is on screen even when the slot is on the week's Sunday: moving it back
   // instead could land on a time already past (a Sunday slot seen on a Saturday), which the server rightly refuses.
-  await page.getByRole("tab", { name: "Month" }).click();
+  await page.getByTestId("post-view-switch").getByRole("link", { name: "Month" }).click();
   // Calendar.dc.html: one column per day, a card per slot.
-  const days = page.getByTestId("v2-schedule").locator(".grid > .day");
+  const days = page.getByTestId("v2-schedule").locator(".pc-grid > .pc-day");
   await expect(days).toHaveCount(28);
   // The card's own day, in the founder's zone as the Calendar keys it (`data-day`); the target is the next day.
   const slotCard = page.locator(`[data-slot-id="${slot.id}"]`);

@@ -42,9 +42,6 @@ html[data-ui="v2"][data-theme="dark"] body { background: #121110; }
   .td-frame .top .td-crumb:not(.is-last) { display: none !important; }
   .td-frame .top .td-pill-more,
   .td-frame .top .td-pill-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-  /* A post row's action goes under the post instead of past the screen's edge. */
-  .pg-analytics .row { flex-wrap: wrap; }
-  .pg-analytics .row > .ghost { margin-left: auto; }
 }
 .td-menu-note { padding: 6px 8px; font-size: 12.5px; color: var(--subtle); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .td-menu a, .td-menu button { display: flex; align-items: center; height: 32px; padding: 0 8px; border: 0; border-radius: 6px; background: transparent; color: var(--text); font: inherit; font-size: 14px; text-align: left; text-decoration: none; cursor: pointer; width: 100%; }
@@ -131,7 +128,6 @@ html[data-ui="v2"] .k .td-chat .cmo-chat-head h2 { font: 500 13.5px Geist, ui-sa
    The card is the real component (every kind keeps its actions); here it takes the artboard's look: no box of its own,
    no head (the row is the head), the artboard's buttons, fields and type. Inside the inverted first row, the artboard's
    tokens switch to its inverted ones first, so the card follows. */
-.pg-main .item.inv .detail { --text: var(--inv-text); --muted: var(--inv-muted); --subtle: var(--inv-muted); --line: var(--inv-line); --line-2: var(--inv-line); --bg: var(--inv); --panel: var(--inv-panel); --raised: var(--inv); --hover: var(--inv); color: var(--inv-text); }
 .td-cardhost {
   --v2-ink: var(--text); --v2-ink2: var(--muted); --v2-ink3: var(--subtle); --v2-line: var(--line); --v2-line2: var(--line-2);
   --v2-paper: var(--bg); --v2-paper2: var(--panel); --v2-paper3: var(--raised); --v2-card: var(--bg); --v2-hover: var(--hover);
@@ -152,7 +148,6 @@ html[data-ui="v2"] .k .td-chat .cmo-chat-head h2 { font: 500 13.5px Geist, ui-sa
 .td-cardhost .v2-button { min-height: 0; height: 32px; padding: 0 12px; border-radius: 7px; font: 400 14px Geist, ui-sans-serif, system-ui, sans-serif; letter-spacing: 0; text-transform: none; }
 .td-cardhost .v2-button.is-primary { padding: 0 14px; border: 0; background: var(--accent); color: var(--accent-ink); font-weight: 600; }
 .td-cardhost .v2-button.is-primary:hover { background: var(--accent-hover); }
-.item.inv .td-cardhost .v2-button.is-primary { background: var(--inv-text); color: var(--inv); }
 .td-cardhost .v2-button.is-secondary { border: 1px solid var(--line-2); background: transparent; color: var(--text); }
 .td-cardhost .v2-button.is-secondary:hover { background: var(--hover); }
 .td-cardhost .v2-button.is-quiet { padding: 0 10px; border: 0; background: transparent; color: var(--muted); }
@@ -476,10 +471,7 @@ html:not([data-theme="dark"]) .k { --ok: #16744c; --warn: #8f5a0e; }
 
   .pg-agentsales .sales-page { padding: 16px 16px 32px !important; }
   .pg-agentsales :is(.primary, .ghost, .skip, .pill) { min-height: 44px; }
-  .pg-agentsales .tabs { gap: 4px; overflow-x: auto; scrollbar-width: none; }
-  .pg-agentsales .tabs button { min-height: 44px; padding: 0 8px; flex: 0 0 auto; }
   .pg-agentsales select { min-height: 44px; }
-  .pg-agentsales .th .row > span > span:first-child { white-space: normal !important; display: -webkit-box !important; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
   /* The reach tabs are one segmented control. */
   .pg-agentsales .reach-tabs { display: grid !important; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2px !important; padding: 2px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); }
   .pg-agentsales .reach-tabs button { border: 0 !important; border-radius: 8px; justify-content: center; min-height: 44px; }
@@ -531,15 +523,12 @@ html:not([data-theme="dark"]) .k { --ok: #16744c; --warn: #8f5a0e; }
 .td-frame .td-locked { border-style: dashed; }
 .td-frame .td-lock { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 32px; height: 32px; border-radius: 8px; background: var(--raised); color: var(--muted); }
 .td-frame .td-reach { margin-right: 4px; color: var(--ok); white-space: nowrap; flex: none; }
-.td-frame .item.inv .td-reach { background: transparent; color: var(--inv-text); border-color: var(--inv-muted); }
 @media (max-width: 640px) {
   .td-frame .td-usage-notice > :is(a, button) { min-height: 44px; flex: 1 1 100%; justify-content: center; }
 }
 @media (max-width: 640px) {
   /* The share used is in the chip's words; its little bar gives way so the account keeps the first row. */
   .td-frame .top .td-usage-meter { display: none; }
-  .pg-settings .nav :is(a, button) { min-height: 44px; }
-  .pg-settings .bd > .ghost, .pg-settings [data-testid="billing-usage"] .ghost { min-height: 44px; }
 }
 
 /* Delete my account (wave 4 C3): a separate block under the account line, its refusal in the warning colour. */

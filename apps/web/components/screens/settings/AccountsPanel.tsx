@@ -27,6 +27,27 @@ export const ACCOUNTS_PANEL_ID = "settings-connected-accounts";
 
 const SAMPLE = "These are sample accounts: nothing connects from here.";
 
+/**
+ * The account's own picture when it loads, the platform's logo when it does not: X avatar links expire, and a dead one
+ * drew a broken image next to "X · marcus_legia" (production 28/11).
+ */
+function AccountPicture({ platform, avatarUrl }: { platform: Platform; avatarUrl?: string | null }) {
+  const [failed, setFailed] = useState(false);
+  if (avatarUrl && !failed)
+    return (
+      <span className="scr-account-pic">
+        {/* eslint-disable-next-line @next/next/no-img-element -- a remote avatar of any host; next/image needs each host listed */}
+        <img src={avatarUrl} alt="" width={30} height={30} onError={() => setFailed(true)} style={{ borderRadius: "50%", display: "block" }} />
+        {hasLogo(platform) ? (
+          <span className="scr-account-pic__mark" aria-hidden="true">
+            <PlatformBadge platform={platform} size={14} />
+          </span>
+        ) : null}
+      </span>
+    );
+  return hasLogo(platform) ? <PlatformBadge platform={platform} size={30} /> : null;
+}
+
 /** The callback's answer, read once and taken out of the address so a reload does not show it again. */
 function callbackNote(): { ok: boolean; text: string } | null {
   const url = new URL(window.location.href);
@@ -130,8 +151,7 @@ export function AccountsPanel({ accounts: given, live }: { accounts: Account[]; 
             return (
               <div key={a.id} className={cx("scr-account", a.status === "reconnect" && "is-stuck")} data-testid="settings-account" data-platform={a.platform}>
                 <span className="scr-account-who">
-                  {hasLogo(a.platform) ? <PlatformBadge platform={a.platform} size={30} /> : null}
-                  {a.avatarUrl ? <img src={a.avatarUrl} alt="" width={24} height={24} /> : null}
+                  <AccountPicture platform={a.platform} avatarUrl={a.avatarUrl} />
                   <span>
                     <b>{name}</b>
                     {a.handle ? ` · ${a.handle}` : ""}

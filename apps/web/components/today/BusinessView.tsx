@@ -11,6 +11,7 @@ import { useShellState } from "@/components/shell-v2/ShellState";
 import { DOCUMENTS, DOCUMENT_KINDS, type DocumentKind, type Field } from "@/lib/cmo/documents";
 import type { CmoState, DocumentRow } from "@/lib/cmo/state";
 
+import { PageHeader } from "./PageHeader";
 import { siteLabel, useWorkspace } from "./workspace";
 
 /** What each document is for, in the order the founder reads them (canvas board Documents). */
@@ -50,20 +51,21 @@ const when = (iso: string) => {
 
 function Section({ label, uses, children }: { label: string; uses?: string; children: ReactNode }) {
   return (
-    <section style={{ padding: "14px 0", borderTop: "1px solid var(--line)" }} className="td-bizfield">
-      <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
-        <span style={{ fontWeight: "500", fontSize: "13.5px" }}>{label}</span>
-        {uses ? <span className="meta">{uses}</span> : null}
+    <section className="uip-field">
+      <div className="uip-field__label">
+        <span>{label}</span>
+        {uses ? <span className="ui-t-xs ui-muted">{uses}</span> : null}
       </div>
-      <div style={{ minWidth: "0", fontSize: "14px", lineHeight: "1.55" }}>{children}</div>
+      <div className="uip-field__value">{children}</div>
     </section>
   );
 }
 
+// `.ui-chip` grows with its text: a feature is a sentence, not a tag (the 22px chip overlapped the next, 28/11).
 const Chips = ({ items }: { items: string[] }) => (
-  <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+  <div className="ui-row" style={{ gap: "6px" }}>
     {items.map((item) => (
-      <span key={item} className="chip">
+      <span key={item} className="ui-chip uip-chip-lg">
         {item}
       </span>
     ))}
@@ -71,14 +73,14 @@ const Chips = ({ items }: { items: string[] }) => (
 );
 
 const Items = ({ items }: { items: string[] }) => (
-  <ul style={{ margin: "0", paddingLeft: "18px", display: "flex", flexDirection: "column", gap: "4px" }}>
+  <ul className="uip-items">
     {items.map((item, i) => (
       <li key={i}>{item}</li>
     ))}
   </ul>
 );
 
-const Empty = () => <span className="meta">Not filled in yet.</span>;
+const Empty = () => <span className="ui-muted">Not filled in yet.</span>;
 
 /** The Brand's look: the logo's address, the colours as swatches, the font, the screenshots and a preview of an image. */
 function Look({ look, name }: { look: Record<string, unknown>; name: string }) {
@@ -93,11 +95,11 @@ function Look({ look, name }: { look: Record<string, unknown>; name: string }) {
       <Section label="Look · logo">{logo ? <span>{siteLabel(logo)}</span> : <Empty />}</Section>
       <Section label="Look · colours and font" uses="Read from your site">
         {colors.length ? (
-          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }} data-testid="brand-colors">
+          <div className="ui-row" style={{ gap: "12px" }} data-testid="brand-colors">
             {colors.map((c) => (
-              <span key={c} style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
-                <span aria-hidden="true" style={{ width: "20px", height: "20px", borderRadius: "5px", background: c, border: "1px solid var(--line)" }}></span>
-                <span className="mono meta">{c}</span>
+              <span key={c} className="uip-swatch">
+                <span aria-hidden="true" style={{ background: c }}></span>
+                <span className="ui-t-xs ui-muted ui-num">{c}</span>
               </span>
             ))}
           </div>
@@ -118,7 +120,7 @@ function Look({ look, name }: { look: Record<string, unknown>; name: string }) {
           <span style={{ fontSize: "18px", fontWeight: "700" }}>One line from a post</span>
           <span style={{ alignSelf: "flex-start", fontSize: "12px", padding: "2px 8px", borderRadius: "999px", background: accent }}>Your accent colour</span>
         </div>
-        <p className="meta" style={{ margin: "6px 0 0" }}>
+        <p className="ui-t-xs ui-muted" style={{ margin: "8px 0 0" }}>
           What Ferreto learned about your look from your website. Quote cards on a post use the Brand Kit you set in the editor.
         </p>
       </Section>
@@ -133,12 +135,12 @@ function DocumentBody({ kind, body, name }: { kind: DocumentKind; body: Record<s
     return (
       <Section label="Competitors">
         {rows.length ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+          <div className="ui-stack">
             {rows.map((r, i) => (
-              <div key={i} className="td-bizpair">
+              <div key={i} className="uip-pair">
                 <span>
-                  <b style={{ fontWeight: "600" }}>{text(r.name)}</b>
-                  <span className="meta" style={{ display: "block" }}>
+                  <b>{text(r.name)}</b>
+                  <span className="ui-t-xs ui-muted" style={{ display: "block" }}>
                     {siteLabel(text(r.website)) ?? ""}
                   </span>
                 </span>
@@ -166,14 +168,14 @@ function DocumentBody({ kind, body, name }: { kind: DocumentKind; body: Record<s
           const items = strings(value);
           content = !items.length ? (
             field.key === "voice_samples" ? (
-              <span className="meta">None yet. Edit the Brand to paste two or three things you wrote: a post, a comment, an email.</span>
+              <span className="ui-muted">None yet. Edit the Brand to paste two or three things you wrote: a post, a comment, an email.</span>
             ) : (
               <Empty />
             )
           ) : field.key === "voice_samples" ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+            <div className="ui-stack" style={{ gap: "8px" }}>
               {items.map((sample, i) => (
-                <blockquote key={i} style={{ margin: "0", padding: "8px 10px", borderRadius: "7px", background: "var(--hover)" }}>
+                <blockquote key={i} className="uip-sample">
                   “{sample}”
                 </blockquote>
               ))}
@@ -220,7 +222,7 @@ function SamplesEditor({ value, onChange }: { value: string[]; onChange: (next: 
   return (
     <fieldset className="cmo-group" data-testid="brand-samples">
       <legend>Your writing samples</legend>
-      <p className="meta" style={{ margin: "0 0 8px" }}>
+      <p className="ui-t-xs ui-muted" style={{ margin: "0 0 8px" }}>
         Paste things you wrote yourself: a post, a comment, an email to a client. Replies and posts are written to sound like them.
       </p>
       {boxes.map((sample, i) => (
@@ -237,15 +239,6 @@ function SamplesEditor({ value, onChange }: { value: string[]; onChange: (next: 
     </fieldset>
   );
 }
-
-/** One icon per document (owner, 2026-11-23: icons over words). */
-const DOC_ICON: Record<string, string> = {
-  product: "m21 8-9-5-9 5 9 5 9-5ZM3 8v8l9 5 9-5V8M12 13v8",
-  strategy: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10ZM12 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z",
-  competitors: "M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM23 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8",
-  post_plan: "M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z",
-  brand: "M12 2a10 10 0 0 0 0 20 2 2 0 0 0 2-2c0-1.1-.9-2 0-3 .8-.9 2-1 3-1a5 5 0 0 0 5-5c0-5-4.5-9-10-9Z",
-};
 
 /**
  * Your business (wave 3, canvas board Documents): the five documents every step reads, on one page. Edit opens the
@@ -277,6 +270,11 @@ export function BusinessView() {
       alive = false;
     };
   }, []);
+
+  // On a phone the tabs scroll sideways: bring the open document's tab into view (?d=brand opened with it off-screen).
+  useEffect(() => {
+    document.querySelector<HTMLElement>('[data-testid="business-doc"][aria-current="page"]')?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [kind]);
 
   const written = state?.documents[kind];
   const changed = draft !== null && JSON.stringify(draft) !== JSON.stringify(written?.body ?? {});
@@ -330,98 +328,83 @@ export function BusinessView() {
   const name = text(state?.documents.product?.body.name) || ws.name || "";
 
   return (
-    <div data-sec="biz" style={{ maxWidth: "1180px", margin: "0 auto", padding: "22px 24px 40px", display: "flex", gap: "28px", flexWrap: "wrap", alignItems: "flex-start" }} data-testid="v2-business">
-      <nav aria-label="Documents" style={{ flex: "1 1 220px", maxWidth: "260px", display: "flex", flexDirection: "column", gap: "4px", padding: "12px", borderRadius: "16px", background: "var(--sec-wash)", border: "1px solid var(--sec-line)", boxSizing: "border-box" }}>
-        <span style={{ display: "flex", alignItems: "center", gap: "10px", fontWeight: "650", fontSize: "16px", margin: "2px 2px 8px" }}>
-          <span className="sec-tile" style={{ width: "34px", height: "34px", borderRadius: "10px" }}>
-            <svg viewBox="0 0 24 24" aria-hidden="true" style={{ width: "17px", height: "17px" }}>
-              <rect x="3" y="7" width="18" height="13" rx="2" />
-              <path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-            </svg>
-          </span>
-          Your business
-        </span>
-        {DOCUMENT_KINDS.map((k) => (
-          <button
-            key={k}
-            type="button"
-            aria-pressed={k === kind}
-            onClick={() => pick(k)}
-            data-testid="business-doc"
-            title={`Read by ${ABOUT[k].readers}`}
-            style={{ display: "flex", alignItems: "center", gap: "10px", padding: "9px 10px", borderRadius: "11px", border: `1px solid ${k === kind ? "var(--sec-line)" : "transparent"}`, background: k === kind ? "var(--panel)" : "transparent", color: "inherit", font: "inherit", textAlign: "left", cursor: "pointer" }}
-          >
-            <span style={{ width: "30px", height: "30px", borderRadius: "9px", display: "inline-flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto", background: k === kind ? "var(--sec)" : "var(--panel)", color: k === kind ? "#fff" : "var(--sec)" }}>
-              <svg viewBox="0 0 24 24" aria-hidden="true" style={{ width: "16px", height: "16px", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round" }}>
-                <path d={DOC_ICON[k] ?? DOC_ICON.product} />
-              </svg>
-            </span>
-            <span style={{ fontWeight: k === kind ? "650" : "500" }}>{ABOUT[k].title}</span>
-          </button>
-        ))}
-        <div style={{ marginTop: "12px", paddingTop: "12px", borderTop: "1px solid var(--line)", display: "flex", flexDirection: "column", gap: "8px" }}>
-          {site ? <span className="meta">From {siteLabel(site)}</span> : null}
-          {site ? (
-            <button type="button" className="ghost" disabled={reading || !state} onClick={() => (edited.length ? setConfirming(true) : void readAgain())} style={{ alignSelf: "flex-start" }}>
+    <div className="uip uip-business" data-testid="v2-business">
+      {/* One row of tabs for the five documents (it was a second sidebar inside the page, 28/11). Buttons, not links:
+          leaving a document with unsaved changes asks first. */}
+      <nav aria-label="Documents" className="uip-docnav">
+        <div className="ui-tabs uip-docnav__tabs">
+          {DOCUMENT_KINDS.map((k) => (
+            <button
+              key={k}
+              type="button"
+              aria-pressed={k === kind}
+              aria-current={k === kind ? "page" : undefined}
+              onClick={() => pick(k)}
+              data-testid="business-doc"
+              title={`Read by ${ABOUT[k].readers}`}
+            >
+              {ABOUT[k].title}
+            </button>
+          ))}
+        </div>
+        {site ? (
+          <div className="uip-docnav__site">
+            <span className="ui-t-xs ui-muted">From {siteLabel(site)}</span>
+            <button type="button" className="ui-btn ui-btn--quiet ui-btn--sm" disabled={reading || !state} onClick={() => (edited.length ? setConfirming(true) : void readAgain())}>
               {reading ? "Reading your website…" : "Read my website again"}
             </button>
-          ) : null}
-          {confirming ? (
-            <div role="alertdialog" aria-label="Read your website again?" className="card" data-testid="business-reread-confirm" style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-              <b>Write over your edits?</b>
-              <span className="meta">
-                You edited {andList(edited)}. Reading your website again writes a new version of every document. Your edited versions stay in the history.
-              </span>
-              <span style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                <button type="button" className="ghost" onClick={() => setConfirming(false)}>
-                  Keep my edits
-                </button>
-                <button type="button" className="primary" onClick={() => void readAgain()}>
-                  Read it again
-                </button>
-              </span>
-            </div>
-          ) : null}
-        </div>
-      </nav>
-
-      <article aria-labelledby="business-title" style={{ flex: "999 1 480px", minWidth: "0" }}>
-        <header style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: "8px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-            <span className="meta">
-              {written ? `Version ${written.version} · ${written.created_by === "user" ? "edited by you" : "drafted by Ferreto"} ${when(written.created_at)}` : "Not written yet"}
-            </span>
-            <span style={{ marginLeft: "auto", display: "flex", gap: "8px" }}>
-              {draft ? (
-                <>
-                  <button type="button" className="ghost" disabled={saving} onClick={() => setDraft(null)}>
-                    Cancel
-                  </button>
-                  <button type="button" className="primary" disabled={saving} onClick={() => void save()}>
-                    {saving ? "Saving…" : "Save"}
-                  </button>
-                </>
-              ) : (
-                <button type="button" className="primary" disabled={!state} onClick={() => setDraft(structuredClone(written?.body ?? {}))}>
-                  {written ? "Edit" : "Write it"}
-                </button>
-              )}
-            </span>
           </div>
-          <h1 id="business-title" style={{ margin: "0", fontSize: "22px", fontWeight: "600", letterSpacing: "-0.4px" }}>
-            {ABOUT[kind].title}
-          </h1>
-          <p className="meta" style={{ margin: "0", fontSize: "14px", maxWidth: "640px" }}>
-            {ABOUT[kind].lede}
-          </p>
-        </header>
+        ) : null}
+      </nav>
+      {confirming ? (
+        <div role="alertdialog" aria-label="Read your website again?" className="ui-card uip-confirm" data-testid="business-reread-confirm">
+          <b>Write over your edits?</b>
+          <span className="ui-t-sm ui-muted">
+            You edited {andList(edited)}. Reading your website again writes a new version of every document. Your edited versions stay in the history.
+          </span>
+          <span className="ui-row">
+            <button type="button" className="ui-btn ui-btn--ghost" onClick={() => setConfirming(false)}>
+              Keep my edits
+            </button>
+            <button type="button" className="ui-btn ui-btn--primary" onClick={() => void readAgain()}>
+              Read it again
+            </button>
+          </span>
+        </div>
+      ) : null}
+
+      <article aria-labelledby="business-title" className="uip-doc">
+        <PageHeader
+          id="business-title"
+          title={ABOUT[kind].title}
+          status={written ? `Version ${written.version} · ${written.created_by === "user" ? "edited by you" : "drafted by Ferreto"} ${when(written.created_at)} · read by ${ABOUT[kind].readers}` : "Not written yet"}
+          actions={
+            draft ? (
+              <button type="button" className="ui-btn ui-btn--ghost" disabled={saving} onClick={() => setDraft(null)}>
+                Cancel
+              </button>
+            ) : null
+          }
+          primary={
+            draft ? (
+              <button type="button" className="ui-btn ui-btn--primary" disabled={saving} onClick={() => void save()}>
+                {saving ? "Saving…" : "Save"}
+              </button>
+            ) : (
+              <button type="button" className="ui-btn ui-btn--primary" disabled={!state} onClick={() => setDraft(structuredClone(written?.body ?? {}))}>
+                {written ? "Edit" : "Write it"}
+              </button>
+            )
+          }
+        />
+        <p className="ui-t-sm ui-muted uip-lede">{ABOUT[kind].lede}</p>
 
         {failed ? (
           <p role="alert">Your documents could not be read. Reload the page to try again.</p>
         ) : !state ? (
-          <p className="meta">Loading…</p>
+          <p className="ui-t-sm ui-muted">Loading…</p>
         ) : draft ? (
-          <div className="td-docform v2">
+          <div className="ui-card td-docform v2">
             {kind === "brand" ? <SamplesEditor value={strings(draft.voice_samples)} onChange={(next) => setDraft({ ...draft, voice_samples: next })} /> : null}
             <DocumentForm fields={formFields(kind)} value={draft} onChange={setDraft} idPrefix={`biz-${kind}`} />
             {error ? (
@@ -431,13 +414,19 @@ export function BusinessView() {
             ) : null}
           </div>
         ) : written ? (
-          <div data-testid="business-fields">
+          <div className="ui-card uip-fields" data-testid="business-fields">
             <DocumentBody kind={kind} body={written.body} name={name} />
           </div>
         ) : (
-          <p>
-            Not written yet. Ferreto writes it from your website, or you can write it yourself. <Link href="/app/setup">Set up from your website</Link>
-          </p>
+          <div className="ui-card ui-empty">
+            <p className="ui-empty__title">Not written yet.</p>
+            <p>Ferreto writes it from your website, or you can write it yourself.</p>
+            <div className="ui-row">
+              <Link href="/app/setup" className="ui-btn ui-btn--ghost">
+                Set up from your website
+              </Link>
+            </div>
+          </div>
         )}
       </article>
       <PlanSheet open={planSheet} onClose={() => setPlanSheet(false)} action="read your website again" />

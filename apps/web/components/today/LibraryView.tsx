@@ -13,7 +13,8 @@ import { useShellState } from "@/components/shell-v2/ShellState";
 import { PLATFORM_LABEL, SALES_PLATFORMS, type SalesPlatform } from "@/lib/cmo/social/conversations";
 import type { LibraryEntry } from "@/lib/cmo/library";
 import type { LibraryThemeView } from "@/lib/screens/library";
-import { hasLogo, PlatformBadge } from "./platform-logos";
+import { PageHeader } from "./PageHeader";
+import { hasLogo, PlatformMark } from "./platform-logos";
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
@@ -53,32 +54,35 @@ function ThemeCard({ theme, onWrite }: { theme: LibraryThemeView; onWrite: (name
     return quote ? [{ id: entry.opportunityId, text: quote.text, where: whereSaid(entry), platform: entry.platform }] : [];
   });
   return (
-    <section className="card" data-testid="library-theme" aria-labelledby={`theme-${theme.id}`} style={{ display: "flex", flexDirection: "column", gap: "10px", minWidth: "0" }}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: "8px", flexWrap: "wrap" }}>
-        <h2 id={`theme-${theme.id}`} style={{ margin: "0", fontSize: "15px", fontWeight: "600" }}>
-          {theme.name}
-        </h2>
-        <span className="meta mono">{plural(theme.count, "conversation", "conversations")}</span>
-        <span className="meta" style={{ marginLeft: "auto", color: theme.thisWeek > 0 ? "var(--ok)" : undefined }}>
-          {theme.thisWeek > 0 ? `+${theme.thisWeek} this week` : "none new this week"}
-        </span>
+    <section className="ui-card uip-theme" data-testid="library-theme" aria-labelledby={`theme-${theme.id}`}>
+      <div className="uip-theme__head">
+        <h2 id={`theme-${theme.id}`}>{theme.name}</h2>
+        <span className="ui-t-xs ui-muted ui-num">{plural(theme.count, "conversation", "conversations")}</span>
+        {theme.thisWeek > 0 ? (
+          <span className="ui-chip ui-num" data-tone="ok">
+            +{theme.thisWeek} this week
+          </span>
+        ) : (
+          <span className="ui-t-xs ui-subtle">none new this week</span>
+        )}
       </div>
       {quotes.length ? (
-        <ul style={{ listStyle: "none", margin: "0", padding: "0", display: "flex", flexDirection: "column", gap: "6px" }}>
+        <ul className="uip-quotes">
           {quotes.map((q) => (
-            <li key={q.id} data-testid="library-quote" style={{ display: "flex", gap: "10px", alignItems: "flex-start", padding: "10px 12px", borderRadius: "11px", background: "var(--raised)", fontSize: "14px", lineHeight: "1.5" }}>
-              {hasLogo(q.platform) ? <PlatformBadge platform={q.platform} size={20} /> : null}
-              <span>
-                “{bare(q.text)}” <span className="meta">{q.where}</span>
+            <li key={q.id} data-testid="library-quote">
+              <blockquote>“{bare(q.text)}”</blockquote>
+              <span className="uip-quotes__where">
+                {hasLogo(q.platform) ? <PlatformMark platform={q.platform} size={13} /> : null}
+                {q.where}
               </span>
             </li>
           ))}
         </ul>
       ) : null}
-      {theme.entries[0] ? <p className="meta" style={{ margin: "0" }}>Latest: {theme.entries[0].summary}</p> : null}
-      <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-        <span className="meta">{theme.usedInPosts > 0 ? `Used in ${plural(theme.usedInPosts, "post", "posts")}` : "Not used in a post yet"}</span>
-        <button type="button" className="ghost" style={{ marginLeft: "auto" }} onClick={() => onWrite(theme.name)}>
+      {theme.entries[0] ? <p className="ui-t-sm ui-muted uip-flat">Latest: {theme.entries[0].summary}</p> : null}
+      <div className="uip-theme__foot">
+        <span className="ui-t-xs ui-muted">{theme.usedInPosts > 0 ? `Used in ${plural(theme.usedInPosts, "post", "posts")}` : "Not used in a post yet"}</span>
+        <button type="button" className="ui-btn ui-btn--ghost ui-btn--sm" onClick={() => onWrite(theme.name)}>
           Write a post from this
         </button>
       </div>
@@ -109,60 +113,50 @@ export function LibraryView() {
     { id: null, label: "All", n: counts?.total ?? null },
     ...SALES_PLATFORMS.map((p) => ({ id: p, label: PLATFORM_LABEL[p], n: counts?.bySource[p] ?? null })),
   ];
+  const status = counts
+    ? [plural(counts.total, "conversation", "conversations"), counts.thisWeek > 0 ? `+${counts.thisWeek} this week` : null, "what people said, in their own words"].filter(Boolean).join(" · ")
+    : "What people said in the conversations Sales kept, in their own words";
 
   return (
-    <div data-sec="find" style={{ maxWidth: "1180px", margin: "0 auto", padding: "22px 24px 40px" }} data-testid="v2-library">
-      <div className="sec-band">
-        <span className="sec-tile">
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5v14ZM4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5" />
-          </svg>
-        </span>
-        <h1>Library</h1>
-        {counts && counts.thisWeek > 0 ? <span className="sec-chip" style={{ color: "var(--ok)" }}>+{counts.thisWeek} this week</span> : null}
-      </div>
+    <div className="uip uip-library" data-testid="v2-library">
+      <PageHeader title="Library" status={status}>
+        <nav aria-label="Filter by source" className="uip-filters">
+          {tabs.map((t) => {
+            const on = t.id === source;
+            return (
+              <Link
+                key={t.id ?? "all"}
+                href={t.id ? `/app/library?source=${t.id}` : "/app/library"}
+                scroll={false}
+                aria-current={on ? "page" : undefined}
+                data-testid="library-filter"
+                className="uip-filter"
+                data-empty={t.n === 0 && !on ? "" : undefined}
+              >
+                {t.id && hasLogo(t.id) ? <PlatformMark platform={t.id} size={13} /> : null}
+                {t.label}{" "}
+                {t.n !== null ? <span className="uip-filter__n ui-num">{t.n}</span> : null}
+              </Link>
+            );
+          })}
+        </nav>
+      </PageHeader>
 
-      <nav aria-label="Filter by source" style={{ display: "flex", gap: "6px", flexWrap: "wrap", margin: "16px 0 14px" }}>
-        {tabs.map((t) => {
-          const on = t.id === source;
-          return (
-            <Link
-              key={t.id ?? "all"}
-              href={t.id ? `/app/library?source=${t.id}` : "/app/library"}
-              scroll={false}
-              aria-current={on ? "page" : undefined}
-              data-testid="library-filter"
-              className="pick-btn"
-              title={t.label}
-              style={{ textDecoration: "none", paddingLeft: t.id ? "6px" : "12px", opacity: t.n === 0 && !on ? 0.5 : undefined, ...(on ? { background: "var(--sec)", borderColor: "var(--sec)", color: "#fff" } : {}) }}
-            >
-              {t.id && hasLogo(t.id) ? (
-                <>
-                  <PlatformBadge platform={t.id} size={24} />
-                  <span className="sr-only">{t.label}</span>
-                </>
-              ) : (
-                t.label
-              )}
-              {t.n !== null ? <span className="mono">{t.n}</span> : null}
-            </Link>
-          );
-        })}
-      </nav>
-
-      {state.status === "loading" ? <p className="meta">Loading…</p> : null}
-      {state.status === "error" ? <p className="meta">{state.message}</p> : null}
+      {state.status === "loading" ? <p className="ui-t-sm ui-muted">Loading…</p> : null}
+      {state.status === "error" ? <p className="ui-t-sm ui-muted">{state.message}</p> : null}
       {state.status === "ready" && themes.length === 0 ? (
-        <div className="card" data-testid="library-empty">
-          <b>{source ? `Nothing from ${PLATFORM_LABEL[source]} yet.` : "Nothing saved yet."}</b>
-          <p className="meta" style={{ margin: "4px 0 0" }}>
-            Each Sales scan saves what people said in the conversations it keeps: a one-line summary and their own words.{" "}
-            <Link href="/app/sales">Open Sales</Link>
-          </p>
+        <div className="ui-card ui-empty" data-testid="library-empty">
+          <p className="ui-empty__title">{source ? `Nothing from ${PLATFORM_LABEL[source]} yet.` : "Nothing saved yet."}</p>
+          <p>Each Sales scan saves what people said in the conversations it keeps: a one-line summary and their own words.</p>
+          <div className="ui-row">
+            <Link href="/app/sales" className="ui-btn ui-btn--ghost">
+              Open Sales
+            </Link>
+          </div>
         </div>
       ) : null}
       {themes.length ? (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 380px), 1fr))", gap: "12px" }}>
+        <div className="uip-themes">
           {themes.map((theme) => (
             <ThemeCard key={theme.id} theme={theme} onWrite={write} />
           ))}

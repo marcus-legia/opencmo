@@ -188,7 +188,7 @@ test("Analytics reads stored Zernio numbers for a connected account", async ({ p
     // Analytics.dc.html: the four numbers, then views per day from the connected account.
     const totals = page.getByRole("region", { name: "Totals" });
     await expect(totals).toContainText("Views on X");
-    await expect(totals.locator(".kpi").nth(1)).not.toHaveText("–");
+    await expect(totals.locator(".uip-kpi__value").nth(1)).not.toHaveText("–");
     await expect(page.getByTestId("v2-analytics")).toContainText("X · all posts");
     await axeClean(page);
     await page.screenshot({ path: join(OUT, "analytics-1440.png"), fullPage: true });

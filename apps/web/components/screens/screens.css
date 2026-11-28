@@ -350,7 +350,7 @@
 /* One row per platform, actions on the right (owner, 2026-11-25: a two-column grid read as a jumble). */
 .scr-accounts { display: flex; flex-direction: column; }
 .scr-reddit-form { display: flex; align-items: center; gap: 8px; flex: none; }
-.scr-reddit-input { display: inline-flex; align-items: center; height: 32px; padding: 0 10px; border: 1px solid var(--v2-line); border-radius: 8px; background: var(--v2-card); color: var(--v2-mute, #8a847b); font-size: 13.5px; }
+.scr-reddit-input { display: inline-flex; align-items: center; height: 32px; padding: 0 10px; border: 1px solid var(--v2-line); border-radius: 8px; background: var(--v2-card); color: var(--muted, #625b52); font-size: 13.5px; }
 .scr-reddit-input input { width: 150px; border: 0; outline: 0; background: transparent; color: var(--v2-ink); font: inherit; padding-left: 2px; }
 .scr-reddit-input:focus-within { border-color: var(--v2-ink); }
 @media (max-width: 560px) { .scr-account-reddit { flex-direction: column; align-items: stretch; } .scr-reddit-form { justify-content: space-between; } .scr-reddit-input { flex: 1; } .scr-reddit-input input { width: 100%; } }

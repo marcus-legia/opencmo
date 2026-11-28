@@ -1,0 +1,229 @@
+/*
+ * Ferreto pages on the UI system (redesign 2026-11-28): Analytics, Library, Competitors, Your business, Settings and
+ * Billing. Imported right after `ui-system.css` by app/app/layout.tsx, and built only from its tokens and classes
+ * (`.ui-card`, `.ui-btn`, `.ui-chip`, `.ui-tabs`, PageHeader). Classes here are `uip-*`, scoped under `.k`, so the
+ * per-page rules of the older stylesheets (`.pg-agentsales .chip`, `.pg-analytics .card`…) cannot reach them.
+ *
+ *   .uip               the page column: max 1180px, 24px gutters (16px on a phone), sections 24px apart
+ *   .uip-grid          two equal columns that stack under 900px (`--wide`: 1.6 : 1)
+ *   .uip-flat          a paragraph with no margins (spacing comes from the stack around it)
+ *   .uip-tablewrap     a table scrolls inside its card, never the page
+ */
+
+/* ── Page column ───────────────────────────────────────────────────────────────────────────────────────────────── */
+.k .uip { container: uip / inline-size; max-width: 1180px; margin: 0 auto; padding: var(--sp-6) var(--sp-6) 48px; display: flex; flex-direction: column; gap: var(--sp-4); min-width: 0; box-sizing: border-box; }
+.k .uip > .ui-ph { margin-bottom: var(--sp-2); }
+.k .uip-flat { margin: 0; }
+.k .uip-h2 { margin: 0; font-size: var(--fs-md); font-weight: 600; color: var(--text); }
+.k .uip-ellipsis { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.k .uip a:not(.ui-btn):not(.uip-filter):not(.uip-list__title) { color: var(--accent-text); }
+.k .uip-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-4); }
+.k .uip-grid--wide { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); }
+@container uip (max-width: 760px) { .k .uip-grid, .k .uip-grid--wide { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 640px) { .k .uip { padding: var(--sp-4) var(--sp-4) 40px; } }
+/* Library, Competitors and Your business sit in the shell's legacy host, which pads its own 24px: the page column owns
+   the gutters, so the host's go (they doubled to 40px at 375px). */
+.k .td-legacy:has(> .uip) { padding: 0; }
+
+/* A table scrolls inside its card. */
+.k .uip-tablewrap { overflow-x: auto; margin-top: var(--sp-4); max-width: 100%; }
+.k .uip-table { width: 100%; min-width: 420px; border-collapse: collapse; font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
+.k .uip-table th, .k .uip-table td { padding: 8px 0 8px 12px; text-align: right; border-top: 1px solid var(--line); }
+.k .uip-table thead th { border-top: 0; padding-top: 0; font-size: var(--fs-xs); font-weight: 500; color: var(--muted); white-space: nowrap; }
+.k .uip-table :is(th, td):first-child { padding-left: 0; text-align: left; }
+.k .uip-table tbody th { font-weight: 500; }
+.k .uip-source { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+
+/* ── Analytics ─────────────────────────────────────────────────────────────────────────────────────────────────── */
+.k .uip-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--sp-3); }
+@container uip (max-width: 760px) { .k .uip-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.k .uip-kpi { display: flex; flex-direction: column; gap: 6px; }
+.k .uip-kpi__label { font-size: var(--fs-xs); color: var(--muted); overflow-wrap: anywhere; }
+.k .uip-kpi__value { font-size: 26px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.1; color: var(--text); }
+.k .uip-kpi__of { font-size: var(--fs-md); font-weight: 500; color: var(--subtle); }
+.k .uip-kpi__note { font-size: var(--fs-xs); color: var(--muted); }
+.k .uip-kpi__note[data-tone="ok"] { color: var(--ok); font-weight: 500; }
+.k .uip-kpi .ui-meter { margin-top: auto; height: 4px; }
+
+/* Funnel: one hue, the bars are sizes of one thing. */
+.k .uip-funnel { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-2); }
+.k .uip-funnel__step { display: grid; grid-template-columns: minmax(0, 140px) minmax(0, 1fr) minmax(0, 190px); gap: var(--sp-3); align-items: center; font-size: var(--fs-sm); }
+.k .uip-funnel__track { display: block; height: 10px; border-radius: 5px; background: var(--raised); overflow: hidden; }
+.k .uip-funnel__track > span { display: block; height: 100%; border-radius: 0 4px 4px 0; background: var(--accent); }
+.k .uip-funnel__value b { font-weight: 600; }
+@container uip (max-width: 560px) {
+  .k .uip-funnel__step { grid-template-columns: minmax(0, 1fr) auto; row-gap: 4px; }
+  .k .uip-funnel__track { grid-column: 1 / -1; grid-row: 2; }
+}
+
+/* Views per day: thin bars on one baseline, the best day labelled, a hover title on every bar. */
+.k .uip-bars { margin-top: var(--sp-2); }
+.k .uip-bars__plot { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 10px; align-items: end; height: 168px; padding-top: 20px; border-bottom: 1px solid var(--line-2); }
+.k .uip-bars[data-dense] .uip-bars__plot { gap: 3px; }
+.k .uip-bars__col { position: relative; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; height: 100%; min-width: 0; }
+.k .uip-bars__bar { display: block; width: min(100%, 36px); min-height: 0; border-radius: 4px 4px 0 0; background: color-mix(in srgb, var(--accent) 55%, var(--panel)); }
+.k .uip-bars__col[data-state="best"] .uip-bars__bar { background: var(--accent); }
+.k .uip-bars__col:hover .uip-bars__bar { background: var(--accent-hover); }
+/* No reading that day: a dashed stub on the baseline, not a zero. A day still to come draws nothing. */
+.k .uip-bars__col[data-state="missing"] .uip-bars__bar { height: 3px; background: none; border-top: 2px dashed var(--line-2); border-radius: 0; }
+.k .uip-bars__col[data-state="future"] .uip-bars__bar { height: 0; }
+.k .uip-bars__label { position: absolute; top: -20px; left: 50%; transform: translateX(-50%); font-size: var(--fs-xs); color: var(--text); font-weight: 500; white-space: nowrap; }
+.k .uip-bars__axis { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 10px; margin-top: 6px; font-size: 12px; color: var(--subtle); text-align: center; }
+.k .uip-bars[data-dense] .uip-bars__axis { gap: 3px; white-space: nowrap; }
+
+/* Best times: one sequential hue, four steps, with its own legend. */
+.k .uip-heat { display: grid; grid-template-columns: 44px repeat(7, minmax(0, 1fr)); gap: 3px; font-size: 12px; color: var(--subtle); }
+.k .uip-heat__day { text-align: center; }
+.k .uip-heat__hour { align-self: center; }
+.k .uip-heat__cell { display: block; height: 22px; border-radius: 3px; background: var(--raised); }
+.k .uip-heat__cell[data-level="1"] { background: color-mix(in srgb, var(--accent) 22%, var(--panel)); }
+.k .uip-heat__cell[data-level="2"] { background: color-mix(in srgb, var(--accent) 52%, var(--panel)); }
+.k .uip-heat__cell[data-level="3"] { background: var(--accent); }
+.k .uip-heat__legend { display: flex; align-items: center; gap: 4px; margin-top: var(--sp-3); }
+.k .uip-heat__legend .uip-heat__cell { width: 14px; height: 10px; }
+
+/* Ranked rows: What worked, Competitors' outliers. */
+.k .uip-list { list-style: none; margin: 0; padding: 0; }
+.k .uip-list__row { display: flex; align-items: center; gap: var(--sp-3); padding: 10px 0; border-top: 1px solid var(--line); }
+.k .uip-list__row:first-child { border-top: 0; padding-top: 0; }
+.k .uip-list__main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.k .uip-list__title { font-weight: 500; font-size: var(--fs-sm); color: var(--text); text-decoration: none; overflow-wrap: anywhere; }
+.k a.uip-list__title:hover { text-decoration: underline; }
+@container uip (max-width: 560px) {
+  .k .uip-list__row { flex-wrap: wrap; }
+  .k .uip-list__row > .ui-btn { margin-left: auto; }
+}
+
+/* ── Library ───────────────────────────────────────────────────────────────────────────────────────────────────── */
+.k .uip-filters { display: flex; gap: 6px; flex-wrap: wrap; }
+.k .uip-filter {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 0 10px; border: 1px solid var(--line-2); border-radius: var(--r-pill);
+  background: var(--panel); color: var(--text); font-size: 13px; font-weight: 500; text-decoration: none; white-space: nowrap;
+}
+.k .uip-filter:hover { background: var(--hover); }
+.k .uip-filter:focus-visible { outline: none; box-shadow: var(--focus); }
+.k .uip-filter[aria-current="page"] { background: var(--accent-wash); border-color: var(--accent); color: var(--accent-text); }
+.k .uip-filter[data-empty] { color: var(--subtle); }
+.k .uip-filter__n { color: var(--muted); font-weight: 400; }
+.k .uip-filter[aria-current="page"] .uip-filter__n { color: inherit; }
+@media (pointer: coarse) { .k .uip-filter { min-height: 40px; } }
+
+.k .uip-themes { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr)); gap: var(--sp-4); }
+.k .uip-theme { display: flex; flex-direction: column; gap: var(--sp-3); }
+.k .uip-theme__head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.k .uip-theme__head h2 { margin: 0; font-size: var(--fs-md); font-weight: 600; line-height: 1.35; flex: 1 1 auto; min-width: 0; }
+.k .uip-quotes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-3); }
+.k .uip-quotes li { display: flex; flex-direction: column; gap: 4px; padding-left: var(--sp-3); border-left: 2px solid var(--line-2); }
+.k .uip-quotes blockquote { margin: 0; font-size: var(--fs-sm); line-height: 1.5; color: var(--text); overflow-wrap: anywhere; }
+.k .uip-quotes__where { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-xs); color: var(--muted); }
+.k .uip-theme__foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: space-between; margin-top: auto; padding-top: var(--sp-3); border-top: 1px solid var(--line); }
+
+/* ── Competitors ───────────────────────────────────────────────────────────────────────────────────────────────── */
+.k .uip-research { max-width: 1320px; flex-direction: row; flex-wrap: wrap; align-items: flex-start; gap: var(--sp-6); }
+.k .uip-research__main { flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: var(--sp-4); }
+.k .uip-addform { display: flex; gap: var(--sp-2); max-width: 520px; }
+.k .uip-addform .ui-input { flex: 1 1 auto; min-width: 0; }
+.k .uip-you { display: flex; align-items: center; gap: var(--sp-3); padding: 10px var(--sp-4); border: 1px dashed var(--line-2); border-radius: var(--r-lg); }
+.k .uip-you b { flex: 1 1 auto; font-weight: 600; min-width: 0; }
+.k .uip-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: var(--sp-4); }
+.k .uip-cards--sm { grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); gap: var(--sp-3); }
+.k .uip-rival { display: flex; flex-direction: column; gap: var(--sp-3); }
+.k .uip-rival__head { display: flex; align-items: center; gap: var(--sp-3); min-width: 0; }
+.k .uip-rival__who { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.k .uip-rival__who b { font-weight: 600; }
+.k .uip-rival__who a { color: inherit; }
+.k .uip-rival__head > .ui-chip { flex: 0 0 auto; }
+.k .uip-rival__foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: auto; }
+
+.k .uip-ask { flex: 1 1 300px; max-width: 380px; display: flex; flex-direction: column; gap: var(--sp-3); position: sticky; top: var(--sp-4); }
+.k .uip-ask__title { margin: 0; font-size: var(--fs-md); font-weight: 600; }
+.k .uip-ideas { list-style: none; margin: 0; padding: 0; }
+.k .uip-idea { display: flex; flex-direction: column; gap: 4px; padding: 10px 0; border-top: 1px solid var(--line); }
+.k .uip-idea__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.k .uip-idea__head b { font-weight: 600; }
+.k .uip-idea__form { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.k .uip-idea__form .ui-label { width: 100%; margin: 0; }
+.k .uip-idea__form .ui-input { flex: 1 1 140px; width: auto; min-width: 0; }
+@container uip (max-width: 900px) { .k .uip-ask { max-width: none; position: static; } }
+
+/* ── Your business ─────────────────────────────────────────────────────────────────────────────────────────────── */
+.k .uip-business { max-width: 960px; }
+.k .uip-docnav { display: flex; align-items: flex-end; gap: var(--sp-3); flex-wrap: wrap; border-bottom: 1px solid var(--line); }
+.k .uip-docnav__tabs { flex: 1 1 auto; border-bottom: 0; }
+.k .uip-docnav__tabs > [aria-pressed="true"] { color: var(--text); border-bottom-color: var(--accent); }
+.k .uip-docnav__site { display: flex; align-items: center; gap: var(--sp-2); padding-bottom: 4px; }
+.k .uip-confirm { display: flex; flex-direction: column; gap: var(--sp-2); border-color: var(--warn); }
+.k .uip-doc { display: flex; flex-direction: column; gap: var(--sp-3); min-width: 0; }
+.k .uip-doc > .ui-ph { margin-bottom: 0; }
+.k .uip-lede { margin: 0; max-width: 64ch; }
+.k .uip-fields { padding-top: 0; padding-bottom: 0; }
+.k .uip-field { display: grid; grid-template-columns: minmax(0, 200px) minmax(0, 1fr); gap: 8px 24px; padding: 14px 0; border-top: 1px solid var(--line); }
+.k .uip-field:first-child { border-top: 0; }
+.k .uip-field__label { display: flex; flex-direction: column; gap: 2px; font-size: var(--fs-sm); font-weight: 500; }
+.k .uip-field__value { min-width: 0; font-size: var(--fs-sm); line-height: 1.55; overflow-wrap: anywhere; }
+.k .uip-field__value p { margin: 0; white-space: pre-wrap; }
+.k .uip-chip-lg { font-size: 13px; padding: 3px 10px; border-radius: 12px; line-height: 1.45; color: var(--text); }
+.k .uip-items { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+.k .uip-pair { display: grid; grid-template-columns: minmax(0, 180px) minmax(0, 1fr); gap: 4px 16px; }
+.k .uip-pair b { font-weight: 600; }
+.k .uip-sample { margin: 0; padding: 8px 12px; border-left: 2px solid var(--line-2); background: var(--raised); border-radius: 0 var(--r-sm) var(--r-sm) 0; }
+.k .uip-swatch { display: inline-flex; align-items: center; gap: 6px; }
+.k .uip-swatch > span:first-child { width: 20px; height: 20px; border-radius: 5px; border: 1px solid var(--line); }
+@container uip (max-width: 560px) {
+  .k .uip-field, .k .uip-pair { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .k .uip-docnav { flex-direction: column; align-items: stretch; gap: 0; }
+  .k .uip-docnav__tabs { width: 100%; }
+  .k .uip-docnav__site { justify-content: space-between; padding: 6px 0; }
+}
+
+/* ── Settings frame ────────────────────────────────────────────────────────────────────────────────────────────── */
+.k .uip-settings { display: flex; max-width: 1200px; margin: 0 auto; min-width: 0; }
+.k .uip-settings__nav { flex: 0 0 220px; max-width: 220px; padding: var(--sp-6) var(--sp-3); display: flex; flex-direction: column; gap: 2px; position: sticky; top: 0; align-self: flex-start; box-sizing: border-box; }
+.k .uip-settings__nav > button {
+  display: flex; align-items: center; min-height: 34px; padding: 0 10px; border: 0; border-radius: var(--r-sm); background: transparent;
+  color: var(--muted); font: inherit; font-size: var(--fs-sm); text-align: left; cursor: pointer;
+}
+.k .uip-settings__nav > button:hover { background: var(--hover); color: var(--text); }
+.k .uip-settings__nav > button:focus-visible { outline: none; box-shadow: var(--focus); }
+.k .uip-settings__nav > button[aria-current="page"] { background: var(--raised); color: var(--text); font-weight: 600; box-shadow: inset 2px 0 0 var(--accent); }
+.k .uip-settings__main { container: uip / inline-size; flex: 1 1 auto; min-width: 0; max-width: 860px; padding: var(--sp-6) var(--sp-6) 48px; display: flex; flex-direction: column; gap: var(--sp-4); box-sizing: border-box; }
+@media (max-width: 760px) {
+  .k .uip-settings { flex-direction: column; }
+  /* The menu becomes one row of tabs that scrolls on its own. */
+  .k .uip-settings__nav { position: static; flex: none; max-width: none; width: 100%; flex-direction: row; gap: var(--sp-1); padding: var(--sp-3) var(--sp-4) 0; overflow-x: auto; scrollbar-width: none; border-bottom: 1px solid var(--line); }
+  .k .uip-settings__nav > button { flex: 0 0 auto; white-space: nowrap; border-radius: 0; box-shadow: none; border-bottom: 2px solid transparent; }
+  .k .uip-settings__nav > button[aria-current="page"] { background: transparent; box-shadow: none; border-bottom-color: var(--accent); }
+  .k .uip-settings__main { padding: var(--sp-4) var(--sp-4) 40px; }
+}
+@media (pointer: coarse) { .k .uip-settings__nav > button { min-height: 44px; } }
+
+/* Settings › Connected accounts: the account's picture with the platform's mark in its corner. */
+.k .scr-account-pic { position: relative; display: inline-flex; flex: 0 0 auto; }
+.k .scr-account-pic__mark { position: absolute; right: -3px; bottom: -3px; border-radius: 5px; box-shadow: 0 0 0 2px var(--panel); display: inline-flex; }
+
+/* ── Billing ───────────────────────────────────────────────────────────────────────────────────────────────────── */
+.k .uip-billing { display: flex; flex-direction: column; gap: var(--sp-6); min-width: 0; }
+.k .uip-billing > .ui-ph { margin-bottom: calc(var(--sp-2) * -1); }
+.k .uip-cardpad { padding: var(--sp-4) var(--sp-4) 0; }
+.k .uip-cardbody { padding: 0 var(--sp-4) var(--sp-4); }
+.k .uip-plan { display: flex; gap: var(--sp-6); flex-wrap: wrap; align-items: stretch; }
+.k .uip-plan__now { flex: 1 1 260px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.k .uip-plan__name { margin: 0; font-size: 20px; font-weight: 600; }
+.k .uip-plan__usage { flex: 1 1 260px; display: flex; flex-direction: column; gap: var(--sp-2); padding-left: var(--sp-6); border-left: 1px solid var(--line); min-width: 0; }
+.k .uip-plan__pct { font-size: 32px; font-weight: 600; letter-spacing: -0.02em; line-height: 1; }
+.k .uip-plan__meter { height: 8px; border-radius: 4px; }
+.k .uip-plan__meter[data-paused] > span { background: var(--danger); }
+@container uip (max-width: 560px) { .k .uip-plan__usage { padding-left: 0; border-left: 0; padding-top: var(--sp-4); border-top: 1px solid var(--line); } }
+.k .uip-plans { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: var(--sp-3); }
+.k .uip-plans--sm { grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); }
+.k .uip-plancard { display: flex; flex-direction: column; gap: var(--sp-2); }
+.k .uip-plancard h3 { margin: 0; font-size: var(--fs-md); font-weight: 600; }
+.k .uip-plancard__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.k .uip-plancard__price { margin: 0; }
+.k .uip-plancard__price b { font-size: 22px; font-weight: 600; }
+.k .uip-plancard__features { margin: 0; padding-left: 18px; font-size: var(--fs-sm); line-height: 1.6; color: var(--muted); flex: 1 1 auto; }
+.k .uip-plancard > .ui-btn { align-self: flex-start; }
+.k .uip-plancard[data-featured] { border-color: var(--line-2); }
+.k .uip-ledger { list-style: none; margin: var(--sp-3) 0 0; padding: 0; }
+.k .uip-ledger li { display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: var(--sp-3); align-items: baseline; padding: 10px var(--sp-4); border-top: 1px solid var(--line); font-size: var(--fs-sm); }
+@container uip (max-width: 480px) { .k .uip-ledger li { grid-template-columns: minmax(0, 1fr); gap: 2px; } }

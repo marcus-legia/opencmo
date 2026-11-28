@@ -161,35 +161,21 @@ export function PostingPlanPanel({ initial, accounts, live, onSaved }: { initial
   const waiting = TEXT_PLATFORMS.filter((id) => plan.text[id] > 0 && !connected(id)).map((id) => TEXT_LABEL[id]);
 
   return (
-    <section aria-label="Posting plan" id="posting-plan" data-testid="posting-plan" className="pp">
-      <header className="pp-head">
+    <section aria-label="Posting plan" id="posting-plan" data-testid="posting-plan" className="ui-card pp">
+      {/* A <div>, not <header>: inside a section it would still read as a banner to some checkers. */}
+      <div className="pp-head">
         <div>
           <h2>Posting plan</h2>
           <p>Pick where you post and how often. Ferreto writes to this plan.</p>
         </div>
-        <span className="pp-saved" data-live={live || undefined}>
-          {live ? (
-            <>
-              <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M20 6 9 17l-5-5" />
-              </svg>
-              Saved as you change it
-            </>
-          ) : (
-            "Sample plan: changes stay on this page"
-          )}
+        <span className="ui-chip" data-tone={live ? "ok" : undefined}>
+          {live ? "Saved as you change it" : "Sample plan: changes stay on this page"}
         </span>
-      </header>
+      </div>
 
       <div className="pp-groups">
         <div className="pp-group" role="group" aria-labelledby="pp-posts">
           <div className="pp-group-head">
-            <span className="pp-group-icon" aria-hidden="true">
-              <svg className="i" viewBox="0 0 24 24">
-                <path d="M12 20h9" />
-                <path d="M16.4 3.6a2 2 0 0 1 2.9 2.9L7 18.8l-4 1 1-4Z" />
-              </svg>
-            </span>
             <div>
               <h3 id="pp-posts">Posts</h3>
               <p>Written for you every morning, for the platforms you connect here. One post goes to each of them.</p>
@@ -220,12 +206,6 @@ export function PostingPlanPanel({ initial, accounts, live, onSaved }: { initial
       </div>
 
       <div className="pp-sum">
-        <svg className="i" viewBox="0 0 24 24" aria-hidden="true">
-          <rect width="18" height="18" x="3" y="4" rx="2" />
-          <path d="M16 2v4" />
-          <path d="M8 2v4" />
-          <path d="M3 10h18" />
-        </svg>
         <p>
           <b data-testid="posting-plan-line">{planLine(running)}</b>{" "}
           {posts > 0 ? <span>{posts === 1 ? "It goes" : "They go"} to {listOf(on)}.</span> : <span>Connect a platform above to get a post every day.</span>}{" "}
@@ -259,10 +239,10 @@ export function PostingPlanPanel({ initial, accounts, live, onSaved }: { initial
             written for it until you connect it again.
           </p>
           <div className="pp-confirm-acts">
-            <button type="button" disabled={busy === confirmOff.platform} onClick={() => void disconnect(confirmOff)}>
+            <button type="button" className="ui-btn ui-btn--danger" disabled={busy === confirmOff.platform} onClick={() => void disconnect(confirmOff)}>
               {busy === confirmOff.platform ? "Disconnecting…" : `Disconnect ${confirmOff.name}`}
             </button>
-            <button type="button" className="ghost" disabled={busy === confirmOff.platform} onClick={() => setConfirmOff(null)}>
+            <button type="button" className="ui-btn ui-btn--ghost" disabled={busy === confirmOff.platform} onClick={() => setConfirmOff(null)}>
               Keep it
             </button>
           </div>
@@ -339,14 +319,14 @@ function Row({
         )}
       </div>
       <div className="pp-step">
-        <button type="button" aria-label={`Fewer ${unit} on ${name}`} disabled={value <= 0} onClick={() => onChange(value - 1)}>
-          <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
+        <button type="button" className="ui-btn ui-btn--quiet ui-btn--icon ui-btn--sm" aria-label={`Fewer ${unit} on ${name}`} disabled={value <= 0} onClick={() => onChange(value - 1)}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
             <path d="M5 12h14" />
           </svg>
         </button>
         <output aria-label={`${name}: ${unit}`}>{off ? "Off" : `${value} a ${per}`}</output>
-        <button type="button" aria-label={`More ${unit} on ${name}`} disabled={value >= max} onClick={() => onChange(value + 1)}>
-          <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
+        <button type="button" className="ui-btn ui-btn--quiet ui-btn--icon ui-btn--sm" aria-label={`More ${unit} on ${name}`} disabled={value >= max} onClick={() => onChange(value + 1)}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
             <path d="M5 12h14" />
             <path d="M12 5v14" />
           </svg>
