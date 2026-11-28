@@ -225,6 +225,7 @@ test("Writer filters drafts per platform", async ({ page }) => {
   }
   await filter.getByRole("button", { name: "All", exact: true }).click();
   await expect(rows).toHaveCount(all);
+  await page.screenshot({ path: "test-results/writer-filters-1440.png" });
 });
 
 // ------------------------------------------------------------------ C3: posts and captions on live rows

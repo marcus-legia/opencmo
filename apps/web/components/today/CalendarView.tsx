@@ -18,6 +18,7 @@ import { PageHeader } from "./PageHeader";
 import { PostingPlanPanel } from "./PostingPlanPanel";
 import { SamplePosts } from "./SamplePosts";
 import { useDecide } from "./useDecide";
+import { PlatformMark, hasLogo } from "./platform-logos";
 
 /** A slot, or a draft still waiting for the founder's OK drawn at the time its card proposes (`ghost`). */
 type Slot = ScheduleScreen["slots"][number] & { ghost?: boolean };
@@ -231,8 +232,16 @@ export function CalendarView() {
             </div>
             <div role="group" aria-label="Platform" className="ui-row">
               {CHANS.map((c) => (
-                <button key={c.id} type="button" className="ui-chip" aria-pressed={chan === c.id} onClick={() => setChan(c.id)}>
-                  {c.label}
+                <button
+                  key={c.id}
+                  type="button"
+                  className="ui-chip pw-logo-chip"
+                  aria-pressed={chan === c.id}
+                  onClick={() => setChan(c.id)}
+                  aria-label={c.id === "all" ? undefined : c.label}
+                  title={c.id === "all" ? undefined : c.label}
+                >
+                  {c.id !== "all" && hasLogo(c.id) ? <PlatformMark platform={c.id} size={15} /> : c.label}
                 </button>
               ))}
             </div>
@@ -294,7 +303,9 @@ export function CalendarView() {
                           onClick={() => setPicked(e.id)}
                         >
                           <span className="pc-ev__time ui-num">
-                            {zone.time(e.at)} · {chanName(e)}
+                            {hasLogo(e.where.platform) ? <PlatformMark platform={e.where.platform} size={12} /> : null}
+                            {zone.time(e.at)}
+                            <span className={hasLogo(e.where.platform) ? "v2-visually-hidden" : undefined}> · {chanName(e)}</span>
                           </span>
                           <span className="pc-ev__title">{e.title}</span>
                           <span className="pc-ev__state">

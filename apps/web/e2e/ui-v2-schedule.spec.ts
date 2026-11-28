@@ -122,6 +122,7 @@ test("a post card shows its time; approving it schedules the post then, with no 
 
   await page.goto(`/app/schedule?from=${mondayOf(slot.publish_at)}`);
   await expect(page.locator(`[data-slot-id="${slot.id}"]`)).toBeVisible();
+  await page.screenshot({ path: "test-results/calendar-1440.png" });
 });
 
 test("Settings → Accounts: connect Threads through the fake Zernio, then disconnect it", async ({ page }) => {

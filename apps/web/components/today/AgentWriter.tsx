@@ -387,9 +387,16 @@ export function AgentWriter() {
             {/* Which platform, as the platforms' own icons: a toggle each instead of a select (owner, 2026-11-23). */}
             <span role="group" aria-label="Write for" className="ui-seg pw-ask__kinds">
               {ASK_KINDS.map((k) => (
-                <button key={k.id} type="button" aria-pressed={askKind === k.id} onClick={() => setAskKind(k.id)} data-testid={`ask-kind-${k.id}`}>
-                  <PlatformBadge platform={k.id === "post" ? "x" : k.id} size={16} />
-                  {k.label.replace(/ post$/, "")}
+                <button
+                  key={k.id}
+                  type="button"
+                  aria-pressed={askKind === k.id}
+                  onClick={() => setAskKind(k.id)}
+                  data-testid={`ask-kind-${k.id}`}
+                  aria-label={k.label.replace(/ post$/, "")}
+                  title={k.label}
+                >
+                  <PlatformBadge platform={k.id === "post" ? "x" : k.id} size={18} />
                 </button>
               ))}
             </span>
@@ -401,8 +408,8 @@ export function AgentWriter() {
             Or{" "}
             <Link href="/app/compose" data-testid="writer-write-yourself">
               write it yourself
-            </Link>
-            : Ferreto checks each line against the platform&apos;s rules and for lines that read as AI. Reddit posts are written there.
+            </Link>{" "}
+            (Reddit posts too).
           </p>
         </form>
 
@@ -422,8 +429,17 @@ export function AgentWriter() {
           {tab !== "voice" && platforms.length > 1 ? (
             <div role="group" aria-label="Platform" className="ui-row pw-bar__filter">
               {[null, ...platforms].map((p) => (
-                <button key={p ?? "all"} type="button" className="ui-chip" aria-pressed={active === p} onClick={() => setPlatform(p)}>
-                  {p ? PLATFORM_LABEL[p] : "All"}
+                <button
+                  key={p ?? "all"}
+                  type="button"
+                  className="ui-chip pw-logo-chip"
+                  aria-pressed={active === p}
+                  onClick={() => setPlatform(p)}
+                  aria-label={p ? PLATFORM_LABEL[p] : undefined}
+                  title={p ? PLATFORM_LABEL[p] : undefined}
+                >
+                  {/* Platforms as their logos, not words (owner, 28/11); the name stays the button's label. */}
+                  {p && hasLogo(p) ? <PlatformMark platform={p} size={15} /> : p ? PLATFORM_LABEL[p] : "All"}
                 </button>
               ))}
             </div>
@@ -501,7 +517,11 @@ export function AgentWriter() {
                     {/* The same instant as the row's, in the founder's zone: day and time, never the plan's day alone. */}
                     <span className="pw-week__when ui-num">{at ? zoned(at, timezone, { weekday: "short", hour: "2-digit", minute: "2-digit" }) : (d.dayText ?? "").slice(0, 3)}</span>
                     <span className="pw-week__dot" data-done={done || undefined} aria-hidden="true"></span>
-                    <span className="pw-week__what">{kindOf(d)}</span>
+                    <span className="pw-week__what">
+                      {hasLogo(d.platform) ? <PlatformMark platform={d.platform} size={13} /> : null}
+                      <span className={hasLogo(d.platform) ? "v2-visually-hidden" : undefined}>{kindOf(d)}</span>
+                      {hasLogo(d.platform) ? <span aria-hidden="true">{d.title}</span> : null}
+                    </span>
                     <span className="ui-t-xs ui-muted">{badgeOf(d)[0].toLowerCase()}</span>
                   </li>
                 );

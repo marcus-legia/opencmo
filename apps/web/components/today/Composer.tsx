@@ -629,9 +629,8 @@ export function Composer() {
         <div className="pcm-toolbar">
           <span role="group" aria-label="Write for" className="ui-seg pcm-platforms">
             {COMPOSE_PLATFORMS.map((p) => (
-              <button key={p} type="button" aria-pressed={platform === p} onClick={() => setPlatform(p)} data-testid={`composer-platform-${p}`}>
-                <PlatformBadge platform={p} size={16} />
-                {LABEL[p]}
+              <button key={p} type="button" aria-pressed={platform === p} onClick={() => setPlatform(p)} data-testid={`composer-platform-${p}`} aria-label={LABEL[p]} title={LABEL[p]}>
+                <PlatformBadge platform={p} size={18} />
               </button>
             ))}
           </span>
