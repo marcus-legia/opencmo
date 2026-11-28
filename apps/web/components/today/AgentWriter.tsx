@@ -383,12 +383,13 @@ export function AgentWriter() {
                 </button>
               ))}
             </span>
+            {/* It fills the chat; the founder sends it there (`fillChat`). "Write it" read as if it wrote at once (28/11). */}
             <button type="submit" className="ui-btn ui-btn--primary">
-              Write it
+              Ask in chat
             </button>
           </div>
           <p className="ui-t-xs ui-muted pw-ask__note">
-            Or{" "}
+            The request opens in the chat: press Enter there and the draft comes back here. Or{" "}
             <Link href="/app/compose" data-testid="writer-write-yourself">
               write it yourself
             </Link>
