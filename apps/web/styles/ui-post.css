@@ -58,6 +58,7 @@
 .k .pw-no { margin-right: 6px; color: var(--subtle); font-weight: 500; }
 .k .pw-row__meta { font-size: var(--fs-xs); color: var(--muted); }
 .k .pw-row__meta--clip { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.k .pw-row__sources { display: inline-flex; align-items: center; gap: 4px; }
 .k .pw-row__end { display: flex; align-items: center; gap: var(--sp-3); flex: 0 0 auto; padding-right: var(--sp-3); }
 .k .pw-row__when { min-width: 72px; text-align: right; font-size: var(--fs-xs); color: var(--muted); white-space: nowrap; }
 /* Two lines on a phone: the title row, then its state and time under it, aligned with the text. */
@@ -77,7 +78,9 @@
 .k .pw-time__note { margin-top: 6px; }
 
 .k .pw-sources { display: flex; flex-direction: column; gap: 6px; }
-.k .pw-sources ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-xs); line-height: 1.5; }
+.k .pw-sources ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; font-size: var(--fs-xs); line-height: 1.5; }
+.k .pw-sources li { display: flex; align-items: flex-start; gap: 8px; }
+.k .pw-sources li > svg, .k .pw-sources li > span:first-child:not(.pw-sources__text) { flex: 0 0 auto; margin-top: 2px; }
 
 .k .pw-voice { margin: 0 0 var(--sp-3); padding: 0; list-style: none; }
 .k .pw-voice li { display: flex; flex-direction: column; gap: 2px; padding: var(--sp-2) 0; border-bottom: 1px solid var(--line); }

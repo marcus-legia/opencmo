@@ -105,7 +105,9 @@ test("a post card shows its time; approving it schedules the post then, with no 
   await signIn(page, user);
   const view = await openCard(page, card.id);
   await expect(view.getByTestId("post-when")).toContainText("Goes out");
-  await expect(view.getByTestId("post-when")).toContainText("on X (@founder)");
+  // The line shows the logo, the account and the time; the full sentence is its tooltip.
+  await expect(view.getByTestId("post-when")).toContainText("@founder");
+  await expect(view.getByTestId("post-when")).toHaveAttribute("title", /on X \(@founder\)/);
   await view.getByRole("button", { name: "Approve", exact: true }).click();
   await expect(page.getByText(/Approved for .*, your time, on X\./)).toBeVisible();
 

@@ -18,7 +18,7 @@ import { formatWhen, fromLocalInput, localMonday, toLocalInput } from "@/lib/tim
 import { PostViews } from "./CalendarView";
 import { KIND_ICON, PLATFORM_ICON } from "./cards";
 import { PageHeader } from "./PageHeader";
-import { PlatformBadge } from "./platform-logos";
+import { PlatformBadge, PlatformMark, hasLogo } from "./platform-logos";
 import { whereSaid } from "./LibraryView";
 import { useDecide } from "./useDecide";
 import { POST_SECTIONS, dayLabel, draftsLeftOver, draftsThisWeek, postSections } from "./week";
@@ -89,24 +89,28 @@ function SourceList({ sources }: { sources: readonly Source[] }) {
   return (
     <section aria-label="What this post is based on" data-testid="writer-sources" className="pw-sources">
       <p className="ui-t-xs ui-muted">
-        Based on {sources.length === 1 ? "this conversation" : `these ${sources.length} conversations`} in your <Link href="/app/library">Library</Link>
+        Written from {sources.length === 1 ? "this conversation" : `these ${sources.length} conversations`} in your <Link href="/app/library">Library</Link>
       </p>
       <ul>
         {sources.map((s) => (
           <li key={s.opportunityId} data-testid="writer-source">
-            {s.summary}{" "}
-            {s.ref ? (
-              <a href={`/app/sales#thread-${s.opportunityId}`} data-testid="writer-source-sales">
-                From Scan #{s.ref.split(".")[0]} · {s.ref}
-              </a>
-            ) : null}{" "}
-            {s.url ? (
-              <a className="ui-muted" href={s.url} target="_blank" rel="noopener noreferrer" data-testid="writer-source-link">
-                {whereSaid(s)} thread ↗
-              </a>
-            ) : (
-              <span className="ui-muted">{whereSaid(s)}</span>
-            )}
+            {hasLogo(s.platform) ? <PlatformMark platform={s.platform} size={14} /> : null}
+            <span className="pw-sources__text">
+              {s.summary}{" "}
+              {/* The scan reference ("3.1") is the way back to the person on Sales; the words around it were noise. */}
+              {s.ref ? (
+                <a className="ui-muted" href={`/app/sales#thread-${s.opportunityId}`} data-testid="writer-source-sales" title={`From Scan #${s.ref.split(".")[0]}`}>
+                  #{s.ref}
+                </a>
+              ) : null}{" "}
+              {s.url ? (
+                <a className="ui-muted" href={s.url} target="_blank" rel="noopener noreferrer" data-testid="writer-source-link" >
+                  {whereSaid(s)} ↗
+                </a>
+              ) : (
+                <span className="ui-muted">{whereSaid(s)}</span>
+              )}
+            </span>
           </li>
         ))}
       </ul>
@@ -259,7 +263,8 @@ export function AgentWriter() {
                     #{d.no}
                   </span>
                 ) : null}
-                <span className="ui-muted">{kindOf(d)} · </span>
+                {/* The row's icon already shows the platform (28/11 redesign): the words stay for screen readers. */}
+                <span className="v2-visually-hidden">{kindOf(d)}: </span>
                 {d.title}
               </span>
               {lastWeek.has(d.id) && d.column === "waiting" ? (
@@ -268,9 +273,14 @@ export function AgentWriter() {
                 </span>
               ) : null}
               {d.sources?.length ? (
-                <span className="pw-row__meta pw-row__meta--clip" data-testid="writer-based-on">
-                  {basedOn(d.sources)}
-                  {d.sources.some((s) => s.ref) ? ` · From ${d.sources.flatMap((s) => (s.ref ? [`Scan #${s.ref.split(".")[0]} · ${s.ref}`] : [])).join(", ")}` : ""}
+                <span className="pw-row__meta pw-row__sources" data-testid="writer-based-on" title={basedOn(d.sources)}>
+                  {[...new Set(d.sources.map((s) => s.platform))].map((p) =>
+                    hasLogo(p) ? <PlatformMark key={p} platform={p} size={13} /> : null,
+                  )}
+                  <span className="v2-visually-hidden">{basedOn(d.sources)}</span>
+                  <span aria-hidden="true">
+                    {d.sources.length} {d.sources.length === 1 ? "source" : "sources"}
+                  </span>
                 </span>
               ) : null}
             </span>

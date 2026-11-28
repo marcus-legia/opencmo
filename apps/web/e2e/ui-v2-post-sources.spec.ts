@@ -45,7 +45,9 @@ test("a draft from the Library: Based on N conversations in the list, each sourc
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/app/writer");
   const row = page.getByTestId("writer-row").filter({ hasText: "Most late invoices" });
-  await expect(row.getByTestId("writer-based-on")).toHaveText("Based on 2 conversations · Reddit, Hacker News");
+  // The row shows the sources' logos and a count; the full line stays its tooltip and its screen-reader text.
+  await expect(row.getByTestId("writer-based-on")).toHaveAttribute("title", "Based on 2 conversations · Reddit, Hacker News");
+  await expect(row.getByTestId("writer-based-on")).toContainText("2 sources");
 
   // The first waiting draft opens on its own; open it only if it is closed.
   const toggle = row.getByRole("button").first();

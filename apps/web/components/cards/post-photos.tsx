@@ -137,13 +137,17 @@ export function PostPhotos({
   }
 
   return (
-    <div className="v2-card-photo-edit" data-testid="post-photos">
+    <div className="v2-card-photo-edit pcx-tools" data-testid="post-photos">
       <PhotoStrip photos={photos} label="Your photos, in posting order" onRemove={(object) => void remove(object)} disabled={busy !== null} />
       {room > 0 ? (
-        <label className={`v2-card-photo-add${busy ? " is-busy" : ""}`}>
+        <label className={`v2-card-photo-add pcx-tool${busy ? " is-busy" : ""}`} title={`Your own photos, up to ${POST_PHOTO_LIMIT}. They go out with the post on every platform.`}>
           <input ref={input} type="file" accept={POST_PHOTO_TYPES.join(",")} multiple disabled={busy !== null} onChange={(e) => void add(e.target.files)} />
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <rect width="18" height="18" x="3" y="3" rx="2" />
+            <circle cx="9" cy="9" r="2" />
+            <path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21" />
+          </svg>
           <span>{busy ?? (photos.length ? "Add more photos" : "Add photos")}</span>
-          <span className="v2-card-photo-hint">Your own, up to {POST_PHOTO_LIMIT}: they go out with the post on every platform.</span>
         </label>
       ) : busy ? (
         <span className="v2-card-photo-hint">{busy}</span>
