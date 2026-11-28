@@ -128,7 +128,10 @@ export function toPlanItems(
   const themes = (opts.library ?? []).filter((t) => t.entries.length).map((t) => t.name);
   let nextTheme = 0;
   const mustRide = refs !== null && refs.length === 0 && opts.fromBrief !== true;
-  const asked = plan.items.filter((i) => i.department === "post");
+  // "none" keeps a post off the news only where the founder's content plan says so: with no content plan the model's
+  // none is its own guess, and a week planned on it never used the day's story (28/11 review).
+  const items = opts.docs && !hasContentPlan(opts.docs) ? plan.items.map((i) => (i.news === "none" ? { ...i, news: "hook" as const } : i)) : plan.items;
+  const asked = items.filter((i) => i.department === "post");
   const noNews = mustRide && asked.length > 0 && asked.every((i) => i.news === "none");
   const postsAllowed = !noNews;
   const newsOf = (item: Answer | undefined): NewsMode => item?.news ?? "hook";
@@ -144,7 +147,7 @@ export function toPlanItems(
   const angleOf = (item: Answer | undefined): PostAngle => (item?.angle === "cta" && ctas < maxCta(slots.length) ? (ctas++, "cta") : "share");
   const taken = new Map<string, Answer>();
   const loose = new Map<number, Answer[]>();
-  for (const item of plan.items) {
+  for (const item of items) {
     if (item.department !== "post") continue;
     const day = clampDay(item.day_offset);
     const key = `${day}:${item.slot}`;
@@ -228,6 +231,11 @@ function skeletonBlock(posting: PostingPlan): string {
     ? slots.map((s) => `- day_offset ${s.day_offset}, slot ${s.slot}: ${s.targets.map((t) => postPlatform(t)).join(", ")}`).join("\n")
     : "(no posts this week: the founder set every platform to 0)";
   return `<post_slots>\n${posts}\n</post_slots>`;
+}
+
+/** Whether the founder wrote a content plan (Post plan › content_plan). */
+export function hasContentPlan(docs: Documents | undefined): boolean {
+  return typeof docs?.post_plan?.content_plan === "string" && docs.post_plan.content_plan.trim().length > 0;
 }
 
 /** The founder's content plan (owner, 2026-11-27): its own block, right after the documents, never twice. */

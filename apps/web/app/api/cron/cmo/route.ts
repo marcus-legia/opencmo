@@ -36,6 +36,11 @@ async function run(request: NextRequest) {
     if (error) console.error("[cron] cmo expire planned", error.message);
     return error ? null : (data as number);
   });
+  // A post card left waiting past its time gets the next free one before the founder opens it (28/11 review).
+  const refreshed = await admin.rpc("post_refresh_proposals").then(({ data, error }) => {
+    if (error) console.error("[cron] cmo refresh post times", error.message);
+    return error ? null : (data as number);
+  });
   let loops;
   try {
     loops = await enqueueDueLoops(admin);
@@ -43,7 +48,7 @@ async function run(request: NextRequest) {
     console.error("[cron] cmo", error);
     return NextResponse.json({ error: "Could not read users." }, { status: 500 });
   }
-  if (new Date().getUTCHours() !== 0) return NextResponse.json({ ...loops, expired });
+  if (new Date().getUTCHours() !== 0) return NextResponse.json({ ...loops, expired, refreshed });
   const progress = await runProgressCheck(admin).catch((error) => {
     console.error("[cron] cmo progress check", error);
     return null;
@@ -54,7 +59,7 @@ async function run(request: NextRequest) {
         return null;
       })
     : null;
-  return NextResponse.json({ ...loops, expired, progress, edits });
+  return NextResponse.json({ ...loops, expired, refreshed, progress, edits });
 }
 
 /** Checks in with Sentry's cron monitor once the caller is the clock (`lib/ops/cron-monitor.ts`). */

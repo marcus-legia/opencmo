@@ -87,7 +87,7 @@ function firstText(card: Card): string {
 export function postWhen(proposed: NonNullable<Extract<Card["body"], { kind: "post" }>["proposed"]>, now = Date.now()): string {
   const when = formatWhen(proposed.at, proposed.timezone);
   const where = PLATFORM_LABEL[proposed.platform];
-  if (new Date(proposed.at).getTime() <= now) return `Its time (${when}) has passed. Approve it and pick a new time, or change it here.`;
+  if (new Date(proposed.at).getTime() <= now) return `Its time (${when}) has passed. The next free time shows here within the hour, or change it now.`;
   return proposed.mode === "publish"
     ? `Goes out ${when} on ${where}${proposed.handle ? ` (${proposed.handle})` : ""}, your time.`
     // No account: nothing is scheduled until one is connected (20270206040000, 20270206090000).
