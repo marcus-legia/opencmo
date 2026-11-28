@@ -1,6 +1,5 @@
 "use client";
 
-import { PostViewSwitch } from "./TopBar";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -15,20 +14,23 @@ import { PLATFORM_LABEL, type SlotStatus } from "@/lib/screens/common";
 import type { ApprovalCard as Card } from "@/lib/screens/approval-card";
 import type { ScheduleScreen } from "@/lib/screens/schedule";
 
+import { PageHeader } from "./PageHeader";
 import { PostingPlanPanel } from "./PostingPlanPanel";
 import { SamplePosts } from "./SamplePosts";
 import { useDecide } from "./useDecide";
 
-type Slot = ScheduleScreen["slots"][number];
+/** A slot, or a draft still waiting for the founder's OK drawn at the time its card proposes (`ghost`). */
+type Slot = ScheduleScreen["slots"][number] & { ghost?: boolean };
 const DAY_MS = 86_400_000;
 
 /** The artboard's four states (Calendar.dc.html legend), from the slot statuses. */
-const ST: Record<SlotStatus, [string, string]> = {
-  proposed: ["Waiting on you", "st wait"],
-  waiting_founder: ["Waiting on you", "st wait"],
-  scheduled: ["Scheduled", "st sch"],
-  posted: ["Posted", "st post"],
-  failed: ["Failed", "st make"],
+type Tone = "accent" | "ok" | "warn" | "danger" | undefined;
+const ST: Record<SlotStatus, [string, Tone]> = {
+  proposed: ["Waiting on you", "accent"],
+  waiting_founder: ["Waiting on you", "accent"],
+  scheduled: ["Scheduled", undefined],
+  posted: ["Posted", "ok"],
+  failed: ["Failed", "danger"],
 };
 
 /**
@@ -48,10 +50,48 @@ type ChanId = (typeof CHANS)[number]["id"];
  * 2026-11-24: "Scheduled" there made a founder think it would): it says the founder posts it.
  */
 const unposted = (s: Slot) => s.status === "scheduled" && s.connected === false;
-const stOf = (s: Slot): [string, string] => (unposted(s) ? ["Post it yourself", "st wait"] : ST[s.status]);
+const stOf = (s: Slot): [string, Tone] => (unposted(s) ? ["Post it yourself", "warn"] : ST[s.status]);
 
-/** Slots that have not started posting can move (the same rule as before the redesign). */
+/** Slots that have not started posting can move (the same rule as before the redesign). A waiting draft moves on its card. */
 const MOVABLE: ReadonlySet<SlotStatus> = new Set(["proposed", "waiting_founder", "scheduled"]);
+const movable = (s: Slot) => !s.ghost && MOVABLE.has(s.status);
+
+/**
+ * Post's one view switch (redesign 2026-11-28): List, Week and Month in a single control. Before, the Calendar showed
+ * List/Week and Week/Month side by side. Links, so each view has its address (`?range=month`) and Back works.
+ */
+export function PostViews({ current, from }: { current: "list" | "week" | "month"; from?: string | null }) {
+  const week = from ? `/app/schedule?from=${from}` : "/app/schedule";
+  const month = `/app/schedule?${new URLSearchParams({ ...(from ? { from } : {}), range: "month" })}`;
+  const item = (id: typeof current, label: string, href: string) => (
+    <Link href={href} aria-current={current === id ? "page" : undefined} scroll={false}>
+      {label}
+    </Link>
+  );
+  return (
+    <nav aria-label="Post view" className="ui-seg" data-testid="post-view-switch">
+      {item("list", "List", "/app/writer")}
+      {item("week", "Week", week)}
+      {item("month", "Month", month)}
+    </nav>
+  );
+}
+
+/**
+ * The drafts that wait for the founder's OK, at the time their card proposes (bug 4, 2026-11-28): only approved slots
+ * were drawn, so a week with a draft waiting for today looked empty and "Waiting on you" matched nothing. A card that
+ * already has a slot on the week is that slot, not a second item.
+ */
+function waitingDrafts(queue: Card[], slots: readonly Slot[], from: string, to: string): Slot[] {
+  const taken = new Set(slots.flatMap((s) => (s.approvalId ? [s.approvalId] : [])));
+  return queue.flatMap((c) => {
+    if (c.body.kind !== "post" || !c.body.proposed || taken.has(c.id)) return [];
+    const { at, platform, handle } = c.body.proposed;
+    const t = Date.parse(at);
+    if (!(t >= Date.parse(from) && t < Date.parse(to))) return [];
+    return [{ id: `draft-${c.id}`, at, where: { platform, handle: handle ?? "" }, title: c.title, status: "waiting_founder" as const, note: null, approvalId: c.id, ghost: true }];
+  });
+}
 
 function inZone(timezone: string) {
   const dayFmt = new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" });
@@ -83,11 +123,15 @@ function sameTimeOn(at: string, fromKey: string, toKey: string, minutesOf: (t: n
 /**
  * Calendar (Calendar.dc.html): the week of slots, a chip per channel, the picked slot in the drawer on the right. A card
  * dragged to another day keeps its time and asks again (`change_time` gives it a new card, as before); Move sets an exact
- * time. SQL checks the posting rules and says why when it refuses.
+ * time. SQL checks the posting rules and says why when it refuses. Drafts still waiting for the founder's OK show at
+ * their proposed time, dashed, and open their card.
  */
 export function CalendarView() {
-  // `?from=YYYY-MM-DD` opens that week (a card's "See it in the calendar", the old Schedule screen's links).
-  const asked = useSearchParams().get("from");
+  // `?from=YYYY-MM-DD` opens that week (a card's "See it in the calendar", the old Schedule screen's links);
+  // `?range=month` the four weeks from it (Post's view switch).
+  const params = useSearchParams();
+  const asked = params.get("from");
+  const range: "week" | "month" = params.get("range") === "month" ? "month" : "week";
   const usageState = useUsageState();
   const askedWeek = asked && /^\d{4}-\d{2}-\d{2}$/.test(asked) ? asked : null;
   const [from, setFrom] = useState<string | null>(askedWeek);
@@ -95,7 +139,6 @@ export function CalendarView() {
   useEffect(() => {
     if (askedWeek) setFrom(askedWeek);
   }, [askedWeek]);
-  const [range, setRange] = useState<"week" | "month">("week");
   const [state, reload] = useScreen("schedule", { ...(from ? { from } : {}), ...(range === "month" ? { range: "month" } : {}) });
   // The cards that wait, so a picked slot shows its post, versions and actions in the drawer (Calendar.dc.html).
   const [dash, reloadCards] = useScreen("dashboard");
@@ -113,15 +156,18 @@ export function CalendarView() {
   const days = start ? Array.from({ length: range === "month" ? 28 : 7 }, (_, i) => addDays(start, i)) : [];
   const today = zone.dayKey(Date.now());
   const only = CHANS.find((c) => c.id === chan)?.platforms ?? null;
-  const slots = (data?.slots ?? []).filter((s) => !only || (only as readonly string[]).includes(s.where.platform)).map((s) => (moved[s.id] ? { ...s, at: moved[s.id]! } : s));
   const queue = dash.status === "ready" ? ((dash.data as { queue: Card[] }).queue ?? []) : [];
-  const onDecide = useDecide(!(dash.status === "ready" && (dash.live as { queue?: boolean }).queue), () => {
+  const sampleCards = !(dash.status === "ready" && (dash.live as { queue?: boolean }).queue);
+  const allSlots: Slot[] = data ? [...data.slots, ...waitingDrafts(queue, data.slots, data.from, data.to)] : [];
+  const slots = allSlots.filter((s) => !only || (only as readonly string[]).includes(s.where.platform)).map((s) => (moved[s.id] ? { ...s, at: moved[s.id]! } : s));
+  const onDecide = useDecide(sampleCards, () => {
     reload();
     reloadCards();
   });
   // Nothing is open until the founder picks an item: the detail opens over the chat column (one working screen), and
   // Close now closes it. Before, the first waiting item was always shown and Close fell back to it.
   const sel = picked ? (slots.find((s) => s.id === picked) ?? null) : null;
+  const selCard = sel?.approvalId ? queue.find((c) => c.id === sel.approvalId) : undefined;
 
   async function move(slot: Slot, publishAt: string) {
     if (!live) {
@@ -147,184 +193,184 @@ export function CalendarView() {
     event.preventDefault();
     const id = event.dataTransfer.getData("text/plain");
     const slot = slots.find((s) => s.id === id);
-    if (!slot || !MOVABLE.has(slot.status)) return;
+    if (!slot || !movable(slot)) return;
     const fromKey = zone.dayKey(slot.at);
     if (fromKey !== key) void move(slot, sameTimeOn(slot.at, fromKey, key, zone.minutes));
   }
 
-  const title = start && end ? (range === "month" ? label(start, { month: "long", year: "numeric" }) : `${label(start, { day: "numeric" })} – ${label(end, { day: "numeric", month: "long" })}`) : "Calendar";
+  const span = start && end ? (range === "month" ? `${label(start, { day: "numeric", month: "short" })} – ${label(end, { day: "numeric", month: "short", year: "numeric" })}` : `${label(start, { day: "numeric" })} – ${label(end, { day: "numeric", month: "long" })}`) : null;
   const step = (dir: -1 | 1) => start && setFrom(addDays(start, dir * (range === "month" ? 28 : 7)));
   const chanName = (s: Slot) => PLATFORM_LABEL[s.where.platform];
+  const waitingCount = slots.filter((s) => s.status === "waiting_founder" || s.status === "proposed").length;
+  const status = data
+    ? [waitingCount ? `${waitingCount} waiting on you` : "Nothing waiting on you", `times in ${data.timezone}`].join(" · ")
+    : state.status === "loading"
+      ? "Loading the week…"
+      : null;
 
   return (
-    <div style={{ display: "flex", flexWrap: "wrap", minHeight: "calc(100vh - 48px)" }} data-testid="v2-schedule">
-      <main style={{ flex: "1 1 640px", minWidth: "0", padding: "16px 20px 32px" }}>
+    <div className="ui-post pc" data-testid="v2-schedule" data-range={range}>
+      <main className="pc-main">
+        <PageHeader title="Post calendar" status={status} actions={<PostViews current={range} from={from} />}>
+          <div className="pc-bar">
+            <div className="pc-nav">
+              <button type="button" className="ui-btn ui-btn--ghost ui-btn--icon ui-btn--sm" aria-label={range === "month" ? "Previous month" : "Previous week"} onClick={() => step(-1)}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="m15 18-6-6 6-6" />
+                </svg>
+              </button>
+              <button type="button" className="ui-btn ui-btn--ghost ui-btn--sm" onClick={() => setFrom(null)}>
+                Today
+              </button>
+              <button type="button" className="ui-btn ui-btn--ghost ui-btn--icon ui-btn--sm" aria-label={range === "month" ? "Next month" : "Next week"} onClick={() => step(1)}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="m9 18 6-6-6-6" />
+                </svg>
+              </button>
+              {span ? <span className="pc-span ui-num">{span}</span> : null}
+            </div>
+            <div role="group" aria-label="Platform" className="ui-row">
+              {CHANS.map((c) => (
+                <button key={c.id} type="button" className="ui-chip" aria-pressed={chan === c.id} onClick={() => setChan(c.id)}>
+                  {c.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </PageHeader>
+
         <AllowanceBanner state={usageState} />
         <FreeLockedCard state={usageState} where="post" />
         {/* A free account cannot connect, so nothing is written for it: fixed samples show what Post makes instead. */}
         {live && usageState?.plan === "free" && data && !data.accounts.some((a) => a.status === "connected") ? <SamplePosts /> : null}
-        <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", marginBottom: "14px" }}>
-          <button type="button" className="ib" aria-label={range === "month" ? "Previous month" : "Previous week"} onClick={() => step(-1)}>
-            <svg className="i" viewBox="0 0 24 24" aria-hidden="true">
-              <path d="m15 18-6-6 6-6" />
-            </svg>
-          </button>
-          <h1 style={{ margin: "0", fontSize: "20px", fontWeight: "600", letterSpacing: "-0.3px" }}>{title}</h1>
-          <button type="button" className="ib" aria-label={range === "month" ? "Next month" : "Next week"} onClick={() => step(1)}>
-            <svg className="i" viewBox="0 0 24 24" aria-hidden="true">
-              <path d="m9 18 6-6-6-6" />
-            </svg>
-          </button>
-          <PostViewSwitch current="week" />
-          <button type="button" className="pill" onClick={() => setFrom(null)}>
-            Today
-          </button>
-          <div className="seg" role="tablist" aria-label="Range">
-            <button type="button" role="tab" aria-selected={range === "week"} onClick={() => setRange("week")}>
-              Week
-            </button>
-            <button type="button" role="tab" aria-selected={range === "month"} onClick={() => setRange("month")}>
-              Month
-            </button>
-          </div>
-          <div style={{ flex: "1 1 auto" }}></div>
-          {CHANS.map((c) => (
-            <button key={c.id} type="button" className="chip" aria-pressed={chan === c.id} onClick={() => setChan(c.id)}>
-              {c.label}
-            </button>
-          ))}
-        </div>
 
-        <div style={{ display: "flex", gap: "14px", flexWrap: "wrap", marginBottom: "10px" }} className="meta">
-          <span>
-            <span className="st wait">Waiting on you</span>
-          </span>
-          <span>
-            <span className="st sch">Scheduled</span>
-          </span>
-          {slots.some(unposted) ? (
-            <span>
-              <span className="st wait">Post it yourself</span> no account connected
-            </span>
-          ) : null}
-          <span>
-            <span className="st post">Posted</span>
-          </span>
-          <span>
-            <span className="st make">Failed</span>
-          </span>
-          <span style={{ marginLeft: "auto" }}>Drag a card to another day to move it. Ferreto asks before it changes a time.</span>
-        </div>
+        {state.status === "error" ? <p className="ui-t-sm ui-muted">{state.message}</p> : null}
 
         {data ? (
-          <PostingPlanPanel
-            initial={data.postingPlan}
-            accounts={data.accounts}
-            live={state.status === "ready" && state.live.postingPlan}
-            onSaved={reload}
-          />
+          <>
+            <div className="pc-legend ui-t-xs ui-muted">
+              <span className="ui-chip pc-ghost-chip" data-tone="accent">
+                Waiting on you
+              </span>
+              <span className="ui-chip">Scheduled</span>
+              {slots.some(unposted) ? (
+                <span>
+                  <span className="ui-chip" data-tone="warn">
+                    Post it yourself
+                  </span>{" "}
+                  no account connected
+                </span>
+              ) : null}
+              <span className="ui-chip" data-tone="ok">
+                Posted
+              </span>
+              <span className="ui-chip" data-tone="danger">
+                Failed
+              </span>
+              <span className="pc-legend__hint">Drag a post to another day to move it. Ferreto asks before it changes a time.</span>
+            </div>
+            <div className="pc-grid" data-range={range}>
+              {days.map((key) => {
+                const items = slots.filter((s) => zone.dayKey(s.at) === key).sort((a, b) => a.at.localeCompare(b.at));
+                return (
+                  <div key={key} className="pc-day" data-today={key === today || undefined} data-empty={items.length ? undefined : ""} data-day={key} onDragOver={(e) => e.preventDefault()} onDrop={(e) => drop(e, key)}>
+                    <div className="pc-day__head">
+                      <span>{label(key, { weekday: "short" })}</span>
+                      <b className="ui-num">{label(key, { day: "numeric" })}</b>
+                    </div>
+                    {items.map((e) => {
+                      const [stLabel, tone] = stOf(e);
+                      return (
+                        <button
+                          key={e.id}
+                          type="button"
+                          className="pc-ev"
+                          data-slot-id={e.ghost ? undefined : e.id}
+                          data-ghost={e.ghost || undefined}
+                          data-testid={e.ghost ? "calendar-waiting-draft" : undefined}
+                          aria-pressed={sel?.id === e.id}
+                          draggable={movable(e)}
+                          onDragStart={(ev) => ev.dataTransfer.setData("text/plain", e.id)}
+                          onClick={() => setPicked(e.id)}
+                        >
+                          <span className="pc-ev__time ui-num">
+                            {zone.time(e.at)} · {chanName(e)}
+                          </span>
+                          <span className="pc-ev__title">{e.title}</span>
+                          <span className="pc-ev__state">
+                            {e.status === "failed" ? <FailedMark /> : null}
+                            <span className="ui-chip" data-tone={tone} data-testid="slot-state">
+                              {stLabel}
+                            </span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+          </>
         ) : null}
 
-        {state.status === "error" ? <div className="meta">{state.message}</div> : null}
-        {state.status === "loading" ? <div className="meta">Loading the week…</div> : null}
+        {!sel && !slots.length ? (
+          <p className="ui-t-sm ui-muted pc-empty" data-testid="calendar-empty">
+            {/* Until the week is read, "nothing on the calendar" would be a guess. */}
+            {data ? `Nothing on the calendar this ${range}. Drafts waiting for your OK and approved posts show here at their time.` : state.status === "error" ? null : "Loading…"}
+          </p>
+        ) : null}
 
         {data ? (
-          <div className="grid">
-            {days.map((key) => {
-              const items = slots.filter((s) => zone.dayKey(s.at) === key).sort((a, b) => a.at.localeCompare(b.at));
-              return (
-                <div
-                  key={key}
-                  className={key === today ? "day today" : "day"}
-                  data-day={key}
-                  style={range === "month" ? { minHeight: "140px", borderBottom: "1px solid var(--line)" } : undefined}
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={(e) => drop(e, key)}
-                >
-                  <div className="dh">
-                    <span className="meta">{label(key, { weekday: "short" })}</span>
-                    <b style={{ fontSize: "14px", fontWeight: "600" }}>{label(key, { day: "numeric" })}</b>
-                  </div>
-                  {items.map((e) => (
-                    <button
-                      key={e.id}
-                      type="button"
-                      className="ev"
-                      data-slot-id={e.id}
-                      aria-pressed={sel?.id === e.id}
-                      draggable={MOVABLE.has(e.status)}
-                      onDragStart={(ev) => ev.dataTransfer.setData("text/plain", e.id)}
-                      onClick={() => setPicked(e.id)}
-                    >
-                      <span className="t">
-                        {zone.time(e.at)} · {chanName(e)}
-                      </span>
-                      <span className="n">{e.title}</span>
-                      <span>
-                        {e.status === "failed" ? <FailedMark /> : null}
-                        <span className={stOf(e)[1]} data-testid="slot-state">{stOf(e)[0]}</span>
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              );
-            })}
-          </div>
+          <PostingPlanPanel initial={data.postingPlan} accounts={data.accounts} live={state.status === "ready" && state.live.postingPlan} onSaved={reload} />
         ) : null}
       </main>
 
-      {!sel && !slots.length ? (
-        <p className="meta" style={{ flex: "1 1 100%", padding: "0 20px 24px", margin: "0" }} data-testid="calendar-empty">
-          {/* Until the week is read, "nothing on the calendar" would be a guess. */}
-          {data ? `Nothing on the calendar this ${range}. Approved posts show here at their time.` : state.status === "error" ? null : "Loading…"}
-        </p>
-      ) : null}
-      <aside className="drawer" aria-label="Selected item" hidden={!sel}>
+      <aside className="drawer pc-drawer" aria-label="Selected item" hidden={!sel}>
         {sel ? (
           <>
-            <div style={{ height: "48px", display: "flex", alignItems: "center", gap: "8px", padding: "0 12px 0 16px", borderBottom: "1px solid var(--line)" }}>
-              <span style={{ fontWeight: "600" }}>{chanName(sel)}</span>
-              <span className="meta">
-                · {label(zone.dayKey(sel.at), { weekday: "short", day: "numeric", month: "short" })} {zone.time(sel.at)}
+            <div className="pc-drawer__head">
+              <span className="ui-t-sm">
+                <b>{chanName(sel)}</b>{" "}
+                <span className="ui-muted ui-num">
+                  · {label(zone.dayKey(sel.at), { weekday: "short", day: "numeric", month: "short" })} {zone.time(sel.at)}
+                </span>
               </span>
-              <div style={{ flex: "1 1 auto" }}></div>
-              <button type="button" className="ib" aria-label="Close" onClick={() => setPicked(null)}>
-                <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
+              <button type="button" className="ui-btn ui-btn--quiet ui-btn--icon ui-btn--sm" aria-label="Close" onClick={() => setPicked(null)}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="M18 6 6 18" />
                   <path d="m6 6 12 12" />
                 </svg>
               </button>
             </div>
-            <div style={{ padding: "16px", display: "flex", flexDirection: "column", gap: "12px", flex: "1 1 auto" }}>
+            <div className="pc-drawer__body">
               <div>
-                <span className={stOf(sel)[1]}>{stOf(sel)[0]}</span>
+                <span className="ui-chip" data-tone={stOf(sel)[1]}>
+                  {stOf(sel)[0]}
+                </span>
               </div>
-              <h2 style={{ margin: "0", fontSize: "17px", fontWeight: "600", letterSpacing: "-0.2px" }}>{sel.title}</h2>
-              <div className="meta">
-                {sel.where.handle ? `${chanName(sel)} · ${sel.where.handle}` : chanName(sel)}
+              <h2 className="pc-drawer__title">{sel.title}</h2>
+              <p className="ui-t-xs ui-muted">
+                {sel.ghost ? "A draft: approve it on its card and it goes out at this time." : sel.where.handle ? `${chanName(sel)} · ${sel.where.handle}` : chanName(sel)}
                 {sel.note && !(unposted(sel) && sel.note === "post it yourself") ? ` · ${sel.note}` : ""}
-              </div>
+              </p>
               {unposted(sel) ? (
-                <p className="meta" style={{ margin: "0" }} data-testid="slot-not-connected">
+                <p className="ui-t-sm ui-muted" data-testid="slot-not-connected">
                   No {chanName(sel)} account is connected, so this does not go out on its own. Post it yourself at this time, or connect {chanName(sel)} and it goes out by itself.
                 </p>
               ) : null}
-              {(() => {
-                const card = sel.approvalId ? queue.find((c) => c.id === sel.approvalId) : undefined;
-                return card ? (
-                  <div className="td-cardhost">
-                    <ApprovalCard card={card} sample={!(dash.status === "ready" && (dash.live as { queue?: boolean }).queue)} onDecide={onDecide} open />
-                  </div>
-                ) : null;
-              })()}
+              {selCard ? (
+                <div className="td-cardhost">
+                  <ApprovalCard card={selCard} sample={sampleCards} onDecide={onDecide} open />
+                </div>
+              ) : null}
               {moving === sel.id ? (
                 <MoveForm slot={sel} timezone={data?.timezone ?? "UTC"} onCancel={() => setMoving(null)} onMove={(at) => (setMoving(null), void move(sel, at))} />
               ) : null}
             </div>
-            <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end", padding: "12px 16px", borderTop: "1px solid var(--line)" }}>
-              {MOVABLE.has(sel.status) ? (
-                <button type="button" className="ghost" onClick={() => setMoving(sel.id)}>
-                  <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
+            <div className="pc-drawer__foot">
+              {movable(sel) ? (
+                <button type="button" className="ui-btn ui-btn--ghost" onClick={() => setMoving(sel.id)}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <rect width="18" height="18" x="3" y="4" rx="2" />
                     <path d="M16 2v4" />
                     <path d="M8 2v4" />
@@ -333,25 +379,25 @@ export function CalendarView() {
                   Move
                 </button>
               ) : null}
-              {sel.approvalId && (sel.status === "waiting_founder" || sel.status === "proposed") && !queue.some((c) => c.id === sel.approvalId) ? (
-                <Link href={`/app/inbox/${encodeURIComponent(sel.approvalId)}`} className="primary" style={{ textDecoration: "none" }}>
+              {sel.approvalId && (sel.status === "waiting_founder" || sel.status === "proposed") && !selCard ? (
+                <Link href={`/app/inbox/${encodeURIComponent(sel.approvalId)}`} className="ui-btn ui-btn--primary">
                   Review and approve
                 </Link>
               ) : sel.url ? (
-                <a href={sel.url} target="_blank" rel="noopener noreferrer" className="primary" style={{ textDecoration: "none" }}>
+                <a href={sel.url} target="_blank" rel="noopener noreferrer" className="ui-btn ui-btn--primary">
                   Open the post
                 </a>
-              ) : sel.status === "failed" && sel.approvalId && !queue.some((c) => c.id === sel.approvalId) ? (
+              ) : sel.status === "failed" && sel.approvalId && !selCard ? (
                 // A post that did not go out stays on its day; its card offers Retry at the approved time.
-                <Link href={`/app/inbox/${encodeURIComponent(sel.approvalId)}`} className="primary" style={{ textDecoration: "none" }}>
+                <Link href={`/app/inbox/${encodeURIComponent(sel.approvalId)}`} className="ui-btn ui-btn--primary">
                   Retry
                 </Link>
               ) : unposted(sel) ? (
-                <Link href="/app/settings#settings-connected-accounts" className="primary" style={{ textDecoration: "none" }} data-testid="slot-connect">
+                <Link href="/app/settings#settings-connected-accounts" className="ui-btn ui-btn--primary" data-testid="slot-connect">
                   Connect {chanName(sel)}
                 </Link>
               ) : sel.status === "failed" && sel.note !== "missed" && !sel.approvalId ? (
-                <Link href="/app/settings#settings-connected-accounts" className="primary" style={{ textDecoration: "none" }}>
+                <Link href="/app/settings#settings-connected-accounts" className="ui-btn ui-btn--primary">
                   Fix the account
                 </Link>
               ) : null}
@@ -366,7 +412,7 @@ export function CalendarView() {
 /** A post that did not go out: an alert mark next to its status, so it stands out on the week. */
 function FailedMark() {
   return (
-    <svg className="i s" viewBox="0 0 24 24" role="img" aria-label="Did not go out" style={{ color: "var(--warn)", marginRight: "4px", verticalAlign: "-2px" }}>
+    <svg className="pc-failed" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" role="img" aria-label="Did not go out">
       <circle cx="12" cy="12" r="10" />
       <path d="M12 8v4" />
       <path d="M12 16h.01" />
@@ -386,16 +432,16 @@ function MoveForm({ slot, timezone, onMove, onCancel }: { slot: Slot; timezone: 
     onMove(new Date(guess + offset).toISOString());
   }
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-      <label className="meta" htmlFor="move-at">
+    <div className="pc-move">
+      <label className="ui-label" htmlFor="move-at">
         New time ({timezone})
       </label>
-      <input id="move-at" type="datetime-local" value={value} onChange={(e) => setValue(e.target.value)} style={{ height: "32px", padding: "0 8px", border: "1px solid var(--line-2)", borderRadius: "7px", background: "var(--bg)", color: "var(--text)", font: "inherit" }} />
-      <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
-        <button type="button" className="ghost" onClick={onCancel}>
+      <input id="move-at" className="ui-input" type="datetime-local" value={value} onChange={(e) => setValue(e.target.value)} />
+      <div className="ui-row pc-move__acts">
+        <button type="button" className="ui-btn ui-btn--quiet" onClick={onCancel}>
           Cancel
         </button>
-        <button type="button" className="primary" onClick={submit}>
+        <button type="button" className="ui-btn ui-btn--primary" onClick={submit}>
           Save the time
         </button>
       </div>

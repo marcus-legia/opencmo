@@ -12,9 +12,10 @@ import { profileOf } from "@/lib/cmo/platforms";
 import { LINKEDIN_SHARE, threadsIntent, xIntent } from "@/lib/departments/publish/intent";
 import { liveCheck, REDDIT_TITLE_MAX } from "@/lib/composer/live-check";
 import { sampleCheck, sampleContext } from "@/lib/composer/sample";
-import { COMPOSE_PLATFORMS, type AccountContext, type ComposeCheckOutput, type ComposeIssue, type ComposePlatform, type ComposerContext } from "@/lib/composer/types";
+import { COMPOSE_PLATFORMS, type AccountContext, type ComposeCheckOutput, type ComposeIssue, type ComposePlatform, type ComposerContext, type SubredditContext } from "@/lib/composer/types";
 import { createClient } from "@/lib/supabase/client";
 
+import { PageHeader } from "./PageHeader";
 import { PlatformBadge } from "./platform-logos";
 
 /**
@@ -143,12 +144,28 @@ function Editor({ id, label, value, onChange, issues, rows, maxLength, single }:
   );
 }
 
-const LEVEL: Record<ComposerContext["readiness"]["level"], [string, string]> = {
-  ready: ["Account ready", "badge b-ok"],
-  caution: ["Go carefully", "badge b-wait"],
-  not_ready: ["Account not ready", "badge b-wait"],
-  unknown: ["Account unknown", "badge b-plan"],
+const LEVEL: Record<ComposerContext["readiness"]["level"], [string, "ok" | "warn" | undefined]> = {
+  ready: ["Account ready", "ok"],
+  caution: ["Go carefully", "warn"],
+  not_ready: ["Account not ready", "warn"],
+  unknown: ["Account unknown", undefined],
 };
+
+const VERDICT: Partial<Record<SubredditContext["verdict"], string>> = {
+  requires_disclosure: "say you built it",
+  no_product_mention: "no product mentions",
+  skip: "not a place to post about a product",
+};
+
+/** The rules' summary line, so they can stay folded: "11 rules · 100 karma · accounts 30+ days · promotion in a weekly thread". */
+function rulesSummary(s: SubredditContext): string {
+  const parts = [`${s.rules.length} ${s.rules.length === 1 ? "rule" : "rules"}`];
+  if (s.minKarma) parts.push(`${s.minKarma.toLocaleString("en-US")}+ karma`);
+  if (s.minAccountAgeDays) parts.push(`accounts ${s.minAccountAgeDays}+ days old`);
+  if (s.megathread) parts.push("promotion in a weekly thread");
+  if (VERDICT[s.verdict]) parts.push(VERDICT[s.verdict]!);
+  return parts.join(" · ");
+}
 
 function accountLine(a: AccountContext, sub: string): string {
   const parts: string[] = [];
@@ -164,95 +181,99 @@ function accountLine(a: AccountContext, sub: string): string {
 
 function BeforeYouWrite({ context, sub, loading, error }: { context: ComposerContext; sub: string; loading: boolean; error: string | null }) {
   const s = context.subreddit;
-  const [label, badge] = LEVEL[context.readiness.level];
+  const [label, tone] = LEVEL[context.readiness.level];
   return (
-    <section className="card cmp-before" aria-labelledby="cmp-before-title" data-testid="composer-before">
-      <h2 id="cmp-before-title" className="cmp-h2">
-        Before you write
+    <section className="ui-card pcm-before" aria-labelledby="cmp-before-title" data-testid="composer-before">
+      <div className="ui-card__head">
+        <h2 id="cmp-before-title">{s ? `Before you post in r/${s.name}` : "Before you write"}</h2>
         {s ? (
-          <span className={badge} data-testid="composer-readiness" data-level={context.readiness.level}>
+          <span className="ui-chip" data-tone={tone} data-testid="composer-readiness" data-level={context.readiness.level}>
             {label}
           </span>
         ) : null}
-      </h2>
+      </div>
       {error ? (
-        <p className="meta" role="alert" style={{ color: "var(--warn)" }}>
+        <p className="ui-t-sm pcm-warn" role="alert">
           {error}
         </p>
       ) : null}
-      {loading && !s ? <p className="meta">Reading r/{sub}&apos;s rules…</p> : null}
-      {!s && !loading && !error ? <p className="meta">Type a subreddit to see its rules.</p> : null}
+      {loading && !s ? <p className="ui-t-sm ui-muted">Reading r/{sub}&apos;s rules…</p> : null}
+      {!s && !loading && !error ? <p className="ui-t-sm ui-muted">Type a subreddit to see its rules.</p> : null}
       {s ? (
-        <>
-          <p className="cmp-line">
-            <b>Account:</b> {context.account.username ? `u/${context.account.username} · ` : ""}
-            {accountLine(context.account, s.name)}
+        <div className="ui-stack">
+          <p className="ui-t-sm">
+            <b>Account:</b> {[context.account.username ? `u/${context.account.username}` : "", accountLine(context.account, s.name)].filter(Boolean).join(" · ") || "not added yet"}
           </p>
           {context.readiness.level === "unknown" ? (
-            <p className="meta">
+            <p className="ui-t-sm ui-muted">
               Add your karma and account age in <Link href="/app/settings#settings-reddit">Settings</Link> (as on your Reddit profile) to see if r/{s.name} will let the post through.
             </p>
           ) : null}
           {context.readiness.reasons.length ? (
-            <ul className="cmp-reasons" data-testid="composer-reasons">
+            <ul className="pcm-reasons" data-testid="composer-reasons">
               {context.readiness.reasons.map((r) => (
                 <li key={r}>{r}</li>
               ))}
             </ul>
           ) : null}
-          {s.summary ? <p className="cmp-line">{s.summary}</p> : null}
-          {s.megathread ? <p className="meta">r/{s.name} keeps promotion in a weekly thread.</p> : null}
-          {s.rules.length ? (
-            <details className="cmp-rules" open>
-              <summary>
-                <b>Rules of r/{s.name}</b> <span className="meta">({s.rules.length})</span>
+          {s.summary ? <p className="ui-t-sm">{s.summary}</p> : null}
+          {/* Folded, so Title and Body stay on screen (2026-11-28: eleven rules pushed them below the fold). The summary
+              names the limits that decide whether the post stays up. */}
+          {s.rules.length || s.submitText || s.guide.avoid.length || s.guide.use.length ? (
+            <details className="ui-disclosure pcm-rules" open={s.rules.length <= 4}>
+              <summary data-testid="composer-rules-summary">
+                <span>
+                  <b>Rules of r/{s.name}</b> · {rulesSummary(s)}
+                </span>
               </summary>
-              <ol data-testid="composer-rules">
-                {s.rules.map((r) => (
-                  <li key={r.n} value={r.n}>
-                    <b>{r.title}</b>
-                    {r.text ? <div className="meta">{r.text}</div> : null}
-                  </li>
-                ))}
-              </ol>
+              <div className="ui-stack">
+                {s.rules.length ? (
+                  <ol data-testid="composer-rules">
+                    {s.rules.map((r) => (
+                      <li key={r.n} value={r.n}>
+                        <b>{r.title}</b>
+                        {r.text ? <div className="ui-t-xs ui-muted">{r.text}</div> : null}
+                      </li>
+                    ))}
+                  </ol>
+                ) : null}
+                {s.submitText ? (
+                  <div>
+                    <p className="ui-label">What r/{s.name} asks before you post</p>
+                    <p className="ui-t-xs ui-muted pcm-pre">{s.submitText}</p>
+                  </div>
+                ) : null}
+                {s.guide.avoid.length || s.guide.use.length ? (
+                  <div className="pcm-guide">
+                    {s.guide.avoid.length ? (
+                      <div>
+                        <p className="ui-label">Avoid</p>
+                        <ul>
+                          {s.guide.avoid.map((a) => (
+                            <li key={a}>{a}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+                    {s.guide.use.length ? (
+                      <div>
+                        <p className="ui-label">Use</p>
+                        <ul>
+                          {s.guide.use.map((u) => (
+                            <li key={u}>{u}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
             </details>
           ) : null}
-          {s.submitText ? (
-            <details className="cmp-rules">
-              <summary>
-                <b>What r/{s.name} asks before you post</b>
-              </summary>
-              <p className="meta" style={{ whiteSpace: "pre-wrap" }}>
-                {s.submitText}
-              </p>
-            </details>
-          ) : null}
-          <div className="cmp-guide">
-            {s.guide.avoid.length ? (
-              <div>
-                <b>Avoid</b>
-                <ul>
-                  {s.guide.avoid.map((a) => (
-                    <li key={a}>{a}</li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-            {s.guide.use.length ? (
-              <div>
-                <b>Use</b>
-                <ul>
-                  {s.guide.use.map((u) => (
-                    <li key={u}>{u}</li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-          </div>
-          <p className="meta" style={{ margin: "0" }}>
+          <p className="ui-t-xs ui-subtle">
             Rules read {new Date(s.readAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}. Following them makes removal less likely; nothing guarantees a post stays up.
           </p>
-        </>
+        </div>
       ) : null}
     </section>
   );
@@ -261,29 +282,29 @@ function BeforeYouWrite({ context, sub, loading, error }: { context: ComposerCon
 function IssueList({ issues, onApply, onIgnore }: { issues: ComposeIssue[]; onApply: (i: ComposeIssue) => void; onIgnore: (i: ComposeIssue) => void }) {
   if (!issues.length) return null;
   return (
-    <ul className="cmp-issues" aria-label="What to fix" data-testid="composer-issues">
+    <ul className="pcm-issues" aria-label="What to fix" data-testid="composer-issues">
       {issues.map((i) => (
-        <li key={issueKey(i)} className="cmp-issue" data-severity={i.severity} data-source={i.source} data-testid="composer-issue">
-          <div className="cmp-issue-head">
-            <span className={i.severity === "block" ? "badge b-wait" : "badge b-plan"}>{i.severity === "block" ? "Fix" : "Check"}</span>
+        <li key={issueKey(i)} className="pcm-issue" data-severity={i.severity} data-source={i.source} data-testid="composer-issue">
+          <div className="pcm-issue__head">
+            <span className="ui-chip" data-tone={i.severity === "block" ? "danger" : "warn"}>{i.severity === "block" ? "Fix" : "Check"}</span>
             <b>{i.rule}</b>
-            {i.source === "ai" ? <span className="meta">· AI check</span> : null}
+            {i.source === "ai" ? <span className="ui-muted">· AI check</span> : null}
           </div>
-          {i.quote ? <q className="cmp-quote">{i.quote}</q> : null}
-          <div className="meta">{i.why}</div>
+          {i.quote ? <q className="pcm-quote">{i.quote}</q> : null}
+          <div className="ui-muted">{i.why}</div>
           {i.suggestion ? (
-            <div className="cmp-suggest">
+            <div className="pcm-suggest">
               Try: <span>{i.suggestion}</span>
             </div>
           ) : null}
           {i.source === "ai" ? (
-            <div className="cmp-issue-actions">
+            <div className="ui-row">
               {i.suggestion && i.quote ? (
-                <button type="button" className="ghost" onClick={() => onApply(i)} data-testid="composer-apply">
+                <button type="button" className="ui-btn ui-btn--ghost ui-btn--sm" onClick={() => onApply(i)} data-testid="composer-apply">
                   Apply
                 </button>
               ) : null}
-              <button type="button" className="skip" onClick={() => onIgnore(i)} data-testid="composer-ignore">
+              <button type="button" className="ui-btn ui-btn--quiet ui-btn--sm" onClick={() => onIgnore(i)} data-testid="composer-ignore">
                 Ignore
               </button>
             </div>
@@ -401,12 +422,21 @@ export function Composer() {
     return () => clearTimeout(t);
   }, [booted, key, title, body]);
 
-  // The sub is read when the founder leaves the field or presses Enter, not while typing: each new sub may cost a
-  // provider read (review 2026-11-25).
+  // The sub is read when the founder pauses typing (900 ms), leaves the field or presses Enter: not on every key, as
+  // each new sub may cost a provider read (review 2026-11-25), and not only on blur, which left the rules unread while
+  // the founder went straight to the title (2026-11-28).
   function commitSub() {
     const s = cleanSub(subInput);
     if (s === "" || SUB_NAME.test(s)) setSub(s);
   }
+  useEffect(() => {
+    if (!booted) return;
+    const t = setTimeout(() => {
+      const s = cleanSub(subInput);
+      if (s === "" || SUB_NAME.test(s)) setSub(s);
+    }, 900);
+    return () => clearTimeout(t);
+  }, [booted, subInput]);
 
   const loadContext = useCallback(async () => {
     if (platform !== "reddit") {
@@ -417,6 +447,20 @@ export function Composer() {
     if (!sub) {
       setContext((was) => localContext("reddit", was.account));
       setCtxError(null);
+      if (sample) return;
+      // The account saved in Settings › Reddit, before any sub is typed (2026-11-28: the username stayed empty until a
+      // sub's rules loaded). Without a sub the route reads only the profile: no provider, no credit.
+      const ask = ++asked.current;
+      try {
+        const ctx = await api<ComposerContext>(`/composer/context?${new URLSearchParams({ platform: "reddit" })}`);
+        if (ask !== asked.current) return;
+        setContext((was) => ({ ...was, account: ctx.account }));
+        setUserInput((u) => u || ctx.account.username || "");
+      } catch {
+        // Not read: the field stays empty for the founder to fill, as before.
+      } finally {
+        if (ask === asked.current) setLoading(false);
+      }
       return;
     }
     if (sample) {
@@ -567,58 +611,56 @@ export function Composer() {
   const canOpen = body.trim().length > 0 && (platform !== "reddit" || (sub !== "" && title.trim().length > 0));
 
   return (
-    <div data-sec="post" className="cmp" data-testid="v2-composer">
-      <main className="cmp-main">
-        <div className="sec-band">
-          <span className="sec-tile">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M12 20h9" />
-              <path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z" />
-            </svg>
-          </span>
-          <h1>Composer</h1>
-          {sample ? <span className="sec-chip">Sample data</span> : null}
-          <span style={{ marginLeft: "auto" }}>
-            <Link href="/app/writer" className="meta">
-              Posts
-            </Link>
-          </span>
-        </div>
-        <p className="meta cmp-intro">You write the post. Ferreto checks it against {platform === "reddit" ? "the sub's rules" : `${LABEL[platform]}'s norms`} and flags lines that read as AI. You post it from your own account.</p>
+    <div className="ui-post pcm" data-testid="v2-composer">
+      <main className="pcm-main">
+        <PageHeader
+          title="Post composer"
+          status={`You write the post. Ferreto checks it against ${platform === "reddit" ? "the sub's rules" : `${LABEL[platform]}'s norms`} and flags lines that read as AI. You post it from your own account.`}
+          actions={
+            <>
+              {sample ? <span className="ui-chip">Sample data</span> : null}
+              <Link href="/app/writer" className="ui-btn ui-btn--ghost">
+                Posts
+              </Link>
+            </>
+          }
+        />
 
-        <div className="cmp-toolbar">
-          <span role="group" aria-label="Write for" className="cmp-platforms">
+        <div className="pcm-toolbar">
+          <span role="group" aria-label="Write for" className="ui-seg pcm-platforms">
             {COMPOSE_PLATFORMS.map((p) => (
-              <button key={p} type="button" className="pick-btn" aria-pressed={platform === p} onClick={() => setPlatform(p)} data-testid={`composer-platform-${p}`}>
-                <PlatformBadge platform={p} size={24} />
+              <button key={p} type="button" aria-pressed={platform === p} onClick={() => setPlatform(p)} data-testid={`composer-platform-${p}`}>
+                <PlatformBadge platform={p} size={16} />
                 {LABEL[p]}
               </button>
             ))}
           </span>
           {platform === "reddit" ? (
-            <>
-              <label className="cmp-inline">
-                <span>r/</span>
+            <span className="pcm-who">
+              <label className="pcm-inline">
+                <span aria-hidden="true">r/</span>
                 <input type="text" value={subInput} onChange={(e) => setSubInput(e.target.value)} onBlur={commitSub} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commitSub(); } }} placeholder="SaaS" aria-label="Subreddit" maxLength={24} data-testid="composer-sub" />
               </label>
-              <label className="cmp-inline">
-                <span>u/</span>
+              <label className="pcm-inline">
+                <span aria-hidden="true">u/</span>
                 <input type="text" value={userInput} onChange={(e) => setUserInput(e.target.value)} onBlur={() => void saveUsername()} placeholder="your_username" aria-label="Your Reddit username" maxLength={24} data-testid="composer-username" />
               </label>
               {userNote ? (
-                <span className="meta" role="status">
+                <span className="ui-t-xs ui-muted" role="status">
                   {userNote}
                 </span>
               ) : null}
-            </>
+            </span>
           ) : null}
         </div>
 
         {platform === "reddit" ? <BeforeYouWrite context={context} sub={sub} loading={loading} error={ctxError} /> : (
-          <section className="card cmp-before" data-testid="composer-before">
-            <h2 className="cmp-h2">{LABEL[platform]}</h2>
-            {profile ? <p className="cmp-line">{profile.tone}</p> : null}
-            <p className="meta" style={{ margin: "0" }}>
+          <section className="ui-card pcm-before" data-testid="composer-before">
+            <div className="ui-card__head">
+              <h2>{LABEL[platform]}</h2>
+            </div>
+            {profile ? <p className="ui-t-sm">{profile.tone}</p> : null}
+            <p className="ui-t-xs ui-muted">
               Up to {profile?.limit.toLocaleString("en-US")} characters, no hashtags, the link in a reply. Your daily drafts stay in <Link href="/app/writer">Posts</Link>; open one here to rework it.
             </p>
           </section>
@@ -628,62 +670,65 @@ export function Composer() {
           <Editor id="composer-title" label="Title" value={title} onChange={setTitle} issues={issues.filter((i) => i.field === "title")} rows={1} maxLength={REDDIT_TITLE_MAX + 50} single />
         ) : null}
         <Editor id="composer-body" label={platform === "reddit" ? "Body" : "Post"} value={body} onChange={setBody} issues={issues.filter((i) => i.field === "body")} rows={platform === "reddit" ? 14 : 9} />
-        <div className="cmp-count meta" data-testid="composer-count">
+        <div className="pcm-count ui-t-xs ui-muted ui-num" data-testid="composer-count">
           {platform === "reddit" ? `Title ${title.length}/${REDDIT_TITLE_MAX} · ` : ""}
           {body.length.toLocaleString("en-US")}
           {profile ? `/${profile.limit.toLocaleString("en-US")}` : ""} characters
           {issues.length ? ` · ${issues.length} to look at${blocks ? `, ${blocks} to fix` : ""}` : body ? " · nothing flagged" : ""}
         </div>
 
-        <div className="cmp-actions">
+        <div className="pcm-actions">
           {active ? (
-            <span className="chip">
-              <span className="live"></span>Checking against {where}…
+            <span className="ui-chip ui-chip--dot" data-tone="accent">
+              Checking against {where}…
             </span>
           ) : checkStep === "idle" ? (
-            <button type="button" className="ghost" disabled={!canCheck} onClick={() => setCheckStep("confirm")} data-testid="composer-check" title={inputBytes > CHECK_INPUT_MAX ? "The check reads posts up to about 3,800 characters" : undefined}>
+            <button type="button" className="ui-btn ui-btn--ghost" disabled={!canCheck} onClick={() => setCheckStep("confirm")} data-testid="composer-check" title={inputBytes > CHECK_INPUT_MAX ? "The check reads posts up to about 3,800 characters" : undefined}>
               Check against {platform === "reddit" ? `${where} rules` : `${LABEL[platform]}'s norms`} · {CHECK_CREDITS} {CHECK_CREDITS === 1 ? "credit" : "credits"}
             </button>
           ) : (
-            <span className="cmp-confirm" role="group" aria-label="Confirm the check">
-              <span className="meta" data-testid="composer-check-cost">
+            <span className="pcm-confirm" role="group" aria-label="Confirm the check">
+              <span className="ui-t-xs ui-muted" data-testid="composer-check-cost">
                 One AI pass flags sentences against {platform === "reddit" ? `${where}'s rules` : `${LABEL[platform]}'s norms`} and no-AI-slop. {costLine(CHECK_CREDITS)}
               </span>
-              <button type="button" className="skip" disabled={checkStep === "busy"} onClick={() => setCheckStep("idle")}>
+              <button type="button" className="ui-btn ui-btn--quiet" disabled={checkStep === "busy"} onClick={() => setCheckStep("idle")}>
                 Cancel
               </button>
-              <button type="button" className="primary" disabled={checkStep === "busy"} onClick={() => void startCheck()} data-testid="composer-check-start">
+              <button type="button" className="ui-btn ui-btn--primary" disabled={checkStep === "busy"} onClick={() => void startCheck()} data-testid="composer-check-start">
                 {checkStep === "busy" ? "Starting…" : "Check it"}
               </button>
             </span>
           )}
-          <button type="button" className="primary" disabled={!canOpen} onClick={() => void copyAndOpen()} data-testid="composer-open">
+          <button type="button" className="ui-btn ui-btn--primary" disabled={!canOpen} onClick={() => void copyAndOpen()} data-testid="composer-open">
             {copied ? "Copied · page opened" : target.label}
           </button>
         </div>
-        {inputBytes > CHECK_INPUT_MAX || body.trim().length > CHECK_BODY_MAX ? <p className="meta">The AI check reads posts up to 3,000 characters. The code checks above still run.</p> : null}
+        {inputBytes > CHECK_INPUT_MAX || body.trim().length > CHECK_BODY_MAX ? <p className="ui-t-xs ui-muted">The AI check reads posts up to 3,000 characters. The code checks above still run.</p> : null}
         {copyFailed ? (
-          <p className="meta" role="alert" data-testid="composer-copy-failed">
+          <p className="ui-t-sm pcm-warn" role="alert" data-testid="composer-copy-failed">
             The text was not copied. Select it above, copy it, then paste it on the page that opened.
           </p>
         ) : null}
         {checkError ? (
-          <p className="meta" role="alert" style={{ color: "var(--warn)" }}>
+          <p className="ui-t-sm pcm-warn" role="alert">
             {checkError}
           </p>
         ) : null}
-        {blocks && canOpen ? <p className="meta">Lines marked Fix are likely to get the post removed. You decide what goes out.</p> : null}
+        {blocks && canOpen ? <p className="ui-t-xs ui-muted">Lines marked Fix are likely to get the post removed. You decide what goes out.</p> : null}
       </main>
 
-      <aside className="cmp-side" aria-label="Checks">
-        <section className="card">
-          <h2 className="cmp-h2">What to look at</h2>
+      <aside className="pcm-side" aria-label="Checks">
+        <section className="ui-card">
+          <div className="ui-card__head">
+            <h2>What to look at</h2>
+            {issues.length ? <span className="ui-chip ui-num">{issues.length}</span> : null}
+          </div>
           {aiSummary ? (
-            <p className="cmp-line" data-testid="composer-ai-summary">
+            <p className="ui-t-sm" data-testid="composer-ai-summary">
               {aiSummary}
             </p>
           ) : null}
-          {issues.length ? <IssueList issues={issues} onApply={apply} onIgnore={ignore} /> : <p className="meta">{body ? "Nothing flagged so far." : "Checks show here as you write."}</p>}
+          {issues.length ? <IssueList issues={issues} onApply={apply} onIgnore={ignore} /> : <p className="ui-t-sm ui-muted">{body ? "Nothing flagged so far." : "Checks show here as you write."}</p>}
         </section>
       </aside>
       <PlanSheet open={planFor !== null} onClose={() => setPlanFor(null)} action={planFor ?? undefined} />

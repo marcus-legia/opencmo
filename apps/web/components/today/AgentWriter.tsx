@@ -15,10 +15,11 @@ import { PLATFORM_LABEL } from "@/lib/screens/common";
 import type { WriterScreen } from "@/lib/screens/writer";
 import { formatWhen, fromLocalInput, localMonday, toLocalInput } from "@/lib/time-zone";
 
+import { PostViews } from "./CalendarView";
 import { KIND_ICON, PLATFORM_ICON } from "./cards";
+import { PageHeader } from "./PageHeader";
 import { PlatformBadge } from "./platform-logos";
 import { whereSaid } from "./LibraryView";
-import { PostViewSwitch } from "./TopBar";
 import { useDecide } from "./useDecide";
 import { POST_SECTIONS, dayLabel, draftsLeftOver, draftsThisWeek, postSections } from "./week";
 
@@ -26,7 +27,9 @@ type Draft = WriterScreen["drafts"][number];
 type Tab = "posts" | "voice";
 
 const KIND_LABEL: Record<Draft["kind"], string> = { post: "post", caption: "Caption" };
-const BADGE: Record<Draft["column"], [string, string]> = { planned: ["Planned", "badge b-plan"], waiting: ["Waiting", "badge b-wait"], drafting: ["Drafting", "badge b-new"], scheduled: ["Scheduled", "badge b-ok"], posted: ["Posted", "badge b-ok"] };
+/** A state's words and its chip tone (`.ui-chip[data-tone]`): the accent marks what waits on the founder. */
+type Tone = "accent" | "ok" | "warn" | undefined;
+const BADGE: Record<Draft["column"], [string, Tone]> = { planned: ["Planned", undefined], waiting: ["Waiting", "accent"], drafting: ["Drafting", undefined], scheduled: ["Scheduled", "ok"], posted: ["Posted", "ok"] };
 // The chat passes the platform on to the writer (`create_task` post_platform): X, LinkedIn and Threads (owner, 2026-11-23).
 const ASK_KINDS = [
   { id: "post", label: "X post", prompt: "Write an X post" },
@@ -34,17 +37,24 @@ const ASK_KINDS = [
   { id: "threads", label: "Threads post", prompt: "Write a Threads post" },
 ] as const;
 
-const when = (d: Draft) => {
-  if (!d.at) return dayLabel(d) ?? "";
-  const t = new Date(d.at);
-  return `${t.toLocaleDateString("en-GB", { weekday: "short" })} ${t.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`;
+/**
+ * The one instant a row stands for: when it went or goes out, else the time its waiting card proposes. The list and
+ * the "This week" box both read it, in the profile's zone, so they never name two different days (bug 3, 2026-11-28:
+ * the box said "FRI" from the plan's day while the list said "Sat 04:00" from the card, in the browser's zone).
+ */
+const instantOf = (d: Draft, card: Card | undefined): string | null => d.at ?? (card?.body.kind === "post" ? (card.body.proposed?.at ?? null) : null);
+const zoned = (iso: string, timezone: string, opts: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat("en-GB", { timeZone: timezone, hourCycle: "h23", ...opts }).format(new Date(iso));
+/** "Sat 04:00" in the founder's zone, else the plan's day ("Fri", "Mon 16 Nov"). */
+const whenOf = (d: Draft, card: Card | undefined, timezone: string) => {
+  const at = instantOf(d, card);
+  return at ? zoned(at, timezone, { weekday: "short", hour: "2-digit", minute: "2-digit" }) : (dayLabel(d) ?? "");
 };
 /** A waiting draft whose card is not in the queue says why: held past the day's budget, or no card at all. */
-const badgeOf = (d: Draft): [string, string] =>
-  d.column === "waiting" && d.cardState === "held" ? ["Held", "badge b-plan"]
-  : d.column === "waiting" && d.cardState === "missing" ? ["No card", "badge b-plan"]
+const badgeOf = (d: Draft): [string, Tone] =>
+  d.column === "waiting" && d.cardState === "held" ? ["Held", undefined]
+  : d.column === "waiting" && d.cardState === "missing" ? ["No card", undefined]
   // An approved post with no connected account never goes out on its own (owner, 2026-11-24).
-  : d.column === "scheduled" && d.connected === false ? ["Post it yourself", "badge b-wait"]
+  : d.column === "scheduled" && d.connected === false ? ["Post it yourself", "warn"]
   : BADGE[d.column];
 /** "Open in Composer" (2026-11-25): a post draft for X, Threads or LinkedIn opens there with its words, to rework by hand. */
 const COMPOSE_PLATFORMS = new Set(["x", "threads", "linkedin"]);
@@ -77,25 +87,25 @@ export function basedOn(sources: readonly Source[]): string {
  */
 function SourceList({ sources }: { sources: readonly Source[] }) {
   return (
-    <section aria-label="What this post is based on" data-testid="writer-sources" style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-      <div className="meta" style={{ fontWeight: "500" }}>
+    <section aria-label="What this post is based on" data-testid="writer-sources" className="pw-sources">
+      <p className="ui-t-xs ui-muted">
         Based on {sources.length === 1 ? "this conversation" : `these ${sources.length} conversations`} in your <Link href="/app/library">Library</Link>
-      </div>
-      <ul style={{ listStyle: "none", margin: "0", padding: "0", display: "flex", flexDirection: "column", gap: "4px" }}>
+      </p>
+      <ul>
         {sources.map((s) => (
-          <li key={s.opportunityId} data-testid="writer-source" style={{ fontSize: "13.5px" }}>
+          <li key={s.opportunityId} data-testid="writer-source">
             {s.summary}{" "}
             {s.ref ? (
-              <a className="idx-link" href={`/app/sales#thread-${s.opportunityId}`} data-testid="writer-source-sales">
+              <a href={`/app/sales#thread-${s.opportunityId}`} data-testid="writer-source-sales">
                 From Scan #{s.ref.split(".")[0]} · {s.ref}
               </a>
             ) : null}{" "}
             {s.url ? (
-              <a className="meta" href={s.url} target="_blank" rel="noopener noreferrer" data-testid="writer-source-link">
+              <a className="ui-muted" href={s.url} target="_blank" rel="noopener noreferrer" data-testid="writer-source-link">
                 {whereSaid(s)} thread ↗
               </a>
             ) : (
-              <span className="meta">{whereSaid(s)}</span>
+              <span className="ui-muted">{whereSaid(s)}</span>
             )}
           </li>
         ))}
@@ -213,107 +223,122 @@ export function AgentWriter() {
     setAsk("");
   }
 
+  const cardOf = (d: Draft) => (d.approvalId ? queue.find((c) => c.id === d.approvalId) : undefined);
+  const statusLine = data
+    ? [
+        `${waiting.length - held - lost} waiting for your OK`,
+        held ? `${held} held until tomorrow` : null,
+        lost ? `${lost} without a card` : null,
+        `${approved} approved this week`,
+      ]
+        .filter(Boolean)
+        .join(" · ")
+    : state.status === "loading"
+      ? "Loading…"
+      : null;
+
   const renderRow = (d: Draft) => {
-    const card = d.approvalId ? queue.find((c) => c.id === d.approvalId) : undefined;
+    const card = cardOf(d);
     // A waiting draft always opens: its card, or (held, lost, or not loaded yet) its words and "Show it now".
     const opens = Boolean(card) || d.column === "waiting";
-    const badge = badgeOf(d);
+    const [badge, tone] = badgeOf(d);
     const isOpen = opens && firstOpen === d.id;
-    // An approved post's state is also the way to its time: the badge is a button, and opens the row's schedule panel.
+    // An approved post's state is also the way to its time: the chip is a button, and opens the row's schedule panel.
     const schedules = d.column === "scheduled" && Boolean(d.at);
     const timingOpen = timing === d.id;
+    const compose = composeHref(d, card);
     return (
-      <div key={d.id} className="th" data-open={isOpen || timingOpen} data-testid="writer-row" data-platform={d.platform} id={`post-${d.id}`}>
-        <div className="thead">
-          <button type="button" className="row" onClick={opens ? () => setOpen(isOpen ? "" : d.id) : undefined} aria-expanded={opens ? isOpen : undefined} style={opens ? undefined : { cursor: "default" }}>
-            <span className="st">{iconOf(d)}</span>
-            <span style={{ flex: "1 1 auto", minWidth: "0", display: "flex", flexDirection: "column" }}>
-              <span className="ttl">
+      <div key={d.id} className="ui-card ui-card--flush pw-row" data-active={isOpen || timingOpen || undefined} data-open={isOpen || timingOpen} data-testid="writer-row" data-platform={d.platform} id={`post-${d.id}`}>
+        <div className="pw-row__head">
+          <button type="button" className="pw-row__main" onClick={opens ? () => setOpen(isOpen ? "" : d.id) : undefined} aria-expanded={opens ? isOpen : undefined} data-static={opens ? undefined : ""}>
+            <span className="pw-row__icon">{iconOf(d)}</span>
+            <span className="pw-row__text">
+              <span className="pw-row__title">
                 {d.no ? (
-                  <span className="idx-no" data-testid="writer-no">
+                  <span className="pw-no ui-num" data-testid="writer-no">
                     #{d.no}
                   </span>
                 ) : null}
-                <span className="kind">{kindOf(d)} · </span>
+                <span className="ui-muted">{kindOf(d)} · </span>
                 {d.title}
               </span>
               {lastWeek.has(d.id) && d.column === "waiting" ? (
-                <span className="meta" data-testid="writer-left-over">
+                <span className="pw-row__meta" data-testid="writer-left-over">
                   From last week: approve or skip it
                 </span>
               ) : null}
               {d.sources?.length ? (
-                <span className="meta" data-testid="writer-based-on" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                <span className="pw-row__meta pw-row__meta--clip" data-testid="writer-based-on">
                   {basedOn(d.sources)}
                   {d.sources.some((s) => s.ref) ? ` · From ${d.sources.flatMap((s) => (s.ref ? [`Scan #${s.ref.split(".")[0]} · ${s.ref}`] : [])).join(", ")}` : ""}
                 </span>
               ) : null}
             </span>
           </button>
-          <div className="rowend">
+          <div className="pw-row__end">
             {schedules ? (
-              <button type="button" className={`${badge[1]} badge-btn`} aria-expanded={timingOpen} onClick={() => setTiming(timingOpen ? null : d.id)} data-testid="writer-schedule">
-                <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
+              <button type="button" className="ui-chip" data-tone={tone} aria-expanded={timingOpen} onClick={() => setTiming(timingOpen ? null : d.id)} data-testid="writer-schedule">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <rect width="18" height="18" x="3" y="4" rx="2" />
                   <path d="M16 2v4" />
                   <path d="M8 2v4" />
                   <path d="M3 10h18" />
                 </svg>
-                {badge[0]}
+                {badge}
               </button>
             ) : (
-              <span className={badge[1]}>{badge[0]}</span>
+              <span className="ui-chip" data-tone={tone}>
+                {badge}
+              </span>
             )}
             {d.column === "scheduled" && d.postYourself?.length ? (
-              <span className="meta" data-testid="writer-post-yourself">
+              <span className="pw-row__meta" data-testid="writer-post-yourself">
                 post it yourself on {d.postYourself.map((p) => PLATFORM_LABEL[p as keyof typeof PLATFORM_LABEL] ?? p).join(" and ")}
               </span>
             ) : null}
-            <span className="meta" style={{ minWidth: "64px", textAlign: "right", whiteSpace: "nowrap" }}>
-              {/* A waiting draft's card says when it would go out ("Mon 09:00"): the row shows that, not the planned day. */}
-              {!d.at && card?.body.kind === "post" && card.body.proposed?.at ? when({ ...d, at: card.body.proposed.at }) : when(d)}
-            </span>
+            {/* A waiting draft's card says when it would go out: the row shows that instant, in the founder's zone. */}
+            <span className="pw-row__when ui-num">{whenOf(d, card, timezone)}</span>
           </div>
         </div>
         {timingOpen ? (
           <SchedulePanel draft={d} timezone={timezone} saving={saving === d.id} onMove={(at) => void move(d, at)} onClose={() => setTiming(null)} />
         ) : null}
         {isOpen && card ? (
-          <div className="detail td-cardhost">
+          <div className="pw-detail td-cardhost">
             <ApprovalCard card={card} sample={sample} onDecide={onDecide} open />
             {d.sources?.length ? <SourceList sources={d.sources} /> : null}
-            {composeHref(d, card) ? (
-              <Link className="meta" href={composeHref(d, card)!} data-testid="writer-open-composer">
+            {compose ? (
+              <Link className="ui-btn ui-btn--ghost ui-btn--sm pw-detail__compose" href={compose} data-testid="writer-open-composer">
                 Open in Composer
               </Link>
             ) : null}
           </div>
         ) : null}
         {isOpen && !card && d.column === "waiting" ? (
-          <div className="detail" data-testid="writer-show-now">
-            {d.text ? <p className="post">{d.text}</p> : null}
+          <div className="pw-detail" data-testid="writer-show-now">
+            {d.text ? <p className="pw-post">{d.text}</p> : null}
             {d.sources?.length ? <SourceList sources={d.sources} /> : null}
-            {composeHref(d, undefined) ? (
-              <Link className="meta" href={composeHref(d, undefined)!} data-testid="writer-open-composer">
-                Open in Composer
-              </Link>
-            ) : null}
-            <div className="meta">
+            <p className="ui-t-sm ui-muted">
               {d.cardState === "held"
-                ? `Held until ${d.heldUntil ? new Date(d.heldUntil).toLocaleString("en-GB", { weekday: "short", hour: "2-digit", minute: "2-digit" }) : "tomorrow"}: you get about ten new cards a day, so the rest wait for the next one.`
+                ? `Held until ${d.heldUntil ? zoned(d.heldUntil, timezone, { weekday: "short", hour: "2-digit", minute: "2-digit" }) : "tomorrow"}: you get about ten new cards a day, so the rest wait for the next one.`
                 : d.cardState === "missing"
                   ? "Its card is gone, so it is not on Today. Ask for the card again to approve or skip it."
                   : dash.status === "loading"
                     ? "Loading its card…"
                     : "Its card is not on Today yet."}
-            </div>
-            {d.ref && (d.cardState === "held" || d.cardState === "missing") ? (
-              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                <button type="button" className="primary" disabled={showing === d.id} onClick={() => void showNow(d)}>
+            </p>
+            <div className="ui-row">
+              {d.ref && (d.cardState === "held" || d.cardState === "missing") ? (
+                <button type="button" className="ui-btn ui-btn--primary" disabled={showing === d.id} onClick={() => void showNow(d)}>
                   {showing === d.id ? "Bringing it in…" : d.cardState === "held" ? "Show it now" : "Ask for the card again"}
                 </button>
-              </div>
-            ) : null}
+              ) : null}
+              {compose ? (
+                <Link className="ui-btn ui-btn--ghost" href={compose} data-testid="writer-open-composer">
+                  Open in Composer
+                </Link>
+              ) : null}
+            </div>
           </div>
         ) : null}
       </div>
@@ -321,192 +346,185 @@ export function AgentWriter() {
   };
 
   return (
-    <div data-sec="post" style={{ display: "flex", flexWrap: "wrap", maxWidth: "1320px", margin: "0 auto", padding: "22px 24px 40px", gap: "24px" }} data-testid="v2-writer">
-      <main style={{ flex: "999 1 600px", minWidth: "0" }}>
-        <div className="sec-band">
-          <span className="sec-tile">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M12 20h9" />
-              <path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z" />
-            </svg>
-          </span>
-          <h1>Posts</h1>
-          {thisWeek.length ? (
-            <span className="sec-chip">
-              <span className="live"></span>
-              {thisWeek.length} this week
-            </span>
-          ) : null}
-          <span className="pl-row" aria-label="For X, LinkedIn and Threads">
-            <PlatformBadge platform="x" size={20} />
-            <PlatformBadge platform="linkedin" size={20} />
-            <PlatformBadge platform="threads" size={20} />
-          </span>
-          <span style={{ marginLeft: "auto" }}>
-            <PostViewSwitch current="list" />
-          </span>
-        </div>
+    <div className="ui-post pw" data-testid="v2-writer">
+      <main className="pw-main">
+        <PageHeader
+          title="Posts"
+          status={statusLine}
+          platforms={[
+            { id: "x", label: "X" },
+            { id: "linkedin", label: "LinkedIn" },
+            { id: "threads", label: "Threads" },
+          ]}
+          actions={<PostViews current="list" />}
+        />
 
         <AllowanceBanner state={usageState} />
         <FreeLockedCard state={usageState} where="post" />
 
         <form
-          className="ask"
-          style={{ marginTop: "18px" }}
+          className="ui-card pw-ask"
           onSubmit={(e) => {
             e.preventDefault();
             write();
           }}
         >
-          <svg className="i" viewBox="0 0 24 24" aria-hidden="true" style={{ color: "var(--subtle)" }}>
-            <path d="M12 20h9" />
-            <path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z" />
-          </svg>
-          <label htmlFor="ask-writer" style={{ position: "absolute", width: "1px", height: "1px", overflow: "hidden", clip: "rect(0 0 0 0)" }}>
+          <label htmlFor="ask-writer" className="ui-label">
             Ask for a post
           </label>
-          <input id="ask-writer" type="text" placeholder="Ask for a post" value={ask} onChange={(e) => setAsk(e.target.value)} />
-          {/* Which platform, as the platforms' own icons: a toggle each instead of a select (owner, 2026-11-23). */}
-          <span role="group" aria-label="Write for" style={{ display: "inline-flex", gap: "6px", flexWrap: "wrap" }}>
-            {ASK_KINDS.map((k) => (
-              <button key={k.id} type="button" className="pick-btn" aria-pressed={askKind === k.id} onClick={() => setAskKind(k.id)} data-testid={`ask-kind-${k.id}`}>
-                <PlatformBadge platform={k.id === "post" ? "x" : k.id} size={24} />
-                {k.label.replace(/ post$/, "")}
+          <div className="pw-ask__row">
+            <input id="ask-writer" className="ui-input" type="text" placeholder="What should it be about?" value={ask} onChange={(e) => setAsk(e.target.value)} />
+            {/* Which platform, as the platforms' own icons: a toggle each instead of a select (owner, 2026-11-23). */}
+            <span role="group" aria-label="Write for" className="ui-seg pw-ask__kinds">
+              {ASK_KINDS.map((k) => (
+                <button key={k.id} type="button" aria-pressed={askKind === k.id} onClick={() => setAskKind(k.id)} data-testid={`ask-kind-${k.id}`}>
+                  <PlatformBadge platform={k.id === "post" ? "x" : k.id} size={16} />
+                  {k.label.replace(/ post$/, "")}
+                </button>
+              ))}
+            </span>
+            <button type="submit" className="ui-btn ui-btn--primary">
+              Write it
+            </button>
+          </div>
+          <p className="ui-t-xs ui-muted pw-ask__note">
+            Or{" "}
+            <Link href="/app/compose" data-testid="writer-write-yourself">
+              write it yourself
+            </Link>
+            : Ferreto checks each line against the platform&apos;s rules and for lines that read as AI. Reddit posts are written there.
+          </p>
+        </form>
+
+        <div className="pw-bar">
+          <div className="ui-tabs" role="tablist" aria-label="Writer">
+            {(
+              [
+                ["posts", "Posts"],
+                ["voice", "Voice"],
+              ] as const
+            ).map(([id, label]) => (
+              <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)}>
+                {label}
               </button>
             ))}
-          </span>
-          <button type="submit" className="primary">
-            Write it
-          </button>
-        </form>
-        <p className="meta" style={{ margin: "8px 0 0" }}>
-          Or{" "}
-          <Link href="/app/compose" data-testid="writer-write-yourself">
-            write it yourself
-          </Link>
-          : Ferreto checks each line against the platform&apos;s rules and for lines that read as AI. Reddit posts are written there.
-        </p>
-
-        <div className="tabs" role="tablist" aria-label="Writer">
-          {(
-            [
-              ["posts", "Posts"],
-              ["voice", "Voice"],
-            ] as const
-          ).map(([id, label]) => (
-            <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)}>
-              {label}
-            </button>
-          ))}
+          </div>
+          {tab !== "voice" && platforms.length > 1 ? (
+            <div role="group" aria-label="Platform" className="ui-row pw-bar__filter">
+              {[null, ...platforms].map((p) => (
+                <button key={p ?? "all"} type="button" className="ui-chip" aria-pressed={active === p} onClick={() => setPlatform(p)}>
+                  {p ? PLATFORM_LABEL[p] : "All"}
+                </button>
+              ))}
+            </div>
+          ) : null}
         </div>
 
-        {state.status === "loading" ? <div className="meta" style={{ marginTop: "14px" }}>Loading…</div> : null}
-        {state.status === "error" ? <div className="meta" style={{ marginTop: "14px" }}>{state.message}</div> : null}
+        {state.status === "error" ? <p className="ui-t-sm ui-muted pw-gap">{state.message}</p> : null}
 
         {tab !== "voice" && data ? (
-          <>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", margin: "14px 0 10px", flexWrap: "wrap" }}>
-              <span style={{ fontWeight: "600" }}>{waiting.length - held - lost} waiting for your OK</span>
-              {held ? <span className="meta">· {held} held until tomorrow</span> : null}
-              {lost ? <span className="meta">· {lost} without a card</span> : null}
-              <span className="meta">· {approved} approved this week</span>
-              <div style={{ flex: "1 1 auto" }}></div>
-              {platforms.length > 1 ? (
-                <div role="group" aria-label="Platform" style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-                  {[null, ...platforms].map((p) => (
-                    <button key={p ?? "all"} type="button" className="chip" aria-pressed={active === p} onClick={() => setPlatform(p)} style={{ cursor: "pointer" }}>
-                      {p ? PLATFORM_LABEL[p] : "All"}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-            </div>
+          <div className="ui-stack ui-stack--lg pw-gap">
             {linkGone ? (
-              <p className="meta" role="status" data-testid="writer-link-gone">
+              <p className="ui-t-sm ui-muted" role="status" data-testid="writer-link-gone">
                 That post is older than two weeks, so it is not listed here.
               </p>
             ) : null}
-            {drafts.length === 0 ? <div className="meta">Nothing here yet. The week&apos;s posts are planned every Sunday from what people asked in Sales.</div> : null}
+            {drafts.length === 0 ? (
+              <div className="ui-card ui-empty">
+                <p className="ui-empty__title">No posts yet</p>
+                <p>The week&apos;s posts are planned every Sunday from what people asked in Sales. Ask for one above to start now.</p>
+              </div>
+            ) : null}
             {drafts.length
               ? POST_SECTIONS.map(({ id, label, empty }) => (
-                  <section key={id} className="idx-section" aria-label={label} data-testid={`writer-section-${id}`}>
-                    <h2 className="idx-head">
+                  <section key={id} className="pw-section" aria-label={label} data-testid={`writer-section-${id}`}>
+                    <h2 className="pw-section__head">
                       <span>{label}</span>
-                      <span className="meta">{sections[id].length}</span>
+                      <span className="ui-muted ui-num">{sections[id].length}</span>
                     </h2>
-                    {sections[id].length ? <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>{sections[id].map(renderRow)}</div> : <div className="meta">{active ? `No ${PLATFORM_LABEL[active as Draft["platform"]]} posts here.` : empty}</div>}
+                    {sections[id].length ? (
+                      <div className="pw-list">{sections[id].map(renderRow)}</div>
+                    ) : (
+                      <p className="ui-t-sm ui-subtle">{active ? `No ${PLATFORM_LABEL[active as Draft["platform"]]} posts here.` : empty}</p>
+                    )}
                   </section>
                 ))
               : null}
-          </>
+          </div>
         ) : null}
 
         {tab === "voice" && data ? (
-          <section className="card" style={{ marginTop: "14px" }}>
-            {data.voice.lines.length === 0 ? <div className="meta">Ferreto learns how you write from what you change in its drafts.</div> : null}
-            {data.voice.lines.map((line) => (
-              <div key={line.text} style={{ padding: "8px 0", borderBottom: "1px solid var(--line)" }}>
-                <div style={{ fontWeight: "500" }}>{line.text}</div>
-                <div className="meta">{line.source}</div>
-              </div>
-            ))}
-            <div style={{ marginTop: "10px" }}>
-              <Link href="/app?doc=voice" className="ghost" style={{ textDecoration: "none" }}>
-                Edit your voice
-              </Link>
-            </div>
+          <section className="ui-card pw-gap">
+            {data.voice.lines.length === 0 ? <p className="ui-t-sm ui-muted">Ferreto learns how you write from what you change in its drafts.</p> : null}
+            <ul className="pw-voice">
+              {data.voice.lines.map((line) => (
+                <li key={line.text}>
+                  <span>{line.text}</span>
+                  <span className="ui-t-xs ui-subtle">{line.source}</span>
+                </li>
+              ))}
+            </ul>
+            <Link href="/app?doc=voice" className="ui-btn ui-btn--ghost">
+              Edit your voice
+            </Link>
           </section>
         ) : null}
       </main>
 
-      <aside style={{ flex: "1 1 300px", maxWidth: "360px", display: "flex", flexDirection: "column", gap: "14px" }}>
-        <section className="card">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "4px" }}>
-            <h2 style={{ margin: "0", fontSize: "14px", fontWeight: "600" }}>This week</h2>
-            <Link href="/app/schedule" style={{ fontSize: "12.5px", textDecoration: "none" }}>
+      <aside className="pw-side">
+        <section className="ui-card" aria-labelledby="writer-week-title">
+          <div className="ui-card__head">
+            <h2 id="writer-week-title">This week</h2>
+            <Link href="/app/schedule" className="ui-t-xs">
               Week view
             </Link>
           </div>
-          {week.length === 0 ? <div className="meta">The week's plan lands here on Sunday.</div> : null}
-          {week.map((d) => (
-            <div key={d.id} className="day">
-              <span className="d">{(d.at ? new Date(d.at).toLocaleDateString("en-GB", { weekday: "short" }) : (d.dayText ?? "").slice(0, 3)).toUpperCase()}</span>
-              <span className="dot" style={{ background: d.column === "posted" || d.column === "scheduled" ? "var(--ok)" : "var(--warn)" }}></span>
-              <span style={{ flex: "1", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{kindOf(d)}</span>
-              <span className="meta">{badgeOf(d)[0].toLowerCase()}</span>
-            </div>
-          ))}
+          {week.length === 0 ? <p className="ui-t-sm ui-muted">The week&apos;s plan lands here on Sunday.</p> : null}
+          {week.length ? (
+            <ul className="pw-week">
+              {week.map((d) => {
+                const card = cardOf(d);
+                const at = instantOf(d, card);
+                const done = d.column === "posted" || d.column === "scheduled";
+                return (
+                  <li key={d.id} data-testid="writer-week-day">
+                    {/* The same instant as the row's, in the founder's zone: day and time, never the plan's day alone. */}
+                    <span className="pw-week__when ui-num">{at ? zoned(at, timezone, { weekday: "short", hour: "2-digit", minute: "2-digit" }) : (d.dayText ?? "").slice(0, 3)}</span>
+                    <span className="pw-week__dot" data-done={done || undefined} aria-hidden="true"></span>
+                    <span className="pw-week__what">{kindOf(d)}</span>
+                    <span className="ui-t-xs ui-muted">{badgeOf(d)[0].toLowerCase()}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : null}
         </section>
-        <section className="card" aria-labelledby="writer-voice-title">
-          <h2 id="writer-voice-title" style={{ margin: "0 0 4px", fontSize: "14px", fontWeight: "600" }}>Your voice</h2>
-          <p className="meta" style={{ margin: "0 0 10px", fontSize: "13px" }}>
-            Ferreto learns how you write from what you change in its drafts.
-          </p>
+        <section className="ui-card" aria-labelledby="writer-voice-title">
+          <div className="ui-card__head">
+            <h2 id="writer-voice-title">Your voice</h2>
+          </div>
+          <p className="ui-t-sm ui-muted">Ferreto learns how you write from what you change in its drafts.</p>
           {data?.voice.wordsCut.length ? (
-            <>
-              <div className="meta" style={{ marginBottom: "6px" }}>
-                Words you cut
-              </div>
-              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: "12px" }}>
+            <div className="pw-side__group">
+              <p className="ui-label">Words you cut</p>
+              <div className="ui-row">
                 {data.voice.wordsCut.map((w) => (
-                  <span key={w} className="cut">
+                  <span key={w} className="ui-chip pw-cut">
                     {w}
                   </span>
                 ))}
               </div>
-            </>
+            </div>
           ) : null}
           {data?.voice.lines.length ? (
-            <>
-              <div className="meta" style={{ marginBottom: "6px" }}>
-                Rules it keeps
-              </div>
-              <ul style={{ margin: "0", paddingLeft: "18px", fontSize: "13.5px", lineHeight: "1.6" }}>
+            <div className="pw-side__group">
+              <p className="ui-label">Rules it keeps</p>
+              <ul className="pw-rules">
                 {data.voice.lines.slice(0, 4).map((l) => (
                   <li key={l.text}>{l.text}</li>
                 ))}
               </ul>
-            </>
+            </div>
           ) : null}
         </section>
       </aside>
@@ -524,43 +542,36 @@ function SchedulePanel({ draft, timezone, saving, onMove, onClose }: { draft: Dr
   const at = fromLocalInput(value, timezone);
   const platform = PLATFORM_LABEL[draft.platform];
   return (
-    <div className="detail" data-testid="writer-schedule-panel">
-      <div className="meta">
-        Goes out {formatWhen(draft.at!, timezone)} · {platform} · {timezone}
-      </div>
+    <div className="pw-detail" data-testid="writer-schedule-panel">
+      <p className="ui-t-sm">
+        Goes out <b className="ui-num">{formatWhen(draft.at!, timezone)}</b> <span className="ui-muted">· {platform} · {timezone}</span>
+      </p>
       {draft.connected === false ? (
-        <p className="meta" style={{ margin: "0" }} data-testid="writer-not-connected">
+        <p className="ui-t-sm ui-muted" data-testid="writer-not-connected">
           No {platform} account is connected, so this does not go out on its own. Post it yourself at this time, or connect {platform} and it goes out by itself.
         </p>
       ) : null}
       {draft.slotId ? (
-        <>
-          <label className="meta" htmlFor={`writer-at-${draft.id}`}>
+        <div>
+          <label className="ui-label" htmlFor={`writer-at-${draft.id}`}>
             New time ({timezone})
           </label>
-          <input
-            id={`writer-at-${draft.id}`}
-            type="datetime-local"
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            data-testid="writer-time-input"
-            style={{ height: "32px", padding: "0 8px", border: "1px solid var(--line-2)", borderRadius: "7px", background: "var(--bg)", color: "var(--text)", font: "inherit", width: "fit-content" }}
-          />
-          <div className="meta">Ferreto asks you to approve the new time before it goes out.</div>
-        </>
+          <input id={`writer-at-${draft.id}`} className="ui-input pw-time" type="datetime-local" value={value} onChange={(e) => setValue(e.target.value)} data-testid="writer-time-input" />
+          <p className="ui-t-xs ui-muted pw-time__note">Ferreto asks you to approve the new time before it goes out.</p>
+        </div>
       ) : (
-        <div className="meta">Its time is set in the calendar.</div>
+        <p className="ui-t-sm ui-muted">Its time is set in the calendar.</p>
       )}
-      <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+      <div className="ui-row">
         {draft.slotId ? (
-          <button type="button" className="primary" disabled={saving || !at || value === initial} onClick={() => at && onMove(at)} data-testid="writer-save-time">
+          <button type="button" className="ui-btn ui-btn--primary" disabled={saving || !at || value === initial} onClick={() => at && onMove(at)} data-testid="writer-save-time">
             {saving ? "Saving…" : "Save the time"}
           </button>
         ) : null}
-        <Link className="ghost" style={{ textDecoration: "none" }} href={`/app/schedule?from=${localMonday(Date.parse(draft.at!), timezone)}`} data-testid="writer-in-calendar">
+        <Link className="ui-btn ui-btn--ghost" href={`/app/schedule?from=${localMonday(Date.parse(draft.at!), timezone)}`} data-testid="writer-in-calendar">
           See it in the calendar
         </Link>
-        <button type="button" className="skip" onClick={onClose}>
+        <button type="button" className="ui-btn ui-btn--quiet" onClick={onClose}>
           Close
         </button>
       </div>
