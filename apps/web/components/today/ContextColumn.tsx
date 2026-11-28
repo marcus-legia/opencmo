@@ -84,11 +84,12 @@ export function ContextColumn({ goal, onClose }: { goal: { text: string | null; 
   // Blank until the workspace loads: a placeholder name and letter would flash before the real product.
   const name = ws.ready ? (ws.name ?? site ?? "Your business") : "";
   const ICON = { fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round" } as const;
+  // Each number with its word (redesign 2026-11-28: a first-time founder could not tell four coloured numbers apart).
   const steps = [
-    { label: "Found", n: week?.found, sec: "find", d: "M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14ZM20 20l-3.5-3.5" },
-    { label: "Replied", n: week?.replied, sec: "idea", d: "M9 17 4 12l5-5M20 18v-2a4 4 0 0 0-4-4H4" },
-    { label: "Answered back", n: week?.answeredBack, sec: "post", d: "M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12Z" },
-    { label: "Signed up", n: week?.signedUp, sec: "sol", d: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM16 11l2 2 4-4" },
+    { label: "Found", n: week?.found },
+    { label: "Replied", n: week?.replied },
+    { label: "Answered back", n: week?.answeredBack },
+    { label: "Signed up", n: week?.signedUp },
   ] as const;
 
   return (
@@ -102,13 +103,14 @@ export function ContextColumn({ goal, onClose }: { goal: { text: string | null; 
         </button>
       ) : null}
       {/* The product, by its own logo (owner, 2026-11-23: fewer words; the summary lives in the Product document). */}
-      <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px", borderRadius: "14px", background: "var(--raised)", margin: "0 0 10px" }} data-testid="context-product">
-        <CompanyLogo name={name} site={ws.site} size={38} />
-        <span style={{ flex: "1", minWidth: "0", display: "flex", flexDirection: "column", gap: "3px" }}>
-          <b style={{ fontSize: "15px", fontWeight: "650", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</b>
-          <span style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", color: "var(--muted)", minWidth: "0" }}>
+      <div className="td-ctx-product" data-testid="context-product">
+        <CompanyLogo name={name} site={ws.site} size={32} />
+        <span style={{ flex: "1", minWidth: "0", display: "flex", flexDirection: "column", gap: "2px" }}>
+          <b>{name}</b>
+          <span className="td-ctx-sub">
             {site ? <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{site}</span> : null}
-            {ws.category ? <span style={{ padding: "1px 6px", borderRadius: "5px", background: "var(--sec-find-wash)", color: "var(--sec-find)", fontWeight: "650", flex: "0 0 auto" }}>{ws.category}</span> : null}
+            {site && ws.category ? <span aria-hidden="true">·</span> : null}
+            {ws.category ? <span style={{ flex: "0 0 auto" }}>{ws.category}</span> : null}
           </span>
         </span>
         <button type="button" className="ib" aria-label="Edit context" title="Edit context" onClick={() => openDoc("product")}>
@@ -118,46 +120,36 @@ export function ContextColumn({ goal, onClose }: { goal: { text: string | null; 
         </button>
       </div>
 
-      {/* Your business and Library side by side, each a coloured icon and a number. */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: "8px", margin: "0 0 14px" }}>
+      {/* Your business and Library side by side. */}
+      <div className="td-ctx-links">
         <button
           type="button"
+          className="td-ctx-link"
           onClick={() => router.push(`/app/business${missing ? `?d=${missing}` : ""}`)}
           data-testid="context-documents"
           title={missing ? "Your business: one document still to write" : `Your business: ${docCount} documents every step reads`}
-          style={{ display: "flex", alignItems: "center", gap: "8px", padding: "9px", border: "1px solid var(--line)", borderRadius: "12px", background: "transparent", font: "inherit", color: "inherit", cursor: "pointer", textAlign: "left" }}
         >
-          <span className="sec-tile" data-sec="biz" style={{ width: "28px", height: "28px", borderRadius: "8px" }}>
-            <svg viewBox="0 0 24 24" aria-hidden="true" style={{ width: "15px", height: "15px" }}>
-              <rect x="3" y="7" width="18" height="13" rx="2" />
-              <path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-            </svg>
-          </span>
-          <span style={{ display: "flex", flexDirection: "column", lineHeight: "1.2" }}>
-            <b style={{ fontSize: "13px" }}>Business</b>
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="3" y="7" width="18" height="13" rx="2" />
+            <path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+          </svg>
+          <span>
+            <b>Business</b>
             <span className="meta" style={{ color: missing ? "var(--warn)" : undefined }}>{missing ? "1 to write" : docCount}</span>
           </span>
           {DOC_ROWS.some((row) => (DOCUMENT_KINDS as readonly string[]).includes(row.id) && isToday(ws.documents[row.id as DocumentKind]?.at)) ? <span className="live" title="Updated today" style={{ marginLeft: "auto" }}></span> : null}
         </button>
-        <a
-          href="/app/library"
-          data-testid="context-library"
-          aria-current={pathname === "/app/library" ? "page" : undefined}
-          title="Library: what people said"
-          style={{ display: "flex", alignItems: "center", gap: "8px", padding: "9px", border: `1px solid ${pathname === "/app/library" ? "var(--sec-find)" : "var(--line)"}`, borderRadius: "12px", color: "inherit", textDecoration: "none" }}
-        >
-          <span className="sec-tile" data-sec="find" style={{ width: "28px", height: "28px", borderRadius: "8px" }}>
-            <svg viewBox="0 0 24 24" aria-hidden="true" style={{ width: "15px", height: "15px" }}>
-              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5v14ZM4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5" />
-            </svg>
-          </span>
-          <span style={{ display: "flex", flexDirection: "column", lineHeight: "1.2" }}>
-            <b style={{ fontSize: "13px" }}>Library</b>
+        <a href="/app/library" className="td-ctx-link" data-testid="context-library" aria-current={pathname === "/app/library" ? "page" : undefined} title="Library: what people said">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5v14ZM4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5" />
+          </svg>
+          <span>
+            <b>Library</b>
             <span className="meta">
               {library ? library.total : "–"}
               {library ? <span className="sr-only">{library.total === 1 ? " conversation" : " conversations"}</span> : null}
               {library && library.thisWeek > 0 ? (
-                <span style={{ color: "var(--ok)", fontWeight: "650" }}>
+                <span style={{ color: "var(--ok)", fontWeight: "600" }}>
                   {" "}+{library.thisWeek}
                   <span className="sr-only"> this week</span>
                 </span>
@@ -167,81 +159,79 @@ export function ContextColumn({ goal, onClose }: { goal: { text: string | null; 
         </a>
       </div>
 
-      {/* The funnel of the week: one colour and icon per step, the label in its title. */}
-      <div style={{ borderTop: "1px solid var(--line)", paddingTop: "12px" }} data-testid="context-funnel">
-        <div className="sec" style={{ padding: "0 6px" }}>
+      {/* The funnel of the week: each step's number with its word. */}
+      <div className="td-ctx-sec" data-testid="context-funnel">
+        <div className="sec">
           <h2>This week</h2>
-          <a href="/app/analytics" aria-label="Analytics" title="Analytics" style={{ color: "var(--sec-stats)", display: "inline-flex" }}>
-            <svg viewBox="0 0 24 24" aria-hidden="true" style={{ width: "16px", height: "16px", ...ICON }}>
+          <a href="/app/analytics" aria-label="Analytics" title="Analytics">
+            <svg viewBox="0 0 24 24" aria-hidden="true" style={{ width: "15px", height: "15px", ...ICON }}>
               <path d="M3 3v18h18M7 15l4-4 3 3 5-6" />
             </svg>
           </a>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: "6px", padding: "0 6px" }}>
+        <div className="td-week">
           {steps.map((step) => (
-            <div key={step.label} data-testid="context-funnel-step" title={step.label} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 10px", borderRadius: "11px", background: `var(--sec-${step.sec}-wash)`, color: `var(--sec-${step.sec})` }}>
-              <svg viewBox="0 0 24 24" role="img" aria-label={step.label} style={{ width: "17px", height: "17px", ...ICON }}>
-                <path d={step.d} />
-              </svg>
-              <b style={{ fontSize: "18px", fontWeight: "650" }}>{step.n ?? "–"}</b>
-              <span className="sr-only">{step.label}</span>
+            <div key={step.label} className="td-week-step" data-testid="context-funnel-step">
+              <b>{step.n ?? "–"}</b>
+              <span>{step.label}</span>
             </div>
           ))}
         </div>
-        <div style={{ padding: "8px 6px 0", display: "flex", alignItems: "center", gap: "8px" }} title={goal?.text ? `Goal: ${goal.text}` : "No goal yet. It comes with the week's plan."}>
-          <svg viewBox="0 0 24 24" aria-hidden="true" style={{ width: "14px", height: "14px", color: "var(--muted)", flex: "0 0 auto", ...ICON }}>
+        <div className="td-goal" title={goal?.text ? `Goal: ${goal.text}` : "No goal yet. It comes with the week's plan."}>
+          <svg viewBox="0 0 24 24" aria-hidden="true" style={{ width: "14px", height: "14px", flex: "0 0 auto", ...ICON }}>
             <circle cx="12" cy="12" r="9" />
             <circle cx="12" cy="12" r="5" />
             <circle cx="12" cy="12" r="1" />
           </svg>
           {goal && goal.total > 0 ? (
             <>
-              <span style={{ flex: "1", height: "6px", borderRadius: "3px", background: "var(--line)", overflow: "hidden" }}>
-                <span style={{ display: "block", width: `${Math.max(pct, 3)}%`, height: "6px", background: "var(--sec-sol)" }}></span>
+              <span className="ui-meter" aria-hidden="true">
+                <span style={{ width: `${Math.max(pct, 3)}%` }}></span>
               </span>
-              <b style={{ fontSize: "12.5px" }}>
+              <b>
                 {goal.done}/{goal.total}
               </b>
+              <span className="sr-only">of this week's goal done</span>
             </>
           ) : (
-            <span className="meta">No goal yet</span>
+            <span>No goal yet</span>
           )}
         </div>
       </div>
 
-      <div style={{ borderTop: "1px solid var(--line)", paddingTop: "12px", marginTop: "14px" }} data-testid="context-competitors">
-        <div className="sec" style={{ padding: "0 6px" }}>
+      <div className="td-ctx-sec" data-testid="context-competitors">
+        <div className="sec">
           <h2>
             Competitors{" "}
             <span className="meta" style={{ marginLeft: "4px" }}>
               {ws.ready ? rivals.length : ""}
             </span>
           </h2>
-          <a href="/app/research" aria-label="Research" title="Research" style={{ color: "var(--sec-find)", display: "inline-flex" }}>
-            <svg viewBox="0 0 24 24" aria-hidden="true" style={{ width: "16px", height: "16px", ...ICON }}>
+          <a href="/app/research" aria-label="Research" title="Research">
+            <svg viewBox="0 0 24 24" aria-hidden="true" style={{ width: "15px", height: "15px", ...ICON }}>
               <path d="M5 12h14M13 6l6 6-6 6" />
             </svg>
           </a>
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
-          <div className="doc" style={{ alignItems: "center", background: "var(--sec-find-wash)", borderRadius: "10px" }}>
+        <ul className="td-rivals">
+          <li className="td-rival is-you">
             <CompanyLogo name={name} site={ws.site} size={20} />
-            <span style={{ fontSize: "13.5px", fontWeight: "600", flex: "1", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
-            <span style={{ fontSize: "10.5px", fontWeight: "750", letterSpacing: "0.1em", color: "var(--sec-find)" }}>YOU</span>
-          </div>
+            <span className="td-rival-name">{name}</span>
+            <span className="td-you">You</span>
+          </li>
           {rivals.slice(0, 8).map((c) => (
-            <div key={c.key} className="doc" style={{ alignItems: "center" }}>
+            <li key={c.key} className="td-rival">
               <CompanyLogo name={c.name} site={c.site} size={20} />
-              <span style={{ fontSize: "13.5px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.name}</span>
-            </div>
+              <span className="td-rival-name">{c.name}</span>
+            </li>
           ))}
-        </div>
+        </ul>
         {rivals.length > 8 ? (
-          <a href="/app/research" className="meta" style={{ display: "block", padding: "4px 6px 0" }}>
+          <a href="/app/research" className="td-ctx-more">
             {rivals.length - 8} more
           </a>
         ) : ws.ready && kept !== null && rivals.length === 0 ? (
-          <a href="/app/research" className="meta" style={{ display: "block", padding: "4px 6px 0" }}>
+          <a href="/app/research" className="td-ctx-more">
             Add the tools your customers compare you with
           </a>
         ) : null}

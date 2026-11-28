@@ -1,0 +1,349 @@
+/*
+ * Ferreto UI system (redesign 2026-11-28). Imported LAST by app/app/layout.tsx, so it wins ties with the older app
+ * stylesheets. Page sessions build on these classes instead of copying `.pg-xxx .chip` / `.card` rules per page.
+ *
+ * Direction: a calm tool a founder opens once a day. One accent (`--accent`) for primary buttons, focus, links and the
+ * active tab. Platform colours only inside platform logos. `--ok --warn --danger` only for status. No coloured section
+ * banners, no icon tiles, no inverted cards.
+ *
+ * ── Tokens (on every `.k` root, dark under html[data-theme="dark"]) ────────────────────────────────────────────────
+ *   Colour   --bg --panel --raised --hover --line --line-2 --text --muted --subtle
+ *            --accent --accent-hover --accent-ink (text on accent) --accent-wash (tinted background) --accent-text
+ *            --ok --warn --danger (+ -wash for each)  --scrim  --focus
+ *   Type     --fs-xs 12.5 · --fs-sm 14 · --fs-md 15.5 · --fs-lg 18 · --fs-xl 22   (body 14–15.5, line-height 1.5)
+ *   Space    --sp-1 4 · --sp-2 8 · --sp-3 12 · --sp-4 16 · --sp-5 20 · --sp-6 24 · --sp-8 32  (16 inside cards, 24 between sections)
+ *   Radius   --r-sm 6 · --r-md 8 · --r-lg 12 · --r-pill 999
+ *
+ * ── Classes ───────────────────────────────────────────────────────────────────────────────────────────────────────
+ *   Text     .ui-t-xs .ui-t-sm .ui-t-md .ui-t-lg .ui-t-xl  .ui-muted .ui-subtle  .ui-num (tabular figures)
+ *   Card     .ui-card            panel, 1px line, radius 12, padding 16
+ *            .ui-card[data-active] / .ui-card.is-active   the open/selected card: 1px accent border (never inverted)
+ *            .ui-card--flush     no padding (lists inside)      .ui-card__head  title row with actions on the right
+ *   Stack    .ui-stack (column, gap 12)  .ui-stack--lg (gap 24)   .ui-row (row, wraps, gap 8)
+ *   Button   .ui-btn + one of .ui-btn--primary .ui-btn--ghost .ui-btn--danger .ui-btn--quiet (text only)
+ *            sizes .ui-btn--sm (28) default (32) .ui-btn--lg (40)   .ui-btn--icon (square; give it an aria-label)
+ *            Works on <button> and <a>; aria-pressed="true" shows a toggle as on. 44px tall on touch screens.
+ *   Chip     .ui-chip            grows with its text (min-height 22, no fixed height, wraps, never truncates)
+ *            [data-tone="accent|ok|warn|danger"]   .ui-chip--dot (a status dot before the text)
+ *            <button class="ui-chip" aria-pressed="true"> for a filter chip
+ *   Tabs     .ui-tabs  (role="tablist") with children [role="tab"][aria-selected="true"] or a[aria-current="page"]
+ *   Segment  .ui-seg   two to four options in one box; children <button aria-pressed|aria-selected> or <a aria-current>
+ *   Disclose .ui-disclosure  on <details>; <summary> gets the chevron. Body is any content after the summary.
+ *   Empty    .ui-empty  > .ui-empty__title + p + actions   centred, for "nothing here yet" with the next step
+ *   Field    .ui-input  (input, textarea, select)   .ui-label
+ *   Meter    .ui-meter > span[style="width:40%"]
+ *
+ * ── PageHeader (components/today/PageHeader.tsx) ───────────────────────────────────────────────────────────────────
+ *   <PageHeader title="Sales" status="Scanned 22 h ago · 13 checked" platforms={[{ id: "reddit", label: "Reddit" }]}
+ *               primary={<button className="ui-btn ui-btn--primary">Scan now</button>}
+ *               actions={<button className="ui-btn ui-btn--ghost">Settings</button>}>
+ *     {optional row under the header, e.g. <div className="ui-tabs">…</div>}
+ *   </PageHeader>
+ *   Renders .ui-ph (.ui-ph__main, .ui-ph__title, .ui-ph__status, .ui-ph__platforms, .ui-ph__actions, .ui-ph__below).
+ *   Title 22/600, one muted line, no banner, no icon tile. At 375px it is one line: title + primary action; the status
+ *   line wraps under it and secondary actions shrink to their icons when they carry `.ui-btn--icon`.
+ */
+
+/* ── Tokens ────────────────────────────────────────────────────────────────────────────────────────────────────── */
+.k {
+  --bg: #f7f6f3; --panel: #ffffff; --raised: #f1efeb; --hover: #ebe8e3;
+  --line: #e7e3dc; --line-2: #d8d2c8;
+  --text: #191816; --muted: #625b52; --subtle: #736c62;
+  --accent: #3b4cca; --accent-hover: #2f3fb0; --accent-ink: #ffffff; --accent-wash: #e9ebfa; --accent-text: #3241b8;
+  --ok: #16744c; --ok-wash: #e3f3ec;
+  --warn: #8f5a0e; --warn-wash: #f8eedc;
+  --danger: #b4362c; --danger-wash: #f9e6e3;
+  --scrim: rgba(25, 24, 22, .28);
+  --focus: 0 0 0 2px var(--panel), 0 0 0 4px var(--accent);
+  --shadow-pop: 0 12px 32px rgba(25, 24, 22, .16);
+
+  --fs-xs: 12.5px; --fs-sm: 14px; --fs-md: 15.5px; --fs-lg: 18px; --fs-xl: 22px;
+  --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 20px; --sp-6: 24px; --sp-8: 32px;
+  --r-sm: 6px; --r-md: 8px; --r-lg: 12px; --r-pill: 999px;
+  --ui-h: 32px;
+}
+html[data-theme="dark"] .k {
+  --bg: #121110; --panel: #181715; --raised: #201e1c; --hover: #262421;
+  --line: #2a2825; --line-2: #36332f;
+  --text: #f2efe9; --muted: #a59e93; --subtle: #8a847b;
+  --accent: #8b97ff; --accent-hover: #a8b1ff; --accent-ink: #0e1024; --accent-wash: #22264a; --accent-text: #a3adff;
+  --ok: #4cc497; --ok-wash: #173328;
+  --warn: #e7a948; --warn-wash: #3a2c14;
+  --danger: #f08a7e; --danger-wash: #3d1c18;
+  --scrim: rgba(0, 0, 0, .5);
+  --shadow-pop: 0 12px 32px rgba(0, 0, 0, .45);
+}
+@media (pointer: coarse) { .k { --ui-h: 44px; } }
+
+/* ── Text ──────────────────────────────────────────────────────────────────────────────────────────────────────── */
+.k .ui-t-xs { font-size: var(--fs-xs); line-height: 1.45; }
+.k .ui-t-sm { font-size: var(--fs-sm); line-height: 1.5; }
+.k .ui-t-md { font-size: var(--fs-md); line-height: 1.5; }
+.k .ui-t-lg { font-size: var(--fs-lg); line-height: 1.35; font-weight: 600; letter-spacing: -0.01em; }
+.k .ui-t-xl { font-size: var(--fs-xl); line-height: 1.25; font-weight: 600; letter-spacing: -0.015em; }
+.k .ui-muted { color: var(--muted); }
+.k .ui-subtle { color: var(--subtle); }
+.k .ui-num { font-variant-numeric: tabular-nums; }
+
+/* ── Layout helpers ────────────────────────────────────────────────────────────────────────────────────────────── */
+.k .ui-stack { display: flex; flex-direction: column; gap: var(--sp-3); min-width: 0; }
+.k .ui-stack--lg { gap: var(--sp-6); }
+.k .ui-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); min-width: 0; }
+
+/* ── Card ──────────────────────────────────────────────────────────────────────────────────────────────────────── */
+.k .ui-card { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: var(--r-lg); padding: var(--sp-4); min-width: 0; }
+.k .ui-card--flush { padding: 0; overflow: hidden; }
+.k .ui-card:is([data-active], .is-active) { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.k .ui-card__head { display: flex; align-items: center; gap: var(--sp-2); justify-content: space-between; margin: 0 0 var(--sp-3); min-width: 0; }
+.k .ui-card__head > :is(h2, h3) { margin: 0; font-size: var(--fs-sm); font-weight: 600; }
+
+/* ── Buttons ───────────────────────────────────────────────────────────────────────────────────────────────────── */
+.k .ui-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: var(--ui-h); padding: 0 12px; border: 1px solid var(--line-2); border-radius: var(--r-md);
+  background: var(--panel); color: var(--text); font-family: inherit; font-weight: 500; font-size: var(--fs-sm); line-height: 1.2;
+  text-decoration: none; white-space: nowrap; cursor: pointer; flex: 0 0 auto;
+  transition: background-color .12s ease, border-color .12s ease, color .12s ease;
+}
+.k .ui-btn:hover { background: var(--hover); }
+.k .ui-btn:focus-visible { outline: none; box-shadow: var(--focus); }
+.k .ui-btn:disabled, .k .ui-btn[aria-disabled="true"] { opacity: .5; cursor: not-allowed; }
+.k .ui-btn svg { width: 15px; height: 15px; flex: 0 0 auto; }
+.k .ui-btn--primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.k .ui-btn--primary:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
+.k .ui-btn--ghost { background: transparent; border-color: var(--line-2); color: var(--text); }
+.k .ui-btn--ghost:hover:not(:disabled) { background: var(--hover); }
+.k .ui-btn--quiet { background: transparent; border-color: transparent; color: var(--muted); }
+.k .ui-btn--quiet:hover:not(:disabled) { background: var(--hover); color: var(--text); }
+.k .ui-btn--danger { background: transparent; border-color: color-mix(in srgb, var(--danger) 45%, var(--line-2)); color: var(--danger); }
+.k .ui-btn--danger:hover:not(:disabled) { background: var(--danger-wash); }
+.k .ui-btn[aria-pressed="true"] { background: var(--accent-wash); border-color: var(--accent); color: var(--accent-text); }
+.k .ui-btn--sm { min-height: 28px; padding: 0 10px; font-size: 13px; border-radius: var(--r-sm); }
+.k .ui-btn--lg { min-height: 40px; padding: 0 16px; font-size: var(--fs-md); }
+.k .ui-btn--icon { width: var(--ui-h); padding: 0; }
+.k .ui-btn--icon.ui-btn--sm { width: 28px; }
+@media (pointer: coarse) { .k .ui-btn--sm { min-height: 44px; } .k .ui-btn--icon.ui-btn--sm { width: 44px; } }
+
+/* ── Chips: grow with their text, never a fixed height, never cut a status ────────────────────────────────────────── */
+.k .ui-chip {
+  display: inline-flex; align-items: center; gap: 5px; height: auto; min-height: 22px; max-width: 100%;
+  padding: 2px 8px; border: 1px solid var(--line); border-radius: var(--r-pill); background: var(--raised);
+  color: var(--muted); font-family: inherit; font-weight: 500; font-size: var(--fs-xs); line-height: 1.35; white-space: normal;
+  overflow-wrap: anywhere; text-align: left; vertical-align: middle;
+}
+.k .ui-chip svg { width: 12px; height: 12px; flex: 0 0 auto; }
+.k .ui-chip[data-tone="accent"] { background: var(--accent-wash); border-color: transparent; color: var(--accent-text); }
+.k .ui-chip[data-tone="ok"] { background: var(--ok-wash); border-color: transparent; color: var(--ok); }
+.k .ui-chip[data-tone="warn"] { background: var(--warn-wash); border-color: transparent; color: var(--warn); }
+.k .ui-chip[data-tone="danger"] { background: var(--danger-wash); border-color: transparent; color: var(--danger); }
+.k .ui-chip--dot::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: 0 0 auto; }
+.k button.ui-chip { cursor: pointer; }
+.k button.ui-chip:hover { color: var(--text); border-color: var(--line-2); }
+.k button.ui-chip[aria-pressed="true"] { background: var(--accent-wash); border-color: var(--accent); color: var(--accent-text); }
+.k button.ui-chip:focus-visible { outline: none; box-shadow: var(--focus); }
+
+/* ── Tabs ──────────────────────────────────────────────────────────────────────────────────────────────────────── */
+.k .ui-tabs { display: flex; gap: var(--sp-4); border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; min-width: 0; }
+.k .ui-tabs > :is(button, a) {
+  position: relative; display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 2px; margin: 0 0 -1px;
+  border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--muted);
+  font-family: inherit; font-weight: 500; font-size: var(--fs-sm); line-height: 1.2; text-decoration: none; white-space: nowrap; cursor: pointer; flex: 0 0 auto;
+}
+.k .ui-tabs > :is(button, a):hover { color: var(--text); }
+.k .ui-tabs > :is([aria-selected="true"], [aria-current="page"]) { color: var(--text); border-bottom-color: var(--accent); }
+.k .ui-tabs > :is(button, a):focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--accent); border-radius: var(--r-sm); }
+@media (pointer: coarse) { .k .ui-tabs > :is(button, a) { min-height: 44px; } }
+
+/* ── Segmented control ─────────────────────────────────────────────────────────────────────────────────────────── */
+.k .ui-seg { display: inline-flex; gap: 2px; padding: 2px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--raised); max-width: 100%; }
+.k .ui-seg > :is(button, a) {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 26px; padding: 0 10px;
+  border: 0; border-radius: var(--r-sm); background: transparent; color: var(--muted);
+  font-family: inherit; font-weight: 500; font-size: 13px; line-height: 1.2; text-decoration: none; white-space: nowrap; cursor: pointer;
+}
+.k .ui-seg > :is(button, a):hover { color: var(--text); }
+.k .ui-seg > :is([aria-pressed="true"], [aria-selected="true"], [aria-current="page"]) { background: var(--panel); color: var(--text); box-shadow: 0 0 0 1px var(--line-2); }
+.k .ui-seg > :is(button, a):focus-visible { outline: none; box-shadow: var(--focus); }
+@media (pointer: coarse) { .k .ui-seg > :is(button, a) { min-height: 40px; } }
+
+/* ── Disclosure ────────────────────────────────────────────────────────────────────────────────────────────────── */
+.k .ui-disclosure > summary {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 28px; list-style: none; cursor: pointer;
+  color: var(--muted); font-size: var(--fs-xs); font-weight: 500; border-radius: var(--r-sm);
+}
+.k .ui-disclosure > summary::-webkit-details-marker { display: none; }
+.k .ui-disclosure > summary::before {
+  content: ""; width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg); transition: transform .15s ease; margin: 0 2px;
+}
+.k .ui-disclosure[open] > summary::before { transform: rotate(45deg); }
+.k .ui-disclosure > summary:hover { color: var(--text); }
+.k .ui-disclosure > summary:focus-visible { outline: none; box-shadow: var(--focus); }
+.k .ui-disclosure[open] > summary { margin-bottom: var(--sp-2); }
+@media (pointer: coarse) { .k .ui-disclosure > summary { min-height: 44px; } }
+
+/* ── Empty state ───────────────────────────────────────────────────────────────────────────────────────────────── */
+.k .ui-empty { display: flex; flex-direction: column; align-items: center; gap: var(--sp-2); padding: var(--sp-8) var(--sp-4); text-align: center; color: var(--muted); font-size: var(--fs-sm); line-height: 1.5; }
+.k .ui-empty__title { margin: 0; color: var(--text); font-size: var(--fs-md); font-weight: 600; }
+.k .ui-empty p { margin: 0; max-width: 46ch; }
+.k .ui-empty > .ui-row { justify-content: center; margin-top: var(--sp-2); }
+
+/* ── Fields and meter ──────────────────────────────────────────────────────────────────────────────────────────── */
+.k .ui-label { display: block; margin: 0 0 6px; font-size: 13px; font-weight: 600; color: var(--muted); }
+.k .ui-input { width: 100%; box-sizing: border-box; min-height: var(--ui-h); padding: 6px 10px; border: 1px solid var(--line-2); border-radius: var(--r-md); background: var(--bg); color: var(--text); font-family: inherit; font-weight: 400; font-size: var(--fs-sm); line-height: 1.5; }
+.k textarea.ui-input { min-height: 80px; resize: vertical; }
+.k .ui-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.k .ui-meter { display: block; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.k .ui-meter > span { display: block; height: 100%; border-radius: inherit; background: var(--accent); }
+
+/* ── PageHeader ────────────────────────────────────────────────────────────────────────────────────────────────── */
+.k .ui-ph { display: flex; flex-direction: column; gap: var(--sp-3); margin: 0 0 var(--sp-6); min-width: 0; }
+.k .ui-ph__row { display: flex; align-items: flex-start; gap: var(--sp-3); min-width: 0; }
+.k .ui-ph__main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.k .ui-ph__titleline { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; flex-wrap: wrap; }
+.k .ui-ph__title { margin: 0; font-size: var(--fs-xl); line-height: 1.25; font-weight: 600; letter-spacing: -0.015em; color: var(--text); overflow-wrap: anywhere; }
+.k .ui-ph__platforms { display: inline-flex; align-items: center; gap: 6px; }
+.k .ui-ph__status { margin: 0; color: var(--muted); font-size: var(--fs-sm); line-height: 1.5; font-variant-numeric: tabular-nums; }
+.k .ui-ph__actions { display: flex; align-items: center; gap: var(--sp-2); flex: 0 0 auto; flex-wrap: wrap; justify-content: flex-end; }
+.k .ui-ph__below { min-width: 0; }
+@media (max-width: 640px) {
+  .k .ui-ph { margin-bottom: var(--sp-4); gap: var(--sp-2); }
+  .k .ui-ph__row { align-items: center; }
+  .k .ui-ph__title { font-size: var(--fs-lg); }
+  .k .ui-ph__status { font-size: 13px; }
+  .k .ui-ph__actions { flex-wrap: nowrap; }
+  /* One line on a phone: secondary actions with a visible label give way; icon-only ones and the primary stay. */
+  .k .ui-ph__secondary > .ui-btn:not(.ui-btn--icon) { display: none; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+ * Shell: top bar, Context column, chat, drawers. These restyle the shell's existing classes (kept for behaviour, tests
+ * and the older responsive rules) onto the tokens above.
+ * ══════════════════════════════════════════════════════════════════════════════════════════════════════════════════ */
+
+/* Top bar */
+.k.td-frame > .top { gap: var(--sp-2); background: var(--top, var(--panel)); }
+.td-frame .top .pill { flex: 0 0 auto; white-space: nowrap; border-radius: var(--r-md); }
+.td-frame .top .pill:focus-visible, .td-frame .top summary:focus-visible, .td-views a:focus-visible { outline: none; box-shadow: var(--focus); }
+.td-frame .top .td-acct {
+  display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 50%;
+  background: var(--raised); border: 1px solid var(--line-2); color: var(--text); font-size: 13px; font-weight: 600; list-style: none; cursor: pointer;
+}
+.td-frame .top .td-project { color: var(--text); gap: 8px; border: 0; padding: 0 8px; list-style: none; }
+.td-frame .top .td-project-name { font-weight: 600; }
+
+/* The views: plain tabs, the open one underlined in the accent at the bar's bottom edge. */
+.k .td-views { gap: var(--sp-1); padding: 0; border: 0; background: transparent; border-radius: 0; }
+.k .td-views a { position: relative; height: 32px; padding: 0 10px; border-radius: var(--r-sm); color: var(--muted); font-weight: 500; }
+.k .td-views a svg { color: inherit; }
+.k .td-views a:hover { color: var(--text); background: var(--hover); }
+.k .td-views a[aria-current="page"], .k .td-views a[data-sec][aria-current="page"] { color: var(--text); background: transparent; box-shadow: none; font-weight: 600; }
+.k .td-views a[aria-current="page"] svg, .k .td-views a[data-sec] svg { color: inherit; }
+@media (min-width: 641px) {
+  .k .td-views a[aria-current="page"]::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: -8px; height: 2px; border-radius: 2px; background: var(--accent); }
+}
+@media (max-width: 640px) {
+  .k .td-views { padding: 2px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--raised); }
+  .k .td-views a[aria-current="page"] { background: var(--panel); box-shadow: 0 0 0 1px var(--line-2); }
+}
+
+/* Usage and autopilot: never cut; Upgrade is the bar's one filled button, in the accent. */
+.td-frame .top .td-usage { gap: 8px; color: var(--muted); text-decoration: none; }
+.td-frame .top .td-usage-meter { display: inline-block; width: 36px; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
+.td-frame .top .td-usage-meter > span { display: block; height: 100%; background: var(--accent); }
+.td-frame .top .td-usage[data-paused] .td-usage-meter > span { background: var(--danger); }
+.k .td-upgrade, .td-upgrade {
+  height: 28px; padding: 0 12px 0 10px; border-radius: var(--r-md); background: var(--accent); color: var(--accent-ink) !important;
+  font-weight: 600; box-shadow: none; flex: 0 0 auto; white-space: nowrap;
+}
+.k .td-upgrade:hover, .td-upgrade:hover { background: var(--accent-hover); transform: none; }
+.td-upgrade:focus-visible { outline: none; box-shadow: var(--focus); }
+.td-frame .top .td-autopilot[aria-pressed="true"] { color: var(--text); border-color: var(--line-2); }
+.td-frame .top .td-autopilot .live { background: var(--ok); }
+/* Phone: business, Upgrade, Context, Logs and the account must share one 375px row. */
+@media (max-width: 640px) {
+  .k.td-frame > .top { gap: 4px; }
+  .td-upgrade { min-height: 44px; padding: 0 10px 0 8px; }
+}
+
+/* Menus from the top bar */
+.td-menu { border-color: var(--line); border-radius: var(--r-lg); background: var(--panel); box-shadow: var(--shadow-pop); }
+.td-menu a:focus-visible, .td-menu button:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--accent); }
+
+/* ── Context column ────────────────────────────────────────────────────────────────────────────────────────────── */
+.pg-main .left { padding: var(--sp-3); }
+.k .td-ctx-sec { border-top: 1px solid var(--line); padding-top: var(--sp-3); margin-top: var(--sp-4); }
+.k .td-ctx-sec .sec { padding: 0 4px; }
+.k .td-ctx-sec .sec h2 { font-size: 13px; font-weight: 600; color: var(--text); }
+.k .td-ctx-sec .sec a { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: var(--fs-xs); text-decoration: none; border-radius: var(--r-sm); }
+.k .td-ctx-sec .sec a:hover { color: var(--text); }
+.k .td-ctx-sec .sec a:focus-visible { outline: none; box-shadow: var(--focus); }
+
+.k .td-ctx-product { display: flex; align-items: center; gap: 10px; padding: 6px 4px 6px 6px; margin: 0 0 var(--sp-3); }
+.k .td-ctx-product b { font-size: var(--fs-md); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.k .td-ctx-product .td-ctx-sub { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); min-width: 0; }
+
+/* Business and Library: two quiet rows */
+.k .td-ctx-links { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-2); }
+.k .td-ctx-link {
+  display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--r-md);
+  background: transparent; color: var(--text); font: inherit; text-align: left; text-decoration: none; cursor: pointer; min-width: 0;
+}
+.k .td-ctx-link:hover { background: var(--hover); }
+.k .td-ctx-link:focus-visible { outline: none; box-shadow: var(--focus); }
+.k .td-ctx-link[aria-current="page"] { border-color: var(--accent); }
+.k .td-ctx-link > svg { width: 16px; height: 16px; flex: 0 0 auto; color: var(--muted); fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.k .td-ctx-link > span { display: flex; flex-direction: column; line-height: 1.25; min-width: 0; }
+.k .td-ctx-link b { font-size: 13px; font-weight: 600; }
+.k .td-ctx-link .meta { font-size: 12px; font-variant-numeric: tabular-nums; }
+
+/* This week: four labelled numbers */
+.k .td-week { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--line); overflow: hidden; }
+.k .td-week-step { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; background: var(--panel); min-width: 0; }
+.k .td-week-step b { font-size: var(--fs-lg); font-weight: 600; line-height: 1.2; color: var(--text); font-variant-numeric: tabular-nums; }
+.k .td-week-step span { font-size: 12px; color: var(--muted); line-height: 1.3; }
+.k .td-goal { display: flex; align-items: center; gap: 8px; padding: var(--sp-2) 4px 0; font-size: var(--fs-xs); color: var(--muted); }
+.k .td-goal .ui-meter { flex: 1 1 auto; }
+.k .td-goal b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* Competitors: a plain list, you first */
+.k .td-rivals { display: flex; flex-direction: column; gap: 0; margin: 0; padding: 0; list-style: none; }
+.k .td-rival { display: flex; align-items: center; gap: 8px; min-height: 30px; padding: 4px; border-radius: var(--r-sm); font-size: 13.5px; color: var(--text); min-width: 0; }
+.k .td-rival-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.k .td-rival.is-you .td-rival-name { font-weight: 600; }
+.k .td-you { font-size: 12px; color: var(--subtle); flex: 0 0 auto; }
+.k .td-ctx-more { display: inline-flex; padding: 4px; font-size: var(--fs-xs); color: var(--accent-text); text-decoration: none; border-radius: var(--r-sm); }
+.k .td-ctx-more:hover { text-decoration: underline; }
+.k .td-ctx-more:focus-visible { outline: none; box-shadow: var(--focus); }
+
+/* ── Chat column: the same cards and buttons as the pages ──────────────────────────────────────────────────────── */
+.td-chat .cmo-ask { border: 1px solid var(--line-2); border-radius: var(--r-lg); background: var(--panel); }
+.td-chat .cmo-ask:focus-within { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.td-chat .cmo-send { border-radius: var(--r-md); background: var(--accent); color: var(--accent-ink); }
+.td-chat .cmo-send:hover:not(:disabled) { background: var(--accent-hover); }
+.td-chat .cmo-send:disabled { background: var(--raised); color: var(--subtle); }
+.td-chat .cmo-send:focus-visible, .td-chat .cmo-icon-btn:focus-visible, .td-chat .cmo-suggest button:focus-visible { outline: none; box-shadow: var(--focus); }
+.td-chat .cmo-suggest button { height: auto; min-height: 28px; padding: 3px 10px; border-radius: var(--r-pill); background: var(--panel); white-space: normal; text-align: left; line-height: 1.35; }
+.td-chat .cmo-msg.is-user .cmo-msg-body { border-radius: var(--r-lg) var(--r-lg) 4px var(--r-lg); background: var(--raised); border-color: var(--line); }
+.td-chat .cmo-confirm-card { border-radius: var(--r-lg); background: var(--panel); border-color: var(--line); }
+.td-askrail:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); }
+
+/* ── Drawers (Context documents, Logs) ─────────────────────────────────────────────────────────────────────────── */
+.k .td-drawer-head { display: flex; align-items: center; gap: var(--sp-2); min-height: 52px; padding: 0 12px 0 20px; border-bottom: 1px solid var(--line); flex: none; flex-wrap: wrap; }
+.k .td-drawer-head > h2 { margin: 0; font-size: var(--fs-md); font-weight: 600; }
+.k .td-drawer-head .meta { font-size: var(--fs-xs); color: var(--muted); }
+.k .td-drawer-foot { display: flex; gap: var(--sp-2); align-items: center; padding: 12px 20px; border-top: 1px solid var(--line); flex: none; flex-wrap: wrap; }
+.k .td-drawer-foot .meta { flex: 1 1 160px; }
+.k .td-day { padding: var(--sp-4) 20px var(--sp-1); font-size: var(--fs-xs); font-weight: 600; color: var(--muted); }
+.k .td-ledger-sum { display: flex; gap: var(--sp-4); padding: 10px 20px; border-bottom: 1px solid var(--line); flex-wrap: wrap; font-variant-numeric: tabular-nums; }
+.k .td-ledger-sum b { font-weight: 600; }
+.k .td-pane-list .doc[aria-current="true"] { background: var(--accent-wash); }
+.k .td-pane-list .doc[aria-current="true"] .u { color: var(--muted); }
+.k .td-pane-list .doc:focus-visible { outline: none; box-shadow: var(--focus); }
+.k.pg-context .drawer h3 { text-transform: none; letter-spacing: 0; color: var(--muted); }
+.td-docform .cmo-field > span, .td-docform legend { text-transform: none; letter-spacing: 0; color: var(--muted); }
+.k .ib:focus-visible { outline: none; box-shadow: var(--focus); }
+
+@media (prefers-reduced-motion: reduce) {
+  .k .ui-btn, .k .ui-disclosure > summary::before { transition: none; }
+}

@@ -198,7 +198,7 @@ export function ContextDrawer({ doc, edit = false, onClose, onOpen }: { doc: Doc
   return createPortal(
     <div className="k pg-context td-layer td-ctx">
       <div style={{ display: "flex", minHeight: "calc(100vh - 48px)", position: "relative", flexWrap: "wrap", width: "100%" }}>
-        <aside style={{ flex: "0 0 288px", background: "var(--panel)", borderRight: "1px solid var(--line)", padding: "14px 12px", position: "relative", zIndex: "2", overflow: "auto" }}>
+        <aside className="td-pane-list" style={{ flex: "0 0 288px", background: "var(--panel)", borderRight: "1px solid var(--line)", padding: "14px 12px", position: "relative", zIndex: "2", overflow: "auto" }}>
           <div className="sec">
             <h2>
               Documents{" "}
@@ -267,15 +267,11 @@ export function ContextDrawer({ doc, edit = false, onClose, onOpen }: { doc: Doc
           role="dialog"
           style={{ flex: pane ? "0 1 960px" : "0 1 640px", minWidth: "0", background: "var(--panel)", borderRight: "1px solid var(--line)", position: "relative", zIndex: "2", display: "flex", flexDirection: "column", boxShadow: "12px 0 32px rgba(0,0,0,.18)", maxHeight: "calc(100vh - 48px)" }}
         >
-          <div style={{ height: "52px", display: "flex", alignItems: "center", gap: "8px", padding: "0 12px 0 20px", borderBottom: "1px solid var(--line)", flex: "none" }}>
-            <svg className="i" viewBox="0 0 24 24" aria-hidden="true" style={{ color: "var(--muted)" }}>
-              <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
-              <path d="M14 2v4a2 2 0 0 0 2 2h4" />
-            </svg>
-            <span style={{ fontWeight: "600", fontSize: "15px" }}>{row.title}</span>
+          <div className="td-drawer-head">
+            <h2>{row.title}</h2>
             {written ? (
               <span className="meta">
-                · version {written.version} · updated {ago(written.created_at)} by {written.created_by === "user" ? "you" : "Ferreto"}
+                Version {written.version}, updated {ago(written.created_at)} by {written.created_by === "user" ? "you" : "Ferreto"}
               </span>
             ) : null}
             <div style={{ flex: "1 1 auto" }}></div>
@@ -307,7 +303,7 @@ export function ContextDrawer({ doc, edit = false, onClose, onOpen }: { doc: Doc
               loadError ? (
                 <p role="alert" style={{ marginTop: "16px" }}>
                   Your documents could not be read.{" "}
-                  <button type="button" className="ghost" onClick={() => setLoads((n) => n + 1)}>
+                  <button type="button" className="ui-btn ui-btn--ghost ui-btn--sm" onClick={() => setLoads((n) => n + 1)}>
                     Try again
                   </button>
                 </p>
@@ -334,15 +330,14 @@ export function ContextDrawer({ doc, edit = false, onClose, onOpen }: { doc: Doc
             )}
           </div>
           {kind ? (
-            <div style={{ display: "flex", gap: "8px", alignItems: "center", padding: "12px 20px", borderTop: "1px solid var(--line)", flex: "none" }}>
+            <div className="td-drawer-foot">
               <span className="meta">{draft ? "Saving makes a new version." : "Changes apply from the next draft."}</span>
-              <div style={{ flex: "1 1 auto" }}></div>
               {draft ? (
                 <>
-                  <button type="button" className="ghost" onClick={() => setDraft(null)} disabled={saving}>
+                  <button type="button" className="ui-btn ui-btn--ghost" onClick={() => setDraft(null)} disabled={saving}>
                     Cancel
                   </button>
-                  <button type="button" className="primary" onClick={() => void save()} disabled={saving}>
+                  <button type="button" className="ui-btn ui-btn--primary" onClick={() => void save()} disabled={saving}>
                     {saving ? "Saving…" : "Save"}
                   </button>
                 </>
@@ -350,7 +345,7 @@ export function ContextDrawer({ doc, edit = false, onClose, onOpen }: { doc: Doc
                 <>
                   <button
                     type="button"
-                    className="ghost"
+                    className="ui-btn ui-btn--ghost"
                     onClick={() => {
                       onClose();
                       focusChat();
@@ -359,7 +354,7 @@ export function ContextDrawer({ doc, edit = false, onClose, onOpen }: { doc: Doc
                   >
                     Ask Ferreto to change it
                   </button>
-                  <button type="button" className="primary" disabled={!state} onClick={() => setDraft(structuredClone(written?.body ?? {}))}>
+                  <button type="button" className="ui-btn ui-btn--primary" disabled={!state} onClick={() => setDraft(structuredClone(written?.body ?? {}))}>
                     <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
                       <path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z" />
                     </svg>

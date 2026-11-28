@@ -129,13 +129,9 @@ export function LogsDrawer({ onClose, running = 0 }: { onClose: () => void; runn
         ref={panel}
         style={{ position: "relative", flex: "0 1 600px", minWidth: "0", background: "var(--panel)", borderLeft: "1px solid var(--line)", display: "flex", flexDirection: "column", boxShadow: "-12px 0 32px rgba(0,0,0,.18)" }}
       >
-        <div style={{ height: "52px", display: "flex", alignItems: "center", gap: "8px", padding: "0 12px 0 20px", borderBottom: "1px solid var(--line)" }}>
-          <svg className="i" viewBox="0 0 24 24" aria-hidden="true" style={{ color: "var(--muted)" }}>
-            <polyline points="4 17 10 11 4 5" />
-            <line x1="12" x2="20" y1="19" y2="19" />
-          </svg>
-          <span style={{ fontWeight: "600", fontSize: "15px" }}>Logs</span>
-          <span className="meta">· what Ferreto did, and what it cost</span>
+        <div className="td-drawer-head">
+          <h2>Logs</h2>
+          <span className="meta">What Ferreto did, and what it cost</span>
           <div style={{ flex: "1 1 auto" }}></div>
           <button type="button" className="ib" aria-label="Close" onClick={onClose}>
             <svg className="i s" viewBox="0 0 24 24" aria-hidden="true">
@@ -146,7 +142,7 @@ export function LogsDrawer({ onClose, running = 0 }: { onClose: () => void; runn
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "12px 20px", borderBottom: "1px solid var(--line)", flexWrap: "wrap" }}>
-          <div className="seg" role="tablist" aria-label="Agent">
+          <div className="ui-seg" role="tablist" aria-label="Agent">
             {FILTERS.map((f) => (
               <button key={f.id} type="button" role="tab" aria-selected={filter === f.id} onClick={() => setFilter(f.id)}>
                 {f.label}
@@ -154,12 +150,12 @@ export function LogsDrawer({ onClose, running = 0 }: { onClose: () => void; runn
             ))}
           </div>
           <div style={{ flex: "1 1 auto" }}></div>
-          <button type="button" className="pill" aria-pressed={problems} onClick={() => setProblems((p) => !p)}>
+          <button type="button" className="ui-btn ui-btn--ghost ui-btn--sm" aria-pressed={problems} onClick={() => setProblems((p) => !p)}>
             Only problems
           </button>
         </div>
 
-        <div style={{ display: "flex", gap: "16px", padding: "10px 20px", borderBottom: "1px solid var(--line)", flexWrap: "wrap" }}>
+        <div className="td-ledger-sum">
           <span>
             <b style={{ fontWeight: "600" }}>{logs?.week.spent ?? 0}</b> <span className="meta">credits spent this week</span>
           </span>
@@ -183,9 +179,9 @@ export function LogsDrawer({ onClose, running = 0 }: { onClose: () => void; runn
             return (
               <div key={e.key}>
                 {heading ? (
-                  <div className="meta" style={{ padding: "12px 20px 4px", textTransform: "uppercase", letterSpacing: ".05em", fontSize: "12px" }}>
+                  <h3 className="td-day" style={{ margin: 0 }}>
                     {heading}
-                  </div>
+                  </h3>
                 ) : null}
                 <div className="ev">
                   <button type="button" className="evr" onClick={() => setOpen(isOpen ? null : e.key)} aria-expanded={isOpen}>

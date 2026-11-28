@@ -123,7 +123,7 @@ const LogsIcon = () => (
 function UsageChip({ usage }: { usage: PlanUsage }) {
   if (usage.plan !== "pro") {
     return (
-      // Orange, not a grey pill (owner, 2026-11-23: "I can't see the Upgrade button anywhere").
+      // The bar's one filled button, in the accent, not a grey pill (owner, 2026-11-23: "I can't see the Upgrade button anywhere").
       <Link href="/app/billing#billing-plans" className="td-upgrade" aria-label="Free plan: upgrade" data-testid="usage-chip">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path d="M12 19V5M5 12l7-7 7 7" />
@@ -140,7 +140,6 @@ function UsageChip({ usage }: { usage: PlanUsage }) {
       aria-label={`Pro plan: ${usage.percent}% of this month's allowance used`}
       data-testid="usage-chip"
       data-paused={usage.paused ? "" : undefined}
-      style={{ textDecoration: "none" }}
     >
       <span className="td-usage-meter" aria-hidden="true">
         <span style={{ width: `${usage.percent}%` }} />
@@ -152,9 +151,6 @@ function UsageChip({ usage }: { usage: PlanUsage }) {
 }
 
 /** The business switcher: the product's initial and name, a menu with what has no other place in the frame. */
-/** Each view's section colour on the top bar (owner, 2026-11-23). The Feed stays neutral. */
-const NAV_SEC: Record<string, string | undefined> = { sales: "find", post: "post", analytics: "stats" };
-
 function Project({ menu }: { menu: ReactNode }) {
   const ws = useWorkspace();
   // Blank until the workspace loads, like the context column: no placeholder name flashing first.
@@ -163,9 +159,9 @@ function Project({ menu }: { menu: ReactNode }) {
   return (
     <details className="td-menuwrap" ref={ref} onClick={(e) => (e.target as HTMLElement).closest("a") && ref.current?.removeAttribute("open")}>
       {/* Named for screen readers: on a phone the name is hidden and the logo is decorative. */}
-      <summary className="pill" aria-label={name} style={{ color: "var(--text)", gap: "8px", border: "0", padding: "0 8px", listStyle: "none" }}>
+      <summary className="pill td-project" aria-label={name}>
         <CompanyLogo name={name} site={ws.site} size={24} />
-        <span className="td-project-name" style={{ fontWeight: "600" }}>{name}</span>
+        <span className="td-project-name">{name}</span>
         <Chevron />
       </summary>
       <div className="td-menu">{menu}</div>
@@ -177,10 +173,7 @@ function Avatar({ email, editor }: { email: string | null; editor: boolean }) {
   const ref = useRef<HTMLDetailsElement>(null);
   return (
     <details className="td-menuwrap is-right" ref={ref} onClick={(e) => (e.target as HTMLElement).closest("a") && ref.current?.removeAttribute("open")}>
-      <summary
-        aria-label="Account"
-        style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: "28px", height: "28px", borderRadius: "50%", background: "var(--line-2)", fontSize: "13px", fontWeight: "600", listStyle: "none", cursor: "pointer" }}
-      >
+      <summary aria-label="Account" className="td-acct">
         {(email ?? "?").charAt(0).toUpperCase()}
       </summary>
       <div className="td-menu">
@@ -291,7 +284,7 @@ export function TopBar({
         <div style={{ flex: "1 1 auto" }}></div>
         <nav className="td-views" aria-label="View">
           {views.map((v) => (
-            <Link key={v.id} href={v.href} data-sec={NAV_SEC[v.id]} aria-current={current === v.id ? "page" : undefined} onMouseEnter={readAhead(v.id)} onFocus={readAhead(v.id)}>
+            <Link key={v.id} href={v.href} aria-current={current === v.id ? "page" : undefined} onMouseEnter={readAhead(v.id)} onFocus={readAhead(v.id)}>
               {v.icon}
               {v.label}
             </Link>
@@ -359,20 +352,15 @@ export function TopBar({
   );
 }
 
-/** Post's two views (owner, 2026-11-19): the list of drafts and posts, and the week. */
+/** Post's two views (owner, 2026-11-19): the list of drafts and posts, and the week. A `.ui-seg` segmented control. */
 export function PostViewSwitch({ current }: { current: "list" | "week" }) {
   const item = (id: "list" | "week", label: string, href: string) => (
-    <Link
-      href={href}
-      aria-current={current === id ? "page" : undefined}
-      className="pill"
-      style={{ textDecoration: "none", ...(current === id ? { background: "var(--line-2)", color: "var(--text)", fontWeight: "600" } : { color: "var(--muted)" }) }}
-    >
+    <Link href={href} aria-current={current === id ? "page" : undefined}>
       {label}
     </Link>
   );
   return (
-    <nav aria-label="Post view" style={{ display: "inline-flex", gap: "4px" }} data-testid="post-view-switch">
+    <nav aria-label="Post view" className="ui-seg" data-testid="post-view-switch">
       {item("list", "List", "/app/writer")}
       {item("week", "Week", "/app/schedule")}
     </nav>
